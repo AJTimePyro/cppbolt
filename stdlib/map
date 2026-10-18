@@ -1,0 +1,71 @@
+#ifndef _MINI_STL_MAP_
+#define _MINI_STL_MAP_
+
+#include <cstddef>
+#include <utility>
+#include "detail_avl_tree.h"
+
+namespace std {
+    template<typename Key, typename Value, typename Compare = detail::AVLTree<pair<Key, Value>, Key, void*, void*>>
+    class map {
+    private:
+        struct KeyOfValue {
+            const Key& operator()(const pair<Key, Value>& p) const {
+                return p.first;
+            }
+        };
+
+        struct LessComp {
+            bool operator()(const Key& a, const Key& b) const {
+                return a < b;
+            }
+        };
+
+        typedef detail::AVLTree<pair<Key, Value>, Key, KeyOfValue, LessComp> TreeType;
+        TreeType tree_;
+
+    public:
+        typedef typename TreeType::iterator iterator;
+        typedef typename TreeType::const_iterator const_iterator;
+
+        map() {}
+
+        size_t size() const { return tree_.size(); }
+        bool empty() const { return tree_.empty(); }
+
+        iterator begin() { return tree_.begin(); }
+        iterator end() { return tree_.end(); }
+        const_iterator begin() const { return tree_.begin(); }
+        const_iterator end() const { return tree_.end(); }
+
+        iterator find(const Key& k) const { return tree_.find(k); }
+        size_t count(const Key& k) const { return tree_.count(k); }
+
+        iterator lower_bound(const Key& k) const { return tree_.lower_bound(k); }
+        iterator upper_bound(const Key& k) const { return tree_.upper_bound(k); }
+        size_t erase(const Key& k) { return tree_.erase(k); }
+        iterator erase(iterator pos) { return tree_.erase(pos); }
+
+        Value& operator[](const Key& k) {
+            typename TreeType::Node* n = tree_.find_node(k);
+            if (n) {
+                return n->data.second;
+            }
+            bool ins = false;
+            n = tree_.insert_internal(make_pair(k, Value()), ins);
+            return n->data.second;
+        }
+
+        pair<iterator, bool> insert(const pair<Key, Value>& p) {
+            bool ins = false;
+            typename TreeType::Node* n = tree_.insert_internal(p, ins);
+            return make_pair(iterator(n), ins);
+        }
+
+        bool check_invariants() const {
+            return tree_.check_invariants();
+        }
+    };
+}
+
+#endif

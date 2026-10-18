@@ -1,0 +1,4 @@
+min: 15
+max: 42
+after swap: a=42, b=15
+reversed: 3 2 1

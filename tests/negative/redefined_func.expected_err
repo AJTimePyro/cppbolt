@@ -1,0 +1,1 @@
+tests/negative/redefined_func.cpp:5:1: error: Redefinition of function 'test_func'

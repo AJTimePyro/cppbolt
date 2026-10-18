@@ -1,0 +1,5 @@
+custom self-assign test
+Buffer self-assign ignored for size=512
+b.size = 512
+default self-assign test
+pt = (15, 25)

@@ -1,0 +1,9 @@
+--- start prvalue elision ---
+Payload ctor 500
+p.tag = 500
+--- arg prvalue elision ---
+Payload ctor 800
+process_payload tag: 800
+Payload dtor 800
+--- done prvalue elision ---
+Payload dtor 500

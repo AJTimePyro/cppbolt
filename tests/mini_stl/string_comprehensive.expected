@@ -1,0 +1,17 @@
+empty: 1 size: 0
+str: Hi! size: 3 empty: 0
+elem 1: i
+substr: i!
+find i: 1 find z: 1
+eq: 1 ne: 1 lt: 1 cmp: -1
+self-assign: Hi!
+s+=s: Hi!Hi!
+orig: Hi!Hi! copy: Xi!Hi!
+byval: apple_suffix orig_a: apple
+c1: hello 1
+c2: hello 101
+c3: hello 201
+words: [first_word] [second_word]
+line: [This is a full line of text]
+big: 1000000 a n
+after clear: empty=1 size=0

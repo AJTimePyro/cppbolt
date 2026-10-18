@@ -1,0 +1,234 @@
+#ifndef _MINI_STL_VECTOR_
+#define _MINI_STL_VECTOR_
+
+#include <cstddef>
+#include <initializer_list>
+#include <new>
+#include <stdlib.h>
+
+namespace std {
+    template<typename T>
+    class vector {
+    private:
+        T*     _data;
+        size_t _size;
+        size_t _cap;
+
+        void _realloc(size_t new_cap) {
+            T* new_data = (T*)malloc(new_cap * sizeof(T));
+            for (size_t i = 0; i < _size; ++i) {
+                new (new_data + i) T(_data[i]);
+                _data[i].~T();
+            }
+            if (_data) {
+                free(_data);
+            }
+            _data = new_data;
+            _cap = new_cap;
+        }
+
+    public:
+        typedef T* iterator;
+        typedef const T* const_iterator;
+
+        vector() : _data(nullptr), _size(0), _cap(0) {}
+
+        vector(initializer_list<T> init) : _data(nullptr), _size(0), _cap(0) {
+            if (init.size() > 0) {
+                _realloc(init.size());
+                for (const T* it = init.begin(); it != init.end(); ++it) {
+                    new (_data + _size) T(*it);
+                    _size++;
+                }
+            }
+        }
+
+        vector(const vector& o) : _data(nullptr), _size(0), _cap(0) {
+            if (o._size > 0) {
+                _realloc(o._size);
+                for (size_t i = 0; i < o._size; ++i) {
+                    new (_data + i) T(o._data[i]);
+                }
+                _size = o._size;
+            }
+        }
+
+        vector& operator=(const vector& o) {
+            if (this == &o) return *this;
+            clear();
+            if (o._size > _cap) {
+                if (_data) free(_data);
+                _data = (T*)malloc(o._size * sizeof(T));
+                _cap = o._size;
+            }
+            for (size_t i = 0; i < o._size; ++i) {
+                new (_data + i) T(o._data[i]);
+            }
+            _size = o._size;
+            return *this;
+        }
+
+        ~vector() {
+            clear();
+            if (_data) {
+                free(_data);
+                _data = nullptr;
+            }
+            _cap = 0;
+        }
+
+        size_t size() const { return _size; }
+        size_t capacity() const { return _cap; }
+        bool empty() const { return _size == 0; }
+
+        T& operator[](size_t idx) { return _data[idx]; }
+        const T& operator[](size_t idx) const { return _data[idx]; }
+
+        iterator begin() { return _data; }
+        iterator end() { return _data + _size; }
+        const_iterator begin() const { return _data; }
+        const_iterator end() const { return _data + _size; }
+
+        void push_back(const T& val) {
+            if (_size < _cap) {
+                new (_data + _size) T(val);
+                _size++;
+            } else {
+                size_t new_cap = _cap == 0 ? 1 : _cap * 2;
+                T* new_data = (T*)malloc(new_cap * sizeof(T));
+                new (new_data + _size) T(val);
+                for (size_t i = 0; i < _size; ++i) {
+                    new (new_data + i) T(_data[i]);
+                    _data[i].~T();
+                }
+                if (_data) free(_data);
+                _data = new_data;
+                _cap = new_cap;
+                _size++;
+            }
+        }
+
+        // emplace_back overloads for 0 to 4 arguments
+        void emplace_back() {
+            if (_size == _cap) {
+                size_t new_cap = _cap == 0 ? 1 : _cap * 2;
+                _realloc(new_cap);
+            }
+            new (_data + _size) T();
+            _size++;
+        }
+
+        template<typename A1>
+        void emplace_back(const A1& a1) {
+            if (_size < _cap) {
+                new (_data + _size) T(a1);
+                _size++;
+            } else {
+                size_t new_cap = _cap == 0 ? 1 : _cap * 2;
+                T* new_data = (T*)malloc(new_cap * sizeof(T));
+                new (new_data + _size) T(a1);
+                for (size_t i = 0; i < _size; ++i) {
+                    new (new_data + i) T(_data[i]);
+                    _data[i].~T();
+                }
+                if (_data) free(_data);
+                _data = new_data;
+                _cap = new_cap;
+                _size++;
+            }
+        }
+
+        template<typename A1, typename A2>
+        void emplace_back(const A1& a1, const A2& a2) {
+            if (_size < _cap) {
+                new (_data + _size) T(a1, a2);
+                _size++;
+            } else {
+                size_t new_cap = _cap == 0 ? 1 : _cap * 2;
+                T* new_data = (T*)malloc(new_cap * sizeof(T));
+                new (new_data + _size) T(a1, a2);
+                for (size_t i = 0; i < _size; ++i) {
+                    new (new_data + i) T(_data[i]);
+                    _data[i].~T();
+                }
+                if (_data) free(_data);
+                _data = new_data;
+                _cap = new_cap;
+                _size++;
+            }
+        }
+
+        template<typename A1, typename A2, typename A3>
+        void emplace_back(const A1& a1, const A2& a2, const A3& a3) {
+            if (_size < _cap) {
+                new (_data + _size) T(a1, a2, a3);
+                _size++;
+            } else {
+                size_t new_cap = _cap == 0 ? 1 : _cap * 2;
+                T* new_data = (T*)malloc(new_cap * sizeof(T));
+                new (new_data + _size) T(a1, a2, a3);
+                for (size_t i = 0; i < _size; ++i) {
+                    new (new_data + i) T(_data[i]);
+                    _data[i].~T();
+                }
+                if (_data) free(_data);
+                _data = new_data;
+                _cap = new_cap;
+                _size++;
+            }
+        }
+
+        template<typename A1, typename A2, typename A3, typename A4>
+        void emplace_back(const A1& a1, const A2& a2, const A3& a3, const A4& a4) {
+            if (_size < _cap) {
+                new (_data + _size) T(a1, a2, a3, a4);
+                _size++;
+            } else {
+                size_t new_cap = _cap == 0 ? 1 : _cap * 2;
+                T* new_data = (T*)malloc(new_cap * sizeof(T));
+                new (new_data + _size) T(a1, a2, a3, a4);
+                for (size_t i = 0; i < _size; ++i) {
+                    new (new_data + i) T(_data[i]);
+                    _data[i].~T();
+                }
+                if (_data) free(_data);
+                _data = new_data;
+                _cap = new_cap;
+                _size++;
+            }
+        }
+
+        iterator erase(iterator pos) {
+            if (pos < _data || pos >= _data + _size) return pos;
+            size_t idx = pos - _data;
+            for (size_t i = idx; i + 1 < _size; ++i) {
+                _data[i] = _data[i + 1];
+            }
+            _size--;
+            _data[_size].~T();
+            return pos;
+        }
+
+        void pop_back() {
+            if (_size > 0) {
+                _size--;
+                _data[_size].~T();
+            }
+        }
+
+        void clear() {
+            for (size_t i = 0; i < _size; ++i) {
+                _data[i].~T();
+            }
+            _size = 0;
+        }
+
+        bool check_invariants() const {
+            if (_size > _cap) return false;
+            if (_size > 0 && _data == nullptr) return false;
+            return true;
+        }
+    };
+}
+
+#endif

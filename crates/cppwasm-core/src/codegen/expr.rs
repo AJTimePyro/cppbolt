@@ -1,0 +1,163 @@
+use super::*;
+
+impl<'a> Codegen<'a> {
+    pub(super) fn compile_expr(
+        &mut self,
+        expr: &Expr,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        match expr {
+            Expr::IntLiteral(val, ty) => {
+                if *ty == Type::LongLong || *ty == Type::UnsignedLongLong {
+                    code.push(OP_I64_CONST);
+                    write_i64(code, *val);
+                } else {
+                    code.push(OP_I32_CONST);
+                    write_i32(code, *val as i32);
+                }
+            }
+            Expr::FloatLiteral(val, ty) => {
+                if *ty == Type::Double {
+                    code.push(OP_F64_CONST);
+                    code.extend_from_slice(&val.to_le_bytes());
+                } else {
+                    code.push(OP_F32_CONST);
+                    code.extend_from_slice(&(*val as f32).to_le_bytes());
+                }
+            }
+            Expr::BoolLiteral(val) => {
+                code.push(OP_I32_CONST);
+                write_i32(code, if *val { 1 } else { 0 });
+            }
+            Expr::CharLiteral(val) => {
+                code.push(OP_I32_CONST);
+                write_i32(code, *val as i32);
+            }
+            Expr::StringLiteral(s) => {
+                let offset = self.string_table.get(s).cloned().unwrap_or(0);
+                code.push(OP_I32_CONST);
+                write_i32(code, offset as i32);
+            }
+            Expr::This => {
+                code.push(OP_LOCAL_GET);
+                write_u32(code, 0); // param 0 = this
+            }
+            Expr::Identifier { .. } => self.compile_identifier(expr, ctx, code)?,
+            Expr::Binary {
+                op: BinaryOp::LogicalAnd,
+                ..
+            } => self.compile_logical_and(expr, ctx, code)?,
+            Expr::Binary {
+                op: BinaryOp::LogicalOr,
+                ..
+            } => self.compile_logical_or(expr, ctx, code)?,
+            Expr::Binary { .. } => self.compile_binary(expr, ctx, code)?,
+            Expr::Unary { .. } => self.compile_unary(expr, ctx, code)?,
+            Expr::Assign { .. } => self.compile_assign(expr, ctx, code)?,
+            Expr::CompoundAssign { .. } => self.compile_compound_assign(expr, ctx, code)?,
+            Expr::New { .. } => self.compile_new(expr, ctx, code)?,
+            Expr::Delete { .. } => self.compile_delete(expr, ctx, code)?,
+            Expr::Call { .. } => self.compile_call(expr, ctx, code)?,
+            Expr::ArraySubscript { .. } | Expr::MemberAccess { .. } => {
+                let ty = self.get_expr_type(expr, ctx);
+                self.compile_lvalue_addr(expr, ctx, code)?;
+                if !matches!(ty.strip_const(), Type::Struct(_) | Type::Array(_, _)) {
+                    self.emit_load(&ty, 0, code);
+                }
+            }
+            Expr::Ternary {
+                cond,
+                then_expr,
+                else_expr,
+            } => {
+                let ty = self.get_expr_type(then_expr, ctx);
+                let wty = ty
+                    .to_wasm_type()
+                    .map(|w| match w {
+                        WasmType::I32 => TYPE_I32,
+                        WasmType::I64 => TYPE_I64,
+                        WasmType::F32 => TYPE_F32,
+                        WasmType::F64 => TYPE_F64,
+                    })
+                    .unwrap_or(TYPE_I32);
+
+                self.compile_cond(cond, ctx, code)?;
+                code.push(OP_IF);
+                code.push(wty);
+                self.compile_expr(then_expr, ctx, code)?;
+                code.push(OP_ELSE);
+                self.compile_expr(else_expr, ctx, code)?;
+                code.push(OP_END);
+            }
+            Expr::Cast { target_type, expr } => {
+                let src_ty = self.get_expr_type(expr, ctx);
+                self.compile_expr(expr, ctx, code)?;
+                if target_type == &Type::Void {
+                    if src_ty != Type::Void {
+                        code.push(OP_DROP);
+                    }
+                    return Ok(());
+                }
+
+                if matches!(
+                    src_ty.strip_const(),
+                    Type::LongLong | Type::UnsignedLongLong
+                ) {
+                    if target_type.is_floating() {
+                        if *target_type == Type::Double {
+                            code.push(OP_F64_CONVERT_I64_S);
+                        } else {
+                            code.push(OP_F32_CONVERT_I64_S);
+                        }
+                    } else if !matches!(
+                        target_type.strip_const(),
+                        Type::LongLong | Type::UnsignedLongLong
+                    ) {
+                        code.push(OP_I32_WRAP_I64);
+                    }
+                } else if matches!(
+                    target_type.strip_const(),
+                    Type::LongLong | Type::UnsignedLongLong
+                ) {
+                    if src_ty == Type::Double {
+                        code.push(OP_I64_TRUNC_F64_S);
+                    } else if src_ty == Type::Float {
+                        code.push(OP_I64_TRUNC_F32_S);
+                    } else if src_ty.is_integer() {
+                        if src_ty.is_signed() {
+                            code.push(OP_I64_EXTEND_I32_S);
+                        } else {
+                            code.push(OP_I64_EXTEND_I32_U);
+                        }
+                    }
+                } else if src_ty == Type::Float && target_type.is_integer() {
+                    code.push(OP_I32_TRUNC_F32_S);
+                } else if src_ty == Type::Double && target_type.is_integer() {
+                    code.push(OP_I32_TRUNC_F64_S);
+                } else if src_ty.is_integer() && *target_type == Type::Float {
+                    code.push(OP_F32_CONVERT_I32_S);
+                } else if src_ty.is_integer() && *target_type == Type::Double {
+                    code.push(OP_F64_CONVERT_I32_S);
+                } else if src_ty == Type::Float && *target_type == Type::Double {
+                    code.push(OP_F64_PROMOTE_F32);
+                } else if src_ty == Type::Double && *target_type == Type::Float {
+                    code.push(OP_F32_DEMOTE_F64);
+                }
+            }
+            Expr::SizeofType(inner) => {
+                let size = inner.size_of(&self.sema.struct_sizes) as i32;
+                code.push(OP_I32_CONST);
+                write_i32(code, size);
+            }
+            Expr::SizeofExpr(inner) => {
+                let ty = self.get_expr_type(inner, ctx);
+                let size = ty.size_of(&self.sema.struct_sizes) as i32;
+                code.push(OP_I32_CONST);
+                write_i32(code, size);
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+}

@@ -1,0 +1,6 @@
+sizeof_int: 4
+sizeof_char: 1
+sizeof_long_long: 8
+sizeof_double: 8
+sizeof_arr: 28
+sizeof_expr: 4

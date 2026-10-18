@@ -1,0 +1,6 @@
+val_extracted: 987 state_eof: 0 state_fail: 0
+next_ch: x state_eof: 0 state_fail: 0
+target: x gcount_read: 1 state_eof: 0 state_fail: 0
+rem1: (yz) state_eof: 1 state_fail: 0
+rem2: () state_eof: 1 state_fail: 1
+res_after_clear: -1 state_eof: 1 state_fail: 1

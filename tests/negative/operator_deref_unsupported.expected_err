@@ -1,0 +1,1 @@
+tests/negative/operator_deref_unsupported.cpp:3:9: error: operator* is not supported

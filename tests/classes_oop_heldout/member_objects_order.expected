@@ -1,0 +1,8 @@
+system start
+SubUnit ctor 101
+SubUnit ctor 202
+MasterUnit active
+MasterUnit shutdown
+SubUnit dtor 202
+SubUnit dtor 101
+system stop

@@ -1,0 +1,1 @@
+tests/negative/diagnostic_bad_header.h:1:27: error: Unexpected token in expression: ';'

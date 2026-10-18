@@ -1,0 +1,14 @@
+before expr 1
+create temp 10
+destroy temp 10
+after expr 1: 10
+before expr 2
+create temp 20
+destroy temp 20
+after expr 2: 20
+before if
+create temp 30
+destroy temp 30
+inside if branch
+after if
+sum: 30

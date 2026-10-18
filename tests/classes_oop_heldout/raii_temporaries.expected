@@ -1,0 +1,14 @@
+expr 1 start
+alloc temp buf 128
+free temp buf 128
+expr 1 result: 128
+expr 2 start
+alloc temp buf 256
+free temp buf 256
+expr 2 result: 256
+cond test
+alloc temp buf 512
+free temp buf 512
+matched 512
+cond done
+total cap: 384

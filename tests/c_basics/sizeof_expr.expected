@@ -1,0 +1,6 @@
+sizeof(char): 1
+sizeof(int): 4
+sizeof(double): 8
+sizeof(Small): 8
+sizeof(arr): 40
+elements: 10

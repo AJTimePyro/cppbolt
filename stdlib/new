@@ -1,0 +1,22 @@
+#ifndef _MINI_STL_NEW_
+#define _MINI_STL_NEW_
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Winline-new-delete"
+
+#include <cstddef>
+#include <stdlib.h>
+
+inline void* operator new(size_t sz) { return malloc(sz); }
+inline void* operator new[](size_t sz) { return malloc(sz); }
+inline void operator delete(void* p) noexcept { free(p); }
+inline void operator delete[](void* p) noexcept { free(p); }
+inline void operator delete(void* p, size_t) noexcept { free(p); }
+inline void operator delete[](void* p, size_t) noexcept { free(p); }
+
+inline void* operator new(size_t, void* ptr) noexcept { return ptr; }
+inline void operator delete(void*, void*) noexcept {}
+
+#pragma clang diagnostic pop
+
+#endif

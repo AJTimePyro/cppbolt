@@ -1,0 +1,10 @@
+sum: 1059
+ternary: 420
+not failed as expected
+line 1: not_a_number
+line 2: line one
+line 3: line two
+total lines: 3
+f1 true
+f0 false
+flag ternary: 100

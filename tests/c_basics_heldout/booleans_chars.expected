@@ -1,0 +1,6 @@
+char_add: C
+char_diff: 1
+bool_and: 0
+bool_or: 1
+bool_not: 1
+cond: 100

@@ -1,0 +1,1 @@
+tests/negative/type_mismatch.cpp:6:5: error: cannot initialize variable 'b' of type B with A

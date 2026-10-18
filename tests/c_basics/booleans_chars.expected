@@ -1,0 +1,5 @@
+t && f: 0
+t || f: 1
+!f: 1
+char: Z, ascii: 90
+ternary: 100

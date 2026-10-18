@@ -1,0 +1,6 @@
+Token ctor (10, 2)
+Token copy ctor (15, 4)
+Token ctor (99, 99)
+Token assign (99,99) -> (15,4)
+final codes: 10, 15, 15
+final extras: 2, 4, 4

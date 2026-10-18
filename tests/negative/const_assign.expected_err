@@ -1,0 +1,1 @@
+tests/negative/const_assign.cpp:3:5: error: Cannot assign to variable 'c' with const-qualified type

@@ -1,0 +1,10 @@
+=== construct db service ===
+BaseService ctor -> invoke hook
+Base service_hook
+DatabaseService ctor -> invoke hook
+DatabaseService hook
+=== destruct db service ===
+DatabaseService dtor -> invoke hook
+DatabaseService hook
+BaseService dtor -> invoke hook
+Base service_hook

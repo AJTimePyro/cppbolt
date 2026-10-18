@@ -1,0 +1,1 @@
+tests/negative/range_for_unsupported.cpp:4:20: error: range-based for is not supported

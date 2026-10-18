@@ -1,0 +1,6 @@
+Base ctor 10
+Derived ctor 20
+base_val: 10
+derived_val: 20
+Derived dtor 20
+Base dtor 10

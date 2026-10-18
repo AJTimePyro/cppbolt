@@ -1,0 +1,10 @@
+product: 24
+ternary_outcome: 57
+extraction rejected
+record #1: invalid_token
+record #2: first entry
+record #3: second entry
+records processed: 3
+active sensor detected
+idle sensor bypassed
+sensor cond: 333

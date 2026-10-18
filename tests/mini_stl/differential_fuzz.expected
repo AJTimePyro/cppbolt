@@ -1,0 +1,21 @@
+seed 0: v=1 s=19 m=18 st=11
+seed 1: v=0 s=31 m=14 st=8
+seed 2: v=0 s=2 m=13 st=6
+seed 3: v=1 s=15 m=20 st=7
+seed 4: v=1 s=3 m=12 st=3
+seed 5: v=0 s=15 m=12 st=3
+seed 6: v=0 s=15 m=12 st=5
+seed 7: v=1 s=10 m=16 st=6
+seed 8: v=1 s=13 m=21 st=8
+seed 9: v=0 s=27 m=14 st=7
+seed 10: v=0 s=27 m=16 st=5
+seed 11: v=1 s=27 m=15 st=8
+seed 12: v=1 s=17 m=18 st=7
+seed 13: v=0 s=9 m=12 st=11
+seed 14: v=0 s=17 m=16 st=9
+seed 15: v=1 s=15 m=15 st=5
+seed 16: v=1 s=4 m=14 st=10
+seed 17: v=0 s=17 m=15 st=8
+seed 18: v=0 s=7 m=7 st=6
+seed 19: v=1 s=8 m=15 st=10
+Differential fuzz complete: all 20 seeds verified with AVL/vector invariants.

@@ -1,0 +1,4 @@
+size: 3
+count 10: 1
+count 40: 0
+set elements: 10 20 30

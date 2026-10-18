@@ -1,0 +1,1 @@
+tests/negative/contextual_bool_reject_bool.cpp:3:5: error: cannot initialize variable 'b' of type bool with std::istream

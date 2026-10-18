@@ -1,0 +1,4 @@
+u_max: 4294967295
+u_wrap: 0
+u_add: 10
+u_underflow: 4294967291

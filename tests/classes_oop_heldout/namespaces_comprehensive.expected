@@ -1,0 +1,9 @@
+eval_nested: 550
+extra_root: 99
+hidden: 888
+modules: 333 vs 444
+shadow_result: 808
+adl_out: Packet[12]
+adl_fn: 36
+custom_math: 101 202 303
+using_mod: 444

@@ -1,0 +1,1 @@
+tests/negative/operator_arrow_unsupported.cpp:3:10: error: operator-> is not supported

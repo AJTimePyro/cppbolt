@@ -1,0 +1,415 @@
+#ifndef _MINI_STL_IOSTREAM_
+#define _MINI_STL_IOSTREAM_
+
+#include <cstddef>
+#include <cstdio>
+#include <string>
+
+namespace std {
+    inline int __mini_stl_itoa(char* buf, long long val) {
+        char tmp[32];
+        int len = 0;
+        bool neg = false;
+        if (val < 0) {
+            neg = true;
+            val = -val;
+        } else if (val == 0) {
+            tmp[len++] = '0';
+        }
+        while (val > 0) {
+            tmp[len++] = (char)('0' + (val % 10));
+            val /= 10;
+        }
+        if (neg) tmp[len++] = '-';
+        int out = 0;
+        for (int i = len - 1; i >= 0; --i) {
+            buf[out++] = tmp[i];
+        }
+        buf[out] = '\0';
+        return out;
+    }
+
+    inline int __mini_stl_utoa(char* buf, unsigned long long val) {
+        char tmp[32];
+        int len = 0;
+        if (val == 0) {
+            tmp[len++] = '0';
+        }
+        while (val > 0) {
+            tmp[len++] = (char)('0' + (val % 10));
+            val /= 10;
+        }
+        int out = 0;
+        for (int i = len - 1; i >= 0; --i) {
+            buf[out++] = tmp[i];
+        }
+        buf[out] = '\0';
+        return out;
+    }
+
+    class ios_base {
+    public:
+        static bool sync_with_stdio(bool sync = true) {
+            (void)sync;
+            return true;
+        }
+    };
+
+    class ostream;
+    typedef ostream& (*ostream_manip)(ostream&);
+
+    class ostream {
+    private:
+        int  _width;
+        int  _precision;
+        bool _fixed;
+        char _fill;
+        bool _precision_set;
+
+        void _pad_before(int len) {
+            char f = _fill ? _fill : ' ';
+            if (_width > len) {
+                for (int i = 0; i < _width - len; ++i) {
+                    std::putchar(f);
+                }
+            }
+            _width = 0;
+        }
+
+    public:
+        constexpr ostream() : _width(0), _precision(6), _fixed(false), _fill(' '), _precision_set(false) {}
+
+        ostream* tie(ostream* = nullptr) { return nullptr; }
+
+        void set_width(int w) { _width = w; }
+        void set_precision(int p) { _precision = p; _precision_set = true; }
+        void set_fixed(bool f) { _fixed = f; }
+        void set_fill(char c) { _fill = c; }
+
+        ostream& operator<<(const char* s) {
+            if (!s) s = "";
+            int len = 0;
+            while (s[len]) len++;
+            _pad_before(len);
+            std::printf("%s", s);
+            return *this;
+        }
+
+        ostream& operator<<(char c) {
+            _pad_before(1);
+            std::putchar(c);
+            return *this;
+        }
+
+        ostream& operator<<(int val) {
+            char buf[32];
+            int len = __mini_stl_itoa(buf, (long long)val);
+            _pad_before(len);
+            std::printf("%s", buf);
+            return *this;
+        }
+
+        ostream& operator<<(long val) {
+            char buf[32];
+            int len = __mini_stl_itoa(buf, (long long)val);
+            _pad_before(len);
+            std::printf("%s", buf);
+            return *this;
+        }
+
+        ostream& operator<<(long long val) {
+            char buf[32];
+            int len = __mini_stl_itoa(buf, val);
+            _pad_before(len);
+            std::printf("%s", buf);
+            return *this;
+        }
+
+        ostream& operator<<(unsigned int val) {
+            char buf[32];
+            int len = __mini_stl_utoa(buf, (unsigned long long)val);
+            _pad_before(len);
+            std::printf("%s", buf);
+            return *this;
+        }
+
+        ostream& operator<<(unsigned long val) {
+            char buf[32];
+            int len = __mini_stl_utoa(buf, (unsigned long long)val);
+            _pad_before(len);
+            std::printf("%s", buf);
+            return *this;
+        }
+
+        ostream& operator<<(unsigned long long val) {
+            char buf[32];
+            int len = __mini_stl_utoa(buf, val);
+            _pad_before(len);
+            std::printf("%s", buf);
+            return *this;
+        }
+
+        ostream& operator<<(bool b) {
+            _pad_before(1);
+            std::printf("%d", b ? 1 : 0);
+            return *this;
+        }
+
+        ostream& operator<<(double val) {
+            int p = _precision_set ? _precision : 6;
+            if (_fixed) {
+                std::printf("%.*f", p, val);
+            } else {
+                std::printf("%.*g", p, val);
+            }
+            return *this;
+        }
+
+        ostream& operator<<(float val) {
+            return *this << (double)val;
+        }
+
+        ostream& operator<<(const string& s) {
+            _pad_before((int)s.size());
+            std::printf("%s", s.c_str());
+            return *this;
+        }
+
+        ostream& operator<<(ostream_manip manip) {
+            return manip(*this);
+        }
+
+        void flush() {}
+    };
+
+    inline ostream& endl(ostream& os) {
+        os << '\n';
+        os.flush();
+        return os;
+    }
+
+    typedef int streamsize;
+
+    class istream {
+    private:
+        bool _eof_flag;
+        bool _fail_flag;
+        int _last_gcount;
+
+        void _skip_ws() {
+            int ch = peek();
+            while (ch != -1 && (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r')) {
+                get();
+                ch = peek();
+            }
+        }
+
+    public:
+        constexpr istream() : _eof_flag(false), _fail_flag(false), _last_gcount(0) {}
+
+        ostream* tie(ostream* = nullptr) { return nullptr; }
+
+        streamsize gcount() const { return _last_gcount; }
+        void _set_gcount(int n) { _last_gcount = n; }
+
+        bool good() const { return !_eof_flag && !_fail_flag; }
+        bool eof() const { return _eof_flag; }
+        bool fail() const { return _fail_flag; }
+        bool bad() const { return false; }
+        void clear() { _eof_flag = false; _fail_flag = false; }
+
+        explicit operator bool() const { return !fail(); }
+        bool operator!() const { return fail(); }
+
+        int peek() {
+            int ch = __mini_stl_peek_char();
+            if (ch == -1) _eof_flag = true;
+            return ch;
+        }
+
+        void setstate_fail() { _fail_flag = true; }
+        void setstate_eof() { _eof_flag = true; }
+
+        int get() {
+            int c = __mini_stl_read_char();
+            if (c == -1) {
+                _eof_flag = true;
+                _fail_flag = true;
+                _last_gcount = 0;
+            } else {
+                _last_gcount = 1;
+            }
+            return c;
+        }
+
+        istream& get(char& c) {
+            int ch = get();
+            if (ch != -1) {
+                c = (char)ch;
+                _last_gcount = 1;
+            } else {
+                _fail_flag = true;
+                _last_gcount = 0;
+            }
+            return *this;
+        }
+
+        istream& unget() {
+            return *this;
+        }
+
+        istream& ignore() {
+            get();
+            return *this;
+        }
+
+        istream& ignore(int n) {
+            for (int i = 0; i < n; ++i) {
+                int ch = get();
+                if (ch == -1) break;
+            }
+            return *this;
+        }
+
+        istream& ignore(int n, int delim) {
+            for (int i = 0; i < n; ++i) {
+                int ch = get();
+                if (ch == -1 || ch == delim) break;
+            }
+            return *this;
+        }
+
+        istream& operator>>(int& val) {
+            _last_gcount = 0;
+            _skip_ws();
+            int ch = peek();
+            if (ch == -1) {
+                _fail_flag = true;
+                return *this;
+            }
+            bool neg = false;
+            if (ch == '-') {
+                neg = true;
+                get();
+                ch = peek();
+            } else if (ch == '+') {
+                get();
+                ch = peek();
+            }
+            if (ch < '0' || ch > '9') {
+                _fail_flag = true;
+                return *this;
+            }
+            long long res = 0;
+            while (ch >= '0' && ch <= '9') {
+                res = res * 10 + (ch - '0');
+                get();
+                ch = peek();
+            }
+            val = (int)(neg ? -res : res);
+            _last_gcount = 0;
+            return *this;
+        }
+
+        istream& operator>>(long long& val) {
+            _last_gcount = 0;
+            _skip_ws();
+            int ch = peek();
+            if (ch == -1) {
+                _fail_flag = true;
+                return *this;
+            }
+            bool neg = false;
+            if (ch == '-') {
+                neg = true;
+                get();
+                ch = peek();
+            } else if (ch == '+') {
+                get();
+                ch = peek();
+            }
+            if (ch < '0' || ch > '9') {
+                _fail_flag = true;
+                return *this;
+            }
+            long long res = 0;
+            while (ch >= '0' && ch <= '9') {
+                res = res * 10 + (ch - '0');
+                get();
+                ch = peek();
+            }
+            val = neg ? -res : res;
+            _last_gcount = 0;
+            return *this;
+        }
+
+        istream& operator>>(double& val) {
+            _last_gcount = 0;
+            _skip_ws();
+            if (std::scanf("%lf", &val) != 1) {
+                _fail_flag = true;
+            }
+            return *this;
+        }
+
+        istream& operator>>(char& c) {
+            _last_gcount = 0;
+            _skip_ws();
+            int ch = get();
+            if (ch == -1) {
+                _fail_flag = true;
+            } else {
+                c = (char)ch;
+            }
+            _last_gcount = 0;
+            return *this;
+        }
+
+        istream& operator>>(string& s) {
+            _last_gcount = 0;
+            _skip_ws();
+            int ch = peek();
+            if (ch == -1) {
+                _fail_flag = true;
+                return *this;
+            }
+            s.clear();
+            while (ch != -1 && ch != ' ' && ch != '\t' && ch != '\n' && ch != '\r') {
+                s.push_back((char)get());
+                ch = peek();
+            }
+            _last_gcount = 0;
+            return *this;
+        }
+    };
+
+    inline istream& getline(istream& is, string& s, char delim) {
+        s.clear();
+        int count = 0;
+        while (true) {
+            int ch = __mini_stl_read_char();
+            if (ch == -1) {
+                is.setstate_eof();
+                if (count == 0) {
+                    is.setstate_fail();
+                }
+                return is;
+            }
+            if (ch == delim) {
+                return is;
+            }
+                        s.push_back((char)ch);
+            count++;
+        }
+    }
+
+    inline istream& getline(istream& is, string& s) {
+        return getline(is, s, '\n');
+    }
+
+    inline ostream cout;
+    inline ostream cerr;
+    inline istream cin;
+}
+
+#endif // _MINI_STL_IOSTREAM_

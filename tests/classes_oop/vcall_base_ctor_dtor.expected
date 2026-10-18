@@ -1,0 +1,10 @@
+--- Constructing Derived ---
+Base ctor before action
+Base action
+Derived ctor before action
+Derived action
+--- Destructing Derived ---
+Derived dtor before action
+Derived action
+Base dtor before action
+Base action

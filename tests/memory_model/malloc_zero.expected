@@ -1,0 +1,2 @@
+malloc(0): non-null aligned pointer obtained
+free(malloc(0)): OK

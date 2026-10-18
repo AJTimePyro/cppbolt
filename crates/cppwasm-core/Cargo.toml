@@ -1,0 +1,13 @@
+[package]
+name = "cppwasm-core"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "cppwasm_core"
+crate-type = ["rlib"]
+
+[dependencies]
+
+[lints]
+workspace = true

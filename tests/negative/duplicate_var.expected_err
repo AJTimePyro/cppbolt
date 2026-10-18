@@ -1,0 +1,1 @@
+tests/negative/duplicate_var.cpp:3:5: error: Redefinition of variable 'x'

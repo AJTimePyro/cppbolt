@@ -1,0 +1,1 @@
+tests/negative/undefined_func.cpp:2:5: error: Undefined function 'undefined_function'

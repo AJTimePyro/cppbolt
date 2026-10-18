@@ -1,0 +1,14 @@
+create t1
+Channel ctor 915
+Transceiver init (915, 25)
+copy t2 = t1
+t2 freq=915, pwr=25
+assign t3 = t2
+Channel ctor 433
+Transceiver init (433, 10)
+t3 freq=915, pwr=25
+end of scope
+Channel dtor 915
+Channel dtor 915
+Channel dtor 915
+finished

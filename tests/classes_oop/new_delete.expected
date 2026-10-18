@@ -1,0 +1,5 @@
+*p = 42
+Widget ctor 100
+w->val = 100
+Widget dtor 100
+arr sum: 24

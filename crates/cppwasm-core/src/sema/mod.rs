@@ -1,0 +1,219 @@
+//! Semantic analysis: symbols, overloads, record layout, and type checks.
+
+mod analyze;
+mod assign;
+mod expr;
+mod expr_call;
+mod expr_member;
+mod expr_ops;
+mod layout;
+mod lookup;
+mod stmt;
+
+use crate::ast::types::Type;
+use crate::ast::*;
+use crate::diagnostics::CompileError;
+use crate::name::QualifiedName;
+use std::collections::HashMap;
+
+#[derive(Debug, Clone)]
+pub struct StructField {
+    pub name: String,
+    pub ty: Type,
+    pub offset: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct StructLayout {
+    pub is_class: bool,
+    pub base_classes: Vec<String>,
+    pub fields: Vec<StructField>,
+    pub size: usize,
+    pub align: usize,
+    pub has_vtable: bool,
+    pub vtable_slots: Vec<String>,
+    pub private_members: std::collections::HashSet<String>,
+    pub is_abstract: bool,
+    pub pure_virtuals: std::collections::HashSet<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionSig {
+    pub name: String,
+    pub mangled_name: String,
+    pub return_type: Type,
+    pub param_types: Vec<Type>,
+    pub default_args: Vec<Option<Expr>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct VarSymbol {
+    pub name: String,
+    pub ty: Type,
+    pub is_global: bool,
+    pub stack_offset: i32, // Offset from local frame pointer
+}
+
+pub struct Scope {
+    pub vars: HashMap<String, VarSymbol>,
+}
+
+pub struct Sema {
+    pub struct_layouts: HashMap<String, StructLayout>,
+    pub struct_order: Vec<String>,
+    pub enum_values: HashMap<String, i64>,
+    pub functions: HashMap<String, Vec<FunctionSig>>,
+    pub global_vars: HashMap<String, VarSymbol>,
+    pub scopes: Vec<Scope>,
+    pub current_func_return_type: Option<Type>,
+    pub current_frame_size: i32,
+    pub struct_sizes: HashMap<String, usize>,
+    pub struct_aligns: HashMap<String, usize>,
+    pub current_line: usize,
+    pub current_col: usize,
+    pub loop_depth: usize,
+    pub switch_depth: usize,
+    pub current_class: Option<String>,
+    pub current_func_name: Option<String>,
+    pub open_namespaces: Vec<String>,
+    pub using_decls: HashMap<String, String>,
+}
+
+impl Sema {
+    pub fn new() -> Self {
+        let mut sema = Self {
+            struct_layouts: HashMap::new(),
+            struct_order: Vec::new(),
+            enum_values: HashMap::new(),
+            functions: HashMap::new(),
+            global_vars: HashMap::new(),
+            scopes: Vec::new(),
+            current_func_return_type: None,
+            current_frame_size: 0,
+            struct_sizes: HashMap::new(),
+            struct_aligns: HashMap::new(),
+            current_line: 1,
+            current_col: 1,
+            loop_depth: 0,
+            switch_depth: 0,
+            current_class: None,
+            current_func_name: None,
+            open_namespaces: Vec::new(),
+            using_decls: HashMap::new(),
+        };
+
+        // Built-in printf: variadic, mangled as "printf"
+        sema.register_function(FunctionSig {
+            name: "printf".to_string(),
+            mangled_name: "printf".to_string(),
+            return_type: Type::Int,
+            param_types: vec![Type::Pointer(Box::new(Type::Char))],
+            default_args: vec![None],
+        });
+        sema.register_function(FunctionSig {
+            name: "std::printf".to_string(),
+            mangled_name: "std::printf".to_string(),
+            return_type: Type::Int,
+            param_types: vec![Type::Pointer(Box::new(Type::Char))],
+            default_args: vec![None],
+        });
+
+        // Built-in malloc & free
+        sema.register_function(FunctionSig {
+            name: "malloc".to_string(),
+            mangled_name: "malloc".to_string(),
+            return_type: Type::Pointer(Box::new(Type::Void)),
+            param_types: vec![Type::Int],
+            default_args: vec![None],
+        });
+
+        sema.register_function(FunctionSig {
+            name: "free".to_string(),
+            mangled_name: "free".to_string(),
+            return_type: Type::Void,
+            param_types: vec![Type::Pointer(Box::new(Type::Void))],
+            default_args: vec![None],
+        });
+
+        sema.register_function(FunctionSig {
+            name: "__builtin_wasm_memory_size".to_string(),
+            mangled_name: "__builtin_wasm_memory_size".to_string(),
+            return_type: Type::Int,
+            param_types: vec![Type::Int],
+            default_args: vec![None],
+        });
+
+        sema
+    }
+
+    pub fn register_function(&mut self, sig: FunctionSig) {
+        self.functions
+            .entry(sig.name.clone())
+            .or_default()
+            .push(sig.clone());
+        self.functions
+            .entry(sig.mangled_name.clone())
+            .or_default()
+            .push(sig.clone());
+        if let Some(alias) = QualifiedName::new(&sig.name).implicit_alias() {
+            self.functions
+                .entry(alias.into_owned())
+                .or_default()
+                .push(sig.clone());
+        }
+    }
+
+    pub fn enter_scope(&mut self) {
+        self.scopes.push(Scope {
+            vars: HashMap::new(),
+        });
+    }
+
+    pub fn exit_scope(&mut self) {
+        self.scopes.pop();
+    }
+
+    pub fn lookup_var(&self, name: &str) -> Option<&VarSymbol> {
+        self.lookup_var_in_context(name, self.current_func_name.as_deref())
+    }
+
+    pub fn lookup_var_in_context(&self, name: &str, func_name: Option<&str>) -> Option<&VarSymbol> {
+        if let Some(stripped) = name.strip_prefix("::") {
+            return self.global_vars.get(stripped);
+        }
+        for scope in self.scopes.iter().rev() {
+            if let Some(var) = scope.vars.get(name) {
+                return Some(var);
+            }
+        }
+        let effective_func = func_name.or(self.current_func_name.as_deref());
+        if let Some(fname) = effective_func {
+            let mut curr = fname;
+            while let Some((ns, _)) = curr.rsplit_once("::") {
+                if let Some(var) = self.global_vars.get(&format!("{}::{}", ns, name)) {
+                    return Some(var);
+                }
+                curr = ns;
+            }
+        }
+        if let Some(var) = self.global_vars.get(name) {
+            return Some(var);
+        }
+        if let Some(alias) = QualifiedName::new(name).implicit_alias()
+            && let Some(var) = self.global_vars.get(alias.as_ref())
+        {
+            return Some(var);
+        }
+        if let Some(target) = self.using_decls.get(name)
+            && let Some(var) = self.global_vars.get(target)
+        {
+            return Some(var);
+        }
+        for ns in &self.open_namespaces {
+            if let Some(var) = self.global_vars.get(&format!("{}::{}", ns, name)) {
+                return Some(var);
+            }
+        }
+        None
+    }
+}

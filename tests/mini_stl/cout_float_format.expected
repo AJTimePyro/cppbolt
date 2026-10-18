@@ -1,0 +1,10 @@
+f: 12.345
+d: 67.89
+val_0_1: 0.1
+val_100: 100
+val_1e_5: 1e-05
+neg: -42.75
+large: 1.23457e+06
+sci_large: 1e+06
+round_pi: 3.14159
+round_up: 2

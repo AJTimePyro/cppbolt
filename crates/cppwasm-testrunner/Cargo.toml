@@ -1,0 +1,14 @@
+[package]
+name = "cppwasm-testrunner"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "cppwasm-testrunner"
+path = "src/main.rs"
+
+[dependencies]
+cppwasm-core = { path = "../cppwasm-core" }
+
+[lints]
+workspace = true

@@ -1,0 +1,21 @@
+--- test AND false left ---
++ TrackTemp 1
+check_val 1 returning 0
+- TrackTemp 1
+--- after AND 1 ---
+--- test OR true left ---
++ TrackTemp 3
+check_val 3 returning 1
+- TrackTemp 3
+OR branch 1 taken
+--- after OR 1 ---
+--- test Ternary true ---
++ TrackTemp 5
+check_val 5 returning 1
+- TrackTemp 5
+r1=1
+--- test Ternary false ---
++ TrackTemp 8
+check_val 8 returning 0
+- TrackTemp 8
+r2=0

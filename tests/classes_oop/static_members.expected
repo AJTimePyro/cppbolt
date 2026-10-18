@@ -1,0 +1,4 @@
+initial: 0
+after c1: 1, id: 1
+inside scope: 3
+after scope: 1

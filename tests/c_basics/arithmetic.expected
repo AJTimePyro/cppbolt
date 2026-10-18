@@ -1,0 +1,16 @@
+add: 29
+sub: 21
+mul: 100
+div: 6
+mod: 1
+and: 0
+or: 29
+xor: 29
+shl: 100
+shr: 12
+not: -5
+long: 100005
+unsigned: 100
+compound: 30
+postfix: 30
+prefix: 32

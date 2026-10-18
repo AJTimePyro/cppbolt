@@ -1,0 +1,12 @@
+#ifndef _MINI_STL_CSTDDEF_
+#define _MINI_STL_CSTDDEF_
+
+#include <stddef.h>
+
+namespace std {
+    using ::size_t;
+    using ::ptrdiff_t;
+    typedef decltype(nullptr) nullptr_t;
+}
+
+#endif

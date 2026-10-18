@@ -1,0 +1,16 @@
+hex_lower: fff
+hex_upper: FFF
+hex_pad: 0004d2
+hex_large: 12345678
+width_r:       9876
+width_l: 9876      |
+pos_sign: +456
+neg_sign: -456
+prec_int: 000789
+w_and_prec:       000789
+flt_prec: 2.718
+flt_round: 0.01
+flt_w:     12.340
+flt_neg: -100.00
+ll_val: 9000000000000
+ll_signed: -7000000000000

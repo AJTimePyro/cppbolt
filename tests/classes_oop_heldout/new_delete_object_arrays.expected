@@ -1,0 +1,16 @@
+allocating device array
+DeviceNode ctor serial=10
+DeviceNode ctor serial=20
+DeviceNode ctor serial=30
+DeviceNode ctor serial=40
+array ready
+node 0 serial=10
+node 1 serial=20
+node 2 serial=30
+node 3 serial=40
+deleting device array
+DeviceNode dtor serial=40
+DeviceNode dtor serial=30
+DeviceNode dtor serial=20
+DeviceNode dtor serial=10
+deletion complete

@@ -1,0 +1,2 @@
+Vec2 init: 100, 250
+item->u = 100, item->v = 250

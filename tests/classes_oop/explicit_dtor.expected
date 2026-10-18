@@ -1,0 +1,4 @@
+Resource ctor 42
+Created resource 42
+Resource dtor 42
+Explicit dtor called

@@ -1,0 +1,6 @@
+Vehicle ctor: 6 wheels
+Truck ctor: 15 tons
+wheels count: 6
+cargo: 15 tons
+Truck dtor: 15 tons
+Vehicle dtor: 6 wheels

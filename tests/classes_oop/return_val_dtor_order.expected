@@ -1,0 +1,8 @@
+before compute
+LocalRAII ctor 1
+LocalRAII ctor 2
+evaluating return expr for id=1
+evaluating return expr for id=2
+LocalRAII dtor 2
+LocalRAII dtor 1
+after compute: res=30

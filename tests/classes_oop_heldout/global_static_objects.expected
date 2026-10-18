@@ -1,0 +1,8 @@
+DeviceInit online
+SubsystemInit online
+Main running
+buf[0]=0, buf[10000]=0, buf[19999]=0
+updated buf[10000]=888
+Main done
+SubsystemInit offline
+DeviceInit offline

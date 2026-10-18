@@ -1,0 +1,1 @@
+tests/negative/syntax_error.cpp:2:5: error: Unexpected token in expression: 'int'

@@ -1,0 +1,16 @@
+sum: 80
+diff: 66
+prod: 511
+quot: 10
+rem: 3
+bw_and: 1
+bw_or: 79
+bw_xor: 78
+lshift: 56
+rshift: 18
+inv: -8
+long_add: 462345
+uint_mul: 297
+compound: 10
+postdec: 10
+predec: 8

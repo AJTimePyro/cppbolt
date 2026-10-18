@@ -1,0 +1,4 @@
+FileStream ctor
+EncryptedFileStream ctor
+EncryptedFileStream dtor
+FileStream dtor

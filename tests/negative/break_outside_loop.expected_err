@@ -1,0 +1,1 @@
+tests/negative/break_outside_loop.cpp:2:5: error: 'break' statement not in loop or switch statement

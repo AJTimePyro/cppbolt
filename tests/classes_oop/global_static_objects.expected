@@ -1,0 +1,8 @@
+GlobalLogger ctor
+SecondaryLogger ctor
+Entering main
+zero[0]=0, zero[5000]=0, zero[9999]=0
+modified zero[5000]=777
+Exiting main
+SecondaryLogger dtor
+GlobalLogger dtor

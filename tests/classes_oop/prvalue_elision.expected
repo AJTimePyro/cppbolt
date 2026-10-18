@@ -1,0 +1,9 @@
+--- test prvalue return ---
+Item ctor 10
+a.val = 10
+--- test prvalue argument ---
+Item ctor 20
+consume_item val: 20
+Item dtor 20
+--- test end ---
+Item dtor 10

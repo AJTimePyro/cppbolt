@@ -1,0 +1,1 @@
+tests/negative/undeclared_var.cpp:2:5: error: Undeclared variable or identifier 'foo'

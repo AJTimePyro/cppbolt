@@ -1,0 +1,1 @@
+tests/negative/postfix_increment_unsupported.cpp:4:13: error: postfix ++/-- is not supported

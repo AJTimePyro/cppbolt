@@ -1,0 +1,8 @@
+Session start
+Acquire lock [200] at depth 1
+Flush buffer [200]
+Acquire lock [404] at depth 2
+Flush buffer [404]
+Release lock [404] at depth 2
+Release lock [200] at depth 1
+Session end

@@ -1,0 +1,1 @@
+tests/negative/namespace_alias.cpp:5:17: error: namespace aliases are not supported

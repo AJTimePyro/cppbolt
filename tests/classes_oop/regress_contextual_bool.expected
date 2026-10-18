@@ -1,0 +1,6 @@
+s_ok is true in if
+!s_err is true in if
+ternary: 1
+ternary err: 2
+while loop iter 0
+while loop iter 1

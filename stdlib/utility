@@ -1,0 +1,54 @@
+#ifndef _MINI_STL_UTILITY_
+#define _MINI_STL_UTILITY_
+
+#include <cstddef>
+
+namespace std {
+    template<typename T>
+    T& move(T& t) noexcept {
+        return t;
+    }
+
+    template<typename T>
+    const T& move(const T& t) noexcept {
+        return t;
+    }
+
+    template<typename T>
+    void swap(T& a, T& b) {
+        T tmp = a;
+        a = b;
+        b = tmp;
+    }
+
+    template<typename T1, typename T2>
+    struct pair {
+        T1 first;
+        T2 second;
+
+        pair() : first(), second() {}
+        pair(const T1& a, const T2& b) : first(a), second(b) {}
+
+        template<typename U1, typename U2>
+        pair(const pair<U1, U2>& p) : first(p.first), second(p.second) {}
+
+        bool operator==(const pair& o) const {
+            return first == o.first && second == o.second;
+        }
+        bool operator!=(const pair& o) const {
+            return !(*this == o);
+        }
+        bool operator<(const pair& o) const {
+            if (first < o.first) return true;
+            if (o.first < first) return false;
+            return second < o.second;
+        }
+    };
+
+    template<typename T1, typename T2>
+    pair<T1, T2> make_pair(const T1& a, const T2& b) {
+        return pair<T1, T2>(a, b);
+    }
+}
+
+#endif

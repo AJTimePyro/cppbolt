@@ -1,0 +1,5 @@
+--- test CustomAssign self-assign ---
+Self-assignment detected for val=42
+ca.val = 42
+--- test DefaultAssign self-assign ---
+da = (10, 20)

@@ -1,0 +1,14 @@
+--- create b1 ---
+Resource ctor 10
+Box ctor (10, 100)
+--- copy b2 = b1 ---
+b2: res=10, tag=100
+--- assign b3 = b2 ---
+Resource ctor 20
+Box ctor (20, 200)
+b3: res=10, tag=100
+--- exiting scope ---
+Resource dtor 10
+Resource dtor 10
+Resource dtor 10
+--- finished ---

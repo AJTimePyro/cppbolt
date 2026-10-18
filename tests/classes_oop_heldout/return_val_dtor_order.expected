@@ -1,0 +1,8 @@
+start pipeline
+Worker init 3
+Worker init 7
+eval metric on slot 3
+eval metric on slot 7
+Worker deinit 7
+Worker deinit 3
+pipeline res: 50

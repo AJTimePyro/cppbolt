@@ -1,0 +1,1 @@
+tests/negative/diagnostic_user_after_include.cpp:4:25: error: Expected ';', found identifier 'value'

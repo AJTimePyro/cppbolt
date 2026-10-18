@@ -1,0 +1,21 @@
+--- check AND shortcut ---
+enter Guard 11
+evaluate 11 -> 0
+leave Guard 11
+--- after AND ---
+--- check OR shortcut ---
+enter Guard 33
+evaluate 33 -> 1
+leave Guard 33
+OR taken
+--- after OR ---
+--- check Ternary cond true ---
+enter Guard 55
+evaluate 55 -> 1
+leave Guard 55
+a = 1
+--- check Ternary cond false ---
+enter Guard 88
+evaluate 88 -> 0
+leave Guard 88
+b = 0

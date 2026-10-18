@@ -1,0 +1,1 @@
+tests/negative/func_arg_count_mismatch.cpp:6:5: error: No matching function call for 'add': expected 2 arguments, found 1

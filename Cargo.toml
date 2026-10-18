@@ -1,0 +1,33 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/cppwasm-core",
+    "crates/cppwasm-cli",
+    "crates/cppwasm-ffi",
+    "crates/cppwasm-testrunner",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+# Panic-free code on every path that can see user input.
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.fast]
+inherits = "release"
+opt-level = 1
+lto = false
+codegen-units = 16
+strip = false

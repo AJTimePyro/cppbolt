@@ -1,0 +1,10 @@
+--- begin ---
+Member ctor 1
+Member ctor 2
+Member ctor 3
+Owner ctor body
+Owner dtor body
+Member dtor 3
+Member dtor 2
+Member dtor 1
+--- end ---

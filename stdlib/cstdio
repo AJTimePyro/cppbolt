@@ -1,0 +1,223 @@
+#ifndef _MINI_STL_CSTDIO_
+#define _MINI_STL_CSTDIO_
+
+#include <stdarg.h>
+
+#ifdef __CPP_WASM__
+extern "C" {
+    void print_char(int c);
+    int read_char(void);
+    int printf(const char* format, ...);
+}
+
+inline int putchar(int c) {
+    print_char(c);
+    return c;
+}
+
+inline int puts(const char* s) {
+    if (s) {
+        while (*s) {
+            print_char((int)(unsigned char)*s);
+            s++;
+        }
+    }
+    print_char(10); // '\n'
+    return 0;
+}
+
+inline int __mini_stl_shared_lookahead = -1;
+
+inline int __mini_stl_read_char() {
+    if (__mini_stl_shared_lookahead != -1) {
+        int c = __mini_stl_shared_lookahead;
+        __mini_stl_shared_lookahead = -1;
+        return c;
+    }
+    return read_char();
+}
+
+inline int __mini_stl_peek_char() {
+    if (__mini_stl_shared_lookahead == -1) {
+        __mini_stl_shared_lookahead = read_char();
+    }
+    return __mini_stl_shared_lookahead;
+}
+
+inline void __mini_stl_unget_char(int c) {
+    __mini_stl_shared_lookahead = c;
+}
+
+inline int getchar(void) {
+    return __mini_stl_read_char();
+}
+
+inline int __mini_stl_scanf_int(int* val) {
+    int ch = __mini_stl_peek_char();
+    while (ch != -1 && (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r')) {
+        __mini_stl_read_char();
+        ch = __mini_stl_peek_char();
+    }
+    if (ch == -1) return 0;
+    bool neg = false;
+    if (ch == '-') {
+        neg = true;
+        __mini_stl_read_char();
+        ch = __mini_stl_peek_char();
+    } else if (ch == '+') {
+        __mini_stl_read_char();
+        ch = __mini_stl_peek_char();
+    }
+    if (ch < '0' || ch > '9') return 0;
+    int res = 0;
+    while (ch >= '0' && ch <= '9') {
+        res = res * 10 + (ch - '0');
+        __mini_stl_read_char();
+        ch = __mini_stl_peek_char();
+    }
+    *val = neg ? -res : res;
+    return 1;
+}
+
+inline int __mini_stl_scanf_str(char* str) {
+    int ch = __mini_stl_peek_char();
+    while (ch != -1 && (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r')) {
+        __mini_stl_read_char();
+        ch = __mini_stl_peek_char();
+    }
+    if (ch == -1) return 0;
+    int idx = 0;
+    while (ch != -1 && ch != ' ' && ch != '\t' && ch != '\n' && ch != '\r') {
+        str[idx++] = (char)__mini_stl_read_char();
+        ch = __mini_stl_peek_char();
+    }
+    str[idx] = '\0';
+    return 1;
+}
+
+inline int __mini_stl_scanf_double(double* val) {
+    int ch = __mini_stl_peek_char();
+    while (ch != -1 && (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r')) {
+        __mini_stl_read_char();
+        ch = __mini_stl_peek_char();
+    }
+    if (ch == -1) return 0;
+    bool neg = false;
+    if (ch == '-') {
+        neg = true;
+        __mini_stl_read_char();
+        ch = __mini_stl_peek_char();
+    } else if (ch == '+') {
+        __mini_stl_read_char();
+        ch = __mini_stl_peek_char();
+    }
+    double res = 0.0;
+    while (ch >= '0' && ch <= '9') {
+        res = res * 10.0 + (double)(ch - '0');
+        __mini_stl_read_char();
+        ch = __mini_stl_peek_char();
+    }
+    if (ch == '.') {
+        __mini_stl_read_char();
+        ch = __mini_stl_peek_char();
+        double factor = 0.1;
+        while (ch >= '0' && ch <= '9') {
+            res += (double)(ch - '0') * factor;
+            factor *= 0.1;
+            __mini_stl_read_char();
+            ch = __mini_stl_peek_char();
+        }
+    }
+    *val = neg ? -res : res;
+    return 1;
+}
+
+inline int scanf(const char* fmt, int* val) {
+    (void)fmt;
+    return __mini_stl_scanf_int(val);
+}
+
+inline int scanf(const char* fmt, char* str) {
+    (void)fmt;
+    return __mini_stl_scanf_str(str);
+}
+
+inline int scanf(const char* fmt, double* val) {
+    (void)fmt;
+    return __mini_stl_scanf_double(val);
+}
+
+namespace std {
+    using ::printf;
+    using ::putchar;
+    using ::puts;
+    using ::getchar;
+    using ::scanf;
+}
+
+#else
+
+extern "C" {
+    struct _IO_FILE;
+    typedef struct _IO_FILE FILE;
+    extern FILE* stdin;
+    int ungetc(int c, FILE* stream);
+    int vscanf(const char* format, va_list arg);
+    int getchar(void);
+    int putchar(int c);
+    int puts(const char* s);
+    int printf(const char* format, ...);
+    int sprintf(char* str, const char* format, ...);
+    int snprintf(char* str, unsigned long size, const char* format, ...);
+    int scanf(const char* format, ...);
+}
+
+inline int __mini_stl_shared_lookahead = -1;
+
+inline int __mini_stl_read_char() {
+    if (__mini_stl_shared_lookahead != -1) {
+        int c = __mini_stl_shared_lookahead;
+        __mini_stl_shared_lookahead = -1;
+        return c;
+    }
+    return ::getchar();
+}
+
+inline int __mini_stl_peek_char() {
+    if (__mini_stl_shared_lookahead == -1) {
+        __mini_stl_shared_lookahead = ::getchar();
+    }
+    return __mini_stl_shared_lookahead;
+}
+
+inline void __mini_stl_unget_char(int c) {
+    __mini_stl_shared_lookahead = c;
+}
+
+namespace std {
+    using ::printf;
+    using ::sprintf;
+    using ::snprintf;
+    using ::putchar;
+    using ::puts;
+
+    inline int getchar() {
+        return __mini_stl_read_char();
+    }
+
+    inline int scanf(const char* fmt, ...) {
+        va_list args;
+        va_start(args, fmt);
+        if (__mini_stl_shared_lookahead != -1) {
+            ::ungetc(__mini_stl_shared_lookahead, stdin);
+            __mini_stl_shared_lookahead = -1;
+        }
+        int res = ::vscanf(fmt, args);
+        va_end(args);
+        return res;
+    }
+}
+
+#endif
+
+#endif

@@ -1,0 +1,4 @@
+auto i: 42
+auto d: 3.14
+auto *p: 42
+auto ch: A

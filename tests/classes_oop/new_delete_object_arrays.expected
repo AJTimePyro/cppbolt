@@ -1,0 +1,13 @@
+--- allocating array ---
+Element default ctor id=1
+Element default ctor id=2
+Element default ctor id=3
+--- array created ---
+elem 0 id=1
+elem 1 id=2
+elem 2 id=3
+--- deleting array ---
+Element dtor id=3
+Element dtor id=2
+Element dtor id=1
+--- deleted ---

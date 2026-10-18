@@ -1,0 +1,5 @@
+decimal: 123
+hex: ff
+string: wasm compiler
+char: W
+float: 3.1

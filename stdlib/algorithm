@@ -1,0 +1,138 @@
+#ifndef _MINI_STL_ALGORITHM_
+#define _MINI_STL_ALGORITHM_
+
+#include <cstddef>
+#include <utility>
+
+namespace std {
+    template<typename T>
+    const T& min(const T& a, const T& b) {
+        return (b < a) ? b : a;
+    }
+
+    template<typename T>
+    const T& max(const T& a, const T& b) {
+        return (a < b) ? b : a;
+    }
+
+    template<typename Iter>
+    void reverse(Iter first, Iter last) {
+        if (first == last) return;
+        --last;
+        while (first < last) {
+            std::swap(*first, *last);
+            ++first;
+            --last;
+        }
+    }
+
+    namespace detail {
+        template<typename Iter, typename Comp>
+        void insertion_sort(Iter first, Iter last, Comp comp) {
+            for (Iter i = first + 1; i < last; ++i) {
+                auto val = *i;
+                Iter j = i;
+                while (j > first && comp(val, *(j - 1))) {
+                    *j = *(j - 1);
+                    --j;
+                }
+                *j = val;
+            }
+        }
+
+        template<typename Iter, typename Comp>
+        void sift_down(Iter first, ptrdiff_t root, ptrdiff_t bottom, Comp comp) {
+            while (root * 2 + 1 <= bottom) {
+                ptrdiff_t child = root * 2 + 1;
+                if (child + 1 <= bottom && comp(*(first + child), *(first + child + 1))) {
+                    child++;
+                }
+                if (comp(*(first + root), *(first + child))) {
+                    std::swap(*(first + root), *(first + child));
+                    root = child;
+                } else {
+                    return;
+                }
+            }
+        }
+
+        template<typename Iter, typename Comp>
+        void heap_sort(Iter first, Iter last, Comp comp) {
+            ptrdiff_t count = last - first;
+            if (count <= 1) return;
+            for (ptrdiff_t i = (count - 2) / 2; i >= 0; --i) {
+                sift_down(first, i, count - 1, comp);
+            }
+            for (ptrdiff_t i = count - 1; i > 0; --i) {
+                std::swap(*first, *(first + i));
+                sift_down(first, 0, i - 1, comp);
+            }
+        }
+
+        template<typename Iter, typename Comp>
+        void introsort_loop(Iter first, Iter last, int depth_limit, Comp comp) {
+            ptrdiff_t count = last - first;
+            if (count <= 16) {
+                insertion_sort(first, last, comp);
+                return;
+            }
+            if (depth_limit <= 0) {
+                heap_sort(first, last, comp);
+                return;
+            }
+
+            Iter mid = first + count / 2;
+            auto pivot = *mid;
+
+            Iter left = first;
+            Iter right = last - 1;
+
+            while (left <= right) {
+                while (comp(*left, pivot)) ++left;
+                while (comp(pivot, *right)) --right;
+                if (left <= right) {
+                    std::swap(*left, *right);
+                    ++left;
+                    --right;
+                }
+            }
+
+            if (first < right + 1) introsort_loop(first, right + 1, depth_limit - 1, comp);
+            if (left < last) introsort_loop(left, last, depth_limit - 1, comp);
+        }
+
+        struct DefaultLess {
+            template<typename T>
+            bool operator()(const T& a, const T& b) const {
+                return a < b;
+            }
+        };
+
+        inline int calc_depth_limit(ptrdiff_t n) {
+            int depth = 0;
+            while (n > 1) {
+                depth++;
+                n >>= 1;
+            }
+            return depth * 2;
+        }
+    }
+
+    template<typename Iter>
+    void sort(Iter first, Iter last) {
+        if (first < last) {
+            int depth = detail::calc_depth_limit(last - first);
+            detail::introsort_loop(first, last, depth, detail::DefaultLess());
+        }
+    }
+
+    template<typename Iter, typename Comp>
+    void sort(Iter first, Iter last, Comp comp) {
+        if (first < last) {
+            int depth = detail::calc_depth_limit(last - first);
+            detail::introsort_loop(first, last, depth, comp);
+        }
+    }
+}
+
+#endif

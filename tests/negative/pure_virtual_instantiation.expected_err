@@ -1,0 +1,1 @@
+tests/negative/pure_virtual_instantiation.cpp:7:5: error: Variable type 'Abstract' is an abstract class

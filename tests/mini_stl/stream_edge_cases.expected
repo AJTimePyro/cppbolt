@@ -1,0 +1,6 @@
+num: 42 eof: 0 fail: 0
+peek: a eof: 0 fail: 0
+get: a gcount: 1 eof: 0 fail: 0
+getline1: [bc] eof: 1 fail: 0
+getline2: [] eof: 1 fail: 1
+after clear get: -1 eof: 1 fail: 1

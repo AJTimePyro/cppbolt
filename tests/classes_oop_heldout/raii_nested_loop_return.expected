@@ -1,0 +1,23 @@
+start search
+Probe OPEN 1
+Probe OPEN 2
+Probe OPEN 100
+Probe OPEN 200
+Probe CLOSE 200
+Probe OPEN 201
+Probe CLOSE 201
+Probe OPEN 202
+Probe CLOSE 202
+Probe CLOSE 100
+Probe OPEN 101
+Probe OPEN 200
+Probe CLOSE 200
+Probe OPEN 201
+Probe CLOSE 201
+Probe OPEN 202
+found target at (1,2)
+Probe CLOSE 202
+Probe CLOSE 101
+Probe CLOSE 2
+Probe CLOSE 1
+end search: 888

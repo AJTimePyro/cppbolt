@@ -1,0 +1,46 @@
+#ifndef _MINI_STL_IOMANIP_
+#define _MINI_STL_IOMANIP_
+
+#include <iostream>
+
+namespace std {
+    struct _Setw {
+        int width;
+        _Setw(int w = 0) : width(w) {}
+    };
+    inline _Setw setw(int n) { return _Setw(n); }
+
+    struct _Setprecision {
+        int prec;
+        _Setprecision(int p = 0) : prec(p) {}
+    };
+    inline _Setprecision setprecision(int n) { return _Setprecision(n); }
+
+    struct _Setfill {
+        char fill;
+        _Setfill(char c = ' ') : fill(c) {}
+    };
+    inline _Setfill setfill(char c) { return _Setfill(c); }
+
+    inline ostream& fixed(ostream& os) {
+        os.set_fixed(true);
+        return os;
+    }
+
+    inline ostream& operator<<(ostream& os, const _Setw& w) {
+        os.set_width(w.width);
+        return os;
+    }
+
+    inline ostream& operator<<(ostream& os, const _Setprecision& p) {
+        os.set_precision(p.prec);
+        return os;
+    }
+
+    inline ostream& operator<<(ostream& os, const _Setfill& f) {
+        os.set_fill(f.fill);
+        return os;
+    }
+}
+
+#endif

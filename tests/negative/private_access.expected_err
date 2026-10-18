@@ -1,0 +1,1 @@
+tests/negative/private_access.cpp:10:5: error: 'hidden' is a private member of 'Secret'

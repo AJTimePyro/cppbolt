@@ -1,0 +1,14 @@
+[package]
+name = "cppwasm-ffi"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "cppwasm_ffi"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cppwasm-core = { path = "../cppwasm-core" }
+
+[lints]
+workspace = true

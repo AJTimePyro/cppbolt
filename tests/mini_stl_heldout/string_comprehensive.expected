@@ -1,0 +1,17 @@
+init empty: 1 len: 0
+text: OK? len: 3 empty: 0
+index 0: O
+part: OK
+find K: 1 find missing: 1
+cmp eq: 1 cmp ne: 1 cmp lt: 1 cmp val: -1
+self: OK?
+doubled: OK?OK?
+base: OK?OK? clone: OZ?OK?
+by_val_out: cherry_processed base_x: cherry
+m1: initial 5
+m2: initial 50
+m3: initial 100
+tokens: <alpha> <beta>
+entry: <Heldout stream input payload line>
+large: 1000000 z m
+post clear: empty=1 len=0

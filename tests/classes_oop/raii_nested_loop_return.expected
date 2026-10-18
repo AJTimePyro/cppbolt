@@ -1,0 +1,15 @@
+before call
+ctor 1
+ctor 2
+ctor 10
+dtor 10
+ctor 11
+dtor 11
+ctor 12
+ctor 100
+early return at i=2
+dtor 100
+dtor 12
+dtor 2
+dtor 1
+after call result: 42

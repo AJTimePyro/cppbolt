@@ -1,0 +1,29 @@
+#ifndef _MINI_STL_CMATH_
+#define _MINI_STL_CMATH_
+
+#include <math.h>
+
+namespace std {
+    using ::sqrt;
+    using ::sin;
+    using ::cos;
+    using ::tan;
+    using ::pow;
+    using ::fabs;
+    using ::floor;
+    using ::ceil;
+    using ::exp;
+    using ::log;
+
+    inline int abs(int n) {
+        return n < 0 ? -n : n;
+    }
+    inline double abs(double d) {
+        return ::fabs(d);
+    }
+    inline float abs(float f) {
+        return ::fabs(f);
+    }
+}
+
+#endif

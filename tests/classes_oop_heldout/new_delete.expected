@@ -1,0 +1,5 @@
+*val = 256
+Packet ctor [7, 512]
+p->len = 512
+Packet dtor [7, 512]
+buffer sum = 110

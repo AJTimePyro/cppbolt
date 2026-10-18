@@ -1,0 +1,3 @@
+macro mul: 20
+const: 42
+feature A active: 100
