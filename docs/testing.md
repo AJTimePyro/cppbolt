@@ -9,7 +9,7 @@ tests and thirteen container/algorithm tests. Reproduce it with:
 
 ```sh
 cargo build --release
-cargo run -p cppwasm-testrunner -- target/release/cppwasm-cli
+cargo run --bin cppwasm-testrunner -- target/release/cppwasm-cli
 ```
 
 Before refactoring, archive each compiling test's Wasm SHA-256 and stdout SHA-256 outside the tree. During

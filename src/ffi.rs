@@ -1,9 +1,10 @@
 // The exported C entry points take pointers with the validity and ownership
 // rules documented at each function; callers outside Rust cannot express
 // `unsafe`, so the checks stay inside these wrappers.
+#![allow(unsafe_code)]
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
-use cppwasm_core::compile_with_options_named;
+use crate::compile_with_options_named;
 
 static mut RESULT_LEN: usize = 0;
 static mut ERROR_LEN: usize = 0;

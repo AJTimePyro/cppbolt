@@ -1,18 +1,25 @@
-[workspace]
-resolver = "2"
-members = [
-    "crates/cppwasm-core",
-    "crates/cppwasm-cli",
-    "crates/cppwasm-ffi",
-    "crates/cppwasm-testrunner",
-]
-
-[workspace.package]
+[package]
+name = "cppwasm"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "cppwasm"
+path = "src/lib.rs"
+crate-type = ["rlib", "cdylib"]
+
+[[bin]]
+name = "cppwasm-cli"
+path = "src/main.rs"
+
+[[bin]]
+name = "cppwasm-testrunner"
+path = "src/bin/cppwasm-testrunner.rs"
+
+[dependencies]
+
 # Panic-free code on every path that can see user input.
-[workspace.lints.clippy]
+[lints.clippy]
 all = { level = "warn", priority = -1 }
 unwrap_used = "deny"
 expect_used = "deny"

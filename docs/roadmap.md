@@ -1,7 +1,7 @@
 # Roadmap
 
 1. Complete source-map spans and structured diagnostics through preprocessing and AST nodes.
-2. Split the package into an OS-agnostic core, CLI, and isolated C ABI crate.
+2. Keep the compiler as one Cargo package with an OS-agnostic library, a native CLI, an isolated C ABI module, and a corpus runner.
 3. Replace string-keyed semantic state with arena IDs and normalize expression value categories.
 4. Decompose code generation and replace conservative frame allocation with measured per-function layouts.
 5. Replace the shell runner with a Rust harness and make baseline/hash comparison reproducible.

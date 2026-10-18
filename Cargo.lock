@@ -3,26 +3,5 @@
 version = 4
 
 [[package]]
-name = "cppwasm-cli"
+name = "cppwasm"
 version = "0.1.0"
-dependencies = [
- "cppwasm-core",
-]
-
-[[package]]
-name = "cppwasm-core"
-version = "0.1.0"
-
-[[package]]
-name = "cppwasm-ffi"
-version = "0.1.0"
-dependencies = [
- "cppwasm-core",
-]
-
-[[package]]
-name = "cppwasm-testrunner"
-version = "0.1.0"
-dependencies = [
- "cppwasm-core",
-]

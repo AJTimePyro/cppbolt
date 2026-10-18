@@ -9,7 +9,7 @@ Build and run the current corpus:
 
 ```sh
 cargo build --release
-cargo run -p cppwasm-testrunner -- target/release/cppwasm-cli
+cargo run --bin cppwasm-testrunner -- target/release/cppwasm-cli
 ```
 
 The architecture and ABI contracts are documented in [`docs/`](docs/README.md). The embedded headers are in

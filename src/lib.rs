@@ -1,6 +1,6 @@
 //! Dependency-free C++ subset to WebAssembly compiler.
 
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 // AST variants are named after their C++ construct (`StructDecl`, `EnumDecl`);
 // the redundant suffix is the clearer spelling at every use site.
 #![allow(clippy::enum_variant_names)]
@@ -8,6 +8,7 @@
 pub(crate) mod ast;
 pub(crate) mod codegen;
 pub(crate) mod diagnostics;
+pub mod ffi;
 pub(crate) mod lexer;
 pub(crate) mod name;
 pub(crate) mod parser;

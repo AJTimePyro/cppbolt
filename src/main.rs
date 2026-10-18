@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use cppwasm_core::{IncludeProvider, compile_with_provider};
+use cppwasm::{IncludeProvider, compile_with_provider};
 use std::env;
 use std::fs;
 use std::process;
@@ -67,7 +67,7 @@ fn main() {
 
     let includes = FilesystemIncludes;
     if dump_layouts {
-        match cppwasm_core::dump_record_layouts_with_provider(&source, &input_path, &includes) {
+        match cppwasm::dump_record_layouts_with_provider(&source, &input_path, &includes) {
             Ok(layouts) => {
                 print!("{}", layouts);
                 process::exit(0);
