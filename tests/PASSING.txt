@@ -187,3 +187,7 @@ c_basics/printf_return
 c_basics_heldout/printf_return
 classes_oop/const_subscript
 classes_oop_heldout/const_subscript
+c_basics/printf_octal
+c_basics_heldout/printf_octal
+c_basics/printf_conversions
+c_basics_heldout/printf_conversions

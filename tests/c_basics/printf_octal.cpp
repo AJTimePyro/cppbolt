@@ -1,0 +1,22 @@
+#include <stdio.h>
+int main(){
+ printf("[%#o]\n", 0);
+ printf("[%#o]\n", 8);
+ printf("[%#.0o]\n", 0);
+ printf("[%#.3o]\n", 8);
+ printf("[%#08o]\n", 8);
+ printf("[%#8o]\n", 8);
+ printf("[%#-8o]\n", 8);
+ printf("[%#x]\n", 0);
+ printf("[%#x]\n", 255);
+ printf("[%#X]\n", 255);
+ printf("[%#.0x]\n", 0);
+ printf("[%#.4x]\n", 255);
+ printf("[%#08x]\n", 255);
+ printf("[%#10x]\n", 255);
+ printf("[%#-10x]\n", 255);
+ printf("[%#010x]\n", 255);
+ printf("[%#o]\n", 4294967295u);
+ printf("[%#o]\n", 9);
+ return 0;
+}

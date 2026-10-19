@@ -230,6 +230,32 @@ pub(super) fn emit_flag_parse(code: &mut Vec<u8>) {
     write_u32(code, 1);
     code.push(OP_END);
 
+    // '#': alternate form (bit 6 = 64)
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 2);
+    code.push(OP_I32_CONST);
+    write_i32(code, 35); // '#'
+    code.push(OP_I32_EQ);
+    code.push(OP_IF);
+    code.push(0x40);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 3);
+    code.push(OP_I32_CONST);
+    write_i32(code, 64);
+    code.push(OP_I32_OR);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 3);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 0);
+    code.push(OP_I32_CONST);
+    write_i32(code, 1);
+    code.push(OP_I32_ADD);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 0);
+    code.push(OP_BR);
+    write_u32(code, 1);
+    code.push(OP_END);
+
     // No more flags
     code.push(OP_BR);
     write_u32(code, 1); // break flags loop

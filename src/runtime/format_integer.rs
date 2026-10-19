@@ -1,7 +1,7 @@
 use super::opcodes::*;
 use crate::wasm::*;
 
-/// Emits the integer conversions `%d`, `%i`, `%u`, `%x`, and `%X`.
+/// Emits the integer conversions `%d`, `%i`, `%u`, `%o`, `%x`, and `%X`.
 pub(super) fn emit_integer_conversion(code: &mut Vec<u8>, func_print_int: u32) {
     // 'd' (100) or 'i' (105)
     code.push(OP_LOCAL_GET);
@@ -218,6 +218,75 @@ pub(super) fn emit_integer_conversion(code: &mut Vec<u8>, func_print_int: u32) {
     write_u32(code, 8);
     code.push(OP_I32_CONST);
     write_i32(code, 16); // radix 16
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 4);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 5);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 3);
+    code.push(OP_CALL);
+    write_u32(code, func_print_int);
+    super::emit_add_to_char_count(code, super::PRINTF_CHAR_COUNT_LOCAL);
+    code.push(OP_BR);
+    write_u32(code, 1);
+    code.push(OP_END);
+
+    // 'o' (111): octal, always unsigned.
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 2);
+    code.push(OP_I32_CONST);
+    write_i32(code, 111);
+    code.push(OP_I32_EQ);
+    code.push(OP_IF);
+    code.push(0x40);
+    // flags |= 32 (is_unsigned)
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 3);
+    code.push(OP_I32_CONST);
+    write_i32(code, 32);
+    code.push(OP_I32_OR);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 3);
+
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 6);
+    code.push(OP_IF);
+    code.push(0x40);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 1);
+    code.push(OP_I64_LOAD);
+    write_u32(code, 2);
+    write_u32(code, 0);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 8);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 1);
+    code.push(OP_I32_CONST);
+    write_i32(code, 8);
+    code.push(OP_I32_ADD);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 1);
+    code.push(OP_ELSE);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 1);
+    code.push(OP_I32_LOAD);
+    write_u32(code, 2);
+    write_u32(code, 0);
+    code.push(OP_I64_EXTEND_I32_U);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 8);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 1);
+    code.push(OP_I32_CONST);
+    write_i32(code, 4);
+    code.push(OP_I32_ADD);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 1);
+    code.push(OP_END);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 8);
+    code.push(OP_I32_CONST);
+    write_i32(code, 8); // radix 8
     code.push(OP_LOCAL_GET);
     write_u32(code, 4);
     code.push(OP_LOCAL_GET);

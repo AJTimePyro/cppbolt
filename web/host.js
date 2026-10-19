@@ -221,6 +221,7 @@
                     const isSpaceSign = (flags & 8) !== 0;
                     const isUppercase = (flags & 16) !== 0;
                     const isUnsigned = (flags & 32) !== 0;
+                    const isAlternate = (flags & 64) !== 0;
 
                     let numVal = BigInt(val);
                     let isNeg = false;
@@ -257,13 +258,30 @@
                         signStr = " ";
                     }
 
-                    if (precision < 0 && isZeroPad && !isLeftAlign) {
-                        while (signStr.length + s.length < width) {
-                            s = "0" + s;
+                    let prefix = "";
+                    if (isAlternate) {
+                        if (radix === 8) {
+                            if (!s.startsWith("0")) {
+                                prefix = "0";
+                            }
+                        } else if (radix === 16 && numVal !== 0n) {
+                            prefix = isUppercase ? "0X" : "0x";
                         }
                     }
 
-                    let fullStr = signStr + s;
+                    let fullStr;
+                    if (precision < 0 && isZeroPad && !isLeftAlign) {
+                        let zeros = "";
+                        while (
+                            signStr.length + prefix.length + zeros.length + s.length <
+                            width
+                        ) {
+                            zeros += "0";
+                        }
+                        fullStr = signStr + prefix + zeros + s;
+                    } else {
+                        fullStr = signStr + prefix + s;
+                    }
                     if (fullStr.length < width) {
                         const padLen = width - fullStr.length;
                         const pad = " ".repeat(padLen);
