@@ -1,4 +1,4 @@
-Hello, World!
-length: 13
-c_str: Hello, World!
-equal: 1
+Web-Assembly
+len: 12
+alias: Web-Assembly
+neq: 0

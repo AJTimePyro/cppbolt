@@ -1,5 +1,6 @@
-decimal: 123
-hex: ff
-string: wasm compiler
-char: W
-float: 3.1
+int: -42
+octal: 0100
+hex: 0XBEEF
+text: mini stdio
+char: M
+real: 2.72

@@ -1,20 +1,20 @@
 #include <iostream>
 
-struct Point2D {
-    int x;
-    int y;
-    Point2D(int x_ = 0, int y_ = 0) : x(x_), y(y_) {}
+struct Vec3 {
+    int i;
+    int j;
+    int k;
+    Vec3(int a = 0, int b = 0, int c = 0) : i(a), j(b), k(c) {}
 };
 
-std::ostream& operator<<(std::ostream& os, const Point2D& pt) {
-    os << "(" << pt.x << ", " << pt.y << ")";
+std::ostream& operator<<(std::ostream& os, const Vec3& v) {
+    os << "<" << v.i << ";" << v.j << ";" << v.k << ">";
     return os;
 }
 
 int main() {
-
-    Point2D p1(12, 34);
-    Point2D p2(56, 78);
-    std::cout << "p1=" << p1 << " and p2=" << p2 << std::endl;
+    Vec3 a(1, 2, 3);
+    Vec3 b(-4, 5, 0);
+    std::cout << "a=" << a << " b=" << b << std::endl;
     return 0;
 }

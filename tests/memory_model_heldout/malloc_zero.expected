@@ -1,2 +1,1 @@
-malloc(0): non-null aligned pointer obtained
-free(malloc(0)): OK
+malloc(0) twice: non-null aligned; malloc(1): OK

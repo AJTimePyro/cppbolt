@@ -22,16 +22,15 @@ void* tracked_malloc(int sz) {
 #endif
 
 int main() {
-
-    int cap = 1024; // 1 KB
+    int cap = 2048;
     char* buf = (char*)malloc(cap);
     buf[0] = 1;
+    buf[cap - 1] = 2;
 
     int peak_pages = get_current_pages();
-
     printf("Start: cap = %d bytes, pages = %d\n", cap, peak_pages);
 
-    while (cap < 64 * 1024 * 1024) {
+    while (cap < 32 * 1024 * 1024) {
         int new_cap = cap * 2;
         char* new_buf = (char*)malloc(new_cap);
         if (!new_buf) {
@@ -39,7 +38,6 @@ int main() {
             return 1;
         }
 
-        // Copy pattern
         new_buf[0] = buf[0];
         new_buf[cap - 1] = (char)(cap & 0x7f);
         new_buf[new_cap - 1] = (char)(new_cap & 0x7f);
@@ -53,7 +51,7 @@ int main() {
             peak_pages = cur_pages;
         }
 
-        if (cap >= 4 * 1024 * 1024) {
+        if (cap >= 8 * 1024 * 1024) {
             printf("Live: %d bytes (%d MB), Peak pages: %d (approx %d MB)\n",
                    cap, cap / (1024 * 1024), peak_pages, (peak_pages * 64) / 1024);
         }

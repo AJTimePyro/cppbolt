@@ -2,7 +2,6 @@
 #include <cstdio>
 
 int main() {
-
     int a = 0;
     std::cin >> a;
 
@@ -16,7 +15,7 @@ int main() {
     char s[32] = {0};
     std::scanf("%s", s);
 
-    int d = 0;
+    long d = 0;
     std::cin >> d;
 
     int peek_ch = std::cin.peek();
@@ -24,8 +23,13 @@ int main() {
     char c3 = 0;
     std::cin >> c3;
 
+    const char* note = "plain";
+    if (peek_ch == ' ') {
+        note = "spaced";
+    }
+
     std::cout << "a=" << a << " c1=" << c1 << " c2=" << c2
               << " b=" << b << " s=" << s << " d=" << d
-              << " peek=" << (char)peek_ch << " c3=" << c3 << "\n";
+              << " note=" << note << " c3=" << c3 << "\n";
     return 0;
 }

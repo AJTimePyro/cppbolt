@@ -1,8 +1,7 @@
-Read number: 42
-Direct getline length: 0
-First line: [First line after number]
-Peek next char: S
-Rest after ignore: [econd line after number]
-*****123
-3.14
-cin eof: 0, fail: 0
+Sum: 7
+After numbers: 0
+Line: [after numbers]
+Peek: t
+Tail: [il line]
+....77
+eof: 0

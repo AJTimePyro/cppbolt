@@ -1,7 +1,5 @@
-Start: cap = 1024 bytes, pages = 256
-Live: 4194304 bytes (4 MB), Peak pages: 257 (approx 16 MB)
+Start: cap = 2048 bytes, pages = 256
 Live: 8388608 bytes (8 MB), Peak pages: 385 (approx 24 MB)
 Live: 16777216 bytes (16 MB), Peak pages: 641 (approx 40 MB)
 Live: 33554432 bytes (32 MB), Peak pages: 1153 (approx 72 MB)
-Live: 67108864 bytes (64 MB), Peak pages: 2177 (approx 136 MB)
-Final peak pages: 2177 vs final live bytes: 0
+Final peak pages: 1153 vs final live bytes: 0

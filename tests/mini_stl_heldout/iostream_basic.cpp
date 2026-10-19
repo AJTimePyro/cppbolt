@@ -1,7 +1,7 @@
 #include <iostream>
 
 int main() {
-
-    std::cout << "Hello, " << "iostream! " << 123 << " " << 45.5 << std::endl;
+    std::cout << "Value: " << 7 << ", ratio: " << 2.5 << ", flag: " << 'Y' << std::endl;
+    std::cout << "Sum: " << (3 + 4) << '\n';
     return 0;
 }

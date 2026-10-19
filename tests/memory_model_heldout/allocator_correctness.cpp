@@ -8,19 +8,17 @@ struct Block {
 };
 
 int main() {
-
-    unsigned int prng = 1337;
+    unsigned int prng = 4242;
     unsigned int checksum = 0;
-    Block blocks[32];
+    Block blocks[40];
     int count = 0;
 
-    for (int round = 0; round < 100; round++) {
-        // Allocate a few blocks
-        int to_alloc = (prng % 4) + 1;
+    for (int round = 0; round < 120; round++) {
+        int to_alloc = (prng % 3) + 1;
         prng = (prng * 1103515245 + 12345) & 0x7fffffff;
 
-        for (int k = 0; k < to_alloc && count < 32; k++) {
-            int sz = ((prng % 16) + 1) * 32;
+        for (int k = 0; k < to_alloc && count < 40; k++) {
+            int sz = ((prng % 24) + 1) * 16;
             prng = (prng * 1103515245 + 12345) & 0x7fffffff;
             int id = round * 100 + k;
 
@@ -30,13 +28,11 @@ int main() {
                 return 1;
             }
 
-            // 8-byte alignment check
             if (((unsigned long)p) % 8 != 0) {
                 printf("Unaligned pointer: %p\n", p);
                 return 2;
             }
 
-            // Overlap check against all active blocks
             for (int j = 0; j < count; j++) {
                 char* p_start = p;
                 char* p_end = p + sz;
@@ -48,11 +44,10 @@ int main() {
                 }
             }
 
-            // Fill pattern
             for (int b = 0; b < sz; b++) {
-                char val = (char)((id + b) & 0x7f);
+                char val = (char)((id + b) & 0xff);
                 p[b] = val;
-                checksum = (checksum * 31 + (unsigned char)val) & 0x7fffffff;
+                checksum = (checksum * 131 + (unsigned char)val) & 0x7fffffff;
             }
 
             blocks[count].ptr = p;
@@ -61,42 +56,37 @@ int main() {
             count++;
         }
 
-        // Free a block if any
-        if (count > 0 && (prng % 2 == 0 || count >= 28)) {
+        if (count > 0 && (prng % 2 == 0 || count >= 36)) {
             int idx = prng % count;
             prng = (prng * 1103515245 + 12345) & 0x7fffffff;
 
-            // Verify pattern before free
             Block b = blocks[idx];
             for (int byte_i = 0; byte_i < b.size; byte_i++) {
-                char expected = (char)((b.id + byte_i) & 0x7f);
+                char expected = (char)((b.id + byte_i) & 0xff);
                 if (b.ptr[byte_i] != expected) {
-                    printf("Pattern mismatch at %p offset %d!\n", b.ptr, byte_i);
+                    printf("Pattern mismatch at offset %d!\n", byte_i);
                     return 4;
                 }
             }
 
             free(b.ptr);
-
-            // Remove from array
             blocks[idx] = blocks[count - 1];
             count--;
         }
     }
 
-    // Free remaining blocks
     for (int i = 0; i < count; i++) {
         Block b = blocks[i];
         for (int byte_i = 0; byte_i < b.size; byte_i++) {
-            char expected = (char)((b.id + byte_i) & 0x7f);
+            char expected = (char)((b.id + byte_i) & 0xff);
             if (b.ptr[byte_i] != expected) {
-                printf("Final pattern mismatch at %p offset %d!\n", b.ptr, byte_i);
+                printf("Final pattern mismatch at offset %d!\n", byte_i);
                 return 5;
             }
         }
         free(b.ptr);
     }
 
-    printf("Allocator correctness: OK, checksum: %u\n", checksum);
+    printf("Allocator stress: OK, checksum: %u\n", checksum);
     return 0;
 }
