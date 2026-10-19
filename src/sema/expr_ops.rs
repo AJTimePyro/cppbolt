@@ -180,9 +180,11 @@ impl Sema {
 
         let arr_ty = self.analyze_expr(array)?;
         let _idx_ty = self.analyze_expr(index)?;
+        let receiver_const = crate::sema::receiver_is_const_type(&arr_ty);
         let clean_ty = arr_ty.strip_const();
         if let Type::Struct(sname) = clean_ty
-            && let Some(sig) = self.find_method_in_class(sname, "operator[]")
+            && let Some(sig) =
+                self.find_method_in_class_for_receiver(sname, "operator[]", receiver_const)
         {
             return Ok(sig.return_type.strip_reference().clone());
         }

@@ -185,3 +185,5 @@ c_basics/multidim_arrays
 c_basics_heldout/multidim_arrays
 c_basics/printf_return
 c_basics_heldout/printf_return
+classes_oop/const_subscript
+classes_oop_heldout/const_subscript

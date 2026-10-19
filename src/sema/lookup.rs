@@ -32,19 +32,26 @@ impl Sema {
     }
 
     pub fn find_method_in_class(&self, class_name: &str, method_name: &str) -> Option<FunctionSig> {
+        self.find_method_in_class_for_receiver(class_name, method_name, false)
+    }
+
+    /// Finds a method, selecting the const overload when the receiver is const.
+    pub fn find_method_in_class_for_receiver(
+        &self,
+        class_name: &str,
+        method_name: &str,
+        receiver_const: bool,
+    ) -> Option<FunctionSig> {
         let pick_sig = |sigs: &[FunctionSig]| -> Option<FunctionSig> {
-            if let Some(non_const) = sigs.iter().find(|s| {
-                !s.param_types
-                    .first()
-                    .map(|p| match p {
-                        Type::Pointer(inner) => matches!(**inner, Type::Const(_)),
-                        _ => false,
-                    })
-                    .unwrap_or(false)
-            }) {
+            let receiver_matches =
+                |sig: &FunctionSig| !receiver_const || crate::sema::sig_receiver_is_const(sig);
+            if let Some(non_const) = sigs
+                .iter()
+                .find(|s| receiver_matches(s) && !crate::sema::sig_receiver_is_const(s))
+            {
                 Some(non_const.clone())
             } else {
-                sigs.first().cloned()
+                sigs.iter().find(|s| receiver_matches(s)).cloned()
             }
         };
         let qual_name = format!("{}::{}", class_name, method_name);
@@ -59,7 +66,9 @@ impl Sema {
         }
         if let Some(layout) = self.struct_layouts.get(class_name) {
             for b in &layout.base_classes {
-                if let Some(sig) = self.find_method_in_class(b, method_name) {
+                if let Some(sig) =
+                    self.find_method_in_class_for_receiver(b, method_name, receiver_const)
+                {
                     return Some(sig);
                 }
             }

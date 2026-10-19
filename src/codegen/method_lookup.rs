@@ -3,11 +3,39 @@ use super::*;
 impl<'a> Codegen<'a> {
     /// Resolves a method or destructor call on a class, including inherited
     /// methods, selecting the lowest-cost overload.
+    ///
+    /// Overloads that differ only in `const` are biased toward the non-const
+    /// overload; use [`Self::find_method_for_receiver`] when the receiver's
+    /// constness is known.
     pub fn find_method(
         &self,
         class_name: &str,
         method_name: &str,
         arg_types: &[Type],
+    ) -> Option<(u32, FunctionSig)> {
+        self.find_method_filtered(class_name, method_name, arg_types, None)
+    }
+
+    /// Resolves a method for a receiver whose constness is known.
+    ///
+    /// A const receiver only considers const-qualified overloads; a non-const
+    /// receiver prefers the non-const overload but still accepts a const one.
+    pub fn find_method_for_receiver(
+        &self,
+        class_name: &str,
+        method_name: &str,
+        arg_types: &[Type],
+        receiver_const: bool,
+    ) -> Option<(u32, FunctionSig)> {
+        self.find_method_filtered(class_name, method_name, arg_types, Some(receiver_const))
+    }
+
+    fn find_method_filtered(
+        &self,
+        class_name: &str,
+        method_name: &str,
+        arg_types: &[Type],
+        receiver: Option<bool>,
     ) -> Option<(u32, FunctionSig)> {
         if method_name.starts_with('~') {
             let short_cls = class_name.split("::").last().unwrap_or(class_name);
@@ -44,6 +72,12 @@ impl<'a> Codegen<'a> {
                 let mut best_sig = None;
                 let mut best_score = usize::MAX;
                 for sig in sigs {
+                    if let Some(receiver_const) = receiver
+                        && receiver_const
+                        && !crate::sema::sig_receiver_is_const(sig)
+                    {
+                        continue;
+                    }
                     let params = if sig.is_static {
                         &sig.param_types[..]
                     } else if !sig.param_types.is_empty() {
@@ -89,6 +123,11 @@ impl<'a> Codegen<'a> {
                                 break;
                             }
                         }
+                        let receiver_penalty = match receiver {
+                            Some(false) if crate::sema::sig_receiver_is_const(sig) => 1,
+                            _ => 0,
+                        };
+                        let score = score + receiver_penalty;
                         if ok && score < best_score {
                             best_score = score;
                             best_sig = Some(sig.clone());
@@ -131,12 +170,14 @@ impl<'a> Codegen<'a> {
             });
         if let Some(layout) = layout {
             if let Some(base) = layout.base_classes.first()
-                && let Some(result) = self.find_method(base, method_name, arg_types)
+                && let Some(result) =
+                    self.find_method_filtered(base, method_name, arg_types, receiver)
             {
                 return Some(result);
             }
             for (base, _) in layout.base_offsets.iter().skip(1) {
-                if let Some(result) = self.find_method(base, method_name, arg_types)
+                if let Some(result) =
+                    self.find_method_filtered(base, method_name, arg_types, receiver)
                     && result.1.is_static
                 {
                     return Some(result);

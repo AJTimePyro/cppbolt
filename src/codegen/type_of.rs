@@ -298,7 +298,13 @@ impl<'a> Codegen<'a> {
                 let clean_ty = arr_ty.strip_const();
                 if let Type::Struct(sname) = clean_ty {
                     let idx_ty = self.get_expr_type(index, ctx);
-                    if let Some((_, sig)) = self.find_method(sname, "operator[]", &[idx_ty]) {
+                    let receiver_const = crate::sema::receiver_is_const_type(&arr_ty);
+                    if let Some((_, sig)) = self.find_method_for_receiver(
+                        sname,
+                        "operator[]",
+                        &[idx_ty],
+                        receiver_const,
+                    ) {
                         return sig.return_type.clone();
                     }
                 }
