@@ -10,6 +10,10 @@ static mut RESULT_LEN: usize = 0;
 static mut ERROR_LEN: usize = 0;
 static mut ERROR_BYTES: [u8; 4096] = [0; 4096];
 
+/// Allocates an uninitialised input buffer of `size` bytes.
+///
+/// The caller owns the returned block and must release it with
+/// [`dealloc_buffer`] using the same size, or hand it to `compile_wasm`.
 #[unsafe(no_mangle)]
 pub extern "C" fn alloc_buffer(size: usize) -> *mut u8 {
     let mut buffer = Vec::with_capacity(size);
@@ -18,6 +22,10 @@ pub extern "C" fn alloc_buffer(size: usize) -> *mut u8 {
     pointer
 }
 
+/// Releases a buffer previously returned by [`alloc_buffer`].
+///
+/// The `size` must be the value passed to `alloc_buffer`; input buffers are
+/// allocated with that exact capacity, so the deallocation layout matches.
 #[unsafe(no_mangle)]
 pub extern "C" fn dealloc_buffer(pointer: *mut u8, size: usize) {
     if !pointer.is_null() && size > 0 {
@@ -25,6 +33,24 @@ pub extern "C" fn dealloc_buffer(pointer: *mut u8, size: usize) {
         unsafe {
             drop(Vec::from_raw_parts(pointer, size, size));
         }
+    }
+}
+
+/// Releases a successful result buffer returned by `compile_wasm`.
+///
+/// Results are boxed slices, so `length` must be `get_result_len()` from the
+/// same call. Error text lives in a static buffer and is never freed.
+#[unsafe(no_mangle)]
+pub extern "C" fn free_result(pointer: *mut u8, length: usize) {
+    if pointer.is_null() || length == 0 {
+        return;
+    }
+    // SAFETY: the pointer and length are exactly the boxed slice returned by
+    // compile_wasm and ownership is transferred back once.
+    unsafe {
+        drop(Box::from_raw(std::ptr::slice_from_raw_parts_mut(
+            pointer, length,
+        )));
     }
 }
 
@@ -40,13 +66,13 @@ fn set_error(message: &str) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn compile_wasm(source_pointer: *const u8, source_length: usize) -> *const u8 {
+pub extern "C" fn compile_wasm(source_pointer: *const u8, source_length: usize) -> *mut u8 {
     let source = if source_length == 0 {
         ""
     } else {
         if source_pointer.is_null() {
             set_error("source pointer is null");
-            return std::ptr::null();
+            return std::ptr::null_mut();
         }
         // SAFETY: the ABI caller supplies a readable buffer of the declared length.
         let source_bytes = unsafe { std::slice::from_raw_parts(source_pointer, source_length) };
@@ -54,16 +80,17 @@ pub extern "C" fn compile_wasm(source_pointer: *const u8, source_length: usize) 
             Ok(source) => source,
             Err(_) => {
                 set_error("source is not valid UTF-8");
-                return std::ptr::null();
+                return std::ptr::null_mut();
             }
         }
     };
 
     match compile_with_options_named(source, "<input>", 256) {
-        Ok(mut bytes) => {
-            let pointer = bytes.as_mut_ptr();
-            let length = bytes.len();
-            std::mem::forget(bytes);
+        Ok(bytes) => {
+            let mut boxed = bytes.into_boxed_slice();
+            let pointer = boxed.as_mut_ptr();
+            let length = boxed.len();
+            std::mem::forget(boxed);
             // SAFETY: the ABI is single-threaded in the supported browser/Node hosts.
             unsafe {
                 RESULT_LEN = length;
@@ -73,7 +100,7 @@ pub extern "C" fn compile_wasm(source_pointer: *const u8, source_length: usize) 
         }
         Err(error) => {
             set_error(&error.to_string());
-            std::ptr::null()
+            std::ptr::null_mut()
         }
     }
 }
