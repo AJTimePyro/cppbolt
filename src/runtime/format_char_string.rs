@@ -1,6 +1,7 @@
 use super::opcodes::*;
 use crate::wasm::*;
 
+/// Emits the `%c` and `%s` conversions.
 pub(super) fn emit_char_string_conversion(code: &mut Vec<u8>, func_print_char: u32) {
     // 'c' (99)
     code.push(OP_LOCAL_GET);
@@ -51,7 +52,7 @@ pub(super) fn emit_char_string_conversion(code: &mut Vec<u8>, func_print_char: u
     code.push(OP_LOCAL_SET);
     write_u32(code, 1);
 
-    // Loop printing characters of string
+    // Print until the NUL terminator.
     code.push(OP_BLOCK);
     code.push(0x40);
     code.push(OP_LOOP);

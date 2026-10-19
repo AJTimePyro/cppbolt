@@ -78,7 +78,9 @@ impl Sema {
         }
         if let Type::Pointer(t_elem) = target {
             if value.is_integer() {
-                return true; // NULL / integer to pointer
+                // Accept integers as potential null pointers; this subset does
+                // not track the constant-expression rule here.
+                return true;
             }
             if let Type::Pointer(v_elem) = value {
                 if t_elem.strip_const() == &Type::Void || v_elem.strip_const() == &Type::Void {

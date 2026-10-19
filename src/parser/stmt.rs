@@ -117,8 +117,9 @@ impl Parser {
         let base_type = self.parse_type()?;
         let (final_ty, name) =
             if self.peek() == &TokenKind::LParen && self.peek_ahead(1) == &TokenKind::Star {
-                self.advance(); // (
-                self.advance(); // *
+                // Function-pointer local: Base (*name)(args).
+                self.advance();
+                self.advance();
                 let id = match self.advance().kind.clone() {
                     TokenKind::Ident(id) => id,
                     _ => {
@@ -217,7 +218,7 @@ impl Parser {
 
     pub(super) fn parse_if_stmt(&mut self) -> Result<Stmt, CompileError> {
         let tok = self.current().clone();
-        self.advance(); // consume 'if'
+        self.advance();
         self.expect(TokenKind::LParen)?;
         let cond = self.parse_expr()?;
         self.expect(TokenKind::RParen)?;
@@ -241,7 +242,7 @@ impl Parser {
 
     pub(super) fn parse_while_stmt(&mut self) -> Result<Stmt, CompileError> {
         let tok = self.current().clone();
-        self.advance(); // consume 'while'
+        self.advance();
         self.expect(TokenKind::LParen)?;
         let cond = self.parse_expr()?;
         self.expect(TokenKind::RParen)?;
@@ -251,7 +252,7 @@ impl Parser {
 
     pub(super) fn parse_do_while_stmt(&mut self) -> Result<Stmt, CompileError> {
         let tok = self.current().clone();
-        self.advance(); // consume 'do'
+        self.advance();
         let body = Box::new(self.parse_stmt()?);
         self.expect(TokenKind::KwWhile)?;
         self.expect(TokenKind::LParen)?;
@@ -267,7 +268,7 @@ impl Parser {
 
     pub(super) fn parse_for_stmt(&mut self) -> Result<Stmt, CompileError> {
         let tok = self.current().clone();
-        self.advance(); // consume 'for'
+        self.advance();
         self.expect(TokenKind::LParen)?;
 
         let init = if self.peek() == &TokenKind::Semi {
@@ -315,7 +316,7 @@ impl Parser {
 
     pub(super) fn parse_switch_stmt(&mut self) -> Result<Stmt, CompileError> {
         let tok = self.current().clone();
-        self.advance(); // consume 'switch'
+        self.advance();
         self.expect(TokenKind::LParen)?;
         let expr = self.parse_expr()?;
         self.expect(TokenKind::RParen)?;
@@ -326,6 +327,4 @@ impl Parser {
             tok.col,
         ))
     }
-
-    // Expression parser using Precedence Climbing
 }

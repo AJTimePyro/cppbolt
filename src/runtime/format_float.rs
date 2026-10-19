@@ -1,6 +1,7 @@
 use super::opcodes::*;
 use crate::wasm::*;
 
+/// Emits the floating-point conversions `%f`, `%e`/`%E`, and `%g`/`%G`.
 pub(super) fn emit_float_conversion(code: &mut Vec<u8>, func_print_double: u32) {
     // 'f' (102)
     code.push(OP_LOCAL_GET);

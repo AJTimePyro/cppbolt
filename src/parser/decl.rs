@@ -78,8 +78,9 @@ impl Parser {
             self.advance();
             let base_type = self.parse_type()?;
             if self.peek() == &TokenKind::LParen && self.peek_ahead(1) == &TokenKind::Star {
-                self.advance(); // (
-                self.advance(); // *
+                // Function-pointer typedef: Base (*Name)(args).
+                self.advance();
+                self.advance();
                 let id = match self.advance().kind.clone() {
                     TokenKind::Ident(id) => id,
                     _ => {
@@ -132,8 +133,10 @@ impl Parser {
         if self.peek() == &TokenKind::KwExtern
             && matches!(self.peek_ahead(1), TokenKind::StringLiteral(_))
         {
-            self.advance(); // extern
-            self.advance(); // string
+            // Linkage and ABI strings have no effect in this single-module
+            // compiler; declarations inside the block are parsed normally.
+            self.advance();
+            self.advance();
             if self.peek() == &TokenKind::LBrace {
                 self.advance();
                 while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
@@ -172,8 +175,9 @@ impl Parser {
 
         let ty = self.parse_type()?;
         if self.peek() == &TokenKind::LParen && self.peek_ahead(1) == &TokenKind::Star {
-            self.advance(); // (
-            self.advance(); // *
+            // Function-pointer declarator: Base (*name)(args).
+            self.advance();
+            self.advance();
             let name = match self.advance().kind.clone() {
                 TokenKind::Ident(id) => id,
                 _ => {
@@ -271,8 +275,9 @@ impl Parser {
             let base_type = self.parse_type()?;
             let (ptype, pname) =
                 if self.peek() == &TokenKind::LParen && self.peek_ahead(1) == &TokenKind::Star {
-                    self.advance(); // (
-                    self.advance(); // *
+                    // Function-pointer parameter: Base (*name)(args).
+                    self.advance();
+                    self.advance();
                     let id = if let TokenKind::Ident(id) = self.peek().clone() {
                         self.advance();
                         id

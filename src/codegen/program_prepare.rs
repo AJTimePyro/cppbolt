@@ -2,12 +2,13 @@ use super::*;
 
 impl<'a> Codegen<'a> {
     pub(super) fn prepare<'p>(&mut self, program: &'p Program) -> Plan<'p> {
-        // Collect string literals
+        // Intern string literals first so their data offsets are stable.
         for decl in &program.declarations {
             self.collect_strings_decl(decl);
         }
 
-        // Collect address-taken functions across the AST
+        // Functions whose address escapes are roots for dead-code elimination
+        // and need entries in the indirect-call table.
         let mut address_taken = HashSet::new();
         for decl in &program.declarations {
             match decl {
@@ -30,7 +31,9 @@ impl<'a> Codegen<'a> {
             }
         }
 
-        // Global variables and function-local statics layout
+        // Lay out globals, static fields, and function-local statics in the
+        // data segment. Function-local statics use source locations in their
+        // storage names to keep same-named statics distinct.
         for decl in &program.declarations {
             if let Decl::GlobalVar { name, ty, init, .. } = decl {
                 let offset = self.next_data_offset;
@@ -83,7 +86,9 @@ impl<'a> Codegen<'a> {
             }
         }
 
-        // Reachability analysis & Dead Function Elimination
+        // Reachability analysis: `main`, address-taken functions, and virtual
+        // methods are roots; calls discovered while walking reachable bodies
+        // extend the set to a fixed point.
         let mut candidates = Vec::new();
         for decl in &program.declarations {
             if let Decl::Function(f) = decl {
@@ -147,6 +152,8 @@ impl<'a> Codegen<'a> {
                             collect_stmt_calls(body, &mut calls);
                         }
 
+                        // A constructor or destructor implicitly calls the
+                        // lifecycle methods of its bases and members.
                         if let Some(layout) = self.sema.struct_layouts.get(name)
                             && (m.name == *name || m.name == format!("~{}", name))
                         {
@@ -158,6 +165,8 @@ impl<'a> Codegen<'a> {
                             }
                         }
 
+                        // Virtual methods can be reached through any vtable,
+                        // so they are conservative roots.
                         let is_vmethod = self
                             .sema
                             .struct_layouts
@@ -209,7 +218,8 @@ impl<'a> Codegen<'a> {
             }
         }
 
-        // Collect all calls across reachable functions
+        // Union the call sets of reachable bodies. These names decide which
+        // runtime helpers must exist in the module.
         let mut all_reachable_calls = HashSet::new();
         for &idx in &reachable {
             all_reachable_calls.extend(candidates[idx].calls.iter().cloned());
@@ -239,6 +249,9 @@ impl<'a> Codegen<'a> {
         let need_printf = all_reachable_calls.contains("printf")
             || all_reachable_calls.contains("std::printf")
             || all_reachable_calls.iter().any(|c| c.ends_with("::printf"));
+        // Keep the allocator whenever a record exists: synthesized constructors,
+        // destructors, and prvalue returns may allocate even without a visible
+        // `new`, `malloc`, or `free` call.
         let need_alloc = all_reachable_calls.contains("malloc")
             || all_reachable_calls.contains("free")
             || has_deleting_dtors
@@ -264,9 +277,10 @@ impl<'a> Codegen<'a> {
                 .map(|l| l.has_vtable)
                 .unwrap_or(false)
         });
+        // Vtables, function pointers, and indirect calls all need a funcref
+        // table. Slot 0 is reserved for the pure-virtual trap.
         let need_table = has_vtables || !address_taken.is_empty() || has_indirect_calls;
 
-        // Dynamically register printf if needed
         if need_printf {
             let func_idx = (self.module.imports.len() + self.module.functions.len()) as u32;
             let t_printf = self
@@ -279,7 +293,6 @@ impl<'a> Codegen<'a> {
             self.func_printf = func_idx;
         }
 
-        // Dynamically register malloc & free if needed
         if need_alloc {
             let func_malloc = (self.module.imports.len() + self.module.functions.len()) as u32;
             let t_malloc = self.module.add_type(vec![TYPE_I32], vec![TYPE_I32]);
@@ -292,14 +305,15 @@ impl<'a> Codegen<'a> {
             self.func_indices.insert("free".to_string(), func_free);
         }
 
-        // Dynamically register trap function & table slot 0 if needed
         let trap_func_idx = if need_table {
             let func_trap = (self.module.imports.len() + self.module.functions.len()) as u32;
             let t_trap = self.module.add_type(vec![], vec![]);
             self.module.functions.push(t_trap);
             self.func_indices
                 .insert("__cxa_pure_virtual".to_string(), func_trap);
-            self.vtable_func_indices = vec![func_trap]; // table slot 0 dynamically points to trap
+            // Table slot 0 points at the trap so an unfilled vtable slot is a
+            // deterministic dynamic error.
+            self.vtable_func_indices = vec![func_trap];
             Some(func_trap)
         } else {
             None

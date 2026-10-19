@@ -1,6 +1,7 @@
 use super::opcodes::*;
 use crate::wasm::*;
 
+/// Emits the integer conversions `%d`, `%i`, `%u`, `%x`, and `%X`.
 pub(super) fn emit_integer_conversion(code: &mut Vec<u8>, func_print_int: u32) {
     // 'd' (100) or 'i' (105)
     code.push(OP_LOCAL_GET);

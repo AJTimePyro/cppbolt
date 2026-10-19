@@ -1,6 +1,8 @@
 use super::*;
 
 impl<'a> Codegen<'a> {
+    /// Resolves a free-function call, including ADL and the implicit `std`
+    /// alias, selecting the lowest-cost overload.
     pub fn find_function(&self, name: &str, arg_types: &[Type]) -> Option<(u32, FunctionSig)> {
         let mut candidate_names = vec![
             name.to_string(),
@@ -106,6 +108,7 @@ impl<'a> Codegen<'a> {
             })
     }
 
+    /// Looks up a virtual method on a class or one of its bases.
     pub fn find_class_vmethod(&self, class_name: &str, method_name: &str) -> Option<u32> {
         let m_name = format!("{}_{}", class_name, method_name);
         if let Some(&idx) = self.func_indices.get(&m_name) {

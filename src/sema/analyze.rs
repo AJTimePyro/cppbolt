@@ -78,7 +78,8 @@ impl Sema {
 
         // Synthesize implicit default constructors for classes whose bases or
         // members require construction, and for polymorphic classes that need
-        // their vtable installed by a constructor.
+        // their vtable installed by a constructor. Iterate to a fixed point so
+        // a class becomes constructible once its dependencies do.
         let polymorphic: std::collections::HashSet<String> = self
             .struct_layouts
             .iter()
@@ -346,6 +347,8 @@ impl Sema {
     }
 }
 
+/// Reports whether a field/base type needs a synthesized default constructor
+/// and whether an existing non-default constructor blocks synthesis.
 fn type_ctor_status(
     ty: &Type,
     any_ctor: &std::collections::HashSet<String>,
@@ -361,6 +364,7 @@ fn type_ctor_status(
     }
 }
 
+/// Returns true when a value of `ty` owns a subobject with a destructor.
 fn type_has_dtor(ty: &Type, structs_with_dtor: &std::collections::HashSet<String>) -> bool {
     match ty.strip_const() {
         Type::Struct(name) => structs_with_dtor.contains(name),

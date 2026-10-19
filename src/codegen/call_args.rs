@@ -1,6 +1,11 @@
 use super::*;
 
 impl<'a> Codegen<'a> {
+    /// Lowers one call argument.
+    ///
+    /// Reference parameters take an lvalue address; by-value structs may need
+    /// a copy-constructor temporary, whose cleanup is transferred to the
+    /// callee's owned parameter copy.
     pub(super) fn compile_call_arg(
         &mut self,
         a: &Expr,

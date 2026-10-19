@@ -43,6 +43,8 @@ use analysis::{
 use program::Plan;
 use std::collections::{HashMap, HashSet};
 
+/// Mutable state for one compilation: the Wasm module, symbol offsets, and
+/// the data/vtable/table bookkeeping shared by the lowering passes.
 pub struct Codegen<'a> {
     pub max_memory_mb: u32,
     pub sema: &'a Sema,
@@ -149,6 +151,11 @@ enum VarBinding {
     },
 }
 
+/// Per-function lowering state.
+///
+/// Local frame offsets grow monotonically for the whole function, even across
+/// nested scopes, so a variable keeps one address for its entire lifetime.
+/// Shadowed names are restored by `exit_scope`.
 pub struct FunctionContext {
     pub fp_local: u32,
     pub scratch1: u32,
@@ -164,9 +171,14 @@ pub struct FunctionContext {
     pub static_var_offsets: HashMap<String, (u32, Type)>,
     pub next_local_offset: u32,
     pub frame_size: i32,
+    /// Byte positions of five-byte LEB placeholders for the frame size, used
+    /// by both the prologue and epilogue.
     pub frame_size_patches: Vec<usize>,
+    /// Bindings shadowed by each active block, innermost last.
     var_scopes: Vec<Vec<VarBinding>>,
+    /// Objects to destroy at scope exit, in construction order.
     pub scope_objects: Vec<Vec<(String, Type, u32)>>,
+    /// Statement temporaries: `(class, frame slot, needs destructor)`.
     pub temp_objects: Vec<(String, u32, bool)>,
     pub current_class: Option<String>,
     pub current_func_name: String,
@@ -247,6 +259,7 @@ impl FunctionContext {
         }
     }
 
+    /// Allocates a checked, aligned slot in the current stack frame.
     pub fn alloc_frame(&mut self, size: u32, align: u32) -> Result<u32, CompileError> {
         let align = align.max(1);
         let offset = self
@@ -258,12 +271,17 @@ impl FunctionContext {
         Ok(offset)
     }
 
+    /// Emits a fixed-width frame-size immediate that can be patched later.
+    ///
+    /// The frame size is only known after the body has allocated all locals,
+    /// and each function may refer to it in both the prologue and epilogue.
     pub fn emit_frame_size(&mut self, code: &mut Vec<u8>) {
         code.push(OP_I32_CONST);
         self.frame_size_patches.push(code.len());
         code.extend_from_slice(&[0x80, 0x80, 0x80, 0x80, 0x00]);
     }
 
+    /// Patches every emitted frame-size placeholder once the final size is known.
     pub fn patch_frame_sizes(&self, code: &mut [u8]) -> Result<(), CompileError> {
         let value = u32::try_from(self.frame_size).map_err(|_| frame_too_large())?;
         for &position in &self.frame_size_patches {
@@ -293,6 +311,8 @@ fn frame_too_large() -> CompileError {
         .with_kind(crate::diagnostics::ErrorKind::Internal)
 }
 
+/// Writes a positive LEB128 number into exactly five bytes, padding with
+/// continuation bits so the encoded length never changes.
 fn write_fixed_u32(bytes: &mut [u8], value: u32) {
     let mut value = value;
     for (index, byte) in bytes.iter_mut().enumerate() {

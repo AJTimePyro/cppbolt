@@ -116,7 +116,8 @@ impl Sema {
                     return Ok((**return_type).clone());
                 }
             }
-            // Overload resolution
+            // Overload resolution: exact matches score best, followed by
+            // reference binding, arithmetic conversions, and user conversions.
             let q1 = name.to_string();
             let q2 = QualifiedName::new(name).alternate().into_owned();
             let mut candidates = self
@@ -172,7 +173,7 @@ impl Sema {
                             let p_base = p_decay.strip_const();
                             let a_base = a_decay.strip_const();
                             if p_base == a_base {
-                                // exact match
+                                // Exact matches add no conversion penalty.
                             } else if p.is_reference()
                                 && p.deref_type().map(|d| d.strip_const())
                                     == Some(arg_ty.strip_const())
@@ -196,7 +197,7 @@ impl Sema {
                             }
                             best_candidate = Some((cand, full_args));
                             if score == 0 {
-                                break; // perfect match
+                                break; // No candidate can score lower.
                             }
                         }
                     }
@@ -230,7 +231,7 @@ impl Sema {
             }
         }
 
-        // Indirect call
+        // No named function matched: treat the callee as a function pointer.
         let callee_ty = self.analyze_expr(callee)?;
         if let Type::Pointer(inner) = callee_ty.strip_const() {
             if let Type::Function { return_type, .. } = &**inner {

@@ -98,6 +98,8 @@ impl<'a> Codegen<'a> {
         self.compile_expr(expr, ctx, code)?;
         self.emit_clean_temporaries(ctx, code);
 
+        // Case expressions and bodies may call functions, which can clobber
+        // scratch locals. Keep the switch value and match state in frame slots.
         let target_slot = if switch_is_wide {
             ctx.alloc_frame(8, 8)?
         } else {
@@ -162,6 +164,7 @@ impl<'a> Codegen<'a> {
         code.push(0x40); // break block
         let break_target_abs = self.current_block_depth;
         self.current_block_depth += 1;
+        // `0` means this construct has no continue target.
         self.loop_depths
             .push((break_target_abs, 0, ctx.scope_objects.len()));
 
@@ -266,6 +269,8 @@ impl<'a> Codegen<'a> {
 
         Ok(())
     }
+    /// Pushes `1` when the saved switch value equals `value`, without
+    /// re-evaluating the switch expression.
     fn emit_switch_case_eq(
         &self,
         target_slot: u32,

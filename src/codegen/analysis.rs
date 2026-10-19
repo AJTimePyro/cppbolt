@@ -1,3 +1,6 @@
+//! AST walks used by dead-code elimination, static-local discovery, and
+//! address-taken function collection.
+
 use super::*;
 
 fn check_expr_has_new_delete(expr: &Expr) -> bool {
@@ -127,12 +130,15 @@ pub(super) fn collect_static_vars(
     }
 }
 
+/// Conservatively records names that may escape as function pointers.
+///
+/// A bare identifier callee is a named call or a function-pointer variable; it
+/// does not by itself take a function's address, so only nested callee
+/// expressions are visited.
 pub(super) fn collect_address_taken_expr(expr: &Expr, address_taken: &mut HashSet<String>) {
     match expr {
         Expr::Call { callee, args } => {
-            if let Expr::Identifier(_) = &**callee {
-                // direct call
-            } else {
+            if !matches!(&**callee, Expr::Identifier(_)) {
                 collect_address_taken_expr(callee, address_taken);
             }
             for a in args {

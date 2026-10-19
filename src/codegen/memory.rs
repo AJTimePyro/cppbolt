@@ -1,6 +1,8 @@
 use super::*;
 
 impl<'a> Codegen<'a> {
+    /// Emits a store of the value on top of the stack to `[address + offset]`.
+    /// The address is already on the stack below the value.
     pub(super) fn emit_store(&self, ty: &Type, offset: u32, code: &mut Vec<u8>) {
         match ty.strip_const() {
             Type::Bool | Type::Char | Type::SignedChar => {
@@ -52,6 +54,10 @@ impl<'a> Codegen<'a> {
         }
     }
 
+    /// Emits a representation conversion and then normalizes narrow integers.
+    ///
+    /// All sub-word integer types live in `i32` locals, so a cast must
+    /// explicitly truncate and re-extend the value to its declared width.
     pub(super) fn emit_conversion(&self, from: &Type, to: &Type, code: &mut Vec<u8>) {
         let from = from.strip_const().strip_reference();
         let to = to.strip_const().strip_reference();
@@ -154,6 +160,7 @@ impl<'a> Codegen<'a> {
         emit_integer_narrowing(to, code);
     }
 
+    /// Emits a load of `ty` from `[address + offset]`.
     pub(super) fn emit_load(&self, ty: &Type, offset: u32, code: &mut Vec<u8>) {
         match ty.strip_const() {
             Type::Char | Type::SignedChar => {
@@ -211,6 +218,7 @@ impl<'a> Codegen<'a> {
     }
 }
 
+/// Restores the canonical i32 representation of a narrow integer type.
 fn emit_integer_narrowing(ty: &Type, code: &mut Vec<u8>) {
     match ty.strip_const() {
         Type::Char | Type::SignedChar => code.push(OP_I32_EXTEND8_S),

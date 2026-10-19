@@ -54,7 +54,6 @@ impl<'a> Codegen<'a> {
                     self.func_indices.insert(mangled.clone(), func_idx);
                     self.func_indices.insert(f.name.clone(), func_idx);
                     if f.name == "main" {
-                        // Export main
                         self.module.exports.push(("main".to_string(), 0, func_idx));
                     }
                 }
@@ -134,7 +133,8 @@ impl<'a> Codegen<'a> {
             }
         }
 
-        // Register deleting destructor functions
+        // Reserve one deleting-destructor body per class with a virtual
+        // destructor. Its table slot is filled below.
         let mut deleting_dtor_structs = Vec::new();
         for name in &self.sema.struct_order {
             if let Some(layout) = self.sema.struct_layouts.get(name)
@@ -149,7 +149,8 @@ impl<'a> Codegen<'a> {
             }
         }
 
-        // Build Vtables: layout slots and store into data section
+        // Lay out vtables in the data section. Each slot stores an element
+        // index into the function table rather than a raw function index.
         for name in &self.sema.struct_order {
             if let Some(layout) = self.sema.struct_layouts.get(name)
                 && layout.has_vtable
@@ -185,7 +186,8 @@ impl<'a> Codegen<'a> {
             }
         }
 
-        // Assign table entries to address-taken functions
+        // Give every address-taken function one table index; all of its
+        // aliases share that entry.
         for (idx, cand) in plan.candidates.iter().enumerate() {
             if !plan.reachable.contains(&idx) {
                 continue;
@@ -209,7 +211,8 @@ impl<'a> Codegen<'a> {
                 .push((0, self.vtable_func_indices.clone()));
         }
 
-        // Emit runtime function bodies in exact registration order
+        // Emit runtime bodies in the same order their indices were reserved in
+        // `prepare`.
         if plan.need_printf {
             self.module.codes.push(crate::runtime::emit_printf(0, 1, 2));
         }
@@ -223,7 +226,7 @@ impl<'a> Codegen<'a> {
                 .push(crate::runtime::emit_pure_virtual_trap());
         }
 
-        // Compile bodies ONLY for plan.reachable functions
+        // Compile bodies only for functions that survived reachability analysis.
         for (idx, cand) in plan.candidates.iter().enumerate() {
             if !plan.reachable.contains(&idx) {
                 continue;
@@ -264,7 +267,8 @@ impl<'a> Codegen<'a> {
             }
         }
 
-        // Compile deleting destructors
+        // Deleting destructors run the complete destructor chain and then free
+        // the object, so `delete base_ptr` can dispatch through a vtable slot.
         for name in &deleting_dtor_structs {
             let mut code = Vec::new();
             let dtor_name = format!("{}_~{}", name, name);
@@ -282,7 +286,7 @@ impl<'a> Codegen<'a> {
             self.module.codes.push((vec![], code));
         }
 
-        // Store strings into data section
+        // Copy interned string bytes into the data segment.
         let mut string_entries: Vec<(&String, &u32)> = self.string_table.iter().collect();
         string_entries.sort_by_key(|&(_, offset)| *offset);
         for (s, &offset) in string_entries {

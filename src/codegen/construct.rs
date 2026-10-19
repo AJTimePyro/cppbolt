@@ -1,6 +1,11 @@
 use super::*;
 
 impl<'a> Codegen<'a> {
+    /// Finds the best constructor overload for `arg_types`.
+    ///
+    /// Constructors are registered with the implicit `this` parameter in
+    /// `param_types`, so argument matching starts at index 1. Lower conversion
+    /// scores win; user-defined conversions are the last resort.
     pub fn find_constructor_sig(
         &self,
         class_name: &str,
@@ -24,6 +29,9 @@ impl<'a> Codegen<'a> {
                         &[]
                     };
                     if params.len() == arg_types.len() {
+                        // Lower is better: exact (0), const/reference (1-2),
+                        // arithmetic conversion (10), standard conversion (20),
+                        // user-defined conversion (1000).
                         let mut score = 0;
                         let mut ok = true;
                         for (p, a) in params.iter().zip(arg_types) {
@@ -116,6 +124,7 @@ impl<'a> Codegen<'a> {
         }
     }
 
+    /// Returns only the function index of the selected constructor.
     pub fn find_constructor(&self, class_name: &str, arg_types: &[Type]) -> Option<u32> {
         self.find_constructor_sig(class_name, arg_types)
             .map(|(idx, _)| idx)

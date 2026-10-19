@@ -23,18 +23,22 @@ pub use diagnostics::CompileError;
 pub use name::QualifiedName;
 pub use source::{FileId, IncludeProvider, NoIncludes, SourceMap, Span};
 
+/// Runs only the preprocessor and returns the expanded source.
 pub fn preprocess(source: &str) -> Result<String, CompileError> {
     preprocessor::Preprocessor::new().process(source)
 }
 
+/// Compiles with the default 256 MiB memory limit.
 pub fn compile(source: &str) -> Result<Vec<u8>, CompileError> {
     compile_with_options(source, 256)
 }
 
+/// Compiles with a custom maximum linear-memory size in MiB.
 pub fn compile_with_options(source: &str, max_memory_mb: u32) -> Result<Vec<u8>, CompileError> {
     compile_with_options_named(source, "<input>", max_memory_mb)
 }
 
+/// Compiles with a diagnostic filename and a custom memory limit.
 pub fn compile_with_options_named(
     source: &str,
     filename: &str,
@@ -46,6 +50,7 @@ pub fn compile_with_options_named(
 /// Compiles with a caller-supplied include provider.
 ///
 /// The native CLI passes a filesystem provider; the browser ABI passes none.
+/// The returned bytes are a complete WebAssembly module.
 pub fn compile_with_provider(
     source: &str,
     filename: &str,
@@ -79,10 +84,12 @@ pub fn compile_with_provider(
         .map_err(|error| preprocessed.map_error(error))
 }
 
+/// Renders the compiler's record layout report for `source`.
 pub fn dump_record_layouts(source: &str) -> Result<String, CompileError> {
     dump_record_layouts_with_provider(source, "<input>", &NoIncludes)
 }
 
+/// Renders the record layout report using a caller-supplied include provider.
 pub fn dump_record_layouts_with_provider(
     source: &str,
     filename: &str,

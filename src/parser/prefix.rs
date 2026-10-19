@@ -163,7 +163,7 @@ impl Parser {
                 // Check if cast: (int)x or (char)x
                 if self.is_cast_ahead() {
                     let saved_pos = self.pos;
-                    self.advance(); // consume '('
+                    self.advance();
                     let cast_res = (|| -> Result<Expr, CompileError> {
                         let ty = self.parse_type()?;
                         self.expect(TokenKind::RParen)?;

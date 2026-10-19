@@ -1,6 +1,10 @@
 use super::*;
 
 impl<'a> Codegen<'a> {
+    /// Lowers scalar/array `new`, including placement new.
+    ///
+    /// Class arrays reserve a four-byte element-count cookie before the user
+    /// pointer so `delete[]` can run the right number of destructors.
     pub(super) fn compile_new(
         &mut self,
         expr: &Expr,
@@ -207,6 +211,7 @@ impl<'a> Codegen<'a> {
                     code.push(OP_BR_IF);
                     write_u32(code, 1);
 
+                    // Install each element's vtable, then construct it.
                     if let Some(vo) = v_off {
                         code.push(OP_LOCAL_GET);
                         write_u32(code, ctx.scratch1);
@@ -236,7 +241,6 @@ impl<'a> Codegen<'a> {
                         write_u32(code, ci);
                     }
 
-                    // i++
                     code.push(OP_LOCAL_GET);
                     write_u32(code, ctx.ret_temp_i32);
                     code.push(OP_I32_CONST);
@@ -251,7 +255,8 @@ impl<'a> Codegen<'a> {
                     code.push(OP_END);
                     code.push(OP_END);
 
-                    // Reload the user pointer after constructor calls.
+                    // Constructors may clobber scratch locals, so reload the
+                    // user pointer from its frame slot.
                     code.push(OP_LOCAL_GET);
                     write_u32(code, ctx.fp_local);
                     code.push(OP_I32_LOAD);
@@ -275,7 +280,7 @@ impl<'a> Codegen<'a> {
                     write_u32(code, ctx.scratch1);
                 }
             } else {
-                // POD array
+                // Plain arrays have no cookie and no element constructors.
                 code.push(OP_LOCAL_GET);
                 write_u32(code, ctx.scratch_i64);
                 code.push(OP_I32_WRAP_I64);
@@ -306,7 +311,8 @@ impl<'a> Codegen<'a> {
             write_u32(code, obj_slot);
 
             if let Type::Struct(sname) = ty.strip_const() {
-                // Set up vtable if exists
+                // Install the vtable before the constructor runs, matching the
+                // C++ object model.
                 if let Some(&v_off) = self.vtable_offsets.get(sname) {
                     code.push(OP_LOCAL_GET);
                     write_u32(code, ctx.fp_local);
@@ -319,7 +325,6 @@ impl<'a> Codegen<'a> {
                     write_u32(code, 2);
                     write_u32(code, 0);
                 }
-                // Call constructor
                 let arg_types: Vec<Type> =
                     args.iter().map(|a| self.get_expr_type(a, ctx)).collect();
                 if let Some(ctor_idx) = self.find_constructor(sname, &arg_types) {
@@ -339,9 +344,9 @@ impl<'a> Codegen<'a> {
                 write_u32(code, ctx.fp_local);
                 code.push(OP_I32_LOAD);
                 write_u32(code, 2);
-                write_u32(code, obj_slot); // addr
+                write_u32(code, obj_slot);
                 let value_ty = self.get_expr_type(&args[0], ctx);
-                self.compile_expr(&args[0], ctx, code)?; // value
+                self.compile_expr(&args[0], ctx, code)?;
                 self.emit_conversion(&value_ty, ty, code);
                 self.emit_store(ty, 0, code);
             }

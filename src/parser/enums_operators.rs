@@ -2,7 +2,7 @@ use super::*;
 
 impl Parser {
     pub(super) fn parse_enum(&mut self) -> Result<Decl, CompileError> {
-        self.advance(); // consume 'enum'
+        self.advance();
         let name = match self.advance().kind.clone() {
             TokenKind::Ident(id) => id,
             _ => {

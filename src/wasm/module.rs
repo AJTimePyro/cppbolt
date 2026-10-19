@@ -7,16 +7,28 @@ use super::sections::{write_section, write_string};
 /// A function body: local declarations followed by encoded instructions.
 pub type FuncBody = (Vec<(u32, u8)>, Vec<u8>);
 
+/// The sections this compiler emits, held in a form close to their binary
+/// encoding.
 pub struct WasmModule {
+    /// Function signatures as `(params, results)`, deduplicated by `add_type`.
     pub types: Vec<(Vec<u8>, Vec<u8>)>,
+    /// Host imports as `(module, field, type index)`.
     pub imports: Vec<(String, String, u32)>,
+    /// Type indices of the defined functions, in function-index order.
     pub functions: Vec<u32>,
+    /// Funcref table limits as `(minimum, maximum)`.
     pub table: Option<(u32, Option<u32>)>,
+    /// Exports as `(name, kind, index)`.
     pub exports: Vec<(String, u8, u32)>,
+    /// Globals as `(value type, mutable, initial i32)`.
     pub globals: Vec<(u8, bool, i32)>,
+    /// Active element segments as `(table offset, function indices)`.
     pub elements: Vec<(u32, Vec<u32>)>,
+    /// Bodies for the defined functions in `functions`.
     pub codes: Vec<FuncBody>,
+    /// Active data segments as `(memory offset, bytes)`.
     pub data: Vec<(u32, Vec<u8>)>,
+    /// Linear-memory limits as `(initial pages, maximum pages)`.
     pub memory_pages: (u32, Option<u32>),
 }
 
@@ -42,6 +54,7 @@ impl WasmModule {
         }
     }
 
+    /// Interns a function signature, returning an existing index when equal.
     pub fn add_type(&mut self, params: Vec<u8>, results: Vec<u8>) -> u32 {
         for (index, (existing_params, existing_results)) in self.types.iter().enumerate() {
             if existing_params == &params && existing_results == &results {
@@ -53,6 +66,7 @@ impl WasmModule {
         index
     }
 
+    /// Serializes the module with sections in canonical order.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         out.extend_from_slice(b"\x00asm");

@@ -9,6 +9,7 @@ impl<'a> Codegen<'a> {
     ) -> Result<FuncBody, CompileError> {
         let mut code = Vec::new();
 
+        // Non-static methods carry the implicit `this` pointer as parameter 0.
         let num_params = f.params.len() as u32;
         let fp_local = num_params;
         let scratch1 = num_params + 1;
@@ -60,8 +61,9 @@ impl<'a> Codegen<'a> {
             is_main: f.name == "main",
         };
 
-        // Function Prologue: allocate frame from stack pointer. The frame size is
-        // patched once the body has determined how much scratch space it needs.
+        // Prologue: reserve the frame below the stack pointer. The size is
+        // patched after the body has allocated all of its locals and scratch
+        // slots, because both the prologue and epilogue refer to it.
         code.push(OP_GLOBAL_GET);
         write_u32(&mut code, 0); // stack pointer
         ctx.emit_frame_size(&mut code);
@@ -71,7 +73,8 @@ impl<'a> Codegen<'a> {
         code.push(OP_GLOBAL_SET);
         write_u32(&mut code, 0);
 
-        // Stack overflow guard: if fp_local < 65536 -> unreachable trap
+        // Keep the reserved low page untouched: a frame that would cross it
+        // traps instead of corrupting null-page storage.
         code.push(OP_LOCAL_GET);
         write_u32(&mut code, fp_local);
         code.push(OP_I32_CONST);
@@ -83,7 +86,8 @@ impl<'a> Codegen<'a> {
         code.push(OP_END);
 
         if ctx.is_main {
-            // Global constructors before main
+            // Namespace-scope objects are dynamically initialized before
+            // main's body. Their destructors are queued and run in reverse.
             let inits = self.global_inits.clone();
             for (gname, gty, init_opt) in inits {
                 if let Some(&goffset) = self.global_offsets.get(&gname) {
@@ -152,7 +156,8 @@ impl<'a> Codegen<'a> {
             }
         }
 
-        // Copy incoming parameters into stack slots
+        // Copy parameter locals into the frame; the body addresses locals
+        // relative to the frame pointer.
         for (i, p) in f.params.iter().enumerate() {
             let psize = u32::try_from(p.ty.size_of(&self.sema.struct_sizes))
                 .map_err(|_| crate::internal_error!(0, 0, "parameter is too large"))?;
@@ -186,7 +191,10 @@ impl<'a> Codegen<'a> {
             }
         }
 
-        // If constructor or destructor, set up vtable pointer and chain bases
+        // Constructor prologue: run base constructors, install the
+        // most-derived vtable, then initialize direct members. Destructors
+        // reinstall their own vtable for virtual dispatch during member
+        // destruction.
         if let Some(ref cls) = class_name {
             let short_cls = cls.split("::").last().unwrap_or(cls);
             if f.name == *cls || f.name == short_cls {
@@ -221,7 +229,7 @@ impl<'a> Codegen<'a> {
                             write_u32(&mut code, b_idx);
                         }
                     }
-                    // 2. Set this class vtable
+                    // 2. Install this class's vtable after base constructors.
                     if let Some(&v_off) = self.vtable_offsets.get(cls) {
                         code.push(OP_LOCAL_GET);
                         write_u32(&mut code, 0); // this
@@ -258,7 +266,7 @@ impl<'a> Codegen<'a> {
                                 write_u32(&mut code, 0); // this
                                 code.push(OP_I32_CONST);
                                 write_i32(&mut code, fld.offset as i32);
-                                code.push(OP_I32_ADD); // addr of member
+                                code.push(OP_I32_ADD);
                                 if let Some(args) = init_args {
                                     for (i, a) in args.iter().enumerate() {
                                         let param_ty = sig.param_types.get(i + 1);
@@ -326,11 +334,11 @@ impl<'a> Codegen<'a> {
 
         self.compile_stmt(body, &mut ctx, &mut code)?;
 
-        // Epilogue root RAII destructors
+        // Destroy locals still live in the body's root scope.
         let root_objs = ctx.scope_objects.pop().unwrap_or_default();
         self.emit_dtor_for_scope(&root_objs, &ctx, &mut code);
 
-        // Member destructors in reverse declaration order
+        // Member destructors run in reverse declaration order.
         if let Some(ref cls) = class_name
             && f.name == format!("~{}", cls)
             && let Some(layout) = self.sema.struct_layouts.get(cls)
@@ -349,7 +357,7 @@ impl<'a> Codegen<'a> {
                         write_u32(&mut code, 0); // this
                         code.push(OP_I32_CONST);
                         write_i32(&mut code, fld.offset as i32);
-                        code.push(OP_I32_ADD); // member addr
+                        code.push(OP_I32_ADD);
                         code.push(OP_CALL);
                         write_u32(&mut code, d_idx);
                     }
@@ -407,6 +415,8 @@ impl<'a> Codegen<'a> {
         }
 
         if ctx.is_main {
+            // Falling out of main destroys namespace-scope objects in reverse
+            // construction order.
             for (sname, goffset) in self.global_dtors.iter().rev() {
                 let dtor_name = format!("{}_~{}", sname, sname);
                 if let Some(&dtor_idx) = self.func_indices.get(&dtor_name) {
@@ -418,6 +428,8 @@ impl<'a> Codegen<'a> {
             }
         }
 
+        // Round the final frame to 16 bytes; all frame-size placeholders are
+        // patched after this point.
         let frame_size = ctx
             .next_local_offset
             .checked_add(15)
@@ -434,9 +446,7 @@ impl<'a> Codegen<'a> {
         code.push(OP_GLOBAL_SET);
         write_u32(&mut code, 0);
 
-        if f.return_type == Type::Void {
-            // No return value
-        } else {
+        if f.return_type != Type::Void {
             let ty = &f.return_type;
             if *ty == Type::LongLong || *ty == Type::UnsignedLongLong {
                 code.push(OP_LOCAL_GET);

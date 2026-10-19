@@ -1,6 +1,8 @@
 use super::*;
 
 impl<'a> Codegen<'a> {
+    /// Lowers assignment. The destination address is computed first and
+    /// spilled to a frame slot so evaluating the RHS cannot change the target.
     pub(super) fn compile_assign(
         &mut self,
         expr: &Expr,
@@ -62,6 +64,8 @@ impl<'a> Codegen<'a> {
                     .get(sname)
                     .map(|l| l.size)
                     .unwrap_or(4);
+                // Implicit copy assignment is bytewise for this subset's
+                // layout; every byte in the record is part of the object.
                 for i in 0..size {
                     code.push(OP_LOCAL_GET);
                     write_u32(code, ctx.fp_local);
@@ -173,6 +177,10 @@ impl<'a> Codegen<'a> {
         Ok(())
     }
 
+    /// Lowers compound assignment without evaluating the target twice.
+    ///
+    /// The lvalue address is spilled to a frame slot, then the current value is
+    /// loaded, combined in the usual arithmetic common type, and stored back.
     pub(super) fn compile_compound_assign(
         &mut self,
         expr: &Expr,

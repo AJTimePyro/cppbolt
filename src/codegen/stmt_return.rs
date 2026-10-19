@@ -1,6 +1,8 @@
 use super::*;
 
 impl<'a> Codegen<'a> {
+    /// Lowers `return`, including out-of-band struct results and every
+    /// destructor that must run before the epilogue.
     pub(super) fn compile_return(
         &mut self,
         stmt: &Stmt,
@@ -19,6 +21,8 @@ impl<'a> Codegen<'a> {
                 write_u32(code, ctx.ret_temp_i32);
                 self.emit_clean_temporaries(ctx, code);
             } else if let Type::Struct(sname) = ty.strip_const() {
+                // Structs are returned out of band: the result buffer is
+                // heap-allocated and its address is the Wasm return value.
                 let size = self.sema.struct_sizes.get(sname).copied().unwrap_or(4);
                 if self.is_struct_lvalue(expr, ctx) {
                     code.push(OP_I32_CONST);
@@ -93,6 +97,7 @@ impl<'a> Codegen<'a> {
         }
 
         if ctx.is_main {
+            // A return from main still destroys namespace-scope objects.
             for (sname, goffset) in self.global_dtors.iter().rev() {
                 let dtor_name = format!("{}_~{}", sname, sname);
                 if let Some(&dtor_idx) = self.func_indices.get(&dtor_name) {

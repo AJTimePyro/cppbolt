@@ -1,11 +1,14 @@
 use super::*;
 
 impl<'a> Codegen<'a> {
+    /// Returns the type of a materialized expression; references decay to the
+    /// referred-to type.
     pub fn get_expr_type(&self, expr: &Expr, ctx: &FunctionContext) -> Type {
         let ty = self.get_expr_type_raw(expr, ctx);
         ty.strip_reference().clone()
     }
 
+    /// Returns the expression's type as written, preserving references.
     pub fn get_expr_type_raw(&self, expr: &Expr, ctx: &FunctionContext) -> Type {
         match expr {
             Expr::IntLiteral(_, ty) => ty.clone(),

@@ -1,6 +1,10 @@
 use super::*;
 
 impl<'a> Codegen<'a> {
+    /// Leaves a truthy `i32` on the stack (not necessarily exactly `1`).
+    ///
+    /// Uses a user-defined `operator bool` when present and compares floats to
+    /// zero so NaN remains truthy, matching C++ semantics.
     pub(super) fn compile_cond(
         &mut self,
         expr: &Expr,

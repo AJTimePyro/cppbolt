@@ -1,8 +1,8 @@
 use super::opcodes::*;
 use crate::wasm::*;
 
+/// Parses an optional decimal field width.
 pub(super) fn emit_width_parse(code: &mut Vec<u8>) {
-    // Loop to parse width
     code.push(OP_BLOCK);
     code.push(0x40);
     code.push(OP_LOOP);
@@ -44,7 +44,6 @@ pub(super) fn emit_width_parse(code: &mut Vec<u8>) {
     code.push(OP_I32_ADD);
     code.push(OP_LOCAL_SET);
     write_u32(code, 4);
-    // fmt++
     code.push(OP_LOCAL_GET);
     write_u32(code, 0);
     code.push(OP_I32_CONST);
@@ -62,8 +61,9 @@ pub(super) fn emit_width_parse(code: &mut Vec<u8>) {
     code.push(OP_END);
 }
 
+/// Parses `.precision`, including `*` which consumes an integer argument.
 pub(super) fn emit_precision_parse(code: &mut Vec<u8>) {
-    // Check for precision: '.'
+    // A '.' introduces an explicit precision; without one it stays -1.
     code.push(OP_LOCAL_GET);
     write_u32(code, 0);
     code.push(OP_I32_LOAD8_U);
@@ -79,7 +79,6 @@ pub(super) fn emit_precision_parse(code: &mut Vec<u8>) {
     code.push(OP_I32_EQ);
     code.push(OP_IF);
     code.push(0x40);
-    // fmt++
     code.push(OP_LOCAL_GET);
     write_u32(code, 0);
     code.push(OP_I32_CONST);
@@ -87,7 +86,7 @@ pub(super) fn emit_precision_parse(code: &mut Vec<u8>) {
     code.push(OP_I32_ADD);
     code.push(OP_LOCAL_SET);
     write_u32(code, 0);
-    // precision = 0
+    // A bare '.' means zero digits of precision.
     code.push(OP_I32_CONST);
     write_i32(code, 0);
     code.push(OP_LOCAL_SET);
@@ -125,7 +124,6 @@ pub(super) fn emit_precision_parse(code: &mut Vec<u8>) {
     code.push(OP_I32_ADD);
     code.push(OP_LOCAL_SET);
     write_u32(code, 1);
-    // fmt++
     code.push(OP_LOCAL_GET);
     write_u32(code, 0);
     code.push(OP_I32_CONST);
@@ -135,7 +133,7 @@ pub(super) fn emit_precision_parse(code: &mut Vec<u8>) {
     write_u32(code, 0);
     code.push(OP_ELSE);
 
-    // Loop to parse precision digits
+    // Accumulate decimal precision digits.
     code.push(OP_BLOCK);
     code.push(0x40);
     code.push(OP_LOOP);
@@ -176,7 +174,6 @@ pub(super) fn emit_precision_parse(code: &mut Vec<u8>) {
     code.push(OP_I32_ADD);
     code.push(OP_LOCAL_SET);
     write_u32(code, 5);
-    // fmt++
     code.push(OP_LOCAL_GET);
     write_u32(code, 0);
     code.push(OP_I32_CONST);
@@ -197,8 +194,8 @@ pub(super) fn emit_precision_parse(code: &mut Vec<u8>) {
     code.push(OP_END); // end if '.'
 }
 
+/// Parses a `z`, `l`, or `ll` length modifier.
 pub(super) fn emit_length_parse(code: &mut Vec<u8>) {
-    // Check for length modifier: 'z', 'l', or "ll"
     code.push(OP_LOCAL_GET);
     write_u32(code, 0);
     code.push(OP_I32_LOAD8_U);
@@ -231,7 +228,6 @@ pub(super) fn emit_length_parse(code: &mut Vec<u8>) {
     code.push(OP_I32_EQ);
     code.push(OP_IF);
     code.push(0x40);
-    // fmt++
     code.push(OP_LOCAL_GET);
     write_u32(code, 0);
     code.push(OP_I32_CONST);
@@ -240,7 +236,7 @@ pub(super) fn emit_length_parse(code: &mut Vec<u8>) {
     code.push(OP_LOCAL_SET);
     write_u32(code, 0);
 
-    // check if second 'l'
+    // `ll` widens integer arguments to 64 bits.
     code.push(OP_LOCAL_GET);
     write_u32(code, 0);
     code.push(OP_I32_LOAD8_U);
@@ -255,7 +251,6 @@ pub(super) fn emit_length_parse(code: &mut Vec<u8>) {
     write_i32(code, 1);
     code.push(OP_LOCAL_SET);
     write_u32(code, 6); // is_long_long = 1
-    // fmt++
     code.push(OP_LOCAL_GET);
     write_u32(code, 0);
     code.push(OP_I32_CONST);
@@ -267,7 +262,7 @@ pub(super) fn emit_length_parse(code: &mut Vec<u8>) {
 
     code.push(OP_END); // end if 'l'
 
-    // Specifier: ch = mem[fmt]; fmt++
+    // Read the conversion specifier and consume it.
     code.push(OP_LOCAL_GET);
     write_u32(code, 0);
     code.push(OP_I32_LOAD8_U);

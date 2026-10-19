@@ -1,8 +1,9 @@
 use super::opcodes::*;
 use crate::wasm::*;
 
+/// Emits the outer format-string loop, including literal text and `%%`.
 pub(super) fn emit_format_loop_start(code: &mut Vec<u8>, func_print_char: u32) {
-    // Outer loop over format string
+    // Walk the format string one byte at a time until the NUL terminator.
     code.push(OP_BLOCK);
     code.push(0x40);
     code.push(OP_LOOP);
@@ -36,7 +37,6 @@ pub(super) fn emit_format_loop_start(code: &mut Vec<u8>, func_print_char: u32) {
     write_u32(code, 2);
     code.push(OP_CALL);
     write_u32(code, func_print_char);
-    // fmt++
     code.push(OP_LOCAL_GET);
     write_u32(code, 0);
     code.push(OP_I32_CONST);
@@ -48,7 +48,7 @@ pub(super) fn emit_format_loop_start(code: &mut Vec<u8>, func_print_char: u32) {
     write_u32(code, 1); // continue outer loop
     code.push(OP_END); // end if != '%'
 
-    // We saw '%'. Advance fmt past '%'
+    // Consume '%' and handle the "%%" escape before parsing flags.
     code.push(OP_LOCAL_GET);
     write_u32(code, 0);
     code.push(OP_I32_CONST);
@@ -77,7 +77,6 @@ pub(super) fn emit_format_loop_start(code: &mut Vec<u8>, func_print_char: u32) {
     write_i32(code, 37);
     code.push(OP_CALL);
     write_u32(code, func_print_char);
-    // fmt++
     code.push(OP_LOCAL_GET);
     write_u32(code, 0);
     code.push(OP_I32_CONST);
@@ -90,33 +89,28 @@ pub(super) fn emit_format_loop_start(code: &mut Vec<u8>, func_print_char: u32) {
     code.push(OP_END);
 }
 
+/// Resets per-conversion state and parses the supported flag characters.
 pub(super) fn emit_flag_parse(code: &mut Vec<u8>) {
-    // Initialize flags, width, precision, is_long_long
-    // flags = 0
+    // Reset per-conversion state: flags=0, width=0, precision=unspecified
+    // (-1), and is_long_long=0.
     code.push(OP_I32_CONST);
     write_i32(code, 0);
     code.push(OP_LOCAL_SET);
     write_u32(code, 3);
-
-    // width = 0
     code.push(OP_I32_CONST);
     write_i32(code, 0);
     code.push(OP_LOCAL_SET);
     write_u32(code, 4);
-
-    // precision = -1
     code.push(OP_I32_CONST);
     write_i32(code, -1);
     code.push(OP_LOCAL_SET);
     write_u32(code, 5);
-
-    // is_long_long = 0
     code.push(OP_I32_CONST);
     write_i32(code, 0);
     code.push(OP_LOCAL_SET);
     write_u32(code, 6);
 
-    // Loop to parse flags: '0', '-', '+', ' ', '#'
+    // Parse the supported flags: '0', '-', '+', and ' '.
     code.push(OP_BLOCK);
     code.push(0x40);
     code.push(OP_LOOP);

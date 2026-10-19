@@ -68,6 +68,10 @@ impl Type {
         }
     }
 
+    /// Applies the C++ integral promotions used before arithmetic.
+    ///
+    /// `char`, `short`, `bool`, and enum values promote to `int`; this target
+    /// has 32-bit `long`, and `unsigned long` promotes to `unsigned int`.
     pub fn integer_promotion(&self) -> Type {
         match self.strip_const() {
             Type::Bool
@@ -83,6 +87,8 @@ impl Type {
         }
     }
 
+    /// Returns the common type of a binary arithmetic expression after
+    /// applying [`Type::integer_promotion`] to both operands.
     pub fn usual_arithmetic_conversion(&self, other: &Type) -> Type {
         let self_clean = self.strip_const();
         let other_clean = other.strip_const();
@@ -167,6 +173,8 @@ impl Type {
         }
     }
 
+    /// Returns the source-level size of this type on the compiler's 32-bit
+    /// WebAssembly target. Record sizes come from semantic analysis.
     pub fn size_of(&self, struct_sizes: &HashMap<String, usize>) -> usize {
         match self.strip_const() {
             Type::Void | Type::Auto => 0,

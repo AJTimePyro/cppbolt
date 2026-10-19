@@ -60,7 +60,8 @@ impl<'a> Codegen<'a> {
             };
             scope.push((name.clone(), ty.clone(), offset));
 
-            // Install vtable if has vtable
+            // Install the vtable before construction. The constructor will
+            // install it again for the most-derived class.
             if let Some(&v_off) = self.vtable_offsets.get(sname) {
                 code.push(OP_LOCAL_GET);
                 write_u32(code, ctx.fp_local);
@@ -101,7 +102,6 @@ impl<'a> Codegen<'a> {
                     }
                     Expr::Call { callee, args } if matches!(&**callee, Expr::Identifier(cname) if cname == sname) =>
                     {
-                        // Direct constructor call
                         let arg_types: Vec<Type> =
                             args.iter().map(|a| self.get_expr_type(a, ctx)).collect();
                         if let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types)
@@ -152,12 +152,14 @@ impl<'a> Codegen<'a> {
                                 code.push(OP_LOCAL_SET);
                                 write_u32(code, ctx.scratch1);
                                 self.emit_copy_struct(sname, offset, ctx, code);
-                                // Free the temporary heap block returned
+                                // The prvalue's heap storage is copied into the
+                                // local, so it can be freed immediately.
                                 code.push(OP_LOCAL_GET);
                                 write_u32(code, ctx.scratch1);
                                 code.push(OP_CALL);
                                 write_u32(code, self.func_indices["free"]);
-                                // Truncate temp_objects so emit_clean_temporaries does not double-free
+                                // Drop the temporary from the cleanup list so
+                                // statement-end RAII does not double-free it.
                                 if ctx.temp_objects.len() > temp_count_before {
                                     ctx.temp_objects.truncate(temp_count_before);
                                 }
@@ -196,7 +198,7 @@ impl<'a> Codegen<'a> {
                     }
                 }
             } else {
-                // Default constructor if available
+                // No initializer: run the default constructor when one exists.
                 if let Some(ctor_idx) = self.find_constructor(sname, &[]) {
                     code.push(OP_LOCAL_GET);
                     write_u32(code, ctx.fp_local);

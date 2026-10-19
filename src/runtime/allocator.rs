@@ -1,14 +1,14 @@
 use super::opcodes::*;
 use crate::wasm::*;
 
+/// Emits `i32 malloc(i32 size)`.
+///
+/// Each allocation has an eight-byte header: payload size at offset 0, the
+/// next-free pointer at offset 4, then the payload at offset 8. Free chunks are
+/// kept in a singly linked free list; new memory is bump-allocated from
+/// `global_heap_base`.
 pub fn emit_malloc(global_heap_base: u32, global_free_list: u32) -> FuncBody {
-    // i32 malloc(i32 size)
-    // Header layout (8 bytes):
-    // offset 0: chunk_size (i32) - payload size
-    // offset 4: next_free (i32) - pointer to next free chunk header
-    // offset 8: payload (returned pointer)
-    //
-    // locals:
+    // Locals:
     // 0: size (param)
     // 1: alloc_size (i32)
     // 2: prev (i32)
@@ -290,9 +290,9 @@ pub fn emit_malloc(global_heap_base: u32, global_free_list: u32) -> FuncBody {
     (vec![(9, TYPE_I32)], code)
 }
 
+/// Emits `void free(i32 ptr)`, prepending the block to the free list.
 pub fn emit_free(global_free_list: u32) -> FuncBody {
-    // void free(i32 ptr)
-    // locals:
+    // Locals:
     // 0: ptr (param)
     // 1: chunk (i32)
     // 2: next (i32)

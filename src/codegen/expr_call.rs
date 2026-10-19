@@ -1,6 +1,8 @@
 use super::*;
 
 impl<'a> Codegen<'a> {
+    /// Lowers direct, virtual, and indirect calls, plus `printf`, math
+    /// builtins, and prvalue constructor calls.
     pub(super) fn compile_call(
         &mut self,
         expr: &Expr,
@@ -45,7 +47,8 @@ impl<'a> Codegen<'a> {
             let this_slot = ctx.alloc_frame(4, 4)?;
             let fn_slot = ctx.alloc_frame(4, 4)?;
 
-            // Compute this_ptr
+            // Evaluate the object once and keep its address in a frame slot;
+            // argument evaluation may clobber the scratch locals.
             if *is_arrow || is_ref {
                 self.compile_expr(object, ctx, code)?;
             } else {
@@ -95,7 +98,7 @@ impl<'a> Codegen<'a> {
                     ));
                 };
 
-                // Push this
+                // The implicit `this` argument comes first.
                 code.push(OP_LOCAL_GET);
                 write_u32(code, ctx.fp_local);
                 code.push(OP_I32_LOAD);
@@ -120,7 +123,8 @@ impl<'a> Codegen<'a> {
                 write_u32(code, 2);
                 write_u32(code, fn_slot);
 
-                // Find sig type_idx
+                // The indirect call site needs the callee's exact Wasm
+                // signature type, including the implicit `this` parameter.
                 let params_wasm: Vec<u8> = sig
                     .param_types
                     .iter()
@@ -202,6 +206,9 @@ impl<'a> Codegen<'a> {
                 self.compile_expr(&args[0], ctx, code)?;
                 code.push(opcode);
             } else if name == "printf" || name == "std::printf" || name.ends_with("::printf") {
+                // Variadic arguments are laid out by value in a compact frame
+                // block. Floats are promoted to double, matching the runtime's
+                // 4/8-byte reader.
                 let mut vararg_bytes = 0u32;
                 for a in args.iter().skip(1) {
                     let aty = self.get_expr_type(a, ctx);
@@ -261,7 +268,8 @@ impl<'a> Codegen<'a> {
                 code.push(0);
                 return Ok(());
             } else if self.sema.struct_layouts.contains_key(name) {
-                // Struct constructor / prvalue: Item(args)
+                // A struct-valued call such as `Item(args)` produces a prvalue
+                // in a heap temporary; the caller materializes and cleans it up.
                 let size = i32::try_from(self.sema.struct_layouts[name].size)
                     .map_err(|_| crate::internal_error!(0, 0, "object is too large"))?;
                 let temp_ptr_slot = ctx.alloc_frame(4, 4)?;
@@ -305,7 +313,8 @@ impl<'a> Codegen<'a> {
                     write_u32(code, ctor_idx);
                 }
 
-                // Save temp_ptr to local slot so it can be cleaned up at statement end
+                // Save the temporary pointer in a frame slot so statement
+                // cleanup can destroy and free it after the full expression.
                 let temp_slot = ctx.alloc_frame(4, 4)?;
                 code.push(OP_LOCAL_GET);
                 write_u32(code, ctx.fp_local);
@@ -326,7 +335,8 @@ impl<'a> Codegen<'a> {
                 write_u32(code, 2);
                 write_u32(code, temp_ptr_slot);
             } else if ctx.var_offsets.contains_key(name) || self.global_offsets.contains_key(name) {
-                // Indirect call through variable holding function pointer
+                // Call through a function-pointer variable. Build the call-site
+                // signature from the actual argument types.
                 let mut params_wasm = Vec::new();
                 for a in args {
                     let aty = self.get_expr_type(a, ctx);
@@ -413,7 +423,7 @@ impl<'a> Codegen<'a> {
                 ));
             }
         } else {
-            // General indirect call
+            // General indirect call through an arbitrary callee expression.
             let mut params_wasm = Vec::new();
             for a in args {
                 let aty = self.get_expr_type(a, ctx);

@@ -1,6 +1,11 @@
 use super::*;
 
 impl Sema {
+    /// Computes field offsets, base-subobject offsets, and vtable slot order.
+    ///
+    /// Only the primary base may be polymorphic; a polymorphic secondary base
+    /// is rejected because this backend does not adjust virtual dispatch
+    /// through secondary subobjects.
     pub(super) fn compute_struct_layout(
         &mut self,
         name: &str,
@@ -72,7 +77,9 @@ impl Sema {
             }
         }
 
-        // 2. Check for virtual methods and destructors
+        // 2. Add newly introduced virtual methods to the inherited slot list.
+        // A virtual destructor occupies two slots: the destructor and the
+        // deleting destructor used by `delete` on a base pointer.
         if has_vtable {
             for m in methods {
                 if m.name.starts_with('~') {
@@ -90,7 +97,7 @@ impl Sema {
             }
         }
 
-        // 3. Compute field offsets
+        // 3. Lay out this record's own fields after all base subobjects.
         for (fname, ftype) in fields {
             let fsize = ftype.size_of(&self.struct_sizes);
             let falign = ftype.align_of(&self.struct_aligns);
@@ -288,6 +295,10 @@ impl Sema {
         out
     }
 
+    /// Builds the compiler-private symbol name used to distinguish overloads.
+    ///
+    /// This is intentionally simpler than the Itanium C++ ABI; the resulting
+    /// names only need to be stable within one compilation.
     pub fn mangle_name(&self, name: &str, params: &[Param]) -> String {
         if name == "main"
             || name == "printf"

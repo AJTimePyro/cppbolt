@@ -1,6 +1,11 @@
 use super::*;
 
 impl<'a> Codegen<'a> {
+    /// Lowers scalar and array `delete`.
+    ///
+    /// Class arrays read their element count from a four-byte cookie before
+    /// the user pointer. Virtual scalar deletes dispatch through the deleting
+    /// destructor slot, which also releases the object.
     pub(super) fn compile_delete(
         &mut self,
         expr: &Expr,
@@ -48,7 +53,8 @@ impl<'a> Codegen<'a> {
                     code.push(OP_LOCAL_SET);
                     write_u32(code, ctx.scratch2); // count
 
-                    // Loop backwards: i = count;
+                    // Destroy elements from last to first. The loop counter
+                    // starts at `count` and is decremented before each call.
                     code.push(OP_LOCAL_GET);
                     write_u32(code, ctx.scratch2);
                     code.push(OP_LOCAL_SET);
@@ -140,7 +146,6 @@ impl<'a> Codegen<'a> {
                 code.push(OP_LOCAL_SET);
                 write_u32(code, ctx.scratch2);
 
-                // Push this
                 code.push(OP_LOCAL_GET);
                 write_u32(code, ctx.scratch1);
                 code.push(OP_LOCAL_GET);
@@ -174,7 +179,8 @@ impl<'a> Codegen<'a> {
             }
         }
 
-        // Call free
+        // Scalar delete and the non-class fallback release the allocation;
+        // `free` ignores null.
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.scratch1);
         code.push(OP_CALL);

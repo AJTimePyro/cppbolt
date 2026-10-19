@@ -1,6 +1,8 @@
 use super::*;
 
 impl<'a> Codegen<'a> {
+    /// Resolves a method or destructor call on a class, including inherited
+    /// methods, selecting the lowest-cost overload.
     pub fn find_method(
         &self,
         class_name: &str,

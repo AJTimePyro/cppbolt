@@ -23,6 +23,11 @@ pub struct StructField {
     pub offset: usize,
 }
 
+/// Physical layout of one record.
+///
+/// `fields` includes inherited fields flattened into the object, while
+/// `base_offsets` records where each base subobject starts. `vtable_slots` is
+/// in slot order and includes the virtual destructor's special slots.
 #[derive(Debug, Clone)]
 pub struct StructLayout {
     pub is_class: bool,
@@ -38,6 +43,9 @@ pub struct StructLayout {
     pub pure_virtuals: std::collections::HashSet<String>,
 }
 
+/// One overload after parameter adjustment.
+///
+/// For non-static methods, `param_types[0]` is the implicit `this` pointer.
 #[derive(Debug, Clone)]
 pub struct FunctionSig {
     pub name: String,
@@ -53,7 +61,8 @@ pub struct VarSymbol {
     pub name: String,
     pub ty: Type,
     pub is_global: bool,
-    pub stack_offset: i32, // Offset from local frame pointer
+    /// Offset from the local frame pointer for locals; unused for globals.
+    pub stack_offset: i32,
 }
 
 pub struct Scope {
@@ -153,6 +162,8 @@ impl Sema {
         sema
     }
 
+    /// Registers an overload under its source name, mangled name, and any
+    /// implicit `std::` alias so every spelling resolves to the same symbol.
     pub fn register_function(&mut self, sig: FunctionSig) {
         self.functions
             .entry(sig.name.clone())

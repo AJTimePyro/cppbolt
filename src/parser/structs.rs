@@ -3,7 +3,7 @@ use super::*;
 impl Parser {
     pub(super) fn parse_struct(&mut self) -> Result<Decl, CompileError> {
         let is_class = self.current().kind == TokenKind::KwClass;
-        self.advance(); // consume struct or class
+        self.advance();
         let mut name = match self.advance().kind.clone() {
             TokenKind::Ident(id) => id,
             _ => {
@@ -196,7 +196,7 @@ impl Parser {
 
             // Destructor: ~ClassName()
             if self.peek() == &TokenKind::Tilde {
-                self.advance(); // consume ~
+                self.advance();
                 let dname = match self.advance().kind.clone() {
                     TokenKind::Ident(id) => format!("~{}", id),
                     _ => {
@@ -220,7 +220,7 @@ impl Parser {
                 && (id == name || id == short_name)
                 && self.peek_ahead(1) == &TokenKind::LParen
             {
-                self.advance(); // consume ctor name
+                self.advance();
                 let mut ctor = self.parse_function_tail(
                     short_name.to_string(),
                     Type::Void,
@@ -250,7 +250,8 @@ impl Parser {
                     }
                 };
 
-                // Check if member function
+                // A parameter list after the name marks a member function;
+                // otherwise this is a field declaration.
                 if self.peek() == &TokenKind::LParen {
                     let mut func =
                         self.parse_function_tail(fname.clone(), ty, start_tok.line, start_tok.col)?;
@@ -261,7 +262,6 @@ impl Parser {
                     }
                     methods.push(func);
                 } else {
-                    // Field
                     let final_ty = self.parse_array_suffix(ty.clone())?;
                     if is_static {
                         let init = if self.peek() == &TokenKind::Assign {
