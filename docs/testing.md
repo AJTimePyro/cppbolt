@@ -4,7 +4,7 @@ Positive corpus tests contain `.cpp` and `.expected` files; optional `.input` su
 groups assert a nonzero Wasm trap. Negative tests contain `.expected_err` diagnostics. The runner discovers
 tests by directory and must report on-disk, executed, passed, and failed counts for every group.
 
-The current dirty-tree baseline is 202 tests, 202 executed, 183 passed, and 19 expected failures: six template
+The current dirty-tree baseline is 214 tests, 214 executed, 195 passed, and 19 expected failures: six template
 tests and thirteen container/algorithm tests. Reproduce it with:
 
 ```sh

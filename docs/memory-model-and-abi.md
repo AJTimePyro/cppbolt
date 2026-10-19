@@ -1,8 +1,9 @@
 # Memory model and ABI
 
-Generated programs use 32-bit ILP32 values. Linear memory is divided into a reserved first 64 KiB, an 8 MiB
-downward-growing stack, static data, and an upward-growing allocator heap. The constants live in
-`src/memory_layout.rs`; code generation must use that module rather than literals.
+Generated programs use 32-bit ILP32 values. Linear memory is divided into a reserved 64 KiB guard region,
+an 8 MiB downward-growing stack, static data, and an upward-growing allocator heap. Frame allocation traps
+before the stack pointer enters the guard. The constants live in `src/runtime/memory_layout.rs`; code generation
+must use that module rather than literals.
 
 Pointers are four-byte Wasm `i32` values. A null pointer is reserved by allocation policy but a raw load at
 address zero is not a hardware trap. The indirect function table reserves slot zero for the deterministic trap
