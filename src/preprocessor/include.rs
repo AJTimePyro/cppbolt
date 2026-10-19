@@ -1,13 +1,21 @@
 //! Embedded header table plus provider-backed filesystem includes.
 
-use crate::source::IncludeProvider;
+use crate::source::{IncludeProvider, ResolvedInclude};
 
-pub(super) fn resolve(includes: &dyn IncludeProvider, spec: &str) -> Option<String> {
-    if let Some(header) = embedded_header(spec) {
-        return Some(header.to_string());
-    }
+pub(super) fn resolve(
+    includes: &dyn IncludeProvider,
+    spec: &str,
+    including_file: Option<&str>,
+) -> Option<ResolvedInclude> {
     let clean = spec.trim_matches(|c| c == '<' || c == '>' || c == '"');
-    includes.read_include(clean)
+    if let Some(header) = embedded_header(spec) {
+        return Some(ResolvedInclude {
+            name: clean.to_string(),
+            content: header.to_string(),
+        });
+    }
+    let quoted = spec.trim_start().starts_with('"');
+    includes.resolve_include(clean, including_file, quoted)
 }
 
 fn embedded_header(name: &str) -> Option<&'static str> {

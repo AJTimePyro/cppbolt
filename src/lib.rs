@@ -21,7 +21,7 @@ pub(crate) mod wasm;
 
 pub use diagnostics::CompileError;
 pub use name::QualifiedName;
-pub use source::{FileId, IncludeProvider, NoIncludes, SourceMap, Span};
+pub use source::{FileId, IncludeProvider, NoIncludes, ResolvedInclude, SourceMap, Span};
 
 /// Runs only the preprocessor and returns the expanded source.
 pub fn preprocess(source: &str) -> Result<String, CompileError> {

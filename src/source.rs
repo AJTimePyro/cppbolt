@@ -72,6 +72,33 @@ impl fmt::Display for FileId {
 /// and browser/Node callers simply leave it unset.
 pub trait IncludeProvider {
     fn read_include(&self, name: &str) -> Option<String>;
+
+    /// Resolves an include directive and returns its canonical name together
+    /// with its contents.
+    ///
+    /// `including_file` is the resolved name of the file containing the
+    /// directive and `quoted` distinguishes `"..."` from `<...>`. The returned
+    /// name is used for diagnostics, `#pragma once`, and cycle detection.
+    /// Providers that only look names up globally can keep the default.
+    fn resolve_include(
+        &self,
+        name: &str,
+        _including_file: Option<&str>,
+        _quoted: bool,
+    ) -> Option<ResolvedInclude> {
+        let content = self.read_include(name)?;
+        Some(ResolvedInclude {
+            name: name.to_string(),
+            content,
+        })
+    }
+}
+
+/// One include file resolved by an [`IncludeProvider`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedInclude {
+    pub name: String,
+    pub content: String,
 }
 
 /// A provider that resolves nothing outside the embedded headers.

@@ -1,0 +1,1 @@
+tests/negative/include_cycle_b.h:1:1: error: include cycle detected: 'tests/negative/include_cycle_a.h'

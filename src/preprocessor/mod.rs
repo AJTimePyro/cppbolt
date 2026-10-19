@@ -60,6 +60,7 @@ pub struct Preprocessor<'a> {
     pragma_once_headers: HashSet<String>,
     includes: &'a dyn IncludeProvider,
     include_depth: usize,
+    include_stack: Vec<String>,
 }
 
 impl Preprocessor<'static> {
@@ -84,6 +85,7 @@ impl<'a> Preprocessor<'a> {
             pragma_once_headers: HashSet::new(),
             includes,
             include_depth: 0,
+            include_stack: Vec::new(),
         }
     }
 
@@ -96,7 +98,10 @@ impl<'a> Preprocessor<'a> {
         input: &str,
         root_file: &str,
     ) -> Result<PreprocessedSource, CompileError> {
-        let lines = self.process_lines(input, Some(root_file))?;
+        self.include_stack.push(root_file.to_string());
+        let result = self.process_lines(input, Some(root_file));
+        self.include_stack.pop();
+        let lines = result?;
         let text = lines
             .iter()
             .map(|line| line.text.as_str())
@@ -233,30 +238,40 @@ impl<'a> Preprocessor<'a> {
         current_file: Option<&str>,
         line_number: usize,
     ) -> Result<Vec<SourceLine>, CompileError> {
+        let file = current_file.unwrap_or("<input>");
         let clean = header_spec.trim_matches(|c| c == '<' || c == '>' || c == '"');
-        if self.pragma_once_headers.contains(clean) {
-            return Ok(vec![SourceLine::empty(
-                current_file.unwrap_or("<input>"),
-                line_number,
-            )]);
-        }
-
-        let Some(content) = include::resolve(self.includes, header_spec) else {
+        let Some(resolved) = include::resolve(self.includes, header_spec, current_file) else {
             return Err(CompileError::new(
                 format!("cannot find include '{}'", clean),
                 line_number,
                 1,
-            ));
+            )
+            .at(file, line_number, 1));
         };
-        if self.include_depth >= 128 {
+        if self.pragma_once_headers.contains(&resolved.name) {
+            return Ok(vec![SourceLine::empty(file, line_number)]);
+        }
+        if self.include_stack.iter().any(|name| name == &resolved.name) {
             return Err(CompileError::new(
-                "include nesting is too deep",
+                format!("include cycle detected: '{}'", resolved.name),
                 line_number,
                 1,
-            ));
+            )
+            .at(file, line_number, 1));
+        }
+        if self.include_depth >= 128 {
+            return Err(
+                CompileError::new("include nesting is too deep", line_number, 1).at(
+                    file,
+                    line_number,
+                    1,
+                ),
+            );
         }
         self.include_depth += 1;
-        let result = self.process_lines(&content, Some(clean));
+        self.include_stack.push(resolved.name.clone());
+        let result = self.process_lines(&resolved.content, Some(&resolved.name));
+        self.include_stack.pop();
         self.include_depth -= 1;
         result
     }
@@ -293,6 +308,8 @@ fn split_directive(directive_line: &str) -> (&str, &str) {
 #[cfg(test)]
 mod tests {
     use super::Preprocessor;
+    use crate::source::IncludeProvider;
+    use std::cell::Cell;
 
     #[test]
     fn origins_survive_include_expansion() -> Result<(), Box<dyn std::error::Error>> {
@@ -306,6 +323,55 @@ mod tests {
             .ok_or_else(|| std::io::Error::other("missing origin"))?;
         assert_eq!(origin.file, "main.cpp");
         assert_eq!(origin.line, 2);
+        Ok(())
+    }
+
+    struct CycleIncludes;
+
+    impl IncludeProvider for CycleIncludes {
+        fn read_include(&self, name: &str) -> Option<String> {
+            match name {
+                "cycle_a" => Some("#include <cycle_b>\n".to_string()),
+                "cycle_b" => Some("#include <cycle_a>\n".to_string()),
+                _ => None,
+            }
+        }
+    }
+
+    #[test]
+    fn detects_include_cycles() -> Result<(), Box<dyn std::error::Error>> {
+        let includes = CycleIncludes;
+        let mut preprocessor = Preprocessor::new_with_includes(&includes);
+        let error = match preprocessor.process_named("#include <cycle_a>\n", "main.cpp") {
+            Ok(_) => return Err("expected an include-cycle diagnostic".into()),
+            Err(error) => error,
+        };
+        assert!(error.message.contains("include cycle"));
+        assert_eq!(error.file, "cycle_b");
+        Ok(())
+    }
+
+    struct EndlessIncludes {
+        next: Cell<usize>,
+    }
+
+    impl IncludeProvider for EndlessIncludes {
+        fn read_include(&self, _name: &str) -> Option<String> {
+            let level = self.next.get();
+            self.next.set(level + 1);
+            Some(format!("#include <level_{level}>\n"))
+        }
+    }
+
+    #[test]
+    fn rejects_deep_include_nesting() -> Result<(), Box<dyn std::error::Error>> {
+        let includes = EndlessIncludes { next: Cell::new(0) };
+        let mut preprocessor = Preprocessor::new_with_includes(&includes);
+        let error = match preprocessor.process_named("#include <root>\n", "main.cpp") {
+            Ok(_) => return Err("expected an include-depth diagnostic".into()),
+            Err(error) => error,
+        };
+        assert!(error.message.contains("too deep"));
         Ok(())
     }
 }
