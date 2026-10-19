@@ -254,7 +254,7 @@ impl Parser {
     }
 
     pub(super) fn parse_array_suffix(&mut self, elem_type: Type) -> Result<Type, CompileError> {
-        let mut cur_type = elem_type;
+        let mut dimensions = Vec::new();
         while self.peek() == &TokenKind::LBracket {
             self.advance();
             let size = if self.peek() != &TokenKind::RBracket {
@@ -273,6 +273,12 @@ impl Parser {
                 0
             };
             self.expect(TokenKind::RBracket)?;
+            dimensions.push(size);
+        }
+        // C declarators nest left to right, so `int m[2][3]` is two rows of
+        // three ints: wrap the element type from the innermost dimension out.
+        let mut cur_type = elem_type;
+        for size in dimensions.into_iter().rev() {
             cur_type = Type::Array(Box::new(cur_type), size);
         }
         Ok(cur_type)

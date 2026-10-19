@@ -159,4 +159,18 @@ mod tests {
             "int main() { int x = 0; for (int i = 0; i < 2; i = i ? 1 : 0) { x = i; } return x; }"
         ));
     }
+
+    #[test]
+    pub(super) fn multi_dimensional_array_dimensions_wrap_inside_out()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let tokens = Lexer::new("int matrix[2][3];").tokenize()?;
+        let program = Parser::new(tokens).parse_program()?;
+        assert!(matches!(program.declarations[0], Decl::GlobalVar { .. }));
+        let Decl::GlobalVar { ty, .. } = &program.declarations[0] else {
+            return Ok(());
+        };
+        let expected = Type::Array(Box::new(Type::Array(Box::new(Type::Int), 3)), 2);
+        assert_eq!(ty, &expected);
+        Ok(())
+    }
 }

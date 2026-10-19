@@ -181,3 +181,5 @@ mini_stl/string_comprehensive
 mini_stl_heldout/string_comprehensive
 mini_stl/stream_edge_cases
 mini_stl_heldout/stream_edge_cases
+c_basics/multidim_arrays
+c_basics_heldout/multidim_arrays
