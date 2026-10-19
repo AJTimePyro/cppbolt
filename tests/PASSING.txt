@@ -183,3 +183,5 @@ mini_stl/stream_edge_cases
 mini_stl_heldout/stream_edge_cases
 c_basics/multidim_arrays
 c_basics_heldout/multidim_arrays
+c_basics/printf_return
+c_basics_heldout/printf_return

@@ -18,6 +18,7 @@ pub(super) fn emit_char_string_conversion(code: &mut Vec<u8>, func_print_char: u
     write_u32(code, 0);
     code.push(OP_CALL);
     write_u32(code, func_print_char);
+    super::emit_increment_char_count(code, super::PRINTF_CHAR_COUNT_LOCAL);
     code.push(OP_LOCAL_GET);
     write_u32(code, 1);
     code.push(OP_I32_CONST);
@@ -75,6 +76,7 @@ pub(super) fn emit_char_string_conversion(code: &mut Vec<u8>, func_print_char: u
     write_u32(code, 2);
     code.push(OP_CALL);
     write_u32(code, func_print_char);
+    super::emit_increment_char_count(code, super::PRINTF_CHAR_COUNT_LOCAL);
 
     code.push(OP_LOCAL_GET);
     write_u32(code, 7);

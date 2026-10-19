@@ -37,6 +37,7 @@ pub(super) fn emit_float_conversion(code: &mut Vec<u8>, func_print_double: u32) 
     write_u32(code, 3); // flags
     code.push(OP_CALL);
     write_u32(code, func_print_double);
+    super::emit_add_to_char_count(code, super::PRINTF_CHAR_COUNT_LOCAL);
     code.push(OP_BR);
     write_u32(code, 1);
     code.push(OP_END);
@@ -81,6 +82,7 @@ pub(super) fn emit_float_conversion(code: &mut Vec<u8>, func_print_double: u32) 
     write_u32(code, 3); // flags
     code.push(OP_CALL);
     write_u32(code, func_print_double);
+    super::emit_add_to_char_count(code, super::PRINTF_CHAR_COUNT_LOCAL);
     code.push(OP_BR);
     write_u32(code, 1);
     code.push(OP_END);
@@ -125,6 +127,7 @@ pub(super) fn emit_float_conversion(code: &mut Vec<u8>, func_print_double: u32) 
     write_u32(code, 3); // flags
     code.push(OP_CALL);
     write_u32(code, func_print_double);
+    super::emit_add_to_char_count(code, super::PRINTF_CHAR_COUNT_LOCAL);
     code.push(OP_BR);
     write_u32(code, 1);
     code.push(OP_END);

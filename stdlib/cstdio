@@ -16,14 +16,17 @@ inline int putchar(int c) {
 }
 
 inline int puts(const char* s) {
+    int written = 0;
     if (s) {
         while (*s) {
             print_char((int)(unsigned char)*s);
+            written++;
             s++;
         }
     }
     print_char(10); // '\n'
-    return 0;
+    written++;
+    return written;
 }
 
 inline int __mini_stl_shared_lookahead = -1;

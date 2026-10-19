@@ -33,6 +33,7 @@ pub(super) fn emit_format_loop_start(code: &mut Vec<u8>, func_print_char: u32) {
     code.push(OP_I32_NE);
     code.push(OP_IF);
     code.push(0x40);
+    super::emit_increment_char_count(code, super::PRINTF_CHAR_COUNT_LOCAL);
     code.push(OP_LOCAL_GET);
     write_u32(code, 2);
     code.push(OP_CALL);
@@ -77,6 +78,7 @@ pub(super) fn emit_format_loop_start(code: &mut Vec<u8>, func_print_char: u32) {
     write_i32(code, 37);
     code.push(OP_CALL);
     write_u32(code, func_print_char);
+    super::emit_increment_char_count(code, super::PRINTF_CHAR_COUNT_LOCAL);
     code.push(OP_LOCAL_GET);
     write_u32(code, 0);
     code.push(OP_I32_CONST);

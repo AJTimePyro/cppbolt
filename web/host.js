@@ -271,6 +271,7 @@
                     }
 
                     writeStdout(fullStr);
+                    return fullStr.length;
                 },
                 print_double: (val, width, precision, mode, flags) => { 
                     let s = "";
@@ -292,6 +293,7 @@
                         s = isLeftAlign ? (s + pad) : (pad + s);
                     }
                     writeStdout(s);
+                    return s.length;
                 },
                 read_char: () => {
                     if (typeof getStdin === 'function') {

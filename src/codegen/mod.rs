@@ -70,15 +70,15 @@ impl<'a> Codegen<'a> {
 
         // Type 0: (i32) -> void (print_char)
         let _t_i32_v = module.add_type(vec![TYPE_I32], vec![]);
-        // Type 1: (i64, i32, i32, i32, i32) -> void (print_int)
+        // Type 1: (i64, i32, i32, i32, i32) -> i32 (print_int)
         let t_print_int = module.add_type(
             vec![TYPE_I64, TYPE_I32, TYPE_I32, TYPE_I32, TYPE_I32],
-            vec![],
+            vec![TYPE_I32],
         );
-        // Type 2: (f64, i32, i32, i32, i32) -> void (print_double)
+        // Type 2: (f64, i32, i32, i32, i32) -> i32 (print_double)
         let t_print_double = module.add_type(
             vec![TYPE_F64, TYPE_I32, TYPE_I32, TYPE_I32, TYPE_I32],
-            vec![],
+            vec![TYPE_I32],
         );
         // Type 3: () -> i32 (read_char)
         let t_v_i32 = module.add_type(vec![], vec![TYPE_I32]);
