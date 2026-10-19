@@ -8,6 +8,9 @@ Source-map fidelity through nested macro expansion is incomplete. The code gener
 and its frame/scratch allocation is conservative. The current shell harness remains a migration point toward a
 typed Rust test harness.
 
+The parser accepts at most 255 nested parentheses (258 recursive parse frames). Deeper sources are rejected
+with a normal diagnostic instead of exhausting the native or WebAssembly stack.
+
 The `printf` runtime implements `%d`, `%i`, `%u`, `%o`, `%x`, `%X`, `%c`, `%s`, `%e`, `%f`, and `%g` with the
 `0`, `-`, `+`, space, and `#` flags. Field width and precision are honoured for the numeric conversions; `%c`
 and `%s` print without field width or precision, floating conversions ignore the sign flags, and `%p` and `%n`

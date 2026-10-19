@@ -175,7 +175,10 @@ impl Parser {
                     })();
                     match cast_res {
                         Ok(cast_expr) => Ok(cast_expr),
-                        Err(_) => {
+                        Err(error) => {
+                            if self.nesting_exceeded.get() {
+                                return Err(error);
+                            }
                             self.pos = saved_pos;
                             self.advance();
                             let expr = self.parse_expr()?;

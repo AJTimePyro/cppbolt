@@ -2,6 +2,7 @@ use super::*;
 
 impl Parser {
     pub(super) fn parse_stmt(&mut self) -> Result<Stmt, CompileError> {
+        let _guard = self.enter_nesting()?;
         let tok = self.current().clone();
         match self.peek() {
             TokenKind::KwUsing => {
@@ -85,7 +86,10 @@ impl Parser {
                     let saved_pos = self.pos;
                     match self.parse_var_decl() {
                         Ok(stmt) => Ok(stmt),
-                        Err(_) => {
+                        Err(error) => {
+                            if self.nesting_exceeded.get() {
+                                return Err(error);
+                            }
                             self.pos = saved_pos;
                             let expr = self.parse_expr()?;
                             self.expect(TokenKind::Semi)?;
@@ -198,6 +202,7 @@ impl Parser {
     }
 
     pub(super) fn parse_initializer(&mut self) -> Result<Expr, CompileError> {
+        let _guard = self.enter_nesting()?;
         if self.peek() == &TokenKind::LBrace {
             self.advance();
             let mut list = Vec::new();

@@ -5,7 +5,9 @@ use crate::ast::*;
 use crate::diagnostics::{CompileError, ErrorKind};
 use crate::lexer::{Token, TokenKind};
 use crate::name::QualifiedName;
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 mod atom;
 mod decl;
@@ -17,6 +19,25 @@ mod structs;
 mod types;
 mod unsupported;
 
+/// Maximum recursion depth accepted by the parser. This is deliberately far
+/// below the native and WebAssembly stack limits so deeply nested sources get a
+/// diagnostic instead of a stack overflow. It leaves room for roughly 255
+/// nested parentheses after the surrounding declaration and statement frames.
+const MAX_NESTING: usize = 258;
+
+/// Decrements the parser's nesting counter when a recursive parse completes,
+/// including on an early error return.
+struct NestingGuard {
+    depth: Rc<Cell<usize>>,
+}
+
+impl Drop for NestingGuard {
+    fn drop(&mut self) {
+        let depth = self.depth.get();
+        self.depth.set(depth.saturating_sub(1));
+    }
+}
+
 pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
@@ -25,6 +46,8 @@ pub struct Parser {
     pub type_aliases: HashMap<String, Type>,
     pub current_namespace: Vec<String>,
     pub open_namespaces: Vec<String>,
+    nesting: Rc<Cell<usize>>,
+    nesting_exceeded: Cell<bool>,
 }
 
 impl Parser {
@@ -75,7 +98,27 @@ impl Parser {
             type_aliases,
             current_namespace: Vec::new(),
             open_namespaces: Vec::new(),
+            nesting: Rc::new(Cell::new(0)),
+            nesting_exceeded: Cell::new(false),
         }
+    }
+
+    /// Reserves one nesting level for the duration of a recursive parse.
+    fn enter_nesting(&self) -> Result<NestingGuard, CompileError> {
+        let depth = self.nesting.get() + 1;
+        if depth > MAX_NESTING {
+            self.nesting_exceeded.set(true);
+            return Err(CompileError::new(
+                "Nesting depth exceeds the supported limit",
+                self.current().line,
+                self.current().col,
+            )
+            .with_kind(ErrorKind::Syntax));
+        }
+        self.nesting.set(depth);
+        Ok(NestingGuard {
+            depth: Rc::clone(&self.nesting),
+        })
     }
 
     pub(super) fn current(&self) -> &Token {
@@ -172,5 +215,50 @@ mod tests {
         let expected = Type::Array(Box::new(Type::Array(Box::new(Type::Int), 3)), 2);
         assert_eq!(ty, &expected);
         Ok(())
+    }
+
+    #[test]
+    pub(super) fn accepts_255_nested_parentheses() -> Result<(), Box<dyn std::error::Error>> {
+        let source = format!(
+            "int main() {{ return {}1{}; }}",
+            "(".repeat(255),
+            ")".repeat(255)
+        );
+        let parsed = spawn_parse(source)?
+            .join()
+            .map_err(|_| std::io::Error::other("parser test thread panicked"))?;
+        assert!(parsed.is_ok());
+        Ok(())
+    }
+
+    #[test]
+    pub(super) fn rejects_256_nested_parentheses() -> Result<(), Box<dyn std::error::Error>> {
+        let source = format!(
+            "int main() {{ return {}1{}; }}",
+            "(".repeat(256),
+            ")".repeat(256)
+        );
+        let parsed = spawn_parse(source)?
+            .join()
+            .map_err(|_| std::io::Error::other("parser test thread panicked"))?;
+        let error = match parsed {
+            Ok(_) => return Err("expected a nesting-depth diagnostic".into()),
+            Err(error) => error,
+        };
+        assert!(error.message.contains("Nesting depth"));
+        Ok(())
+    }
+
+    /// Deep nesting needs more stack than the default test thread provides in
+    /// unoptimized builds, so run it on an explicitly sized thread.
+    fn spawn_parse(
+        source: String,
+    ) -> Result<std::thread::JoinHandle<Result<Program, CompileError>>, std::io::Error> {
+        std::thread::Builder::new()
+            .stack_size(32 * 1024 * 1024)
+            .spawn(move || {
+                let tokens = Lexer::new(&source).tokenize()?;
+                Parser::new(tokens).parse_program()
+            })
     }
 }
