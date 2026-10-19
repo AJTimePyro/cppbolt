@@ -71,8 +71,10 @@ impl<'a> Codegen<'a> {
                 then_expr,
                 else_expr,
             } => {
-                let ty = self.get_expr_type(then_expr, ctx);
-                let wty = ty
+                let result_ty = self.get_expr_type(expr, ctx);
+                let then_ty = self.get_expr_type(then_expr, ctx);
+                let else_ty = self.get_expr_type(else_expr, ctx);
+                let wty = result_ty
                     .to_wasm_type()
                     .map(|w| match w {
                         WasmType::I32 => TYPE_I32,
@@ -86,8 +88,10 @@ impl<'a> Codegen<'a> {
                 code.push(OP_IF);
                 code.push(wty);
                 self.compile_expr(then_expr, ctx, code)?;
+                self.emit_conversion(&then_ty, &result_ty, code);
                 code.push(OP_ELSE);
                 self.compile_expr(else_expr, ctx, code)?;
+                self.emit_conversion(&else_ty, &result_ty, code);
                 code.push(OP_END);
             }
             Expr::Cast { target_type, expr } => {
@@ -100,50 +104,7 @@ impl<'a> Codegen<'a> {
                     return Ok(());
                 }
 
-                if matches!(
-                    src_ty.strip_const(),
-                    Type::LongLong | Type::UnsignedLongLong
-                ) {
-                    if target_type.is_floating() {
-                        if *target_type == Type::Double {
-                            code.push(OP_F64_CONVERT_I64_S);
-                        } else {
-                            code.push(OP_F32_CONVERT_I64_S);
-                        }
-                    } else if !matches!(
-                        target_type.strip_const(),
-                        Type::LongLong | Type::UnsignedLongLong
-                    ) {
-                        code.push(OP_I32_WRAP_I64);
-                    }
-                } else if matches!(
-                    target_type.strip_const(),
-                    Type::LongLong | Type::UnsignedLongLong
-                ) {
-                    if src_ty == Type::Double {
-                        code.push(OP_I64_TRUNC_F64_S);
-                    } else if src_ty == Type::Float {
-                        code.push(OP_I64_TRUNC_F32_S);
-                    } else if src_ty.is_integer() {
-                        if src_ty.is_signed() {
-                            code.push(OP_I64_EXTEND_I32_S);
-                        } else {
-                            code.push(OP_I64_EXTEND_I32_U);
-                        }
-                    }
-                } else if src_ty == Type::Float && target_type.is_integer() {
-                    code.push(OP_I32_TRUNC_F32_S);
-                } else if src_ty == Type::Double && target_type.is_integer() {
-                    code.push(OP_I32_TRUNC_F64_S);
-                } else if src_ty.is_integer() && *target_type == Type::Float {
-                    code.push(OP_F32_CONVERT_I32_S);
-                } else if src_ty.is_integer() && *target_type == Type::Double {
-                    code.push(OP_F64_CONVERT_I32_S);
-                } else if src_ty == Type::Float && *target_type == Type::Double {
-                    code.push(OP_F64_PROMOTE_F32);
-                } else if src_ty == Type::Double && *target_type == Type::Float {
-                    code.push(OP_F32_DEMOTE_F64);
-                }
+                self.emit_conversion(&src_ty, target_type, code);
             }
             Expr::SizeofType(inner) => {
                 let size = inner.size_of(&self.sema.struct_sizes) as i32;

@@ -39,7 +39,11 @@ fn main() {
                 index += 2;
             }
             "--max-memory" | "--max-memory-mb" if index + 1 < args.len() => {
-                max_memory_mb = args[index + 1].parse().unwrap_or(256);
+                let Some(value) = args[index + 1].parse().ok() else {
+                    eprintln!("Error: invalid memory limit '{}'", args[index + 1]);
+                    process::exit(1);
+                };
+                max_memory_mb = value;
                 index += 2;
             }
             "-I" if index + 1 < args.len() => index += 2,

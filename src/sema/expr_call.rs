@@ -132,7 +132,8 @@ impl Sema {
                     self.using_decls
                         .get(name)
                         .and_then(|full| self.functions.get(full))
-                });
+                })
+                .cloned();
             if candidates.is_none() {
                 for aty in &arg_types {
                     let clean = aty.strip_const().strip_reference();
@@ -140,16 +141,24 @@ impl Sema {
                         && let Some((ns, _)) = s.rsplit_once("::")
                         && let Some(sigs) = self.functions.get(&format!("{}::{}", ns, name))
                     {
-                        candidates = Some(sigs);
+                        candidates = Some(sigs.clone());
                         break;
                     }
+                }
+            }
+            if candidates.is_none()
+                && let Some((class_name, method_name)) = name.rsplit_once("::")
+            {
+                let static_methods = self.find_static_methods_in_class(class_name, method_name);
+                if !static_methods.is_empty() {
+                    candidates = Some(static_methods);
                 }
             }
             if let Some(candidates) = candidates {
                 let mut best_candidate: Option<(&FunctionSig, Vec<Expr>)> = None;
                 let mut best_score = usize::MAX;
 
-                for cand in candidates {
+                for cand in &candidates {
                     let min_args = cand.default_args.iter().take_while(|d| d.is_none()).count();
                     let max_args = cand.param_types.len();
 

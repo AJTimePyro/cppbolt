@@ -26,6 +26,7 @@ impl<'a> Codegen<'a> {
                             class_name.to_string(),
                         )))],
                         default_args: vec![],
+                        is_static: false,
                     },
                 ));
             }
@@ -41,7 +42,9 @@ impl<'a> Codegen<'a> {
                 let mut best_sig = None;
                 let mut best_score = usize::MAX;
                 for sig in sigs {
-                    let params = if !sig.param_types.is_empty() {
+                    let params = if sig.is_static {
+                        &sig.param_types[..]
+                    } else if !sig.param_types.is_empty() {
                         &sig.param_types[1..]
                     } else {
                         &[]
@@ -125,9 +128,16 @@ impl<'a> Codegen<'a> {
                     .get(QualifiedName::new(class_name).plain())
             });
         if let Some(layout) = layout {
-            for b in &layout.base_classes {
-                if let Some(res) = self.find_method(b, method_name, arg_types) {
-                    return Some(res);
+            if let Some(base) = layout.base_classes.first()
+                && let Some(result) = self.find_method(base, method_name, arg_types)
+            {
+                return Some(result);
+            }
+            for (base, _) in layout.base_offsets.iter().skip(1) {
+                if let Some(result) = self.find_method(base, method_name, arg_types)
+                    && result.1.is_static
+                {
+                    return Some(result);
                 }
             }
         }

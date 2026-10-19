@@ -57,7 +57,7 @@ impl Sema {
             | BinaryOp::Le
             | BinaryOp::Gt
             | BinaryOp::Ge => Ok(Type::Bool),
-            BinaryOp::Shl | BinaryOp::Shr => Ok(lty),
+            BinaryOp::Shl | BinaryOp::Shr => Ok(lty.strip_reference().integer_promotion()),
             _ => {
                 // Pointer arithmetic: ptr + int or ptr - int
                 let lty_d = lty.decay_array();
@@ -66,18 +66,12 @@ impl Sema {
                     Ok(lty_d)
                 } else if rty_d.is_pointer() && lty.is_integer() && *op == BinaryOp::Add {
                     Ok(rty_d)
-                } else if lty == Type::Double || rty == Type::Double {
-                    Ok(Type::Double)
-                } else if lty == Type::Float || rty == Type::Float {
-                    Ok(Type::Float)
-                } else if lty == Type::LongLong
-                    || rty == Type::LongLong
-                    || lty == Type::UnsignedLongLong
-                    || rty == Type::UnsignedLongLong
-                {
-                    Ok(Type::LongLong)
-                } else {
+                } else if lty_d.is_pointer() && rty_d.is_pointer() && *op == BinaryOp::Sub {
                     Ok(Type::Int)
+                } else {
+                    Ok(lty
+                        .strip_reference()
+                        .usual_arithmetic_conversion(rty.strip_reference()))
                 }
             }
         }
@@ -114,13 +108,8 @@ impl Sema {
                 }
                 Ok(Type::Pointer(Box::new(ty)))
             }
-            UnaryOp::BitNot
-            | UnaryOp::Neg
-            | UnaryOp::Plus
-            | UnaryOp::PreInc
-            | UnaryOp::PreDec
-            | UnaryOp::PostInc
-            | UnaryOp::PostDec => Ok(ty),
+            UnaryOp::BitNot | UnaryOp::Neg | UnaryOp::Plus => Ok(ty.integer_promotion()),
+            UnaryOp::PreInc | UnaryOp::PreDec | UnaryOp::PostInc | UnaryOp::PostDec => Ok(ty),
         }
     }
 

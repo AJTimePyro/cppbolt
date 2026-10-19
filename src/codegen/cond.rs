@@ -18,17 +18,22 @@ impl<'a> Codegen<'a> {
         }
         self.compile_expr(expr, ctx, code)?;
         let ty = self.get_expr_type(expr, ctx);
-        if ty == Type::LongLong || ty == Type::UnsignedLongLong {
-            code.push(OP_I64_EQZ);
-            code.push(OP_I32_EQZ);
-        } else if ty == Type::Float {
-            code.push(OP_F32_CONST);
-            code.extend_from_slice(&0.0f32.to_le_bytes());
-            code.push(OP_F32_NE);
-        } else if ty == Type::Double {
-            code.push(OP_F64_CONST);
-            code.extend_from_slice(&0.0f64.to_le_bytes());
-            code.push(OP_F64_NE);
+        match ty.strip_const() {
+            Type::LongLong | Type::UnsignedLongLong => {
+                code.push(OP_I64_EQZ);
+                code.push(OP_I32_EQZ);
+            }
+            Type::Float => {
+                code.push(OP_F32_CONST);
+                code.extend_from_slice(&0.0f32.to_le_bytes());
+                code.push(OP_F32_NE);
+            }
+            Type::Double => {
+                code.push(OP_F64_CONST);
+                code.extend_from_slice(&0.0f64.to_le_bytes());
+                code.push(OP_F64_NE);
+            }
+            _ => {}
         }
         Ok(())
     }
@@ -79,6 +84,25 @@ impl<'a> Codegen<'a> {
                     || self.check_expr_has_indirect_call(then_expr)
                     || self.check_expr_has_indirect_call(else_expr)
             }
+            Expr::Cast { expr, .. } => self.check_expr_has_indirect_call(expr),
+            Expr::New {
+                args,
+                array_size,
+                placement,
+                ..
+            } => {
+                args.iter()
+                    .any(|arg| self.check_expr_has_indirect_call(arg))
+                    || array_size
+                        .as_ref()
+                        .map(|size| self.check_expr_has_indirect_call(size))
+                        .unwrap_or(false)
+                    || placement
+                        .as_ref()
+                        .map(|place| self.check_expr_has_indirect_call(place))
+                        .unwrap_or(false)
+            }
+            Expr::Delete { expr, .. } => self.check_expr_has_indirect_call(expr),
             _ => false,
         }
     }

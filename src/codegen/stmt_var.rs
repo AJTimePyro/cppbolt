@@ -18,19 +18,22 @@ impl<'a> Codegen<'a> {
         };
 
         if *is_static {
-            let gname = format!("__static_{}", name);
+            let gname =
+                crate::name::static_local_name(&ctx.current_func_name, stmt.line, stmt.col, name);
             if let Some(&goff) = self.global_offsets.get(&gname) {
-                ctx.static_var_offsets
-                    .insert(name.clone(), (goff, ty.clone()));
+                ctx.bind_static(name.clone(), goff, ty.clone());
+            } else {
+                ctx.bind_type(name.clone(), ty.clone());
             }
-            ctx.var_types.insert(name.clone(), ty.clone());
             return Ok(());
         }
-        let size = ty.size_of(&self.sema.struct_sizes) as u32;
-        let offset = ctx.next_local_offset;
-        ctx.next_local_offset += (size + 3) & !3;
-        ctx.var_offsets.insert(name.clone(), offset);
-        ctx.var_types.insert(name.clone(), ty.clone());
+        let size = u32::try_from(ty.size_of(&self.sema.struct_sizes))
+            .map_err(|_| crate::internal_error!(stmt.line, stmt.col, "local is too large"))?;
+        let align = u32::try_from(ty.align_of(&self.sema.struct_aligns))
+            .unwrap_or(4)
+            .max(4);
+        let offset = ctx.alloc_frame(size, align)?;
+        ctx.bind_local(name.clone(), offset, ty.clone());
 
         if ty.is_reference() {
             if let Some(init_expr) = init {
@@ -92,15 +95,8 @@ impl<'a> Codegen<'a> {
                             }
                             code.push(OP_CALL);
                             write_u32(code, ctor_idx);
-                        } else if let Some(layout) = self.sema.struct_layouts.get(sname) {
-                            for (i, item) in list.iter().enumerate() {
-                                if let Some(fld) = layout.fields.get(i) {
-                                    code.push(OP_LOCAL_GET);
-                                    write_u32(code, ctx.fp_local);
-                                    self.compile_expr(item, ctx, code)?;
-                                    self.emit_store(&fld.ty, offset + fld.offset as u32, code);
-                                }
-                            }
+                        } else if self.sema.struct_layouts.contains_key(sname) {
+                            self.compile_aggregate_local(ty, init_expr, offset, ctx, code)?;
                         }
                     }
                     Expr::Call { callee, args } if matches!(&**callee, Expr::Identifier(cname) if cname == sname) =>
@@ -169,14 +165,21 @@ impl<'a> Codegen<'a> {
                         } else {
                             // Converting constructor: sname(init_ty)
                             let arg_types = vec![init_ty.clone()];
-                            if let Some(ctor_idx) = self.find_constructor(sname, &arg_types) {
+                            if let Some((ctor_idx, sig)) =
+                                self.find_constructor_sig(sname, &arg_types)
+                            {
                                 code.push(OP_LOCAL_GET);
                                 write_u32(code, ctx.fp_local);
                                 code.push(OP_I32_CONST);
                                 write_i32(code, offset as i32);
                                 code.push(OP_I32_ADD); // this
 
-                                self.compile_expr(init_expr, ctx, code)?;
+                                self.compile_call_arg(
+                                    init_expr,
+                                    sig.param_types.get(1),
+                                    ctx,
+                                    code,
+                                )?;
                                 code.push(OP_CALL);
                                 write_u32(code, ctor_idx);
                             } else {
@@ -204,15 +207,51 @@ impl<'a> Codegen<'a> {
                     write_u32(code, ctor_idx);
                 }
             }
-        } else if let Type::Array(elem_ty, _) = ty.strip_const() {
-            if let Some(Expr::InitializerList(list)) = init {
-                let elem_size = elem_ty.size_of(&self.sema.struct_sizes) as u32;
-                for (i, item) in list.iter().enumerate() {
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.fp_local);
-                    self.compile_expr(item, ctx, code)?;
-                    self.emit_store(elem_ty, offset + (i as u32) * elem_size, code);
+        } else if let Type::Array(elem_ty, count) = ty.strip_const() {
+            let elem_size = u32::try_from(elem_ty.size_of(&self.sema.struct_sizes))
+                .map_err(|_| crate::internal_error!(stmt.line, stmt.col, "array is too large"))?;
+            let init_list = match init {
+                Some(Expr::InitializerList(list)) => Some(list.as_slice()),
+                _ => None,
+            };
+            let mut scope_entries = Vec::new();
+            for i in 0..*count {
+                let elem_offset = offset
+                    .checked_add((i as u32).checked_mul(elem_size).ok_or_else(|| {
+                        crate::internal_error!(stmt.line, stmt.col, "array is too large")
+                    })?)
+                    .ok_or_else(|| {
+                        crate::internal_error!(stmt.line, stmt.col, "array is too large")
+                    })?;
+                if let Type::Struct(sname) = elem_ty.strip_const() {
+                    scope_entries.push((
+                        format!("{}[{}]", name, i),
+                        elem_ty.as_ref().clone(),
+                        elem_offset,
+                    ));
+                    if let Some(item) = init_list.and_then(|items| items.get(i)) {
+                        self.compile_aggregate_local(
+                            elem_ty.as_ref(),
+                            item,
+                            elem_offset,
+                            ctx,
+                            code,
+                        )?;
+                    } else if let Some(ci) = self.find_constructor(sname, &[]) {
+                        code.push(OP_LOCAL_GET);
+                        write_u32(code, ctx.fp_local);
+                        code.push(OP_I32_CONST);
+                        write_i32(code, elem_offset as i32);
+                        code.push(OP_I32_ADD);
+                        code.push(OP_CALL);
+                        write_u32(code, ci);
+                    }
+                } else if let Some(item) = init_list.and_then(|items| items.get(i)) {
+                    self.compile_aggregate_local(elem_ty.as_ref(), item, elem_offset, ctx, code)?;
                 }
+            }
+            if let Some(scope) = ctx.scope_objects.last_mut() {
+                scope.extend(scope_entries);
             }
         } else {
             if let Some(init_expr) = init {
@@ -221,27 +260,171 @@ impl<'a> Codegen<'a> {
                 write_u32(code, ctx.fp_local);
                 self.compile_expr(init_expr, ctx, code)?;
 
-                // Implicit conversions
-                if *ty == Type::Double && init_ty.is_integer() {
-                    code.push(OP_F64_CONVERT_I32_S);
-                } else if *ty == Type::Float && init_ty.is_integer() {
-                    code.push(OP_F32_CONVERT_I32_S);
-                } else if *ty == Type::Float && init_ty == Type::Double {
-                    code.push(OP_F32_DEMOTE_F64);
-                } else if *ty == Type::Double && init_ty == Type::Float {
-                    code.push(OP_F64_PROMOTE_F32);
-                } else if (*ty == Type::LongLong || *ty == Type::UnsignedLongLong)
-                    && (init_ty.is_integer()
-                        && init_ty != Type::LongLong
-                        && init_ty != Type::UnsignedLongLong)
-                {
-                    code.push(OP_I64_EXTEND_I32_S);
-                }
+                self.emit_conversion(&init_ty, ty, code);
                 self.emit_store(ty, offset, code);
             }
         }
         self.emit_clean_temporaries(ctx, code);
 
         Ok(())
+    }
+}
+
+impl<'a> Codegen<'a> {
+    fn compile_aggregate_local(
+        &mut self,
+        ty: &Type,
+        init: &Expr,
+        offset: u32,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        if let Expr::InitializerList(list) = init
+            && list.len() == 1
+            && !matches!(ty.strip_const(), Type::Struct(_) | Type::Array(_, _))
+        {
+            return self.compile_aggregate_local(ty, &list[0], offset, ctx, code);
+        }
+
+        if let Type::Struct(sname) = ty.strip_const() {
+            if let Expr::Call { callee, args } = init
+                && matches!(&**callee, Expr::Identifier(name) if name == sname)
+            {
+                let arg_types: Vec<Type> = args
+                    .iter()
+                    .map(|arg| self.get_expr_type(arg, ctx))
+                    .collect();
+                let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types) else {
+                    return Err(CompileError::new(
+                        format!("No matching constructor for '{}'", sname),
+                        1,
+                        1,
+                    ));
+                };
+                self.emit_local_address(offset, ctx, code);
+                for (i, arg) in args.iter().enumerate() {
+                    self.compile_call_arg(arg, sig.param_types.get(i + 1), ctx, code)?;
+                }
+                code.push(OP_CALL);
+                write_u32(code, ctor_idx);
+                return Ok(());
+            }
+
+            if let Expr::InitializerList(list) = init {
+                let arg_types: Vec<Type> = list
+                    .iter()
+                    .map(|arg| self.get_expr_type(arg, ctx))
+                    .collect();
+                if let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types) {
+                    self.emit_local_address(offset, ctx, code);
+                    for (i, arg) in list.iter().enumerate() {
+                        self.compile_call_arg(arg, sig.param_types.get(i + 1), ctx, code)?;
+                    }
+                    code.push(OP_CALL);
+                    write_u32(code, ctor_idx);
+                    return Ok(());
+                }
+                if let Some(layout) = self.sema.struct_layouts.get(sname).cloned() {
+                    for (i, item) in list.iter().enumerate() {
+                        if let Some(fld) = layout.fields.get(i) {
+                            let field_offset =
+                                offset.checked_add(fld.offset as u32).ok_or_else(|| {
+                                    crate::internal_error!(1, 1, "object is too large")
+                                })?;
+                            self.compile_aggregate_local(&fld.ty, item, field_offset, ctx, code)?;
+                        }
+                    }
+                }
+                return Ok(());
+            }
+
+            let init_ty = self.get_expr_type(init, ctx);
+            if matches!(
+                init_ty.strip_const().strip_reference(),
+                Type::Struct(other) if other == sname
+            ) {
+                let copy_ctor_arg = vec![Type::Reference(Box::new(Type::Const(Box::new(
+                    Type::Struct(sname.clone()),
+                ))))];
+                if self.is_struct_lvalue(init, ctx) {
+                    if let Some(ctor_idx) = self.find_constructor(sname, &copy_ctor_arg) {
+                        self.emit_local_address(offset, ctx, code);
+                        self.compile_lvalue_addr(init, ctx, code)?;
+                        code.push(OP_CALL);
+                        write_u32(code, ctor_idx);
+                    } else {
+                        self.compile_lvalue_addr(init, ctx, code)?;
+                        code.push(OP_LOCAL_SET);
+                        write_u32(code, ctx.scratch1);
+                        self.emit_copy_struct(sname, offset, ctx, code);
+                    }
+                } else {
+                    self.compile_expr(init, ctx, code)?;
+                    code.push(OP_LOCAL_SET);
+                    write_u32(code, ctx.scratch1);
+                    if let Some(ctor_idx) = self.find_constructor(sname, &copy_ctor_arg) {
+                        self.emit_local_address(offset, ctx, code);
+                        code.push(OP_LOCAL_GET);
+                        write_u32(code, ctx.scratch1);
+                        code.push(OP_CALL);
+                        write_u32(code, ctor_idx);
+                    } else {
+                        self.emit_copy_struct(sname, offset, ctx, code);
+                    }
+                }
+                return Ok(());
+            }
+
+            let arg_types = vec![init_ty.clone()];
+            if let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types) {
+                self.emit_local_address(offset, ctx, code);
+                self.compile_call_arg(init, sig.param_types.get(1), ctx, code)?;
+                code.push(OP_CALL);
+                write_u32(code, ctor_idx);
+                return Ok(());
+            }
+            return Err(CompileError::new(
+                format!(
+                    "Cannot initialize struct '{}' with value of type {:?}",
+                    sname, init_ty
+                ),
+                1,
+                1,
+            ));
+        }
+
+        if let (Type::Array(elem_ty, _), Expr::InitializerList(list)) = (ty.strip_const(), init) {
+            let elem_size = u32::try_from(elem_ty.size_of(&self.sema.struct_sizes))
+                .map_err(|_| crate::internal_error!(1, 1, "array is too large"))?;
+            for (i, item) in list.iter().enumerate() {
+                let item_offset = offset
+                    .checked_add(
+                        (i as u32)
+                            .checked_mul(elem_size)
+                            .ok_or_else(|| crate::internal_error!(1, 1, "array is too large"))?,
+                    )
+                    .ok_or_else(|| crate::internal_error!(1, 1, "array is too large"))?;
+                self.compile_aggregate_local(elem_ty, item, item_offset, ctx, code)?;
+            }
+            return Ok(());
+        }
+
+        let item_ty = self.get_expr_type(init, ctx);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        self.compile_expr(init, ctx, code)?;
+        self.emit_conversion(&item_ty, ty, code);
+        self.emit_store(ty, offset, code);
+        Ok(())
+    }
+
+    fn emit_local_address(&self, offset: u32, ctx: &FunctionContext, code: &mut Vec<u8>) {
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        if offset != 0 {
+            code.push(OP_I32_CONST);
+            write_i32(code, offset as i32);
+            code.push(OP_I32_ADD);
+        }
     }
 }

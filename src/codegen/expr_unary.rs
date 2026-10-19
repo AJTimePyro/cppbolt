@@ -45,7 +45,7 @@ impl<'a> Codegen<'a> {
                     self.compile_lvalue_addr(expr, ctx, code)?;
                     code.push(OP_CALL);
                     write_u32(code, m_idx);
-                    self.register_returned_struct_temp(&sig.return_type, ctx, code);
+                    self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
                     return Ok(());
                 }
                 if ty == Type::Double {
@@ -92,7 +92,7 @@ impl<'a> Codegen<'a> {
                         self.compile_lvalue_addr(expr, ctx, code)?;
                         code.push(OP_CALL);
                         write_u32(code, m_idx);
-                        self.register_returned_struct_temp(&sig.return_type, ctx, code);
+                        self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
                         return Ok(());
                     }
                 }
@@ -153,7 +153,7 @@ impl<'a> Codegen<'a> {
                 } else {
                     let step = if ty.is_pointer() {
                         ty.deref_type()
-                            .map(|d| d.size_of(&self.sema.struct_sizes))
+                            .map(|d| d.size_of(&self.sema.struct_sizes).max(1))
                             .unwrap_or(1) as i32
                     } else {
                         1
@@ -236,7 +236,7 @@ impl<'a> Codegen<'a> {
 
                     let step = if ty.is_pointer() {
                         ty.deref_type()
-                            .map(|d| d.size_of(&self.sema.struct_sizes))
+                            .map(|d| d.size_of(&self.sema.struct_sizes).max(1))
                             .unwrap_or(1) as i32
                     } else {
                         1

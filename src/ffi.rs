@@ -28,13 +28,35 @@ pub extern "C" fn dealloc_buffer(pointer: *mut u8, size: usize) {
     }
 }
 
+fn set_error(message: &str) {
+    // SAFETY: the fixed buffer is private to this ABI and the copy is bounded.
+    unsafe {
+        RESULT_LEN = 0;
+        let bytes = message.as_bytes();
+        let length = bytes.len().min(4096);
+        ERROR_BYTES[..length].copy_from_slice(&bytes[..length]);
+        ERROR_LEN = length;
+    }
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn compile_wasm(source_pointer: *const u8, source_length: usize) -> *const u8 {
-    // SAFETY: the ABI caller supplies a readable UTF-8 buffer of the declared length.
-    let source_bytes = unsafe { std::slice::from_raw_parts(source_pointer, source_length) };
-    let source = match std::str::from_utf8(source_bytes) {
-        Ok(source) => source,
-        Err(_) => return std::ptr::null(),
+    let source = if source_length == 0 {
+        ""
+    } else {
+        if source_pointer.is_null() {
+            set_error("source pointer is null");
+            return std::ptr::null();
+        }
+        // SAFETY: the ABI caller supplies a readable buffer of the declared length.
+        let source_bytes = unsafe { std::slice::from_raw_parts(source_pointer, source_length) };
+        match std::str::from_utf8(source_bytes) {
+            Ok(source) => source,
+            Err(_) => {
+                set_error("source is not valid UTF-8");
+                return std::ptr::null();
+            }
+        }
     };
 
     match compile_with_options_named(source, "<input>", 256) {
@@ -50,15 +72,7 @@ pub extern "C" fn compile_wasm(source_pointer: *const u8, source_length: usize) 
             pointer
         }
         Err(error) => {
-            let message = error.to_string();
-            // SAFETY: the fixed buffer is private to this ABI and the copy is bounded.
-            unsafe {
-                RESULT_LEN = 0;
-                let bytes = message.as_bytes();
-                let length = bytes.len().min(4096);
-                ERROR_BYTES[..length].copy_from_slice(&bytes[..length]);
-                ERROR_LEN = length;
-            }
+            set_error(&error.to_string());
             std::ptr::null()
         }
     }

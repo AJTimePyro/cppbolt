@@ -44,26 +44,40 @@ impl<'a> Codegen<'a> {
                 && let Type::Struct(psname) = clean_p
                 && let Some(ctor_idx) = self.find_constructor(psname, std::slice::from_ref(clean_a))
             {
-                let size = clean_p.size_of(&self.sema.struct_sizes) as u32;
+                let size = i32::try_from(clean_p.size_of(&self.sema.struct_sizes))
+                    .map_err(|_| crate::internal_error!(0, 0, "object is too large"))?;
+                let temp_ptr_slot = ctx.alloc_frame(4, 4)?;
                 code.push(OP_I32_CONST);
-                write_i32(code, size as i32);
+                write_i32(code, size);
                 code.push(OP_CALL);
                 write_u32(code, self.func_indices["malloc"]);
                 code.push(OP_LOCAL_SET);
                 write_u32(code, ctx.scratch1); // temp_ptr
-
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.scratch1);
-                self.compile_expr(a, ctx, code)?;
-                code.push(OP_CALL);
-                write_u32(code, ctor_idx);
-
-                let temp_slot = ctx.next_local_offset;
-                ctx.next_local_offset += 4;
                 code.push(OP_LOCAL_GET);
                 write_u32(code, ctx.fp_local);
                 code.push(OP_LOCAL_GET);
                 write_u32(code, ctx.scratch1);
+                code.push(OP_I32_STORE);
+                write_u32(code, 2);
+                write_u32(code, temp_ptr_slot);
+
+                code.push(OP_LOCAL_GET);
+                write_u32(code, ctx.fp_local);
+                code.push(OP_I32_LOAD);
+                write_u32(code, 2);
+                write_u32(code, temp_ptr_slot);
+                self.compile_expr(a, ctx, code)?;
+                code.push(OP_CALL);
+                write_u32(code, ctor_idx);
+
+                let temp_slot = ctx.alloc_frame(4, 4)?;
+                code.push(OP_LOCAL_GET);
+                write_u32(code, ctx.fp_local);
+                code.push(OP_LOCAL_GET);
+                write_u32(code, ctx.fp_local);
+                code.push(OP_I32_LOAD);
+                write_u32(code, 2);
+                write_u32(code, temp_ptr_slot);
                 code.push(OP_I32_STORE);
                 write_u32(code, 2);
                 write_u32(code, temp_slot);
@@ -71,7 +85,10 @@ impl<'a> Codegen<'a> {
                 ctx.temp_objects.push((psname.clone(), temp_slot, true));
 
                 code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.scratch1);
+                write_u32(code, ctx.fp_local);
+                code.push(OP_I32_LOAD);
+                write_u32(code, 2);
+                write_u32(code, temp_ptr_slot);
                 return Ok(());
             }
             self.compile_lvalue_addr(a, ctx, code)?;
@@ -85,26 +102,41 @@ impl<'a> Codegen<'a> {
                     Type::Struct(sname.clone()),
                 ))))];
                 if let Some(ctor_idx) = self.find_constructor(sname, &copy_ctor_arg) {
-                    let size = self.sema.struct_sizes.get(sname).copied().unwrap_or(4);
+                    let size =
+                        i32::try_from(self.sema.struct_sizes.get(sname).copied().unwrap_or(4))
+                            .map_err(|_| crate::internal_error!(0, 0, "object is too large"))?;
+                    let temp_ptr_slot = ctx.alloc_frame(4, 4)?;
                     code.push(OP_I32_CONST);
-                    write_i32(code, size as i32);
+                    write_i32(code, size);
                     code.push(OP_CALL);
                     write_u32(code, self.func_indices["malloc"]);
                     code.push(OP_LOCAL_SET);
                     write_u32(code, ctx.scratch1);
-
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.scratch1);
-                    self.compile_lvalue_addr(a, ctx, code)?;
-                    code.push(OP_CALL);
-                    write_u32(code, ctor_idx);
-
-                    let temp_slot = ctx.next_local_offset;
-                    ctx.next_local_offset += 4;
                     code.push(OP_LOCAL_GET);
                     write_u32(code, ctx.fp_local);
                     code.push(OP_LOCAL_GET);
                     write_u32(code, ctx.scratch1);
+                    code.push(OP_I32_STORE);
+                    write_u32(code, 2);
+                    write_u32(code, temp_ptr_slot);
+
+                    code.push(OP_LOCAL_GET);
+                    write_u32(code, ctx.fp_local);
+                    code.push(OP_I32_LOAD);
+                    write_u32(code, 2);
+                    write_u32(code, temp_ptr_slot);
+                    self.compile_lvalue_addr(a, ctx, code)?;
+                    code.push(OP_CALL);
+                    write_u32(code, ctor_idx);
+
+                    let temp_slot = ctx.alloc_frame(4, 4)?;
+                    code.push(OP_LOCAL_GET);
+                    write_u32(code, ctx.fp_local);
+                    code.push(OP_LOCAL_GET);
+                    write_u32(code, ctx.fp_local);
+                    code.push(OP_I32_LOAD);
+                    write_u32(code, 2);
+                    write_u32(code, temp_ptr_slot);
                     code.push(OP_I32_STORE);
                     write_u32(code, 2);
                     write_u32(code, temp_slot);
@@ -112,7 +144,10 @@ impl<'a> Codegen<'a> {
                     ctx.temp_objects.push((sname.clone(), temp_slot, false));
 
                     code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.scratch1);
+                    write_u32(code, ctx.fp_local);
+                    code.push(OP_I32_LOAD);
+                    write_u32(code, 2);
+                    write_u32(code, temp_ptr_slot);
                     return Ok(());
                 }
             }

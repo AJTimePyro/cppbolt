@@ -32,13 +32,29 @@ impl<'a> Codegen<'a> {
                 write_u32(code, assign_idx);
                 return Ok(());
             } else {
+                let dest_slot = ctx.alloc_frame(4, 4)?;
+                let src_slot = ctx.alloc_frame(4, 4)?;
                 self.compile_lvalue_addr(target, ctx, code)?;
                 code.push(OP_LOCAL_SET);
                 write_u32(code, ctx.scratch2); // dest addr
+                code.push(OP_LOCAL_GET);
+                write_u32(code, ctx.fp_local);
+                code.push(OP_LOCAL_GET);
+                write_u32(code, ctx.scratch2);
+                code.push(OP_I32_STORE);
+                write_u32(code, 2);
+                write_u32(code, dest_slot);
 
                 self.compile_lvalue_addr(value, ctx, code)?;
                 code.push(OP_LOCAL_SET);
                 write_u32(code, ctx.scratch1); // src addr
+                code.push(OP_LOCAL_GET);
+                write_u32(code, ctx.fp_local);
+                code.push(OP_LOCAL_GET);
+                write_u32(code, ctx.scratch1);
+                code.push(OP_I32_STORE);
+                write_u32(code, 2);
+                write_u32(code, src_slot);
 
                 let size = self
                     .sema
@@ -46,72 +62,50 @@ impl<'a> Codegen<'a> {
                     .get(sname)
                     .map(|l| l.size)
                     .unwrap_or(4);
-                for i in (0..size).step_by(4) {
+                for i in 0..size {
                     code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.scratch2);
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.scratch1);
+                    write_u32(code, ctx.fp_local);
                     code.push(OP_I32_LOAD);
                     write_u32(code, 2);
-                    write_u32(code, i as u32);
-                    code.push(OP_I32_STORE);
+                    write_u32(code, dest_slot);
+                    code.push(OP_LOCAL_GET);
+                    write_u32(code, ctx.fp_local);
+                    code.push(OP_I32_LOAD);
                     write_u32(code, 2);
+                    write_u32(code, src_slot);
+                    code.push(OP_I32_LOAD8_U);
+                    write_u32(code, 0);
+                    write_u32(code, i as u32);
+                    code.push(OP_I32_STORE8);
+                    write_u32(code, 0);
                     write_u32(code, i as u32);
                 }
                 code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.scratch2);
+                write_u32(code, ctx.fp_local);
+                code.push(OP_I32_LOAD);
+                write_u32(code, 2);
+                write_u32(code, dest_slot);
                 return Ok(());
             }
         }
 
         let target_ty = self.get_expr_type(target, ctx);
         let val_ty = self.get_expr_type(value, ctx);
+        let dest_slot = ctx.alloc_frame(4, 4)?;
         self.compile_lvalue_addr(target, ctx, code)?;
         code.push(OP_LOCAL_SET);
         write_u32(code, ctx.scratch1); // dest addr
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch1);
+        code.push(OP_I32_STORE);
+        write_u32(code, 2);
+        write_u32(code, dest_slot);
 
         self.compile_expr(value, ctx, code)?;
 
-        if matches!(
-            val_ty.strip_const(),
-            Type::LongLong | Type::UnsignedLongLong
-        ) {
-            if target_ty.is_floating() {
-                if target_ty == Type::Double {
-                    code.push(OP_F64_CONVERT_I64_S);
-                } else {
-                    code.push(OP_F32_CONVERT_I64_S);
-                }
-            } else if !matches!(
-                target_ty.strip_const(),
-                Type::LongLong | Type::UnsignedLongLong
-            ) {
-                code.push(OP_I32_WRAP_I64);
-            }
-        } else if matches!(
-            target_ty.strip_const(),
-            Type::LongLong | Type::UnsignedLongLong
-        ) {
-            if val_ty == Type::Double {
-                code.push(OP_I64_TRUNC_F64_S);
-            } else if val_ty == Type::Float {
-                code.push(OP_I64_TRUNC_F32_S);
-            } else if val_ty.is_integer() {
-                if val_ty.is_signed() {
-                    code.push(OP_I64_EXTEND_I32_S);
-                } else {
-                    code.push(OP_I64_EXTEND_I32_U);
-                }
-            }
-        } else if target_ty == Type::Double && val_ty.is_integer() {
-            code.push(OP_F64_CONVERT_I32_S);
-        } else if target_ty == Type::Float && val_ty.is_integer() {
-            code.push(OP_F32_CONVERT_I32_S);
-        } else if target_ty == Type::Float && val_ty == Type::Double {
-            code.push(OP_F32_DEMOTE_F64);
-        } else if target_ty == Type::Double && val_ty == Type::Float {
-            code.push(OP_F64_PROMOTE_F32);
-        }
+        self.emit_conversion(&val_ty, &target_ty, code);
 
         let target_raw = target_ty.strip_const();
         if matches!(target_raw, Type::LongLong | Type::UnsignedLongLong) {
@@ -119,7 +113,10 @@ impl<'a> Codegen<'a> {
             write_u32(code, ctx.scratch_i64);
 
             code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.scratch1);
+            write_u32(code, ctx.fp_local);
+            code.push(OP_I32_LOAD);
+            write_u32(code, 2);
+            write_u32(code, dest_slot);
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.scratch_i64);
             self.emit_store(&target_ty, 0, code);
@@ -131,7 +128,10 @@ impl<'a> Codegen<'a> {
             write_u32(code, ctx.scratch_f64);
 
             code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.scratch1);
+            write_u32(code, ctx.fp_local);
+            code.push(OP_I32_LOAD);
+            write_u32(code, 2);
+            write_u32(code, dest_slot);
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.scratch_f64);
             self.emit_store(&target_ty, 0, code);
@@ -143,7 +143,10 @@ impl<'a> Codegen<'a> {
             write_u32(code, ctx.scratch_f32);
 
             code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.scratch1);
+            write_u32(code, ctx.fp_local);
+            code.push(OP_I32_LOAD);
+            write_u32(code, 2);
+            write_u32(code, dest_slot);
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.scratch_f32);
             self.emit_store(&target_ty, 0, code);
@@ -155,7 +158,10 @@ impl<'a> Codegen<'a> {
             write_u32(code, ctx.scratch2);
 
             code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.scratch1);
+            write_u32(code, ctx.fp_local);
+            code.push(OP_I32_LOAD);
+            write_u32(code, 2);
+            write_u32(code, dest_slot);
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.scratch2);
             self.emit_store(&target_ty, 0, code);
@@ -214,55 +220,72 @@ impl<'a> Codegen<'a> {
             write_u32(code, m_idx);
             return Ok(());
         }
+        let is_pointer_arithmetic =
+            ty.is_pointer() && (op == &BinaryOp::Add || op == &BinaryOp::Sub);
+        let arithmetic_ty = if is_pointer_arithmetic {
+            ty.clone()
+        } else if matches!(op, BinaryOp::Shl | BinaryOp::Shr) {
+            promote_integer(&ty)
+        } else {
+            arithmetic_common_type(&ty, &val_ty)
+        };
+        let dest_slot = ctx.alloc_frame(4, 4)?;
         self.compile_lvalue_addr(target, ctx, code)?;
         code.push(OP_LOCAL_SET);
         write_u32(code, ctx.scratch1);
-
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.scratch1);
+        code.push(OP_I32_STORE);
+        write_u32(code, 2);
+        write_u32(code, dest_slot);
 
         code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.scratch1);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, dest_slot);
+
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, dest_slot);
         self.emit_load(&ty, 0, code);
+        self.emit_conversion(&ty, &arithmetic_ty, code);
         self.compile_expr(value, ctx, code)?;
 
-        if ty.is_pointer() && (op == &BinaryOp::Add || op == &BinaryOp::Sub) {
+        if is_pointer_arithmetic {
+            self.emit_conversion(&val_ty, &Type::UnsignedInt, code);
             let esize = ty
                 .deref_type()
                 .map(|d| d.size_of(&self.sema.struct_sizes))
-                .unwrap_or(4) as i32;
+                .unwrap_or(4)
+                .max(1) as i32;
             code.push(OP_I32_CONST);
             write_i32(code, esize);
             code.push(OP_I32_MUL);
+        } else {
+            self.emit_conversion(&val_ty, &arithmetic_ty, code);
         }
 
-        let val_ty = self.get_expr_type(value, ctx);
-        if (ty == Type::LongLong || ty == Type::UnsignedLongLong)
-            && val_ty != Type::LongLong
-            && val_ty != Type::UnsignedLongLong
-        {
-            code.push(OP_I64_EXTEND_I32_S);
-        } else if ty == Type::Double && val_ty == Type::Float {
-            code.push(OP_F64_PROMOTE_F32);
-        } else if ty == Type::Float && val_ty == Type::Double {
-            code.push(OP_F32_DEMOTE_F64);
-        }
-
-        if ty == Type::LongLong || ty == Type::UnsignedLongLong {
+        let unsigned = !arithmetic_ty.is_signed();
+        if arithmetic_ty == Type::LongLong || arithmetic_ty == Type::UnsignedLongLong {
             match op {
                 BinaryOp::Add => code.push(OP_I64_ADD),
                 BinaryOp::Sub => code.push(OP_I64_SUB),
                 BinaryOp::Mul => code.push(OP_I64_MUL),
-                BinaryOp::Div => code.push(OP_I64_DIV_S),
-                BinaryOp::Rem => code.push(OP_I64_REM_S),
+                BinaryOp::Div => code.push(if unsigned { OP_I64_DIV_U } else { OP_I64_DIV_S }),
+                BinaryOp::Rem => code.push(if unsigned { OP_I64_REM_U } else { OP_I64_REM_S }),
                 BinaryOp::BitAnd => code.push(OP_I64_AND),
                 BinaryOp::BitOr => code.push(OP_I64_OR),
                 BinaryOp::BitXor => code.push(OP_I64_XOR),
                 BinaryOp::Shl => code.push(OP_I64_SHL),
-                BinaryOp::Shr => code.push(OP_I64_SHR_S),
+                BinaryOp::Shr => code.push(if unsigned { OP_I64_SHR_U } else { OP_I64_SHR_S }),
                 _ => {}
             }
-        } else if ty == Type::Double {
+        } else if arithmetic_ty == Type::Double {
             match op {
                 BinaryOp::Add => code.push(OP_F64_ADD),
                 BinaryOp::Sub => code.push(OP_F64_SUB),
@@ -270,7 +293,7 @@ impl<'a> Codegen<'a> {
                 BinaryOp::Div => code.push(OP_F64_DIV),
                 _ => {}
             }
-        } else if ty == Type::Float {
+        } else if arithmetic_ty == Type::Float {
             match op {
                 BinaryOp::Add => code.push(OP_F32_ADD),
                 BinaryOp::Sub => code.push(OP_F32_SUB),
@@ -283,19 +306,26 @@ impl<'a> Codegen<'a> {
                 BinaryOp::Add => code.push(OP_I32_ADD),
                 BinaryOp::Sub => code.push(OP_I32_SUB),
                 BinaryOp::Mul => code.push(OP_I32_MUL),
-                BinaryOp::Div => code.push(OP_I32_DIV_S),
-                BinaryOp::Rem => code.push(OP_I32_REM_S),
+                BinaryOp::Div => code.push(if unsigned { OP_I32_DIV_U } else { OP_I32_DIV_S }),
+                BinaryOp::Rem => code.push(if unsigned { OP_I32_REM_U } else { OP_I32_REM_S }),
                 BinaryOp::BitAnd => code.push(OP_I32_AND),
                 BinaryOp::BitOr => code.push(OP_I32_OR),
                 BinaryOp::BitXor => code.push(OP_I32_XOR),
                 BinaryOp::Shl => code.push(OP_I32_SHL),
-                BinaryOp::Shr => code.push(OP_I32_SHR_S),
+                BinaryOp::Shr => code.push(if unsigned { OP_I32_SHR_U } else { OP_I32_SHR_S }),
                 _ => {}
             }
         }
 
+        self.emit_conversion(&arithmetic_ty, &ty, code);
         self.emit_store(&ty, 0, code);
-        self.compile_expr(target, ctx, code)?;
+
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, dest_slot);
+        self.emit_load(&ty, 0, code);
 
         Ok(())
     }

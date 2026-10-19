@@ -107,6 +107,7 @@ impl<'a> Codegen<'a> {
                             class_name.to_string(),
                         )))],
                         default_args: vec![],
+                        is_static: false,
                     },
                 )
             })

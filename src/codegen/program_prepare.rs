@@ -68,7 +68,7 @@ impl<'a> Codegen<'a> {
                 && let Some(body) = &f.body
             {
                 let mut statics = Vec::new();
-                collect_static_vars(body, &mut statics);
+                collect_static_vars(body, &f.name, &mut statics);
                 for (gname, gty, ginit) in statics {
                     if !self.global_offsets.contains_key(&gname) {
                         let offset = self.next_data_offset;
@@ -102,12 +102,7 @@ impl<'a> Codegen<'a> {
                 let is_root = f.name == "main" || is_address_taken;
                 if f.name == "main" {
                     for (_, gty, _) in &self.global_inits {
-                        if let Type::Struct(sname) = gty.strip_const() {
-                            calls.insert(format!("{}_{}", sname, sname));
-                            calls.insert(format!("{}::{}", sname, sname));
-                            calls.insert(format!("{}_~{}", sname, sname));
-                            calls.insert(format!("{}::~{}", sname, sname));
-                        }
+                        collect_type_lifecycle(gty, &mut calls);
                     }
                 }
                 candidates.push(FuncCandidate {
@@ -152,25 +147,14 @@ impl<'a> Codegen<'a> {
                             collect_stmt_calls(body, &mut calls);
                         }
 
-                        if let Some(layout) = self.sema.struct_layouts.get(name) {
-                            if m.name == *name {
-                                for b in &layout.base_classes {
-                                    calls.insert(format!("{}_{}", b, b));
-                                }
-                                for fld in &layout.fields {
-                                    if let Type::Struct(s) = fld.ty.strip_const() {
-                                        calls.insert(format!("{}_{}", s, s));
-                                    }
-                                }
-                            } else if m.name == format!("~{}", name) {
-                                for b in &layout.base_classes {
-                                    calls.insert(format!("{}_~{}", b, b));
-                                }
-                                for fld in &layout.fields {
-                                    if let Type::Struct(s) = fld.ty.strip_const() {
-                                        calls.insert(format!("{}_~{}", s, s));
-                                    }
-                                }
+                        if let Some(layout) = self.sema.struct_layouts.get(name)
+                            && (m.name == *name || m.name == format!("~{}", name))
+                        {
+                            for b in &layout.base_classes {
+                                collect_type_lifecycle(&Type::Struct(b.clone()), &mut calls);
+                            }
+                            for fld in &layout.fields {
+                                collect_type_lifecycle(&fld.ty, &mut calls);
                             }
                         }
 

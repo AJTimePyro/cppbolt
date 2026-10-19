@@ -71,6 +71,23 @@ impl<'a> Codegen<'a> {
 
         let lty = self.get_expr_type(left, ctx);
         let rty = self.get_expr_type(right, ctx);
+        let pointer_diff_elem = if *op == BinaryOp::Sub
+            && lty.decay_array().is_pointer()
+            && rty.decay_array().is_pointer()
+        {
+            let size = lty
+                .decay_array()
+                .deref_type()
+                .map(|inner| inner.size_of(&self.sema.struct_sizes))
+                .unwrap_or(1)
+                .max(1);
+            Some(
+                i32::try_from(size)
+                    .map_err(|_| crate::internal_error!(0, 0, "pointer element is too large"))?,
+            )
+        } else {
+            None
+        };
         if (matches!(lty.strip_const(), Type::Struct(_) | Type::Enum(_))
             || matches!(rty.strip_const(), Type::Struct(_) | Type::Enum(_)))
             && let Some(op_name) = op.op_name()
@@ -93,7 +110,7 @@ impl<'a> Codegen<'a> {
                 }
                 code.push(OP_CALL);
                 write_u32(code, m_idx);
-                self.register_returned_struct_temp(&sig.return_type, ctx, code);
+                self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
                 return Ok(());
             }
 
@@ -128,53 +145,145 @@ impl<'a> Codegen<'a> {
                 }
                 code.push(OP_CALL);
                 write_u32(code, f_idx);
-                self.register_returned_struct_temp(&sig.return_type, ctx, code);
+                self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
                 return Ok(());
             }
         }
-        let is_fp = lty.is_floating() || rty.is_floating();
-        let is_double = lty == Type::Double || rty == Type::Double;
-        let is_i64 = lty == Type::LongLong
-            || lty == Type::UnsignedLongLong
-            || rty == Type::LongLong
-            || rty == Type::UnsignedLongLong;
-        let is_unsigned = !lty.is_signed() || !rty.is_signed();
+        let lraw = lty.strip_const();
+        let rraw = rty.strip_const();
+        let is_shift = matches!(op, BinaryOp::Shl | BinaryOp::Shr);
+        let pointer_arithmetic = matches!(op, BinaryOp::Add | BinaryOp::Sub)
+            && (((lty.is_pointer() || lty.is_array()) && rty.is_integer())
+                || (*op == BinaryOp::Add
+                    && (rty.is_pointer() || rty.is_array())
+                    && lty.is_integer()));
+        let common_ty = if pointer_arithmetic
+            || ((lty.is_pointer() || lty.is_array()) && (rty.is_pointer() || rty.is_array()))
+        {
+            Type::UnsignedInt
+        } else if is_shift {
+            promote_integer(lraw)
+        } else {
+            arithmetic_common_type(lraw, rraw)
+        };
+        let is_double = common_ty == Type::Double;
+        let is_fp = matches!(common_ty, Type::Float | Type::Double);
+        let is_i64 = matches!(common_ty, Type::LongLong | Type::UnsignedLongLong);
+        let is_unsigned = !common_ty.is_signed();
 
         self.compile_expr(left, ctx, code)?;
-        if is_double && lty == Type::Float {
-            code.push(OP_F64_PROMOTE_F32);
-        } else if is_fp && lty.is_integer() {
-            if is_double {
-                code.push(OP_F64_CONVERT_I32_S);
-            } else {
-                code.push(OP_F32_CONVERT_I32_S);
+        if is_double {
+            if matches!(lraw, Type::Float) {
+                code.push(OP_F64_PROMOTE_F32);
+            } else if matches!(lraw, Type::LongLong | Type::UnsignedLongLong) {
+                code.push(if lraw.is_signed() {
+                    OP_F64_CONVERT_I64_S
+                } else {
+                    OP_F64_CONVERT_I64_U
+                });
+            } else if lraw.is_integer() {
+                code.push(if lraw.is_signed() {
+                    OP_F64_CONVERT_I32_S
+                } else {
+                    OP_F64_CONVERT_I32_U
+                });
             }
-        } else if is_i64 && !matches!(lty.strip_const(), Type::LongLong | Type::UnsignedLongLong) {
-            code.push(OP_I64_EXTEND_I32_S);
+        } else if is_fp {
+            if matches!(lraw, Type::LongLong | Type::UnsignedLongLong) {
+                code.push(if lraw.is_signed() {
+                    OP_F32_CONVERT_I64_S
+                } else {
+                    OP_F32_CONVERT_I64_U
+                });
+            } else if lraw.is_integer() {
+                code.push(if lraw.is_signed() {
+                    OP_F32_CONVERT_I32_S
+                } else {
+                    OP_F32_CONVERT_I32_U
+                });
+            }
+        } else if is_i64 {
+            if !matches!(lraw, Type::LongLong | Type::UnsignedLongLong) {
+                code.push(if lraw.is_signed() {
+                    OP_I64_EXTEND_I32_S
+                } else {
+                    OP_I64_EXTEND_I32_U
+                });
+            }
+        } else if matches!(lraw, Type::LongLong | Type::UnsignedLongLong) {
+            code.push(OP_I32_WRAP_I64);
         }
 
         self.compile_expr(right, ctx, code)?;
-        if is_double && rty == Type::Float {
-            code.push(OP_F64_PROMOTE_F32);
-        } else if is_fp && rty.is_integer() {
-            if is_double {
-                code.push(OP_F64_CONVERT_I32_S);
-            } else {
-                code.push(OP_F32_CONVERT_I32_S);
+        if is_double {
+            if matches!(rraw, Type::Float) {
+                code.push(OP_F64_PROMOTE_F32);
+            } else if matches!(rraw, Type::LongLong | Type::UnsignedLongLong) {
+                code.push(if rraw.is_signed() {
+                    OP_F64_CONVERT_I64_S
+                } else {
+                    OP_F64_CONVERT_I64_U
+                });
+            } else if rraw.is_integer() {
+                code.push(if rraw.is_signed() {
+                    OP_F64_CONVERT_I32_S
+                } else {
+                    OP_F64_CONVERT_I32_U
+                });
             }
-        } else if is_i64 && !matches!(rty.strip_const(), Type::LongLong | Type::UnsignedLongLong) {
-            code.push(OP_I64_EXTEND_I32_S);
-        } else if (lty.is_pointer() || lty.is_array())
+        } else if is_fp {
+            if matches!(rraw, Type::LongLong | Type::UnsignedLongLong) {
+                code.push(if rraw.is_signed() {
+                    OP_F32_CONVERT_I64_S
+                } else {
+                    OP_F32_CONVERT_I64_U
+                });
+            } else if rraw.is_integer() {
+                code.push(if rraw.is_signed() {
+                    OP_F32_CONVERT_I32_S
+                } else {
+                    OP_F32_CONVERT_I32_U
+                });
+            }
+        } else if is_i64 {
+            if !matches!(rraw, Type::LongLong | Type::UnsignedLongLong) {
+                code.push(if rraw.is_signed() {
+                    OP_I64_EXTEND_I32_S
+                } else {
+                    OP_I64_EXTEND_I32_U
+                });
+            }
+        } else if matches!(rraw, Type::LongLong | Type::UnsignedLongLong) {
+            code.push(OP_I32_WRAP_I64);
+        }
+
+        if (lty.is_pointer() || lty.is_array())
             && rty.is_integer()
             && (op == &BinaryOp::Add || op == &BinaryOp::Sub)
         {
             let esize = lty
                 .deref_type()
                 .map(|d| d.size_of(&self.sema.struct_sizes))
-                .unwrap_or(4) as i32;
+                .unwrap_or(4)
+                .max(1) as i32;
             code.push(OP_I32_CONST);
             write_i32(code, esize);
             code.push(OP_I32_MUL);
+        } else if (rty.is_pointer() || rty.is_array()) && lty.is_integer() && op == &BinaryOp::Add {
+            let esize = rty
+                .deref_type()
+                .map(|d| d.size_of(&self.sema.struct_sizes))
+                .unwrap_or(4)
+                .max(1) as i32;
+            // The stack holds [integer, pointer]. Keep the pointer in a scratch
+            // local while the integer is scaled, then put them back in add order.
+            code.push(OP_LOCAL_SET);
+            write_u32(code, ctx.scratch1);
+            code.push(OP_I32_CONST);
+            write_i32(code, esize);
+            code.push(OP_I32_MUL);
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.scratch1);
         }
 
         if is_double {
@@ -306,6 +415,14 @@ impl<'a> Codegen<'a> {
                     code.push(OP_I32_OR);
                 }
             }
+        }
+
+        if let Some(elem_size) = pointer_diff_elem
+            && elem_size > 1
+        {
+            code.push(OP_I32_CONST);
+            write_i32(code, elem_size);
+            code.push(OP_I32_DIV_S);
         }
 
         Ok(())

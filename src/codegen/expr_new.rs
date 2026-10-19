@@ -19,14 +19,25 @@ impl<'a> Codegen<'a> {
         };
 
         if let Some(place_expr) = placement {
+            let place_slot = ctx.alloc_frame(4, 4)?;
             self.compile_expr(place_expr, ctx, code)?;
             code.push(OP_LOCAL_SET);
             write_u32(code, ctx.scratch1); // placement ptr
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.fp_local);
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.scratch1);
+            code.push(OP_I32_STORE);
+            write_u32(code, 2);
+            write_u32(code, place_slot);
 
             if let Type::Struct(sname) = ty.strip_const() {
                 if let Some(&v_off) = self.vtable_offsets.get(sname) {
                     code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.scratch1);
+                    write_u32(code, ctx.fp_local);
+                    code.push(OP_I32_LOAD);
+                    write_u32(code, 2);
+                    write_u32(code, place_slot);
                     code.push(OP_I32_CONST);
                     write_i32(code, v_off as i32);
                     code.push(OP_I32_STORE);
@@ -37,7 +48,10 @@ impl<'a> Codegen<'a> {
                     args.iter().map(|a| self.get_expr_type(a, ctx)).collect();
                 if let Some(ctor_idx) = self.find_constructor(sname, &arg_types) {
                     code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.scratch1); // this
+                    write_u32(code, ctx.fp_local);
+                    code.push(OP_I32_LOAD);
+                    write_u32(code, 2);
+                    write_u32(code, place_slot); // this
                     for a in args {
                         self.compile_expr(a, ctx, code)?;
                     }
@@ -46,38 +60,91 @@ impl<'a> Codegen<'a> {
                 }
             } else if !args.is_empty() {
                 code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.scratch1);
+                write_u32(code, ctx.fp_local);
+                code.push(OP_I32_LOAD);
+                write_u32(code, 2);
+                write_u32(code, place_slot);
+                let value_ty = self.get_expr_type(&args[0], ctx);
                 self.compile_expr(&args[0], ctx, code)?;
+                self.emit_conversion(&value_ty, ty, code);
                 self.emit_store(ty, 0, code);
             }
             code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.scratch1);
+            write_u32(code, ctx.fp_local);
+            code.push(OP_I32_LOAD);
+            write_u32(code, 2);
+            write_u32(code, place_slot);
             return Ok(());
         }
         if *is_array {
-            let elem_size = ty.size_of(&self.sema.struct_sizes) as i32;
+            let elem_size = i32::try_from(ty.size_of(&self.sema.struct_sizes))
+                .map_err(|_| crate::internal_error!(0, 0, "array element is too large"))?;
+            if elem_size <= 0 {
+                return Err(crate::internal_error!(0, 0, "array element has no size"));
+            }
             let has_struct = if let Type::Struct(sname) = ty.strip_const() {
                 Some(sname.clone())
             } else {
                 None
             };
 
+            let count_slot = ctx.alloc_frame(4, 4)?;
+            let base_slot = ctx.alloc_frame(4, 4)?;
+
             if let Some(sz_expr) = array_size {
+                let size_ty = self.get_expr_type(sz_expr, ctx);
                 self.compile_expr(sz_expr, ctx, code)?;
+                self.emit_conversion(&size_ty, &Type::UnsignedInt, code);
             } else {
                 code.push(OP_I32_CONST);
                 write_i32(code, 1);
             }
             code.push(OP_LOCAL_SET);
             write_u32(code, ctx.scratch2); // count
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.fp_local);
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.scratch2);
+            code.push(OP_I32_STORE);
+            write_u32(code, 2);
+            write_u32(code, count_slot);
+
+            // Reject negative element counts instead of letting the size wrap.
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.scratch2);
+            code.push(OP_I32_CONST);
+            write_i32(code, 0);
+            code.push(OP_I32_LT_S);
+            code.push(OP_IF);
+            code.push(0x40);
+            code.push(OP_UNREACHABLE);
+            code.push(OP_END);
+
+            // Compute the payload size in 64 bits and trap if it does not fit a
+            // signed 32-bit allocation (with room for the array cookie).
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.scratch2);
+            code.push(OP_I64_EXTEND_I32_U);
+            code.push(OP_I64_CONST);
+            write_i64(code, elem_size as i64);
+            code.push(OP_I64_MUL);
+            code.push(OP_LOCAL_SET);
+            write_u32(code, ctx.scratch_i64);
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.scratch_i64);
+            code.push(OP_I64_CONST);
+            write_i64(code, i32::MAX as i64 - 4);
+            code.push(OP_I64_GT_U);
+            code.push(OP_IF);
+            code.push(0x40);
+            code.push(OP_UNREACHABLE);
+            code.push(OP_END);
 
             if let Some(sname) = has_struct {
                 // Allocation size: count * elem_size + 4 (for cookie)
                 code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.scratch2);
-                code.push(OP_I32_CONST);
-                write_i32(code, elem_size);
-                code.push(OP_I32_MUL);
+                write_u32(code, ctx.scratch_i64);
+                code.push(OP_I32_WRAP_I64);
                 code.push(OP_I32_CONST);
                 write_i32(code, 4);
                 code.push(OP_I32_ADD);
@@ -85,12 +152,22 @@ impl<'a> Codegen<'a> {
                 write_u32(code, self.func_indices["malloc"]);
                 code.push(OP_LOCAL_SET);
                 write_u32(code, ctx.scratch1); // base ptr
+                code.push(OP_LOCAL_GET);
+                write_u32(code, ctx.fp_local);
+                code.push(OP_LOCAL_GET);
+                write_u32(code, ctx.scratch1);
+                code.push(OP_I32_STORE);
+                write_u32(code, 2);
+                write_u32(code, base_slot);
 
                 // Store count cookie at offset 0
                 code.push(OP_LOCAL_GET);
                 write_u32(code, ctx.scratch1);
                 code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.scratch2);
+                write_u32(code, ctx.fp_local);
+                code.push(OP_I32_LOAD);
+                write_u32(code, 2);
+                write_u32(code, count_slot);
                 code.push(OP_I32_STORE);
                 write_u32(code, 2);
                 write_u32(code, 0);
@@ -122,7 +199,10 @@ impl<'a> Codegen<'a> {
                     code.push(OP_LOCAL_GET);
                     write_u32(code, ctx.ret_temp_i32);
                     code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.scratch2);
+                    write_u32(code, ctx.fp_local);
+                    code.push(OP_I32_LOAD);
+                    write_u32(code, 2);
+                    write_u32(code, count_slot);
                     code.push(OP_I32_GE_S);
                     code.push(OP_BR_IF);
                     write_u32(code, 1);
@@ -170,33 +250,69 @@ impl<'a> Codegen<'a> {
 
                     code.push(OP_END);
                     code.push(OP_END);
+
+                    // Reload the user pointer after constructor calls.
+                    code.push(OP_LOCAL_GET);
+                    write_u32(code, ctx.fp_local);
+                    code.push(OP_I32_LOAD);
+                    write_u32(code, 2);
+                    write_u32(code, base_slot);
+                    code.push(OP_I32_CONST);
+                    write_i32(code, 4);
+                    code.push(OP_I32_ADD);
+                    code.push(OP_LOCAL_SET);
+                    write_u32(code, ctx.scratch1);
+                } else {
+                    code.push(OP_LOCAL_GET);
+                    write_u32(code, ctx.fp_local);
+                    code.push(OP_I32_LOAD);
+                    write_u32(code, 2);
+                    write_u32(code, base_slot);
+                    code.push(OP_I32_CONST);
+                    write_i32(code, 4);
+                    code.push(OP_I32_ADD);
+                    code.push(OP_LOCAL_SET);
+                    write_u32(code, ctx.scratch1);
                 }
             } else {
                 // POD array
                 code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.scratch2);
-                code.push(OP_I32_CONST);
-                write_i32(code, elem_size);
-                code.push(OP_I32_MUL);
+                write_u32(code, ctx.scratch_i64);
+                code.push(OP_I32_WRAP_I64);
                 code.push(OP_CALL);
                 write_u32(code, self.func_indices["malloc"]);
                 code.push(OP_LOCAL_SET);
                 write_u32(code, ctx.scratch1);
             }
         } else {
-            let size = ty.size_of(&self.sema.struct_sizes) as i32;
+            let size = i32::try_from(ty.size_of(&self.sema.struct_sizes))
+                .map_err(|_| crate::internal_error!(0, 0, "object is too large"))?;
+            if size <= 0 {
+                return Err(crate::internal_error!(0, 0, "object has no size"));
+            }
+            let obj_slot = ctx.alloc_frame(4, 4)?;
             code.push(OP_I32_CONST);
             write_i32(code, size);
             code.push(OP_CALL);
             write_u32(code, self.func_indices["malloc"]);
             code.push(OP_LOCAL_SET);
             write_u32(code, ctx.scratch1); // heap obj ptr
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.fp_local);
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.scratch1);
+            code.push(OP_I32_STORE);
+            write_u32(code, 2);
+            write_u32(code, obj_slot);
 
             if let Type::Struct(sname) = ty.strip_const() {
                 // Set up vtable if exists
                 if let Some(&v_off) = self.vtable_offsets.get(sname) {
                     code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.scratch1);
+                    write_u32(code, ctx.fp_local);
+                    code.push(OP_I32_LOAD);
+                    write_u32(code, 2);
+                    write_u32(code, obj_slot);
                     code.push(OP_I32_CONST);
                     write_i32(code, v_off as i32);
                     code.push(OP_I32_STORE);
@@ -208,7 +324,10 @@ impl<'a> Codegen<'a> {
                     args.iter().map(|a| self.get_expr_type(a, ctx)).collect();
                 if let Some(ctor_idx) = self.find_constructor(sname, &arg_types) {
                     code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.scratch1); // this
+                    write_u32(code, ctx.fp_local);
+                    code.push(OP_I32_LOAD);
+                    write_u32(code, 2);
+                    write_u32(code, obj_slot); // this
                     for a in args {
                         self.compile_expr(a, ctx, code)?;
                     }
@@ -217,163 +336,25 @@ impl<'a> Codegen<'a> {
                 }
             } else if !args.is_empty() {
                 code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.scratch1); // addr
+                write_u32(code, ctx.fp_local);
+                code.push(OP_I32_LOAD);
+                write_u32(code, 2);
+                write_u32(code, obj_slot); // addr
+                let value_ty = self.get_expr_type(&args[0], ctx);
                 self.compile_expr(&args[0], ctx, code)?; // value
+                self.emit_conversion(&value_ty, ty, code);
                 self.emit_store(ty, 0, code);
             }
-        }
-
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.scratch1);
-
-        Ok(())
-    }
-
-    pub(super) fn compile_delete(
-        &mut self,
-        expr: &Expr,
-        ctx: &mut FunctionContext,
-        code: &mut Vec<u8>,
-    ) -> Result<(), CompileError> {
-        let Expr::Delete { expr, is_array } = expr else {
-            return Err(crate::internal_error!(0, 0, "unexpected expression kind"));
-        };
-
-        let ty = self.get_expr_type(expr, ctx);
-        self.compile_expr(expr, ctx, code)?;
-        code.push(OP_LOCAL_SET);
-        write_u32(code, ctx.scratch1); // ptr
-
-        if *is_array {
-            if let Some(inner) = ty.deref_type()
-                && let Type::Struct(sname) = inner.strip_const()
-            {
-                let elem_size = inner.size_of(&self.sema.struct_sizes) as i32;
-                let dtor_name = format!("{}_~{}", sname, sname);
-                let dtor_idx = self.func_indices.get(&dtor_name).copied();
-
-                if let Some(di) = dtor_idx {
-                    // count = load i32 from (scratch1 - 4)
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.scratch1);
-                    code.push(OP_I32_CONST);
-                    write_i32(code, 4);
-                    code.push(OP_I32_SUB);
-                    code.push(OP_I32_LOAD);
-                    write_u32(code, 2);
-                    write_u32(code, 0);
-                    code.push(OP_LOCAL_SET);
-                    write_u32(code, ctx.scratch2); // count
-
-                    // Loop backwards: i = count;
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.scratch2);
-                    code.push(OP_LOCAL_SET);
-                    write_u32(code, ctx.ret_temp_i32); // i = count
-
-                    code.push(OP_BLOCK);
-                    code.push(0x40);
-                    code.push(OP_LOOP);
-                    code.push(0x40);
-
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.ret_temp_i32);
-                    code.push(OP_I32_EQZ);
-                    code.push(OP_BR_IF);
-                    write_u32(code, 1);
-
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.ret_temp_i32);
-                    code.push(OP_I32_CONST);
-                    write_i32(code, 1);
-                    code.push(OP_I32_SUB);
-                    code.push(OP_LOCAL_SET);
-                    write_u32(code, ctx.ret_temp_i32);
-
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.scratch1);
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.ret_temp_i32);
-                    code.push(OP_I32_CONST);
-                    write_i32(code, elem_size);
-                    code.push(OP_I32_MUL);
-                    code.push(OP_I32_ADD); // this
-                    code.push(OP_CALL);
-                    write_u32(code, di);
-
-                    code.push(OP_BR);
-                    write_u32(code, 0);
-
-                    code.push(OP_END);
-                    code.push(OP_END);
-
-                    // free(scratch1 - 4)
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.scratch1);
-                    code.push(OP_I32_CONST);
-                    write_i32(code, 4);
-                    code.push(OP_I32_SUB);
-                    code.push(OP_CALL);
-                    write_u32(code, self.func_indices["free"]);
-                    return Ok(());
-                }
-            }
-            // Fallback / POD array: free(ptr)
             code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.scratch1);
-            code.push(OP_CALL);
-            write_u32(code, self.func_indices["free"]);
+            write_u32(code, ctx.fp_local);
+            code.push(OP_I32_LOAD);
+            write_u32(code, 2);
+            write_u32(code, obj_slot);
             return Ok(());
         }
 
-        if let Some(inner) = ty.deref_type()
-            && let Type::Struct(sname) = inner.strip_const()
-        {
-            let layout = self.sema.struct_layouts.get(sname);
-            let is_virtual_dtor =
-                layout.and_then(|l| l.vtable_slots.iter().position(|s| s == "__deleting_dtor"));
-
-            if let Some(slot_idx) = is_virtual_dtor {
-                // Virtual deleting destructor dispatch via vtable slot
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.scratch1);
-                code.push(OP_I32_LOAD);
-                write_u32(code, 2);
-                write_u32(code, 0); // vptr
-                code.push(OP_I32_LOAD);
-                write_u32(code, 2);
-                write_u32(code, (slot_idx * 4) as u32); // table_idx
-                code.push(OP_LOCAL_SET);
-                write_u32(code, ctx.scratch2);
-
-                // Push this
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.scratch1);
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.scratch2);
-
-                code.push(OP_CALL_INDIRECT);
-                write_u32(code, self.t_i32_v);
-                code.push(0);
-
-                return Ok(());
-            } else {
-                // Non-virtual destructor call
-                let dtor_name = format!("{}_~{}", sname, sname);
-                if let Some(&dtor_idx) = self.func_indices.get(&dtor_name) {
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.scratch1); // this
-                    code.push(OP_CALL);
-                    write_u32(code, dtor_idx);
-                }
-            }
-        }
-
-        // Call free
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.scratch1);
-        code.push(OP_CALL);
-        write_u32(code, self.func_indices["free"]);
 
         Ok(())
     }

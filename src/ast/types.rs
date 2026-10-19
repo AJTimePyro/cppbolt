@@ -68,6 +68,43 @@ impl Type {
         }
     }
 
+    pub fn integer_promotion(&self) -> Type {
+        match self.strip_const() {
+            Type::Bool
+            | Type::Char
+            | Type::SignedChar
+            | Type::UnsignedChar
+            | Type::Short
+            | Type::UnsignedShort
+            | Type::Enum(_)
+            | Type::Long => Type::Int,
+            Type::UnsignedLong => Type::UnsignedInt,
+            other => other.clone(),
+        }
+    }
+
+    pub fn usual_arithmetic_conversion(&self, other: &Type) -> Type {
+        let self_clean = self.strip_const();
+        let other_clean = other.strip_const();
+        if self_clean == &Type::Double || other_clean == &Type::Double {
+            return Type::Double;
+        }
+        if self_clean == &Type::Float || other_clean == &Type::Float {
+            return Type::Float;
+        }
+        let left = self_clean.integer_promotion();
+        let right = other_clean.integer_promotion();
+        if left == Type::UnsignedLongLong || right == Type::UnsignedLongLong {
+            Type::UnsignedLongLong
+        } else if left == Type::LongLong || right == Type::LongLong {
+            Type::LongLong
+        } else if !left.is_signed() || !right.is_signed() {
+            Type::UnsignedInt
+        } else {
+            Type::Int
+        }
+    }
+
     pub fn is_integer(&self) -> bool {
         matches!(
             self.strip_const(),

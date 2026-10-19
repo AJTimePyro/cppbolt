@@ -53,12 +53,11 @@ impl<'a> Codegen<'a> {
         return_type: &Type,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
-    ) {
+    ) -> Result<(), CompileError> {
         if !return_type.is_reference()
             && let Type::Struct(sname) = return_type.strip_const()
         {
-            let temp_slot = ctx.next_local_offset;
-            ctx.next_local_offset += 4;
+            let temp_slot = ctx.alloc_frame(4, 4)?;
             code.push(OP_LOCAL_SET);
             write_u32(code, ctx.scratch1);
             code.push(OP_LOCAL_GET);
@@ -72,6 +71,7 @@ impl<'a> Codegen<'a> {
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.scratch1);
         }
+        Ok(())
     }
 
     pub(super) fn emit_copy_struct(
@@ -87,16 +87,16 @@ impl<'a> Codegen<'a> {
             .get(sname)
             .map(|l| l.size)
             .unwrap_or(4);
-        for i in (0..size).step_by(4) {
+        for i in 0..size {
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.fp_local);
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.scratch1);
-            code.push(OP_I32_LOAD);
-            write_u32(code, 2);
+            code.push(OP_I32_LOAD8_U);
+            write_u32(code, 0);
             write_u32(code, i as u32);
-            code.push(OP_I32_STORE);
-            write_u32(code, 2);
+            code.push(OP_I32_STORE8);
+            write_u32(code, 0);
             write_u32(code, target_offset + i as u32);
         }
     }

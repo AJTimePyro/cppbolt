@@ -153,7 +153,14 @@ impl<'a> Codegen<'a> {
                     _ => 4,
                 };
                 self.compile_expr(array, ctx, code)?;
+                let idx_ty = self.get_expr_type(index, ctx);
                 self.compile_expr(index, ctx, code)?;
+                if matches!(
+                    idx_ty.strip_const(),
+                    Type::LongLong | Type::UnsignedLongLong
+                ) {
+                    code.push(OP_I32_WRAP_I64);
+                }
                 code.push(OP_I32_CONST);
                 write_i32(code, elem_size);
                 code.push(OP_I32_MUL);
@@ -211,9 +218,12 @@ impl<'a> Codegen<'a> {
                     self.compile_expr(expr, ctx, code)
                 } else {
                     // Create temporary stack slot for non-reference call return value
-                    let offset = ctx.next_local_offset;
-                    let size = ty.size_of(&self.sema.struct_sizes) as u32;
-                    ctx.next_local_offset += (size + 3) & !3;
+                    let size = u32::try_from(ty.size_of(&self.sema.struct_sizes))
+                        .map_err(|_| crate::internal_error!(0, 0, "temporary is too large"))?;
+                    let align = u32::try_from(ty.align_of(&self.sema.struct_aligns))
+                        .unwrap_or(4)
+                        .max(4);
+                    let offset = ctx.alloc_frame(size, align)?;
                     code.push(OP_LOCAL_GET);
                     write_u32(code, ctx.fp_local);
                     self.compile_expr(expr, ctx, code)?;
@@ -228,9 +238,12 @@ impl<'a> Codegen<'a> {
             }
             _ => {
                 let ty = self.get_expr_type(expr, ctx);
-                let offset = ctx.next_local_offset;
-                let size = ty.size_of(&self.sema.struct_sizes) as u32;
-                ctx.next_local_offset += (size + 3) & !3;
+                let size = u32::try_from(ty.size_of(&self.sema.struct_sizes))
+                    .map_err(|_| crate::internal_error!(0, 0, "temporary is too large"))?;
+                let align = u32::try_from(ty.align_of(&self.sema.struct_aligns))
+                    .unwrap_or(4)
+                    .max(4);
+                let offset = ctx.alloc_frame(size, align)?;
                 code.push(OP_LOCAL_GET);
                 write_u32(code, ctx.fp_local);
                 self.compile_expr(expr, ctx, code)?;

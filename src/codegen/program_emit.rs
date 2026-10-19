@@ -312,7 +312,10 @@ impl<'a> Codegen<'a> {
         // Memory export: calculate needed pages covering stack, data, BSS
         let needed_pages =
             memory_layout::pages_for(heap_start).max(memory_layout::DEFAULT_MEMORY_PAGES);
-        let max_pages = (self.max_memory_mb * 16).max(needed_pages);
+        // WebAssembly32 memories cannot exceed 65536 pages. Clamp user input
+        // before it can overflow the page calculation.
+        let requested_pages = self.max_memory_mb.saturating_mul(16).min(65_536);
+        let max_pages = requested_pages.max(needed_pages).min(65_536);
         self.module.memory_pages = (needed_pages, Some(max_pages));
         self.module.exports.push(("memory".to_string(), 2, 0));
 

@@ -83,6 +83,11 @@ impl Sema {
                         stmt.col,
                     ));
                 }
+                if let Type::Array(elem, 0) = ty.clone()
+                    && let Some(Expr::InitializerList(list)) = init
+                {
+                    *ty = Type::Array(elem, list.len());
+                }
                 if let Some(init_expr) = init {
                     let init_ty = self.analyze_expr(init_expr)?;
                     if ty == &Type::Auto {
@@ -109,7 +114,9 @@ impl Sema {
                 }
 
                 if *is_static {
-                    let global_name = format!("__static_{}", name);
+                    let function = self.current_func_name.as_deref().unwrap_or("");
+                    let global_name =
+                        crate::name::static_local_name(function, stmt.line, stmt.col, name);
                     let sym = VarSymbol {
                         name: global_name.clone(),
                         ty: ty.clone(),

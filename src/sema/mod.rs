@@ -27,6 +27,7 @@ pub struct StructField {
 pub struct StructLayout {
     pub is_class: bool,
     pub base_classes: Vec<String>,
+    pub base_offsets: Vec<(String, usize)>,
     pub fields: Vec<StructField>,
     pub size: usize,
     pub align: usize,
@@ -44,6 +45,7 @@ pub struct FunctionSig {
     pub return_type: Type,
     pub param_types: Vec<Type>,
     pub default_args: Vec<Option<Expr>>,
+    pub is_static: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -109,6 +111,7 @@ impl Sema {
             return_type: Type::Int,
             param_types: vec![Type::Pointer(Box::new(Type::Char))],
             default_args: vec![None],
+            is_static: false,
         });
         sema.register_function(FunctionSig {
             name: "std::printf".to_string(),
@@ -116,6 +119,7 @@ impl Sema {
             return_type: Type::Int,
             param_types: vec![Type::Pointer(Box::new(Type::Char))],
             default_args: vec![None],
+            is_static: false,
         });
 
         // Built-in malloc & free
@@ -125,6 +129,7 @@ impl Sema {
             return_type: Type::Pointer(Box::new(Type::Void)),
             param_types: vec![Type::Int],
             default_args: vec![None],
+            is_static: false,
         });
 
         sema.register_function(FunctionSig {
@@ -133,6 +138,7 @@ impl Sema {
             return_type: Type::Void,
             param_types: vec![Type::Pointer(Box::new(Type::Void))],
             default_args: vec![None],
+            is_static: false,
         });
 
         sema.register_function(FunctionSig {
@@ -141,6 +147,7 @@ impl Sema {
             return_type: Type::Int,
             param_types: vec![Type::Int],
             default_args: vec![None],
+            is_static: false,
         });
 
         sema

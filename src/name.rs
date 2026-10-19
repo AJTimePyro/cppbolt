@@ -9,6 +9,12 @@ use std::borrow::Cow;
 
 const STD: &str = "std::";
 
+/// Storage name for a function-local static. The source location keeps statics
+/// with the same spelling in different scopes from sharing one global.
+pub fn static_local_name(function: &str, line: usize, col: usize, name: &str) -> String {
+    format!("__static_{function}_{line}_{col}_{name}")
+}
+
 /// A name as written in the source, with helpers for the implicit `std`
 /// namespace.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -80,7 +86,7 @@ impl<'a> QualifiedName<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::QualifiedName;
+    use super::{QualifiedName, static_local_name};
 
     #[test]
     fn strips_and_adds_the_std_qualifier() {
@@ -110,5 +116,17 @@ mod tests {
     fn matches_across_the_implicit_qualifier() {
         assert!(QualifiedName::new("std::printf").matches(QualifiedName::new("printf")));
         assert!(!QualifiedName::new("printf").matches(QualifiedName::new("puts")));
+    }
+
+    #[test]
+    fn static_names_distinguish_function_and_source_location() {
+        assert_ne!(
+            static_local_name("first", 3, 5, "value"),
+            static_local_name("second", 3, 5, "value")
+        );
+        assert_ne!(
+            static_local_name("first", 3, 5, "value"),
+            static_local_name("first", 4, 5, "value")
+        );
     }
 }

@@ -53,14 +53,10 @@ impl Sema {
             {
                 let dtor_name = format!("~{}", name);
                 if !methods.iter().any(|m| m.name == dtor_name) {
-                    let has_dtor_members =
-                        fields.iter().any(|(_, ty)| {
-                            if let Type::Struct(s) = ty.strip_const() {
-                                structs_with_dtor.contains(s)
-                            } else {
-                                false
-                            }
-                        }) || base_classes.iter().any(|b| structs_with_dtor.contains(b));
+                    let has_dtor_members = fields
+                        .iter()
+                        .any(|(_, ty)| type_has_dtor(ty, &structs_with_dtor))
+                        || base_classes.iter().any(|b| structs_with_dtor.contains(b));
                     if has_dtor_members {
                         methods.push(FunctionDecl {
                             name: dtor_name,
@@ -77,6 +73,88 @@ impl Sema {
                         });
                     }
                 }
+            }
+        }
+
+        // Synthesize implicit default constructors for classes whose bases or
+        // members require construction, and for polymorphic classes that need
+        // their vtable installed by a constructor.
+        let polymorphic: std::collections::HashSet<String> = self
+            .struct_layouts
+            .iter()
+            .filter(|(_, layout)| layout.has_vtable)
+            .map(|(name, _)| name.clone())
+            .collect();
+        let mut any_ctor = std::collections::HashSet::new();
+        let mut default_ctor = std::collections::HashSet::new();
+        for decl in &program.declarations {
+            if let Decl::StructDecl { name, methods, .. } = decl {
+                let short = name.rsplit("::").next().unwrap_or(name);
+                for m in methods {
+                    if m.name == *name || m.name == short {
+                        any_ctor.insert(name.clone());
+                        if m.params.is_empty() {
+                            default_ctor.insert(name.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        loop {
+            let mut changed = false;
+            for decl in &mut program.declarations {
+                let Decl::StructDecl {
+                    name,
+                    base_classes,
+                    fields,
+                    methods,
+                    ..
+                } = decl
+                else {
+                    continue;
+                };
+                if any_ctor.contains(name) {
+                    continue;
+                }
+                let short = name.rsplit("::").next().unwrap_or(name);
+                let has_ctor = methods.iter().any(|m| m.name == *name || m.name == short);
+                if has_ctor {
+                    continue;
+                }
+
+                let base_needs = base_classes.iter().any(|base| default_ctor.contains(base));
+                let base_blocks = base_classes
+                    .iter()
+                    .any(|base| any_ctor.contains(base) && !default_ctor.contains(base));
+                let field_needs = fields
+                    .iter()
+                    .any(|(_, ty)| type_ctor_status(ty, &any_ctor, &default_ctor).0);
+                let field_blocks = fields
+                    .iter()
+                    .any(|(_, ty)| type_ctor_status(ty, &any_ctor, &default_ctor).1);
+                let needs_ctor = base_needs || field_needs || polymorphic.contains(name);
+                if needs_ctor && !base_blocks && !field_blocks {
+                    methods.push(FunctionDecl {
+                        name: name.clone(),
+                        return_type: Type::Void,
+                        params: vec![],
+                        body: Some(Stmt::new(StmtKind::Compound(vec![]), 0, 0)),
+                        is_virtual: false,
+                        is_pure_virtual: false,
+                        is_const: false,
+                        is_static: false,
+                        ctor_initializers: vec![],
+                        line: 0,
+                        col: 0,
+                    });
+                    any_ctor.insert(name.clone());
+                    default_ctor.insert(name.clone());
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
             }
         }
 
@@ -106,6 +184,7 @@ impl Sema {
                         return_type: f.return_type.clone(),
                         param_types: f.params.iter().map(|p| p.ty.clone()).collect(),
                         default_args: f.params.iter().map(|p| p.default_val.clone()).collect(),
+                        is_static: false,
                     };
                     self.register_function(sig);
                 }
@@ -163,6 +242,7 @@ impl Sema {
                             return_type: m.return_type.clone(),
                             param_types: params.iter().map(|p| p.ty.clone()).collect(),
                             default_args: params.iter().map(|p| p.default_val.clone()).collect(),
+                            is_static: m.is_static,
                         };
                         self.register_function(sig.clone());
                         self.functions.entry(qual_name).or_default().push(sig);
@@ -263,5 +343,28 @@ impl Sema {
         }
 
         Ok(())
+    }
+}
+
+fn type_ctor_status(
+    ty: &Type,
+    any_ctor: &std::collections::HashSet<String>,
+    default_ctor: &std::collections::HashSet<String>,
+) -> (bool, bool) {
+    match ty.strip_const() {
+        Type::Struct(name) => (
+            default_ctor.contains(name),
+            any_ctor.contains(name) && !default_ctor.contains(name),
+        ),
+        Type::Array(element, _) => type_ctor_status(element, any_ctor, default_ctor),
+        _ => (false, false),
+    }
+}
+
+fn type_has_dtor(ty: &Type, structs_with_dtor: &std::collections::HashSet<String>) -> bool {
+    match ty.strip_const() {
+        Type::Struct(name) => structs_with_dtor.contains(name),
+        Type::Array(element, _) => type_has_dtor(element, structs_with_dtor),
+        _ => false,
     }
 }

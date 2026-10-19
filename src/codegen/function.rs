@@ -8,7 +8,6 @@ impl<'a> Codegen<'a> {
         class_name: Option<String>,
     ) -> Result<FuncBody, CompileError> {
         let mut code = Vec::new();
-        let frame_size = memory_layout::DEFAULT_FRAME_BYTES;
 
         let num_params = f.params.len() as u32;
         let fp_local = num_params;
@@ -27,28 +26,6 @@ impl<'a> Codegen<'a> {
             (2, TYPE_F64), // scratch_f64, ret_temp_f64
             (1, TYPE_F32), // scratch_f32
         ];
-
-        // Function Prologue: allocate frame from stack pointer
-        code.push(OP_GLOBAL_GET);
-        write_u32(&mut code, 0); // stack pointer
-        code.push(OP_I32_CONST);
-        write_i32(&mut code, frame_size);
-        code.push(OP_I32_SUB);
-        code.push(OP_LOCAL_TEE);
-        write_u32(&mut code, fp_local);
-        code.push(OP_GLOBAL_SET);
-        write_u32(&mut code, 0);
-
-        // Stack overflow guard: if fp_local < 65536 -> unreachable trap
-        code.push(OP_LOCAL_GET);
-        write_u32(&mut code, fp_local);
-        code.push(OP_I32_CONST);
-        write_i32(&mut code, memory_layout::LOCAL_FRAME_GUARD);
-        code.push(OP_I32_LT_S);
-        code.push(OP_IF);
-        code.push(0x40);
-        code.push(OP_UNREACHABLE);
-        code.push(OP_END);
 
         let is_dtor = if let Some(ref cls) = class_name {
             f.name == format!("~{}", cls)
@@ -70,15 +47,40 @@ impl<'a> Codegen<'a> {
             var_types: HashMap::new(),
             static_var_offsets: HashMap::new(),
             next_local_offset: 16,
-            frame_size,
+            frame_size: 0,
+            frame_size_patches: Vec::new(),
+            var_scopes: vec![Vec::new()],
             scope_objects: vec![Vec::new()],
             temp_objects: Vec::new(),
             current_class: class_name.clone(),
             current_func_name: f.name.clone(),
+            return_type: f.return_type.clone(),
             is_dtor,
             is_reference_return: f.return_type.is_reference(),
             is_main: f.name == "main",
         };
+
+        // Function Prologue: allocate frame from stack pointer. The frame size is
+        // patched once the body has determined how much scratch space it needs.
+        code.push(OP_GLOBAL_GET);
+        write_u32(&mut code, 0); // stack pointer
+        ctx.emit_frame_size(&mut code);
+        code.push(OP_I32_SUB);
+        code.push(OP_LOCAL_TEE);
+        write_u32(&mut code, fp_local);
+        code.push(OP_GLOBAL_SET);
+        write_u32(&mut code, 0);
+
+        // Stack overflow guard: if fp_local < 65536 -> unreachable trap
+        code.push(OP_LOCAL_GET);
+        write_u32(&mut code, fp_local);
+        code.push(OP_I32_CONST);
+        write_i32(&mut code, memory_layout::LOCAL_FRAME_GUARD);
+        code.push(OP_I32_LT_S);
+        code.push(OP_IF);
+        code.push(0x40);
+        code.push(OP_UNREACHABLE);
+        code.push(OP_END);
 
         if ctx.is_main {
             // Global constructors before main
@@ -86,21 +88,23 @@ impl<'a> Codegen<'a> {
             for (gname, gty, init_opt) in inits {
                 if let Some(&goffset) = self.global_offsets.get(&gname) {
                     if let Type::Struct(sname) = gty.strip_const() {
+                        self.global_dtors.push((sname.clone(), goffset));
                         let arg_types = Vec::new();
                         if let Some(ctor_idx) = self.find_constructor(sname, &arg_types) {
                             code.push(OP_I32_CONST);
                             write_i32(&mut code, goffset as i32);
                             code.push(OP_CALL);
                             write_u32(&mut code, ctor_idx);
-                            self.global_dtors.push((sname.clone(), goffset));
                         } else if let Some(Expr::InitializerList(list)) = init_opt
                             && let Some(layout) = self.sema.struct_layouts.get(sname)
                         {
                             for (i, item) in list.iter().enumerate() {
                                 if let Some(fld) = layout.fields.get(i) {
+                                    let item_ty = self.get_expr_type(item, &ctx);
                                     code.push(OP_I32_CONST);
                                     write_i32(&mut code, (goffset + fld.offset as u32) as i32);
                                     self.compile_expr(item, &mut ctx, &mut code)?;
+                                    self.emit_conversion(&item_ty, &fld.ty, &mut code);
                                     self.emit_store(&fld.ty, 0, &mut code);
                                 }
                             }
@@ -127,9 +131,11 @@ impl<'a> Codegen<'a> {
                                         }
                                     }
                                 } else {
+                                    let item_ty = self.get_expr_type(item, &ctx);
                                     code.push(OP_I32_CONST);
                                     write_i32(&mut code, item_offset);
                                     self.compile_expr(item, &mut ctx, &mut code)?;
+                                    self.emit_conversion(&item_ty, elem_ty, &mut code);
                                     self.emit_store(elem_ty, 0, &mut code);
                                 }
                             }
@@ -137,7 +143,9 @@ impl<'a> Codegen<'a> {
                     } else if let Some(init_expr) = init_opt {
                         code.push(OP_I32_CONST);
                         write_i32(&mut code, goffset as i32);
+                        let init_ty = self.get_expr_type(&init_expr, &ctx);
                         self.compile_expr(&init_expr, &mut ctx, &mut code)?;
+                        self.emit_conversion(&init_ty, &gty, &mut code);
                         self.emit_store(&gty, 0, &mut code);
                     }
                 }
@@ -146,11 +154,13 @@ impl<'a> Codegen<'a> {
 
         // Copy incoming parameters into stack slots
         for (i, p) in f.params.iter().enumerate() {
-            let offset = ctx.next_local_offset;
-            let psize = p.ty.size_of(&self.sema.struct_sizes) as u32;
-            ctx.next_local_offset += (psize + 3) & !3;
-            ctx.var_offsets.insert(p.name.clone(), offset);
-            ctx.var_types.insert(p.name.clone(), p.ty.clone());
+            let psize = u32::try_from(p.ty.size_of(&self.sema.struct_sizes))
+                .map_err(|_| crate::internal_error!(0, 0, "parameter is too large"))?;
+            let palign = u32::try_from(p.ty.align_of(&self.sema.struct_aligns))
+                .unwrap_or(4)
+                .max(4);
+            let offset = ctx.alloc_frame(psize, palign)?;
+            ctx.bind_local(p.name.clone(), offset, p.ty.clone());
 
             if let Type::Struct(sname) = p.ty.strip_const() {
                 code.push(OP_LOCAL_GET);
@@ -183,8 +193,7 @@ impl<'a> Codegen<'a> {
                 // Constructor:
                 // 1. If base class exists, call base ctor
                 if let Some(layout) = self.sema.struct_layouts.get(cls) {
-                    if !layout.base_classes.is_empty() {
-                        let base_name = &layout.base_classes[0];
+                    for (base_name, base_offset) in &layout.base_offsets {
                         let base_args = f
                             .ctor_initializers
                             .iter()
@@ -195,11 +204,18 @@ impl<'a> Codegen<'a> {
                             .iter()
                             .map(|a| self.get_expr_type(a, &ctx))
                             .collect();
-                        if let Some(b_idx) = self.find_constructor(base_name, &arg_types) {
+                        if let Some((b_idx, sig)) = self.find_constructor_sig(base_name, &arg_types)
+                        {
                             code.push(OP_LOCAL_GET);
                             write_u32(&mut code, 0); // this
-                            for a in base_args {
-                                self.compile_expr(a, &mut ctx, &mut code)?;
+                            if *base_offset != 0 {
+                                code.push(OP_I32_CONST);
+                                write_i32(&mut code, *base_offset as i32);
+                                code.push(OP_I32_ADD);
+                            }
+                            for (i, a) in base_args.iter().enumerate() {
+                                let param_ty = sig.param_types.get(i + 1);
+                                self.compile_call_arg(a, param_ty, &mut ctx, &mut code)?;
                             }
                             code.push(OP_CALL);
                             write_u32(&mut code, b_idx);
@@ -215,16 +231,14 @@ impl<'a> Codegen<'a> {
                         write_u32(&mut code, 2);
                         write_u32(&mut code, 0);
                     }
-                    // 3. Member initializers in declaration order
-                    let base_field_count = if !layout.base_classes.is_empty() {
-                        self.sema
-                            .struct_layouts
-                            .get(&layout.base_classes[0])
-                            .map(|bl| bl.fields.len())
-                            .unwrap_or(0)
-                    } else {
-                        0
-                    };
+                    // 3. Member initializers in declaration order. Base
+                    // subobjects are initialized by their own constructors.
+                    let base_field_count: usize = layout
+                        .base_classes
+                        .iter()
+                        .filter_map(|b| self.sema.struct_layouts.get(b))
+                        .map(|bl| bl.fields.len())
+                        .sum();
                     for fld in layout.fields.iter().skip(base_field_count) {
                         let init_args = f
                             .ctor_initializers
@@ -254,12 +268,44 @@ impl<'a> Codegen<'a> {
                                 code.push(OP_CALL);
                                 write_u32(&mut code, ctor_idx);
                             }
+                        } else if let Type::Array(elem_ty, count) = fld.ty.strip_const()
+                            && let Type::Struct(sname) = elem_ty.strip_const()
+                            && let Some(ctor_idx) = self.find_constructor(sname, &[])
+                        {
+                            let elem_size = u32::try_from(elem_ty.size_of(&self.sema.struct_sizes))
+                                .map_err(|_| {
+                                    crate::internal_error!(f.line, f.col, "member is too large")
+                                })?;
+                            for i in 0..*count {
+                                let member_offset = (fld.offset as u32)
+                                    .checked_add((i as u32).checked_mul(elem_size).ok_or_else(
+                                        || {
+                                            crate::internal_error!(
+                                                f.line,
+                                                f.col,
+                                                "member is too large"
+                                            )
+                                        },
+                                    )?)
+                                    .ok_or_else(|| {
+                                        crate::internal_error!(f.line, f.col, "member is too large")
+                                    })?;
+                                code.push(OP_LOCAL_GET);
+                                write_u32(&mut code, 0); // this
+                                code.push(OP_I32_CONST);
+                                write_i32(&mut code, member_offset as i32);
+                                code.push(OP_I32_ADD);
+                                code.push(OP_CALL);
+                                write_u32(&mut code, ctor_idx);
+                            }
                         } else if let Some(args) = init_args
                             && !args.is_empty()
                         {
                             code.push(OP_LOCAL_GET);
                             write_u32(&mut code, 0); // this
+                            let item_ty = self.get_expr_type(&args[0], &ctx);
                             self.compile_expr(&args[0], &mut ctx, &mut code)?;
+                            self.emit_conversion(&item_ty, &fld.ty, &mut code);
                             self.emit_store(&fld.ty, fld.offset as u32, &mut code);
                         }
                     }
@@ -289,15 +335,12 @@ impl<'a> Codegen<'a> {
             && f.name == format!("~{}", cls)
             && let Some(layout) = self.sema.struct_layouts.get(cls)
         {
-            let base_field_count = if !layout.base_classes.is_empty() {
-                self.sema
-                    .struct_layouts
-                    .get(&layout.base_classes[0])
-                    .map(|bl| bl.fields.len())
-                    .unwrap_or(0)
-            } else {
-                0
-            };
+            let base_field_count: usize = layout
+                .base_classes
+                .iter()
+                .filter_map(|b| self.sema.struct_layouts.get(b))
+                .map(|bl| bl.fields.len())
+                .sum();
             for fld in layout.fields.iter().skip(base_field_count).rev() {
                 if let Type::Struct(sname) = fld.ty.strip_const() {
                     let member_dtor = format!("{}_~{}", sname, sname);
@@ -310,23 +353,56 @@ impl<'a> Codegen<'a> {
                         code.push(OP_CALL);
                         write_u32(&mut code, d_idx);
                     }
+                } else if let Type::Array(elem_ty, count) = fld.ty.strip_const()
+                    && let Type::Struct(sname) = elem_ty.strip_const()
+                {
+                    let member_dtor = format!("{}_~{}", sname, sname);
+                    let Some(&d_idx) = self.func_indices.get(&member_dtor) else {
+                        continue;
+                    };
+                    let elem_size = u32::try_from(elem_ty.size_of(&self.sema.struct_sizes))
+                        .map_err(|_| {
+                            crate::internal_error!(f.line, f.col, "member is too large")
+                        })?;
+                    for i in (0..*count).rev() {
+                        let member_offset = (fld.offset as u32)
+                            .checked_add((i as u32).checked_mul(elem_size).ok_or_else(|| {
+                                crate::internal_error!(f.line, f.col, "member is too large")
+                            })?)
+                            .ok_or_else(|| {
+                                crate::internal_error!(f.line, f.col, "member is too large")
+                            })?;
+                        code.push(OP_LOCAL_GET);
+                        write_u32(&mut code, 0); // this
+                        code.push(OP_I32_CONST);
+                        write_i32(&mut code, member_offset as i32);
+                        code.push(OP_I32_ADD);
+                        code.push(OP_CALL);
+                        write_u32(&mut code, d_idx);
+                    }
                 }
             }
         }
 
-        // If destructor of derived class, call base destructor at exit
+        // If destructor of derived class, call base destructors in reverse
+        // construction order.
         if let Some(ref cls) = class_name
             && f.name == format!("~{}", cls)
             && let Some(layout) = self.sema.struct_layouts.get(cls)
-            && !layout.base_classes.is_empty()
         {
-            let base_name = &layout.base_classes[0];
-            let base_dtor = format!("{}_~{}", base_name, base_name);
-            if let Some(&b_idx) = self.func_indices.get(&base_dtor) {
-                code.push(OP_LOCAL_GET);
-                write_u32(&mut code, 0); // this
-                code.push(OP_CALL);
-                write_u32(&mut code, b_idx);
+            for (base_name, base_offset) in layout.base_offsets.iter().rev() {
+                let base_dtor = format!("{}_~{}", base_name, base_name);
+                if let Some(&b_idx) = self.func_indices.get(&base_dtor) {
+                    code.push(OP_LOCAL_GET);
+                    write_u32(&mut code, 0); // this
+                    if *base_offset != 0 {
+                        code.push(OP_I32_CONST);
+                        write_i32(&mut code, *base_offset as i32);
+                        code.push(OP_I32_ADD);
+                    }
+                    code.push(OP_CALL);
+                    write_u32(&mut code, b_idx);
+                }
             }
         }
 
@@ -342,11 +418,18 @@ impl<'a> Codegen<'a> {
             }
         }
 
+        let frame_size = ctx
+            .next_local_offset
+            .checked_add(15)
+            .map(|size| size & !15)
+            .ok_or_else(frame_too_large)?;
+        ctx.frame_size = i32::try_from(frame_size)
+            .map_err(|_| crate::internal_error!(0, 0, "frame too large"))?;
+
         // Epilogue: restore stack pointer
         code.push(OP_LOCAL_GET);
         write_u32(&mut code, fp_local);
-        code.push(OP_I32_CONST);
-        write_i32(&mut code, frame_size);
+        ctx.emit_frame_size(&mut code);
         code.push(OP_I32_ADD);
         code.push(OP_GLOBAL_SET);
         write_u32(&mut code, 0);
@@ -371,6 +454,7 @@ impl<'a> Codegen<'a> {
         }
 
         code.push(OP_END);
+        ctx.patch_frame_sizes(&mut code)?;
         Ok((locals, code))
     }
 }

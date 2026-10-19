@@ -100,6 +100,7 @@ impl<'a> Codegen<'a> {
                         return_type: Type::Int,
                         param_types: vec![],
                         default_args: vec![],
+                        is_static: false,
                     },
                 )
             })

@@ -59,6 +59,7 @@ pub struct Preprocessor<'a> {
     macros: HashMap<String, MacroDef>,
     pragma_once_headers: HashSet<String>,
     includes: &'a dyn IncludeProvider,
+    include_depth: usize,
 }
 
 impl Preprocessor<'static> {
@@ -82,6 +83,7 @@ impl<'a> Preprocessor<'a> {
             macros,
             pragma_once_headers: HashSet::new(),
             includes,
+            include_depth: 0,
         }
     }
 
@@ -240,12 +242,23 @@ impl<'a> Preprocessor<'a> {
         }
 
         let Some(content) = include::resolve(self.includes, header_spec) else {
-            return Ok(vec![SourceLine::empty(
-                current_file.unwrap_or("<input>"),
+            return Err(CompileError::new(
+                format!("cannot find include '{}'", clean),
                 line_number,
-            )]);
+                1,
+            ));
         };
-        self.process_lines(&content, Some(clean))
+        if self.include_depth >= 128 {
+            return Err(CompileError::new(
+                "include nesting is too deep",
+                line_number,
+                1,
+            ));
+        }
+        self.include_depth += 1;
+        let result = self.process_lines(&content, Some(clean));
+        self.include_depth -= 1;
+        result
     }
 
     fn handle_define(&mut self, rest: &str, line_number: usize) -> Result<(), CompileError> {

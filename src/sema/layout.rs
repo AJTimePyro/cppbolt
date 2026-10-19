@@ -13,35 +13,67 @@ impl Sema {
         let mut offset = 0;
         let mut max_align = 1;
         let mut struct_fields = Vec::new();
-        let mut has_vtable = false;
+        let mut base_offsets = Vec::new();
         let mut vtable_slots = Vec::new();
+        let has_virtual_methods = methods.iter().any(|m| m.is_virtual);
+        let primary_has_vtable = base_classes
+            .first()
+            .and_then(|base| self.struct_layouts.get(base))
+            .map(|layout| layout.has_vtable)
+            .unwrap_or(false);
+        let has_vtable = has_virtual_methods || primary_has_vtable;
+        if has_virtual_methods && !primary_has_vtable {
+            // A vtable pointer precedes the primary base subobject.
+            offset = 4;
+            max_align = 4;
+        }
 
-        // 1. Inherit from primary base class
-        if !base_classes.is_empty() {
-            let primary_base = &base_classes[0];
-            if let Some(base_layout) = self.struct_layouts.get(primary_base).cloned() {
-                if base_layout.fields.is_empty() && !base_layout.has_vtable {
-                    offset = 0;
-                } else {
-                    offset = base_layout.size;
+        // 1. Lay out every base subobject in declaration order. Only the
+        // primary base contributes the vtable; non-virtual multiple bases are
+        // laid out consecutively so inherited fields keep distinct offsets.
+        for (index, base_name) in base_classes.iter().enumerate() {
+            let Some(base_layout) = self.struct_layouts.get(base_name).cloned() else {
+                continue;
+            };
+            if index > 0 && base_layout.has_vtable {
+                return Err(CompileError::new(
+                    "multiple inheritance with a polymorphic secondary base is not supported",
+                    1,
+                    1,
+                ));
+            }
+            let base_offset = if index == 0
+                && offset == 0
+                && base_layout.fields.is_empty()
+                && !base_layout.has_vtable
+            {
+                0
+            } else {
+                let align = base_layout.align.max(1);
+                if offset % align != 0 {
+                    offset += align - (offset % align);
                 }
-                max_align = base_layout.align;
-                has_vtable = base_layout.has_vtable;
+                let base_offset = offset;
+                offset = offset
+                    .checked_add(base_layout.size)
+                    .ok_or_else(|| CompileError::new("object layout is too large", 1, 1))?;
+                base_offset
+            };
+            max_align = max_align.max(base_layout.align);
+            base_offsets.push((base_name.clone(), base_offset));
+            if index == 0 && base_layout.has_vtable {
                 vtable_slots = base_layout.vtable_slots.clone();
-                for bf in base_layout.fields {
-                    struct_fields.push(bf);
-                }
+            }
+            for mut bf in base_layout.fields {
+                bf.offset = base_offset
+                    .checked_add(bf.offset)
+                    .ok_or_else(|| CompileError::new("object layout is too large", 1, 1))?;
+                struct_fields.push(bf);
             }
         }
 
         // 2. Check for virtual methods and destructors
-        let has_virtual_methods = methods.iter().any(|m| m.is_virtual);
-        if has_virtual_methods || has_vtable {
-            if !has_vtable {
-                has_vtable = true;
-                offset = 4;
-                max_align = max_align.max(4);
-            }
+        if has_vtable {
             for m in methods {
                 if m.name.starts_with('~') {
                     let is_virt_dtor = m.is_virtual || vtable_slots.iter().any(|s| s == "~");
@@ -85,9 +117,8 @@ impl Sema {
         }
 
         let mut pure_virtuals = std::collections::HashSet::new();
-        if !base_classes.is_empty() {
-            let primary_base = &base_classes[0];
-            if let Some(base_layout) = self.struct_layouts.get(primary_base) {
+        for base_name in base_classes {
+            if let Some(base_layout) = self.struct_layouts.get(base_name) {
                 for pv in &base_layout.pure_virtuals {
                     pure_virtuals.insert(pv.clone());
                 }
@@ -105,6 +136,7 @@ impl Sema {
         let layout = StructLayout {
             is_class,
             base_classes: base_classes.to_vec(),
+            base_offsets,
             fields: struct_fields,
             size: offset,
             align: max_align,

@@ -9,12 +9,14 @@ impl<'a> Codegen<'a> {
     ) -> Result<(), CompileError> {
         match &stmt.kind {
             StmtKind::Compound(stmts) => {
+                ctx.enter_scope();
                 ctx.scope_objects.push(Vec::new());
                 for s in stmts {
                     self.compile_stmt(s, ctx, code)?;
                 }
                 let objs = ctx.scope_objects.pop().unwrap_or_default();
                 self.emit_dtor_for_scope(&objs, ctx, code);
+                ctx.exit_scope();
             }
             StmtKind::VarDecl { .. } => self.compile_var_decl(stmt, ctx, code)?,
             StmtKind::Expr(expr) => {
@@ -89,6 +91,11 @@ impl<'a> Codegen<'a> {
 
                 code.push(OP_LOOP);
                 code.push(0x40);
+                let loop_target_abs = self.current_block_depth;
+                self.current_block_depth += 1;
+
+                code.push(OP_BLOCK);
+                code.push(0x40);
                 let continue_target_abs = self.current_block_depth;
                 self.current_block_depth += 1;
 
@@ -100,12 +107,15 @@ impl<'a> Codegen<'a> {
 
                 self.compile_stmt(body, ctx, code)?;
 
+                self.loop_depths.pop();
+
+                code.push(OP_END);
+                self.current_block_depth -= 1;
+
                 self.compile_cond(cond, ctx, code)?;
                 self.emit_clean_temporaries(ctx, code);
                 code.push(OP_BR_IF);
-                write_u32(code, self.current_block_depth - 1 - continue_target_abs);
-
-                self.loop_depths.pop();
+                write_u32(code, self.current_block_depth - 1 - loop_target_abs);
 
                 code.push(OP_END);
                 self.current_block_depth -= 1;
@@ -125,7 +135,13 @@ impl<'a> Codegen<'a> {
                 }
             }
             StmtKind::Continue => {
-                if let Some(&(_, continue_target_abs, loop_scope_depth)) = self.loop_depths.last() {
+                if let Some((_, continue_target_abs, loop_scope_depth)) = self
+                    .loop_depths
+                    .iter()
+                    .rev()
+                    .copied()
+                    .find(|(_, target, _)| *target != 0)
+                {
                     for scope in ctx.scope_objects[loop_scope_depth..].iter().rev() {
                         self.emit_dtor_for_scope(scope, ctx, code);
                     }

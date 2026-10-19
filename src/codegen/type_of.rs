@@ -89,7 +89,7 @@ impl<'a> Codegen<'a> {
                     | BinaryOp::Le
                     | BinaryOp::Gt
                     | BinaryOp::Ge => Type::Bool,
-                    BinaryOp::Shl | BinaryOp::Shr => self.get_expr_type(left, ctx),
+                    BinaryOp::Shl | BinaryOp::Shr => lty.strip_reference().integer_promotion(),
                     _ => {
                         let lty_d = lty.decay_array();
                         let rty_d = rty.decay_array();
@@ -97,18 +97,11 @@ impl<'a> Codegen<'a> {
                             lty_d
                         } else if rty_d.is_pointer() && lty.is_integer() && *op == BinaryOp::Add {
                             rty_d
-                        } else if lty == Type::Double || rty == Type::Double {
-                            Type::Double
-                        } else if lty == Type::Float || rty == Type::Float {
-                            Type::Float
-                        } else if lty == Type::LongLong
-                            || rty == Type::LongLong
-                            || lty == Type::UnsignedLongLong
-                            || rty == Type::UnsignedLongLong
-                        {
-                            Type::LongLong
-                        } else {
+                        } else if lty_d.is_pointer() && rty_d.is_pointer() && *op == BinaryOp::Sub {
                             Type::Int
+                        } else {
+                            lty.strip_reference()
+                                .usual_arithmetic_conversion(rty.strip_reference())
                         }
                     }
                 }
@@ -135,6 +128,9 @@ impl<'a> Codegen<'a> {
                         ty.deref_type().cloned().unwrap_or(Type::Int)
                     }
                     UnaryOp::AddrOf => Type::Pointer(Box::new(self.get_expr_type(expr, ctx))),
+                    UnaryOp::BitNot | UnaryOp::Neg | UnaryOp::Plus => {
+                        self.get_expr_type(expr, ctx).integer_promotion()
+                    }
                     _ => self.get_expr_type(expr, ctx),
                 }
             }

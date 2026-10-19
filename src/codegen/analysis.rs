@@ -30,6 +30,7 @@ fn check_expr_has_new_delete(expr: &Expr) -> bool {
                 || check_expr_has_new_delete(then_expr)
                 || check_expr_has_new_delete(else_expr)
         }
+        Expr::Cast { expr, .. } => check_expr_has_new_delete(expr),
         _ => false,
     }
 }
@@ -84,7 +85,11 @@ pub(super) fn check_stmt_has_new_delete(stmt: &Stmt) -> bool {
     }
 }
 
-pub(super) fn collect_static_vars(stmt: &Stmt, out: &mut Vec<(String, Type, Option<Expr>)>) {
+pub(super) fn collect_static_vars(
+    stmt: &Stmt,
+    function: &str,
+    out: &mut Vec<(String, Type, Option<Expr>)>,
+) {
     match &stmt.kind {
         StmtKind::VarDecl {
             name,
@@ -93,13 +98,13 @@ pub(super) fn collect_static_vars(stmt: &Stmt, out: &mut Vec<(String, Type, Opti
             is_static,
         } => {
             if *is_static {
-                let gname = format!("__static_{}", name);
+                let gname = crate::name::static_local_name(function, stmt.line, stmt.col, name);
                 out.push((gname, ty.clone(), init.clone()));
             }
         }
         StmtKind::Compound(stmts) => {
             for s in stmts {
-                collect_static_vars(s, out);
+                collect_static_vars(s, function, out);
             }
         }
         StmtKind::If {
@@ -107,16 +112,16 @@ pub(super) fn collect_static_vars(stmt: &Stmt, out: &mut Vec<(String, Type, Opti
             else_stmt,
             ..
         } => {
-            collect_static_vars(then_stmt, out);
+            collect_static_vars(then_stmt, function, out);
             if let Some(eb) = else_stmt {
-                collect_static_vars(eb, out);
+                collect_static_vars(eb, function, out);
             }
         }
         StmtKind::While { body, .. }
         | StmtKind::DoWhile { body, .. }
         | StmtKind::For { body, .. }
         | StmtKind::Switch { body, .. } => {
-            collect_static_vars(body, out);
+            collect_static_vars(body, function, out);
         }
         _ => {}
     }
@@ -354,18 +359,26 @@ fn collect_expr_calls(expr: &Expr, calls: &mut HashSet<String>) {
     }
 }
 
+pub(super) fn collect_type_lifecycle(ty: &Type, calls: &mut HashSet<String>) {
+    match ty.strip_const() {
+        Type::Struct(sname) => {
+            calls.insert(format!("{}_{}", sname, sname));
+            calls.insert(format!("{}::{}", sname, sname));
+            calls.insert(format!("{}_~{}", sname, sname));
+            calls.insert(format!("{}::~{}", sname, sname));
+            calls.insert(format!("{}_operator=", sname));
+            calls.insert(format!("{}::operator=", sname));
+        }
+        Type::Array(element, _) => collect_type_lifecycle(element, calls),
+        _ => {}
+    }
+}
+
 pub(super) fn collect_stmt_calls(stmt: &Stmt, calls: &mut HashSet<String>) {
     match &stmt.kind {
         StmtKind::Expr(e) => collect_expr_calls(e, calls),
         StmtKind::VarDecl { ty, init, .. } => {
-            if let Type::Struct(sname) = ty.strip_const() {
-                calls.insert(format!("{}_{}", sname, sname));
-                calls.insert(format!("{}::{}", sname, sname));
-                calls.insert(format!("{}_~{}", sname, sname));
-                calls.insert(format!("{}::~{}", sname, sname));
-                calls.insert(format!("{}_operator=", sname));
-                calls.insert(format!("{}::operator=", sname));
-            }
+            collect_type_lifecycle(ty, calls);
             if let Some(e) = init {
                 collect_expr_calls(e, calls);
             }
