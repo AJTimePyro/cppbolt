@@ -1,3 +1,5 @@
+#include <cstdio>
+
 // Held-out variant of global static objects
 class DeviceInit {
 public:

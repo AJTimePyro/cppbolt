@@ -1,3 +1,5 @@
+#include <cstdio>
+
 // Function pointer comparator referenced ONLY by address
 
 // This function is NEVER called directly by name.

@@ -1,3 +1,5 @@
+#include <cstdio>
+
 // Held-out variant: Function pointer comparator referenced ONLY by address
 bool compare_ascending(int a, int b) {
     return a < b;

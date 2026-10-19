@@ -15,7 +15,7 @@ int main() {
     char s[32] = {0};
     std::scanf("%s", s);
 
-    long d = 0;
+    int d = 0;
     std::cin >> d;
 
     int peek_ch = std::cin.peek();

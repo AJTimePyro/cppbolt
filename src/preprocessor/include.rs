@@ -19,7 +19,7 @@ fn embedded_header(name: &str) -> Option<&'static str> {
         "cstdio" => Some(include_str!("../../stdlib/cstdio")),
         "cstddef" => Some(include_str!("../../stdlib/cstddef")),
         "cmath" => Some(include_str!("../../stdlib/cmath")),
-        "cstdlib" => Some(include_str!("../../stdlib/stdlib.h")),
+        "cstdlib" => Some(include_str!("../../stdlib/cstdlib")),
         "new" => Some(include_str!("../../stdlib/new")),
         "initializer_list" => Some(include_str!("../../stdlib/initializer_list")),
         "utility" => Some(include_str!("../../stdlib/utility")),

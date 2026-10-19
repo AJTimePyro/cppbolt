@@ -1,3 +1,5 @@
+#include <cstdio>
+
 class GlobalLogger {
 public:
     int id;
