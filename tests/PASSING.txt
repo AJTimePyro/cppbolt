@@ -194,3 +194,4 @@ c_basics_variant/printf_conversions
 c_basics/preprocessor_macros
 negative/virtual_inheritance
 c_basics/printf_extended
+c_basics/malloc_failure

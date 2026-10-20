@@ -29,7 +29,9 @@ pub fn emit_malloc(global_heap_base: u32, global_free_list: u32) -> FuncBody {
     code.push(OP_I32_LT_S);
     code.push(OP_IF);
     code.push(0x40);
-    code.push(OP_UNREACHABLE);
+    code.push(OP_I32_CONST);
+    write_i32(&mut code, 0);
+    code.push(OP_RETURN);
     code.push(OP_END);
 
     code.push(OP_LOCAL_GET);
@@ -39,7 +41,9 @@ pub fn emit_malloc(global_heap_base: u32, global_free_list: u32) -> FuncBody {
     code.push(OP_I32_GT_S);
     code.push(OP_IF);
     code.push(0x40);
-    code.push(OP_UNREACHABLE);
+    code.push(OP_I32_CONST);
+    write_i32(&mut code, 0);
+    code.push(OP_RETURN);
     code.push(OP_END);
 
     // 1. alloc_size = (size + 7) & -8; if (alloc_size < 8) alloc_size = 8;
@@ -202,7 +206,9 @@ pub fn emit_malloc(global_heap_base: u32, global_free_list: u32) -> FuncBody {
     code.push(OP_I32_LT_U);
     code.push(OP_IF);
     code.push(0x40);
-    code.push(OP_UNREACHABLE);
+    code.push(OP_I32_CONST);
+    write_i32(&mut code, 0);
+    code.push(OP_RETURN);
     code.push(OP_END);
 
     // cur_bytes = memory.size << 16
@@ -249,7 +255,9 @@ pub fn emit_malloc(global_heap_base: u32, global_free_list: u32) -> FuncBody {
     code.push(OP_I32_EQ);
     code.push(OP_IF);
     code.push(0x40);
-    code.push(OP_UNREACHABLE);
+    code.push(OP_I32_CONST);
+    write_i32(&mut code, 0);
+    code.push(OP_RETURN);
     code.push(OP_END);
 
     code.push(OP_END); // end if

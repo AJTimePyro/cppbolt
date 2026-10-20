@@ -1,8 +1,8 @@
-#include <cstdlib>
+#include <cstddef>
 
 int main() {
     while (true) {
-        malloc(64 * 1024 * 1024);
+        (void)new char[64 * 1024 * 1024];
     }
     return 0;
 }

@@ -180,6 +180,7 @@ impl<'a> Codegen<'a> {
             write_u32(code, self.func_indices["malloc"]);
             code.push(OP_LOCAL_SET);
             write_u32(code, ctx.scratch1); // base ptr
+            emit_new_null_check(code, ctx.scratch1);
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.fp_local);
             code.push(OP_LOCAL_GET);
@@ -312,6 +313,7 @@ impl<'a> Codegen<'a> {
             write_u32(code, self.func_indices["malloc"]);
             code.push(OP_LOCAL_SET);
             write_u32(code, ctx.scratch1);
+            emit_new_null_check(code, ctx.scratch1);
         }
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.scratch1);
@@ -337,6 +339,7 @@ impl<'a> Codegen<'a> {
         write_u32(code, self.func_indices["malloc"]);
         code.push(OP_LOCAL_SET);
         write_u32(code, ctx.scratch1); // heap obj ptr
+        emit_new_null_check(code, ctx.scratch1);
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.fp_local);
         code.push(OP_LOCAL_GET);
@@ -391,4 +394,15 @@ impl<'a> Codegen<'a> {
         write_u32(code, obj_slot);
         Ok(())
     }
+}
+
+/// `operator new` must trap when the allocator cannot satisfy the request.
+fn emit_new_null_check(code: &mut Vec<u8>, pointer_local: u32) {
+    code.push(OP_LOCAL_GET);
+    write_u32(code, pointer_local);
+    code.push(OP_I32_EQZ);
+    code.push(OP_IF);
+    code.push(0x40);
+    code.push(OP_UNREACHABLE);
+    code.push(OP_END);
 }
