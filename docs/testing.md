@@ -4,7 +4,7 @@ The runner discovers tests by directory and reports on-disk, executed, passed, a
 group. Positive tests contain `.cpp` and `.expected` files; optional `.input` supplies stdin. Runtime-trap
 groups assert a nonzero Wasm trap. Negative tests contain `.expected_err` diagnostics.
 
-The current baseline is 214 tests, 214 executed, 195 passed, and 19 expected failures: six template tests and
+The current baseline is 215 tests, 215 executed, 196 passed, and 19 expected failures: six template tests and
 thirteen container/algorithm tests. Reproduce it with:
 
 ```sh

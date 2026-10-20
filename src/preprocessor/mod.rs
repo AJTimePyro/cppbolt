@@ -1,5 +1,6 @@
 //! Textual preprocessing: conditionals, object/function macros, includes.
 
+mod expr;
 mod include;
 mod macros;
 
@@ -21,6 +22,14 @@ struct SourceLine {
     text: String,
     file: String,
     line: usize,
+}
+
+/// State for one `#if`/`#ifdef`/`#ifndef` nesting level.
+struct Conditional {
+    parent_active: bool,
+    taken: bool,
+    active: bool,
+    seen_else: bool,
 }
 
 impl SourceLine {
@@ -61,6 +70,7 @@ pub struct Preprocessor<'a> {
     includes: &'a dyn IncludeProvider,
     include_depth: usize,
     include_stack: Vec<String>,
+    depth: crate::depth::DepthCounter,
 }
 
 impl Preprocessor<'static> {
@@ -86,6 +96,7 @@ impl<'a> Preprocessor<'a> {
             includes,
             include_depth: 0,
             include_stack: Vec::new(),
+            depth: crate::depth::DepthCounter::new(),
         }
     }
 
@@ -124,14 +135,14 @@ impl<'a> Preprocessor<'a> {
     ) -> Result<Vec<SourceLine>, CompileError> {
         let file = current_file.unwrap_or("<input>");
         let mut output_lines = Vec::new();
-        let mut if_stack: Vec<bool> = Vec::new();
+        let mut if_stack: Vec<Conditional> = Vec::new();
 
         for (line_index, line) in input.lines().enumerate() {
             let line_number = line_index + 1;
             let trimmed = line.trim();
 
             if !trimmed.starts_with('#') {
-                let active = if_stack.last().copied().unwrap_or(true);
+                let active = if_stack.last().map(|cond| cond.active).unwrap_or(true);
                 output_lines.push(SourceLine {
                     text: if active {
                         self.expand_line(line)
@@ -152,15 +163,16 @@ impl<'a> Preprocessor<'a> {
                 continue;
             }
 
-            if !if_stack.last().copied().unwrap_or(true) {
+            if !if_stack.last().map(|cond| cond.active).unwrap_or(true) {
                 output_lines.push(SourceLine::empty(file, line_number));
                 continue;
             }
 
             match directive {
                 "include" => {
+                    let expanded = self.expand_line(argument);
                     output_lines.extend(self.handle_include(
-                        argument,
+                        &expanded,
                         current_file,
                         line_number,
                     )?);
@@ -179,7 +191,7 @@ impl<'a> Preprocessor<'a> {
 
         if !if_stack.is_empty() {
             return Err(CompileError::new(
-                "Unterminated #ifdef / #ifndef block at EOF",
+                "Unterminated #if/#ifdef/#ifndef block at EOF",
                 input.lines().count(),
                 1,
             ));
@@ -192,39 +204,67 @@ impl<'a> Preprocessor<'a> {
         &mut self,
         directive: &str,
         argument: &str,
-        if_stack: &mut Vec<bool>,
+        if_stack: &mut Vec<Conditional>,
         line_number: usize,
     ) -> Result<bool, CompileError> {
         match directive {
-            "ifdef" => {
-                let parent = if_stack.last().copied().unwrap_or(true);
-                if_stack.push(parent && self.macros.contains_key(argument));
+            "if" | "ifdef" | "ifndef" => {
+                let parent_active = if_stack.last().map(|cond| cond.active).unwrap_or(true);
+                let condition = match directive {
+                    "if" => {
+                        if parent_active {
+                            self.evaluate_condition(argument, line_number)?
+                        } else {
+                            false
+                        }
+                    }
+                    "ifdef" => self.macros.contains_key(argument.trim()),
+                    _ => !self.macros.contains_key(argument.trim()),
+                };
+                if_stack.push(Conditional {
+                    parent_active,
+                    taken: condition,
+                    active: parent_active && condition,
+                    seen_else: false,
+                });
                 Ok(true)
             }
-            "ifndef" => {
-                let parent = if_stack.last().copied().unwrap_or(true);
-                if_stack.push(parent && !self.macros.contains_key(argument));
+            "elif" => {
+                let Some(previous) = if_stack.last() else {
+                    return Err(CompileError::new("#elif without #if", line_number, 1));
+                };
+                if previous.seen_else {
+                    return Err(CompileError::new("#elif after #else", line_number, 1));
+                }
+                let parent_active = previous.parent_active;
+                let already_taken = previous.taken;
+                let condition = if parent_active && !already_taken {
+                    self.evaluate_condition(argument, line_number)?
+                } else {
+                    false
+                };
+                let Some(current) = if_stack.last_mut() else {
+                    return Err(CompileError::new("#elif without #if", line_number, 1));
+                };
+                current.active = parent_active && !already_taken && condition;
+                current.taken = already_taken || condition;
                 Ok(true)
             }
             "else" => {
-                let Some(active) = if_stack.pop() else {
-                    return Err(CompileError::new(
-                        "#else without #ifdef/#ifndef",
-                        line_number,
-                        1,
-                    ));
+                let Some(current) = if_stack.last_mut() else {
+                    return Err(CompileError::new("#else without #if", line_number, 1));
                 };
-                let parent = if_stack.last().copied().unwrap_or(true);
-                if_stack.push(parent && !active);
+                if current.seen_else {
+                    return Err(CompileError::new("#else after #else", line_number, 1));
+                }
+                current.active = current.parent_active && !current.taken;
+                current.taken = true;
+                current.seen_else = true;
                 Ok(true)
             }
             "endif" => {
                 if if_stack.pop().is_none() {
-                    return Err(CompileError::new(
-                        "#endif without #ifdef/#ifndef",
-                        line_number,
-                        1,
-                    ));
+                    return Err(CompileError::new("#endif without #if", line_number, 1));
                 }
                 Ok(true)
             }
@@ -361,6 +401,39 @@ mod tests {
             self.next.set(level + 1);
             Some(format!("#include <level_{level}>\n"))
         }
+    }
+
+    #[test]
+    fn evaluates_if_elif_and_defined() -> Result<(), Box<dyn std::error::Error>> {
+        let mut preprocessor = Preprocessor::new();
+        let source = preprocessor.process(
+            "#define A 1\n#define B A\n#if B == 1\nint x = 1;\n#elif 1\nint x = 2;\n#else\nint x = 3;\n#endif\n#if defined(A) && !defined(MISSING)\nint y = 1;\n#endif\n",
+        )?;
+        assert!(source.contains("int x = 1;"));
+        assert!(!source.contains("int x = 2;"));
+        assert!(!source.contains("int x = 3;"));
+        assert!(source.contains("int y = 1;"));
+        Ok(())
+    }
+
+    #[test]
+    fn expands_macros_in_include_directives() -> Result<(), Box<dyn std::error::Error>> {
+        let mut preprocessor = Preprocessor::new();
+        let source = preprocessor.process("#define HEADER <cstdio>\n#include HEADER\n")?;
+        assert!(source.contains("printf"));
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_deep_if_parentheses_without_overflow() -> Result<(), Box<dyn std::error::Error>> {
+        let mut preprocessor = Preprocessor::new();
+        let source = format!("#if {}1{}\n#endif\n", "(".repeat(5000), ")".repeat(5000));
+        let error = match preprocessor.process(&source) {
+            Ok(_) => return Err("expected a nesting-depth diagnostic".into()),
+            Err(error) => error,
+        };
+        assert!(error.message.contains("Nesting depth"));
+        Ok(())
     }
 
     #[test]

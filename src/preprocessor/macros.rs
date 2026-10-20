@@ -2,6 +2,7 @@
 
 use super::Preprocessor;
 use crate::diagnostics::CompileError;
+use std::collections::HashSet;
 
 #[derive(Clone, Debug)]
 pub(super) enum MacroDef {
@@ -51,8 +52,20 @@ impl Preprocessor<'_> {
         Ok(())
     }
 
+    /// Expands macros in one line, rescanning replacement lists.
+    ///
+    /// The `disabled` set implements the standard "painted blue" rule: a macro
+    /// name is not expanded again while its own replacement list is being
+    /// rescanned, so self-recursive and mutually recursive definitions
+    /// terminate. The same set is threaded through argument pre-expansion and
+    /// nested object/function macros.
     pub(super) fn expand_line(&self, line: &str) -> String {
-        let chars: Vec<char> = line.chars().collect();
+        let mut disabled = HashSet::new();
+        self.expand_with_hide_set(line, &mut disabled)
+    }
+
+    fn expand_with_hide_set(&self, text: &str, disabled: &mut HashSet<String>) -> String {
+        let chars: Vec<char> = text.chars().collect();
         let mut result = String::new();
         let mut index = 0;
 
@@ -84,9 +97,17 @@ impl Preprocessor<'_> {
                 result.push_str(&ident);
                 continue;
             };
+            if disabled.contains(&ident) {
+                result.push_str(&ident);
+                continue;
+            }
 
             match definition {
-                MacroDef::Object(body) => result.push_str(body),
+                MacroDef::Object(body) => {
+                    disabled.insert(ident.clone());
+                    result.push_str(&self.expand_with_hide_set(body, disabled));
+                    disabled.remove(&ident);
+                }
                 MacroDef::Function { params, body } => {
                     let mut call_start = index;
                     while call_start < chars.len() && chars[call_start].is_whitespace() {
@@ -99,12 +120,16 @@ impl Preprocessor<'_> {
                         None
                     };
                     match extracted {
-                        Some((args, end_index)) => {
-                            let mut expanded = body.clone();
-                            for (param, arg) in params.iter().zip(args.iter()) {
-                                expanded = replace_param(&expanded, param, arg);
-                            }
-                            result.push_str(&expanded);
+                        Some((raw_args, end_index)) => {
+                            let expanded_args: Vec<String> = raw_args
+                                .iter()
+                                .map(|arg| self.expand_with_hide_set(arg, disabled))
+                                .collect();
+                            let substituted =
+                                substitute_body(body, params, &raw_args, &expanded_args);
+                            disabled.insert(ident.clone());
+                            result.push_str(&self.expand_with_hide_set(&substituted, disabled));
+                            disabled.remove(&ident);
                             index = end_index;
                         }
                         None => result.push_str(&ident),
@@ -186,12 +211,45 @@ fn extract_macro_args(chars: &[char], open_paren_index: usize) -> Option<(Vec<St
     None
 }
 
-fn replace_param(body: &str, param: &str, replacement: &str) -> String {
+fn substitute_body(
+    body: &str,
+    params: &[String],
+    raw_args: &[String],
+    expanded_args: &[String],
+) -> String {
     let chars: Vec<char> = body.chars().collect();
     let mut result = String::new();
     let mut index = 0;
 
     while index < chars.len() {
+        if chars[index] == '"' || chars[index] == '\'' {
+            index = copy_quoted(&chars, index, chars[index], &mut result);
+            continue;
+        }
+        if chars[index] == '#' {
+            if chars.get(index + 1) == Some(&'#') {
+                result.push_str("##");
+                index += 2;
+                continue;
+            }
+            let mut probe = index + 1;
+            while probe < chars.len() && chars[probe].is_whitespace() {
+                probe += 1;
+            }
+            let start = probe;
+            while probe < chars.len() && is_ident_continue(chars[probe]) {
+                probe += 1;
+            }
+            let ident: String = chars[start..probe].iter().collect();
+            if let Some(position) = params.iter().position(|param| param == &ident) {
+                result.push_str(&stringize(&raw_args[position]));
+                index = probe;
+                continue;
+            }
+            result.push('#');
+            index += 1;
+            continue;
+        }
         if !is_ident_start(chars[index]) {
             result.push(chars[index]);
             index += 1;
@@ -202,12 +260,102 @@ fn replace_param(body: &str, param: &str, replacement: &str) -> String {
             index += 1;
         }
         let ident: String = chars[start..index].iter().collect();
-        if ident == param {
-            result.push_str(replacement);
+        if let Some(position) = params.iter().position(|param| param == &ident) {
+            result.push_str(&expanded_args[position]);
         } else {
             result.push_str(&ident);
         }
     }
 
-    result
+    apply_token_paste(&result)
+}
+
+fn stringize(argument: &str) -> String {
+    let mut out = String::from("\"");
+    for c in argument.trim().chars() {
+        if c == '\\' || c == '"' {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out.push('"');
+    out
+}
+
+/// Applies the `##` token-paste operator to a substituted replacement list.
+fn apply_token_paste(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::new();
+    let mut index = 0;
+    while index < chars.len() {
+        if chars[index] == '"' || chars[index] == '\'' {
+            let quote = chars[index];
+            out.push(quote);
+            index += 1;
+            while index < chars.len() {
+                let c = chars[index];
+                out.push(c);
+                index += 1;
+                if c == '\\' && index < chars.len() {
+                    out.push(chars[index]);
+                    index += 1;
+                } else if c == quote {
+                    break;
+                }
+            }
+            continue;
+        }
+        if chars[index] == '#' && chars.get(index + 1) == Some(&'#') {
+            while out.ends_with(char::is_whitespace) {
+                out.pop();
+            }
+            index += 2;
+            while index < chars.len() && chars[index].is_whitespace() {
+                index += 1;
+            }
+            continue;
+        }
+        out.push(chars[index]);
+        index += 1;
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn expand(definitions: &[&str], line: &str) -> Result<String, Box<dyn std::error::Error>> {
+        let mut preprocessor = Preprocessor::new();
+        for definition in definitions {
+            preprocessor.parse_define(definition, 1)?;
+        }
+        Ok(preprocessor.expand_line(line))
+    }
+
+    #[test]
+    fn rescans_object_like_replacements() -> Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(expand(&["A 1", "B A"], "return B-1;")?, "return 1-1;");
+        Ok(())
+    }
+
+    #[test]
+    fn self_and_mutual_recursion_terminate() -> Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(expand(&["A A"], "A")?, "A");
+        assert_eq!(expand(&["A B", "B A"], "A")?, "A");
+        Ok(())
+    }
+
+    #[test]
+    fn expands_function_arguments_and_rescans_body() -> Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(expand(&["ID(x) x", "A 7"], "ID(A)")?, "7");
+        Ok(())
+    }
+
+    #[test]
+    fn stringizes_and_pastes_tokens() -> Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(expand(&["STR(x) #x"], "STR(hello)")?, "\"hello\"");
+        assert_eq!(expand(&["CAT(a,b) a ## b"], "CAT(foo,bar)")?, "foobar");
+        Ok(())
+    }
 }

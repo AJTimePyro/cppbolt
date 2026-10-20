@@ -191,3 +191,4 @@ c_basics/printf_octal
 c_basics_variant/printf_octal
 c_basics/printf_conversions
 c_basics_variant/printf_conversions
+c_basics/preprocessor_macros
