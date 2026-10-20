@@ -1,6 +1,8 @@
 //! Variant and independent corpus checks used by the runner's regression gate.
 
 use super::cpp_files;
+use super::golden::sha256_hex;
+use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::Path;
@@ -47,6 +49,121 @@ pub(super) fn check_variant_tests() -> usize {
         }
     }
     failures
+}
+
+/// Verifies that every file in `tests/independent` still matches the committed
+/// hash list, and that no unlisted file has appeared.
+pub(super) fn check_independent_manifest() -> usize {
+    let root = Path::new("tests/independent");
+    let manifest_path = root.join("MANIFEST.sha256");
+    let text = match fs::read_to_string(&manifest_path) {
+        Ok(text) => text,
+        Err(error) => {
+            eprintln!("cannot read {}: {error}", manifest_path.display());
+            return 1;
+        }
+    };
+
+    let mut failures = 0;
+    let mut expected = BTreeMap::new();
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if fields.len() != 2 {
+            eprintln!("[FAIL] independent manifest: malformed entry: {line}");
+            failures += 1;
+            continue;
+        }
+        let path = normalize_manifest_path(fields[1]);
+        if path == "MANIFEST.sha256" {
+            eprintln!("[FAIL] independent manifest: the manifest cannot list itself");
+            failures += 1;
+            continue;
+        }
+        if path.starts_with('/') || path.split('/').any(|part| part == "..") {
+            eprintln!("[FAIL] independent manifest: path escapes the directory: {path}");
+            failures += 1;
+            continue;
+        }
+        if expected
+            .insert(path.clone(), fields[0].to_string())
+            .is_some()
+        {
+            eprintln!("[FAIL] independent manifest: duplicate entry: {path}");
+            failures += 1;
+        }
+    }
+
+    let mut actual = BTreeMap::new();
+    if let Err(error) = collect_independent_files(root, root, &mut actual) {
+        eprintln!(
+            "[FAIL] independent manifest: cannot inventory {}: {error}",
+            root.display()
+        );
+        return failures + 1;
+    }
+
+    for (path, hash) in &expected {
+        match actual.get(path) {
+            Some(actual_hash) if actual_hash == hash => {}
+            Some(_) => {
+                eprintln!("[FAIL] independent file changed: tests/independent/{path}");
+                failures += 1;
+            }
+            None => {
+                eprintln!("[FAIL] independent file missing: tests/independent/{path}");
+                failures += 1;
+            }
+        }
+    }
+    for path in actual.keys() {
+        if !expected.contains_key(path) {
+            eprintln!("[FAIL] independent file is not in the manifest: tests/independent/{path}");
+            failures += 1;
+        }
+    }
+
+    if failures == 0 {
+        let (noun, verb) = if actual.len() == 1 {
+            ("file", "matches")
+        } else {
+            ("files", "match")
+        };
+        println!(
+            "Independent manifest: {} {noun} {verb} {}.",
+            actual.len(),
+            manifest_path.display()
+        );
+    }
+    failures
+}
+
+fn collect_independent_files(
+    root: &Path,
+    directory: &Path,
+    files: &mut BTreeMap<String, String>,
+) -> std::io::Result<()> {
+    for entry in fs::read_dir(directory)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            collect_independent_files(root, &path, files)?;
+        } else if path.file_name() != Some(OsStr::new("MANIFEST.sha256")) {
+            let relative = path
+                .strip_prefix(root)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            files.insert(relative, sha256_hex(&fs::read(&path)?));
+        }
+    }
+    Ok(())
+}
+
+fn normalize_manifest_path(path: &str) -> String {
+    path.strip_prefix("./").unwrap_or(path).replace('\\', "/")
 }
 
 #[derive(Debug, PartialEq, Eq)]

@@ -187,7 +187,7 @@ fn check_manifest(manifest: &Path, entries: &BTreeMap<String, (String, String)>)
 
 /// A small, dependency-free SHA-256 implementation used for the golden
 /// manifest. It is not part of the compiler and never sees untrusted input.
-fn sha256_hex(data: &[u8]) -> String {
+pub(super) fn sha256_hex(data: &[u8]) -> String {
     const K: [u32; 64] = [
         0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
         0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,

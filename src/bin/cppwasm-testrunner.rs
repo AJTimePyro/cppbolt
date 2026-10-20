@@ -30,6 +30,7 @@ const FEATURES: &[&str] = &[
     "templates_operators",
     "mini_stl",
     "mini_stl_variant",
+    "independent",
 ];
 
 const NODE_RUNNER: &str = r#"
@@ -69,6 +70,10 @@ impl Paths {
 }
 
 fn main() -> ExitCode {
+    if checks::check_independent_manifest() > 0 {
+        return ExitCode::FAILURE;
+    }
+
     let mut args = std::env::args().skip(1);
     let first = args.next();
     if first.as_deref() == Some("--oracle") {
