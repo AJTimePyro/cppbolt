@@ -22,7 +22,7 @@ pub fn emit_printf(func_print_char: u32, func_print_int: u32, func_print_double:
     super::format_char_string::emit_char_string_conversion(&mut code, func_print_char);
     emit_printf_epilogue(&mut code);
     (
-        vec![(6, TYPE_I32), (1, TYPE_I64), (1, TYPE_F64), (1, TYPE_I32)],
+        vec![(6, TYPE_I32), (1, TYPE_I64), (1, TYPE_F64), (2, TYPE_I32)],
         code,
     )
 }

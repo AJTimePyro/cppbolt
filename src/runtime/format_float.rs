@@ -79,6 +79,21 @@ pub(super) fn emit_float_conversion(code: &mut Vec<u8>, func_print_double: u32) 
     code.push(OP_I32_CONST);
     write_i32(code, 2); // mode 2 = scientific (%e)
     code.push(OP_LOCAL_GET);
+    write_u32(code, 2);
+    code.push(OP_I32_CONST);
+    write_i32(code, 69); // 'E'
+    code.push(OP_I32_EQ);
+    code.push(OP_IF);
+    code.push(0x40);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 3);
+    code.push(OP_I32_CONST);
+    write_i32(code, 16);
+    code.push(OP_I32_OR);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 3);
+    code.push(OP_END);
+    code.push(OP_LOCAL_GET);
     write_u32(code, 3); // flags
     code.push(OP_CALL);
     write_u32(code, func_print_double);
@@ -123,6 +138,21 @@ pub(super) fn emit_float_conversion(code: &mut Vec<u8>, func_print_double: u32) 
     write_u32(code, 5); // precision
     code.push(OP_I32_CONST);
     write_i32(code, 0); // mode 0 = default (%g)
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 2);
+    code.push(OP_I32_CONST);
+    write_i32(code, 71); // 'G'
+    code.push(OP_I32_EQ);
+    code.push(OP_IF);
+    code.push(0x40);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 3);
+    code.push(OP_I32_CONST);
+    write_i32(code, 16);
+    code.push(OP_I32_OR);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 3);
+    code.push(OP_END);
     code.push(OP_LOCAL_GET);
     write_u32(code, 3); // flags
     code.push(OP_CALL);

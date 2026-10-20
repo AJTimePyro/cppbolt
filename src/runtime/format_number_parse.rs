@@ -262,6 +262,49 @@ pub(super) fn emit_length_parse(code: &mut Vec<u8>) {
 
     code.push(OP_END); // end if 'l'
 
+    // 'h' (104): `hd`/`hu` truncate to 16 bits, `hhd`/`hhu` to 8 bits.
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 2);
+    code.push(OP_I32_CONST);
+    write_i32(code, 104); // 'h'
+    code.push(OP_I32_EQ);
+    code.push(OP_IF);
+    code.push(0x40);
+    code.push(OP_I32_CONST);
+    write_i32(code, 2);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 6);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 0);
+    code.push(OP_I32_CONST);
+    write_i32(code, 1);
+    code.push(OP_I32_ADD);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 0);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 0);
+    code.push(OP_I32_LOAD8_U);
+    write_u32(code, 0);
+    write_u32(code, 0);
+    code.push(OP_I32_CONST);
+    write_i32(code, 104); // 'h'
+    code.push(OP_I32_EQ);
+    code.push(OP_IF);
+    code.push(0x40);
+    code.push(OP_I32_CONST);
+    write_i32(code, 3);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 6);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 0);
+    code.push(OP_I32_CONST);
+    write_i32(code, 1);
+    code.push(OP_I32_ADD);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 0);
+    code.push(OP_END);
+    code.push(OP_END);
+
     // Read the conversion specifier and consume it.
     code.push(OP_LOCAL_GET);
     write_u32(code, 0);

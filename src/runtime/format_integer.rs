@@ -17,42 +17,9 @@ pub(super) fn emit_integer_conversion(code: &mut Vec<u8>, func_print_int: u32) {
     code.push(OP_I32_OR);
     code.push(OP_IF);
     code.push(0x40);
-    // if is_long_long: load i64, args_ptr += 8; else load i32, args_ptr += 4
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 6);
-    code.push(OP_IF);
-    code.push(0x40);
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 1);
-    code.push(OP_I64_LOAD);
-    write_u32(code, 2);
-    write_u32(code, 0);
+    emit_load_integer_argument(code, true);
     code.push(OP_LOCAL_SET);
     write_u32(code, 8);
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 1);
-    code.push(OP_I32_CONST);
-    write_i32(code, 8);
-    code.push(OP_I32_ADD);
-    code.push(OP_LOCAL_SET);
-    write_u32(code, 1);
-    code.push(OP_ELSE);
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 1);
-    code.push(OP_I32_LOAD);
-    write_u32(code, 2);
-    write_u32(code, 0);
-    code.push(OP_I64_EXTEND_I32_S);
-    code.push(OP_LOCAL_SET);
-    write_u32(code, 8);
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 1);
-    code.push(OP_I32_CONST);
-    write_i32(code, 4);
-    code.push(OP_I32_ADD);
-    code.push(OP_LOCAL_SET);
-    write_u32(code, 1);
-    code.push(OP_END);
     // call print_int(val_i64, 10, width, precision, flags)
     code.push(OP_LOCAL_GET);
     write_u32(code, 8);
@@ -88,41 +55,9 @@ pub(super) fn emit_integer_conversion(code: &mut Vec<u8>, func_print_int: u32) {
     code.push(OP_LOCAL_SET);
     write_u32(code, 3);
 
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 6);
-    code.push(OP_IF);
-    code.push(0x40);
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 1);
-    code.push(OP_I64_LOAD);
-    write_u32(code, 2);
-    write_u32(code, 0);
+    emit_load_integer_argument(code, false);
     code.push(OP_LOCAL_SET);
     write_u32(code, 8);
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 1);
-    code.push(OP_I32_CONST);
-    write_i32(code, 8);
-    code.push(OP_I32_ADD);
-    code.push(OP_LOCAL_SET);
-    write_u32(code, 1);
-    code.push(OP_ELSE);
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 1);
-    code.push(OP_I32_LOAD);
-    write_u32(code, 2);
-    write_u32(code, 0);
-    code.push(OP_I64_EXTEND_I32_U);
-    code.push(OP_LOCAL_SET);
-    write_u32(code, 8);
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 1);
-    code.push(OP_I32_CONST);
-    write_i32(code, 4);
-    code.push(OP_I32_ADD);
-    code.push(OP_LOCAL_SET);
-    write_u32(code, 1);
-    code.push(OP_END);
     code.push(OP_LOCAL_GET);
     write_u32(code, 8);
     code.push(OP_I32_CONST);
@@ -179,41 +114,9 @@ pub(super) fn emit_integer_conversion(code: &mut Vec<u8>, func_print_int: u32) {
     code.push(OP_LOCAL_SET);
     write_u32(code, 3);
 
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 6);
-    code.push(OP_IF);
-    code.push(0x40);
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 1);
-    code.push(OP_I64_LOAD);
-    write_u32(code, 2);
-    write_u32(code, 0);
+    emit_load_integer_argument(code, false);
     code.push(OP_LOCAL_SET);
     write_u32(code, 8);
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 1);
-    code.push(OP_I32_CONST);
-    write_i32(code, 8);
-    code.push(OP_I32_ADD);
-    code.push(OP_LOCAL_SET);
-    write_u32(code, 1);
-    code.push(OP_ELSE);
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 1);
-    code.push(OP_I32_LOAD);
-    write_u32(code, 2);
-    write_u32(code, 0);
-    code.push(OP_I64_EXTEND_I32_U);
-    code.push(OP_LOCAL_SET);
-    write_u32(code, 8);
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 1);
-    code.push(OP_I32_CONST);
-    write_i32(code, 4);
-    code.push(OP_I32_ADD);
-    code.push(OP_LOCAL_SET);
-    write_u32(code, 1);
-    code.push(OP_END);
     code.push(OP_LOCAL_GET);
     write_u32(code, 8);
     code.push(OP_I32_CONST);
@@ -248,41 +151,9 @@ pub(super) fn emit_integer_conversion(code: &mut Vec<u8>, func_print_int: u32) {
     code.push(OP_LOCAL_SET);
     write_u32(code, 3);
 
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 6);
-    code.push(OP_IF);
-    code.push(0x40);
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 1);
-    code.push(OP_I64_LOAD);
-    write_u32(code, 2);
-    write_u32(code, 0);
+    emit_load_integer_argument(code, false);
     code.push(OP_LOCAL_SET);
     write_u32(code, 8);
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 1);
-    code.push(OP_I32_CONST);
-    write_i32(code, 8);
-    code.push(OP_I32_ADD);
-    code.push(OP_LOCAL_SET);
-    write_u32(code, 1);
-    code.push(OP_ELSE);
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 1);
-    code.push(OP_I32_LOAD);
-    write_u32(code, 2);
-    write_u32(code, 0);
-    code.push(OP_I64_EXTEND_I32_U);
-    code.push(OP_LOCAL_SET);
-    write_u32(code, 8);
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 1);
-    code.push(OP_I32_CONST);
-    write_i32(code, 4);
-    code.push(OP_I32_ADD);
-    code.push(OP_LOCAL_SET);
-    write_u32(code, 1);
-    code.push(OP_END);
     code.push(OP_LOCAL_GET);
     write_u32(code, 8);
     code.push(OP_I32_CONST);
@@ -298,5 +169,92 @@ pub(super) fn emit_integer_conversion(code: &mut Vec<u8>, func_print_int: u32) {
     super::emit_add_to_char_count(code, super::PRINTF_CHAR_COUNT_LOCAL);
     code.push(OP_BR);
     write_u32(code, 1);
+    code.push(OP_END);
+}
+
+/// Loads one integer vararg, honoring `ll`, `h`, and `hh` length modifiers.
+///
+/// Varargs wider than `int` are passed in the argument block as 8-byte
+/// values. Narrow values are passed as 4-byte `int` values and truncated here
+/// according to the C default-argument-promotion rules.
+fn emit_load_integer_argument(code: &mut Vec<u8>, signed: bool) {
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 6);
+    code.push(OP_I32_CONST);
+    write_i32(code, 1);
+    code.push(OP_I32_EQ);
+    code.push(OP_IF);
+    code.push(0x7E); // result i64
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 1);
+    code.push(OP_I64_LOAD);
+    write_u32(code, 2);
+    write_u32(code, 0);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 1);
+    code.push(OP_I32_CONST);
+    write_i32(code, 8);
+    code.push(OP_I32_ADD);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 1);
+    code.push(OP_ELSE);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 1);
+    code.push(OP_I32_LOAD);
+    write_u32(code, 2);
+    write_u32(code, 0);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 2);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 1);
+    code.push(OP_I32_CONST);
+    write_i32(code, 4);
+    code.push(OP_I32_ADD);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 1);
+
+    // `h` truncates to 16 bits; `hh` truncates to 8 bits.
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 6);
+    code.push(OP_I32_CONST);
+    write_i32(code, 2);
+    code.push(OP_I32_EQ);
+    code.push(OP_IF);
+    code.push(0x7F); // result i32
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 2);
+    code.push(OP_I32_CONST);
+    write_i32(code, 0xFFFF);
+    code.push(OP_I32_AND);
+    if signed {
+        code.push(OP_I32_EXTEND16_S);
+    }
+    code.push(OP_ELSE);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 6);
+    code.push(OP_I32_CONST);
+    write_i32(code, 3);
+    code.push(OP_I32_EQ);
+    code.push(OP_IF);
+    code.push(0x7F); // result i32
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 2);
+    code.push(OP_I32_CONST);
+    write_i32(code, 0xFF);
+    code.push(OP_I32_AND);
+    if signed {
+        code.push(OP_I32_EXTEND8_S);
+    }
+    code.push(OP_ELSE);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 2);
+    code.push(OP_END);
+    code.push(OP_END);
+
+    if signed {
+        code.push(OP_I64_EXTEND_I32_S);
+    } else {
+        code.push(OP_I64_EXTEND_I32_U);
+    }
     code.push(OP_END);
 }

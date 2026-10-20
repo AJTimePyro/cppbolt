@@ -22,7 +22,8 @@ those stacks, 1000-deep nested calls, ternaries, namespaces, and blocks compile,
 rejected at the 2000 limit before the V8 call stack is exhausted (observed around 4000 recursive frames in the
 wasm build). Include depth is separately limited to 128 (129 is rejected).
 
-The `printf` runtime implements `%d`, `%i`, `%u`, `%o`, `%x`, `%X`, `%c`, `%s`, `%e`, `%f`, and `%g` with the
-`0`, `-`, `+`, space, and `#` flags. Field width and precision are honoured for the numeric conversions; `%c`
-and `%s` print without field width or precision, floating conversions ignore the sign flags, and `%p` and `%n`
-are not implemented.
+The `printf` runtime implements `%d`, `%i`, `%u`, `%o`, `%x`, `%X`, `%c`, `%s`, `%e`, `%E`, `%f`, `%g`, and
+`%G`, including the `h`/`hh` length modifiers, with the `0`, `-`, `+`, space, and `#` flags. Field width and
+precision are honoured for the integer conversions, the floating conversions, and `%s`; `%c` ignores width and
+precision. A `*` precision argument is supported, but a `*` field width is not. `%p` and `%n` are not
+implemented.

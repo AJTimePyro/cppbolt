@@ -44,7 +44,7 @@ pub(super) fn emit_char_string_conversion(code: &mut Vec<u8>, func_print_char: u
     write_u32(code, 2);
     write_u32(code, 0);
     code.push(OP_LOCAL_SET);
-    write_u32(code, 7); // str_ptr
+    write_u32(code, 7); // scan/print pointer
     code.push(OP_LOCAL_GET);
     write_u32(code, 1);
     code.push(OP_I32_CONST);
@@ -52,8 +52,17 @@ pub(super) fn emit_char_string_conversion(code: &mut Vec<u8>, func_print_char: u
     code.push(OP_I32_ADD);
     code.push(OP_LOCAL_SET);
     write_u32(code, 1);
+    // local 6 keeps the start pointer; local 11 counts characters to print.
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 7);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 6);
+    code.push(OP_I32_CONST);
+    write_i32(code, 0);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 11);
 
-    // Print until the NUL terminator.
+    // Measure the string, stopping at NUL or at the requested precision.
     code.push(OP_BLOCK);
     code.push(0x40);
     code.push(OP_LOOP);
@@ -65,19 +74,33 @@ pub(super) fn emit_char_string_conversion(code: &mut Vec<u8>, func_print_char: u
     write_u32(code, 0);
     code.push(OP_LOCAL_SET);
     write_u32(code, 2);
-
     code.push(OP_LOCAL_GET);
     write_u32(code, 2);
     code.push(OP_I32_EQZ);
     code.push(OP_BR_IF);
     write_u32(code, 1);
-
     code.push(OP_LOCAL_GET);
+    write_u32(code, 5);
+    code.push(OP_I32_CONST);
+    write_i32(code, 0);
+    code.push(OP_I32_GE_S);
+    code.push(OP_IF);
+    code.push(0x40);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 11);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 5);
+    code.push(OP_I32_GE_U);
+    code.push(OP_BR_IF);
     write_u32(code, 2);
-    code.push(OP_CALL);
-    write_u32(code, func_print_char);
-    super::emit_increment_char_count(code, super::PRINTF_CHAR_COUNT_LOCAL);
-
+    code.push(OP_END);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 11);
+    code.push(OP_I32_CONST);
+    write_i32(code, 1);
+    code.push(OP_I32_ADD);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 11);
     code.push(OP_LOCAL_GET);
     write_u32(code, 7);
     code.push(OP_I32_CONST);
@@ -87,11 +110,121 @@ pub(super) fn emit_char_string_conversion(code: &mut Vec<u8>, func_print_char: u
     write_u32(code, 7);
     code.push(OP_BR);
     write_u32(code, 0);
-
     code.push(OP_END);
+    code.push(OP_END);
+
+    // local 2 = right-padding width, or zero.
+    code.push(OP_I32_CONST);
+    write_i32(code, 0);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 2);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 4);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 11);
+    code.push(OP_I32_GT_U);
+    code.push(OP_IF);
+    code.push(0x40);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 4);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 11);
+    code.push(OP_I32_SUB);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 2);
+    code.push(OP_END);
+
+    // Right-aligned fields get leading spaces; '-' selects trailing spaces.
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 3);
+    code.push(OP_I32_CONST);
+    write_i32(code, 2);
+    code.push(OP_I32_AND);
+    code.push(OP_I32_EQZ);
+    code.push(OP_IF);
+    code.push(0x40);
+    emit_spaces(code, func_print_char, 2);
+    code.push(OP_END);
+
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 6);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 7);
+    code.push(OP_BLOCK);
+    code.push(0x40);
+    code.push(OP_LOOP);
+    code.push(0x40);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 11);
+    code.push(OP_I32_EQZ);
+    code.push(OP_BR_IF);
+    write_u32(code, 1);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 7);
+    code.push(OP_I32_LOAD8_U);
+    write_u32(code, 0);
+    write_u32(code, 0);
+    code.push(OP_CALL);
+    write_u32(code, func_print_char);
+    super::emit_increment_char_count(code, super::PRINTF_CHAR_COUNT_LOCAL);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 7);
+    code.push(OP_I32_CONST);
+    write_i32(code, 1);
+    code.push(OP_I32_ADD);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 7);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 11);
+    code.push(OP_I32_CONST);
+    write_i32(code, 1);
+    code.push(OP_I32_SUB);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 11);
+    code.push(OP_BR);
+    write_u32(code, 0);
+    code.push(OP_END);
+    code.push(OP_END);
+
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 3);
+    code.push(OP_I32_CONST);
+    write_i32(code, 2);
+    code.push(OP_I32_AND);
+    code.push(OP_IF);
+    code.push(0x40);
+    emit_spaces(code, func_print_char, 2);
     code.push(OP_END);
 
     code.push(OP_BR);
     write_u32(code, 1);
     code.push(OP_END); // end 's'
+}
+
+fn emit_spaces(code: &mut Vec<u8>, func_print_char: u32, count_local: u32) {
+    code.push(OP_BLOCK);
+    code.push(0x40);
+    code.push(OP_LOOP);
+    code.push(0x40);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, count_local);
+    code.push(OP_I32_EQZ);
+    code.push(OP_BR_IF);
+    write_u32(code, 1);
+    code.push(OP_I32_CONST);
+    write_i32(code, 32);
+    code.push(OP_CALL);
+    write_u32(code, func_print_char);
+    super::emit_increment_char_count(code, super::PRINTF_CHAR_COUNT_LOCAL);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, count_local);
+    code.push(OP_I32_CONST);
+    write_i32(code, 1);
+    code.push(OP_I32_SUB);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, count_local);
+    code.push(OP_BR);
+    write_u32(code, 0);
+    code.push(OP_END);
+    code.push(OP_END);
 }

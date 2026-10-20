@@ -291,7 +291,7 @@
                     writeStdout(fullStr);
                     return fullStr.length;
                 },
-                print_double: (val, width, precision, mode, flags) => { 
+                print_double: (val, width, precision, mode, flags) => {
                     let s = "";
                     if (mode === 0) {
                         const prec = precision >= 0 ? precision : 6;
@@ -305,10 +305,32 @@
                     } else {
                         s = String(val);
                     }
+                    if ((flags & 16) !== 0) {
+                        s = s.toUpperCase();
+                    }
+                    const isZeroPad = (flags & 1) !== 0;
                     const isLeftAlign = (flags & 2) !== 0;
-                    if (width > 0 && s.length < width) {
-                        const pad = " ".repeat(width - s.length);
-                        s = isLeftAlign ? (s + pad) : (pad + s);
+                    const isShowSign = (flags & 4) !== 0;
+                    const isSpaceSign = (flags & 8) !== 0;
+                    let sign = "";
+                    if (s.startsWith("-")) {
+                        sign = "-";
+                        s = s.slice(1);
+                    } else if (isShowSign) {
+                        sign = "+";
+                    } else if (isSpaceSign) {
+                        sign = " ";
+                    }
+                    if (width > 0 && sign.length + s.length < width) {
+                        const padLen = width - sign.length - s.length;
+                        if (isZeroPad && !isLeftAlign) {
+                            s = sign + "0".repeat(padLen) + s;
+                        } else {
+                            const pad = " ".repeat(padLen);
+                            s = isLeftAlign ? (sign + s + pad) : (pad + sign + s);
+                        }
+                    } else {
+                        s = sign + s;
                     }
                     writeStdout(s);
                     return s.length;
