@@ -7,8 +7,42 @@ impl<'a> Codegen<'a> {
             self.collect_strings_decl(decl);
         }
 
-        // Functions whose address escapes are roots for dead-code elimination
-        // and need entries in the indirect-call table.
+        let address_taken = Self::collect_address_taken(program);
+        self.lay_out_globals(program);
+        let candidates = self.build_candidates(program, &address_taken);
+        let reachable = Self::compute_reachable(&candidates);
+        let all_reachable_calls = Self::collect_reachable_calls(&candidates, &reachable);
+
+        let has_deleting_dtors = self.has_deleting_dtors();
+        let has_new_or_delete = self.has_new_or_delete(&candidates, &reachable);
+        let need_printf = all_reachable_calls.contains("printf")
+            || all_reachable_calls.contains("std::printf")
+            || all_reachable_calls.iter().any(|c| c.ends_with("::printf"));
+        // Keep the allocator whenever a record exists: synthesized constructors,
+        // destructors, and prvalue returns may allocate even without a visible
+        // `new`, `malloc`, or `free` call.
+        let need_alloc = all_reachable_calls.contains("malloc")
+            || all_reachable_calls.contains("free")
+            || has_deleting_dtors
+            || has_new_or_delete
+            || !self.sema.struct_layouts.is_empty();
+        let has_indirect_calls = self.has_indirect_calls(&candidates, &reachable);
+        let has_vtables = self.has_vtables();
+        let need_table = has_vtables || !address_taken.is_empty() || has_indirect_calls;
+
+        let trap_func_idx = self.register_runtime_functions(need_printf, need_alloc, need_table);
+        Plan {
+            candidates,
+            reachable,
+            address_taken,
+            need_printf,
+            need_alloc,
+            need_table,
+            trap_func_idx,
+        }
+    }
+
+    fn collect_address_taken(program: &Program) -> HashSet<String> {
         let mut address_taken = HashSet::new();
         for decl in &program.declarations {
             match decl {
@@ -30,10 +64,10 @@ impl<'a> Codegen<'a> {
                 _ => {}
             }
         }
+        address_taken
+    }
 
-        // Lay out globals, static fields, and function-local statics in the
-        // data segment. Function-local statics use source locations in their
-        // storage names to keep same-named statics distinct.
+    fn lay_out_globals(&mut self, program: &Program) {
         for decl in &program.declarations {
             if let Decl::GlobalVar { name, ty, init, .. } = decl {
                 let offset = self.next_data_offset;
@@ -85,10 +119,13 @@ impl<'a> Codegen<'a> {
                 }
             }
         }
+    }
 
-        // Reachability analysis: `main`, address-taken functions, and virtual
-        // methods are roots; calls discovered while walking reachable bodies
-        // extend the set to a fixed point.
+    fn build_candidates<'p>(
+        &mut self,
+        program: &'p Program,
+        address_taken: &HashSet<String>,
+    ) -> Vec<FuncCandidate<'p>> {
         let mut candidates = Vec::new();
         for decl in &program.declarations {
             if let Decl::Function(f) = decl {
@@ -188,7 +225,10 @@ impl<'a> Codegen<'a> {
                 }
             }
         }
+        candidates
+    }
 
+    fn compute_reachable(candidates: &[FuncCandidate<'_>]) -> HashSet<usize> {
         let mut reachable = HashSet::new();
         let mut worklist = Vec::new();
         for (idx, c) in candidates.iter().enumerate() {
@@ -217,23 +257,37 @@ impl<'a> Codegen<'a> {
                 }
             }
         }
+        reachable
+    }
 
-        // Union the call sets of reachable bodies. These names decide which
-        // runtime helpers must exist in the module.
+    fn collect_reachable_calls(
+        candidates: &[FuncCandidate<'_>],
+        reachable: &HashSet<usize>,
+    ) -> HashSet<String> {
         let mut all_reachable_calls = HashSet::new();
-        for &idx in &reachable {
+        for &idx in reachable {
             all_reachable_calls.extend(candidates[idx].calls.iter().cloned());
         }
+        all_reachable_calls
+    }
 
-        let has_deleting_dtors = self.sema.struct_order.iter().any(|name| {
+    fn has_deleting_dtors(&self) -> bool {
+        self.sema.struct_order.iter().any(|name| {
             self.sema
                 .struct_layouts
                 .get(name)
                 .map(|l| l.vtable_slots.iter().any(|s| s == "__deleting_dtor"))
                 .unwrap_or(false)
-        });
+        })
+    }
+
+    fn has_new_or_delete(
+        &self,
+        candidates: &[FuncCandidate<'_>],
+        reachable: &HashSet<usize>,
+    ) -> bool {
         let mut has_new_or_delete = false;
-        for &idx in &reachable {
+        for &idx in reachable {
             let body_opt = match &candidates[idx].decl {
                 FuncDeclRef::Function(f) => f.body.as_ref(),
                 FuncDeclRef::Method(_, m) => m.body.as_ref(),
@@ -245,20 +299,16 @@ impl<'a> Codegen<'a> {
                 break;
             }
         }
+        has_new_or_delete
+    }
 
-        let need_printf = all_reachable_calls.contains("printf")
-            || all_reachable_calls.contains("std::printf")
-            || all_reachable_calls.iter().any(|c| c.ends_with("::printf"));
-        // Keep the allocator whenever a record exists: synthesized constructors,
-        // destructors, and prvalue returns may allocate even without a visible
-        // `new`, `malloc`, or `free` call.
-        let need_alloc = all_reachable_calls.contains("malloc")
-            || all_reachable_calls.contains("free")
-            || has_deleting_dtors
-            || has_new_or_delete
-            || !self.sema.struct_layouts.is_empty();
+    fn has_indirect_calls(
+        &self,
+        candidates: &[FuncCandidate<'_>],
+        reachable: &HashSet<usize>,
+    ) -> bool {
         let mut has_indirect_calls = false;
-        for &idx in &reachable {
+        for &idx in reachable {
             let body_opt = match &candidates[idx].decl {
                 FuncDeclRef::Function(f) => f.body.as_ref(),
                 FuncDeclRef::Method(_, m) => m.body.as_ref(),
@@ -270,6 +320,10 @@ impl<'a> Codegen<'a> {
                 break;
             }
         }
+        has_indirect_calls
+    }
+
+    fn has_vtables(&self) -> bool {
         let has_vtables = self.sema.struct_order.iter().any(|name| {
             self.sema
                 .struct_layouts
@@ -279,8 +333,15 @@ impl<'a> Codegen<'a> {
         });
         // Vtables, function pointers, and indirect calls all need a funcref
         // table. Slot 0 is reserved for the pure-virtual trap.
-        let need_table = has_vtables || !address_taken.is_empty() || has_indirect_calls;
+        has_vtables
+    }
 
+    fn register_runtime_functions(
+        &mut self,
+        need_printf: bool,
+        need_alloc: bool,
+        need_table: bool,
+    ) -> Option<u32> {
         if need_printf {
             let func_idx = (self.module.imports.len() + self.module.functions.len()) as u32;
             let t_printf = self
@@ -305,7 +366,7 @@ impl<'a> Codegen<'a> {
             self.func_indices.insert("free".to_string(), func_free);
         }
 
-        let trap_func_idx = if need_table {
+        if need_table {
             let func_trap = (self.module.imports.len() + self.module.functions.len()) as u32;
             let t_trap = self.module.add_type(vec![], vec![]);
             self.module.functions.push(t_trap);
@@ -317,15 +378,6 @@ impl<'a> Codegen<'a> {
             Some(func_trap)
         } else {
             None
-        };
-        Plan {
-            candidates,
-            reachable,
-            address_taken,
-            need_printf,
-            need_alloc,
-            need_table,
-            trap_func_idx,
         }
     }
 }
