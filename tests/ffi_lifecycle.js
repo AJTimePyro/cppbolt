@@ -14,8 +14,13 @@ if (!wasmPath) {
 const VALID = "int main() { int x = 1; return x; }";
 const INVALID = "int main( { return 0; }";
 const WARMUP = 50;
-const ITERATIONS = 2000;
-const MAX_GROWTH_BYTES = 8 * 1024 * 1024;
+// 20,000 alternating compiles exercise both the success and diagnostic paths
+// in one instance. A leaking result buffer grows linear memory by roughly
+// 144 bytes per successful compile (measured with free_result disabled), so
+// 20,000 iterations would exceed 2.8 MiB. The 1 MiB bound leaves headroom for
+// allocator page rounding while still failing a leaked result buffer.
+const ITERATIONS = 20000;
+const MAX_GROWTH_BYTES = 1024 * 1024;
 
 function compileOnce(exports, source) {
     const sourceBytes = Buffer.from(source, "utf8");
@@ -59,7 +64,7 @@ WebAssembly.instantiate(fs.readFileSync(wasmPath), {})
         const baseline = exports.memory.buffer.byteLength;
 
         for (let i = 0; i < ITERATIONS; i += 1) {
-            if (compileOnce(exports, i % 3 === 0 ? INVALID : VALID)) {
+            if (compileOnce(exports, i % 2 === 0 ? VALID : INVALID)) {
                 compiled += 1;
             } else {
                 diagnosed += 1;

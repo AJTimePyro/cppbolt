@@ -5,6 +5,9 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 use crate::compile_with_options_named;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+static LIVE_RESULTS: AtomicUsize = AtomicUsize::new(0);
 
 static mut RESULT_LEN: usize = 0;
 static mut ERROR_LEN: usize = 0;
@@ -52,6 +55,7 @@ pub extern "C" fn free_result(pointer: *mut u8, length: usize) {
             pointer, length,
         )));
     }
+    LIVE_RESULTS.fetch_sub(1, Ordering::SeqCst);
 }
 
 fn set_error(message: &str) {
@@ -96,6 +100,7 @@ pub extern "C" fn compile_wasm(source_pointer: *const u8, source_length: usize) 
                 RESULT_LEN = length;
                 ERROR_LEN = 0;
             }
+            LIVE_RESULTS.fetch_add(1, Ordering::SeqCst);
             pointer
         }
         Err(error) => {
@@ -121,4 +126,27 @@ pub extern "C" fn get_error_ptr() -> *const u8 {
 pub extern "C" fn get_error_len() -> usize {
     // SAFETY: see compile_wasm's single-threaded ABI contract.
     unsafe { ERROR_LEN }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn result_buffers_are_freed_exactly_once() {
+        let source = b"int main() { return 0; }";
+        let input = alloc_buffer(source.len());
+        // SAFETY: the test owns the input buffer for the duration of the call.
+        unsafe {
+            std::ptr::copy_nonoverlapping(source.as_ptr(), input, source.len());
+        }
+        let result = compile_wasm(input, source.len());
+        assert!(!result.is_null(), "expected a compiled module");
+        assert_eq!(LIVE_RESULTS.load(Ordering::SeqCst), 1);
+        let length = get_result_len();
+        assert!(length > 8);
+        free_result(result, length);
+        assert_eq!(LIVE_RESULTS.load(Ordering::SeqCst), 0);
+        dealloc_buffer(input, source.len());
+    }
 }
