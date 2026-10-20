@@ -2,7 +2,8 @@
 
 The compiler pipeline is `preprocessor -> lexer -> parser -> semantic analysis -> direct Wasm emission`.
 The native CLI owns files and processes; the library API accepts source text and returns either Wasm bytes or
-a `CompileError`. The core does not spawn processes, access the filesystem, or depend on a host runtime.
+a `CompileError`. The release compiler module built for `wasm32-unknown-unknown` is currently 809,191 bytes
+raw and 223,469 bytes with `gzip -9 -n`. The core does not spawn processes, access the filesystem, or depend on a host runtime.
 
 The project is a single Cargo package with one library and two binaries:
 

@@ -4,6 +4,13 @@
 input, and process exit. It buffers stdout and implements the compiler's number-formatting contract. Hosts use the
 same shim in Node and in browsers; the browser must keep compiler execution off the UI thread.
 
+`print_char(ch)` returns nothing. `print_int(value, radix, width, precision, flags)` and
+`print_double(value, width, precision, mode, flags)` return the number of characters they wrote, including any
+sign and field padding; the generated `printf` adds that count to its own return value. For `print_int`, flags
+are bit 0 zero-pad, bit 1 left-align, bit 2 show `+`, bit 3 space sign, bit 4 uppercase, bit 5 unsigned, and
+bit 6 alternate form. For `print_double`, modes are 0 general, 1 fixed, and 2 scientific; flags are bit 0
+zero-pad, bit 1 left-align, bit 2 show `+`, bit 3 space sign, and bit 4 uppercase.
+
 ## Compiler WebAssembly ABI
 
 The compiler module exports the following C entry points. Each compiled result is an independent boxed slice, so

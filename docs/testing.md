@@ -37,6 +37,11 @@ copies are not evidence of independent coverage. The runner enforces three outco
 - Sources that differ only in identifiers or literals **warn**.
 - Any other difference passes silently.
 
+Variants are anti-overfitting checks, not independent evidence: they are written and reviewed alongside the main
+test and may share its structure. Independent tests are authored without access to the compiler source and are
+the evidence used for specification coverage. Generated differential tests are a third category: they cover
+parameter matrices mechanically and are explicitly not independent.
+
 Some variants are generated rather than hand-written. For example, `tools/generate_lvalue_matrix.py` emits the
 large `lvalue_matrix` pair; see [Generated differential tests](#generated-differential-tests).
 
@@ -121,5 +126,6 @@ python3 tools/verify_mini_stl_gxx.py
 
 The oracle replays every positive test through g++ and clang++ and compares native output with the recorded
 `.expected` files. The header gate compiles the compiler corpus against `stdlib/` with `-nostdinc++`, Sanitizer
-instrumentation, and both compilers; the allocator-specific `free_list_reuse` outputs are reported as skips.
+instrumentation, and both compilers; the allocator-specific `free_list_reuse` outputs and the
+sanitizer-incompatible `malloc_failure` runtime check are reported as skips.
 Emitted modules should also be validated with a WebAssembly validator when one is installed.

@@ -32,7 +32,10 @@ POSITIVE_DIRS = [
 
 # These tests intentionally observe the custom WebAssembly allocator, so a
 # native libc allocator cannot reproduce their recorded output.
-NATIVE_ORACLE_SKIPS = {"free_list_reuse.cpp"}
+NATIVE_ORACLE_SKIPS = {
+    "free_list_reuse.cpp": "output depends on the WebAssembly allocator",
+    "malloc_failure.cpp": "Sanitizers abort instead of returning null for impossible sizes",
+}
 
 
 def run_suite(compiler, files, header_dir):
@@ -46,7 +49,7 @@ def run_suite(compiler, files, header_dir):
     for f in files:
         tname = os.path.basename(f)
         if tname in NATIVE_ORACLE_SKIPS:
-            print(f"  [SKIP] {tname}: output depends on the WebAssembly allocator")
+            print(f"  [SKIP] {tname}: {NATIVE_ORACLE_SKIPS[tname]}")
             skipped += 1
             continue
         bin_path = f"/tmp/gate_{compiler}_{tname}.bin"

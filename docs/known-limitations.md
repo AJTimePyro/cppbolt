@@ -7,8 +7,8 @@ friends, and virtual inheritance remain intentionally out of scope. Virtual base
 constructors work, but non-static method lookup follows the first base class.
 
 Source-map fidelity through nested macro expansion is incomplete. The code generator is still being decomposed
-and its frame/scratch allocation is conservative. The current shell harness remains a migration point toward a
-typed Rust test harness.
+and its frame/scratch allocation is conservative. The corpus and ABI gates are Rust binaries plus Node-hosted
+JavaScript; there is no remaining shell test harness.
 
 The parser, semantic analyzer, code generator, and preprocessor share a single depth limit of 2000 AST or
 expression levels (`src/depth.rs`). Wide left-associative operator chains, `else-if` chains, and string
