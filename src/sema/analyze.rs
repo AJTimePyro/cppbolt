@@ -2,7 +2,15 @@ use super::*;
 
 impl Sema {
     pub fn analyze_program(&mut self, program: &mut Program) -> Result<(), CompileError> {
-        // First pass: register structs and enums
+        self.register_types(program)?;
+        self.synthesize_destructors(program);
+        self.synthesize_constructors(program);
+        self.register_declarations(program)?;
+        self.analyze_declarations(program)?;
+        Ok(())
+    }
+
+    fn register_types(&mut self, program: &Program) -> Result<(), CompileError> {
         for decl in &program.declarations {
             match decl {
                 Decl::EnumDecl { name: _, variants } => {
@@ -31,8 +39,10 @@ impl Sema {
                 _ => {}
             }
         }
+        Ok(())
+    }
 
-        // Synthesize implicit destructors for structs that contain member objects or bases with destructors
+    fn synthesize_destructors(&mut self, program: &mut Program) {
         let mut structs_with_dtor = std::collections::HashSet::new();
         for decl in &program.declarations {
             if let Decl::StructDecl { name, methods, .. } = decl
@@ -75,8 +85,9 @@ impl Sema {
                 }
             }
         }
+    }
 
-        // Synthesize implicit default constructors for classes whose bases or
+    fn synthesize_constructors(&mut self, program: &mut Program) {
         // members require construction, and for polymorphic classes that need
         // their vtable installed by a constructor. Iterate to a fixed point so
         // a class becomes constructible once its dependencies do.
@@ -158,8 +169,9 @@ impl Sema {
                 break;
             }
         }
+    }
 
-        // Second pass: register functions, methods, static fields
+    fn register_declarations(&mut self, program: &Program) -> Result<(), CompileError> {
         let mut defined_functions = std::collections::HashSet::new();
         for decl in &program.declarations {
             match decl {
@@ -252,8 +264,10 @@ impl Sema {
                 _ => {}
             }
         }
+        Ok(())
+    }
 
-        // Third pass: analyze declarations & bodies
+    fn analyze_declarations(&mut self, program: &mut Program) -> Result<(), CompileError> {
         for decl in &mut program.declarations {
             match decl {
                 Decl::GlobalVar {
@@ -342,7 +356,6 @@ impl Sema {
                 _ => {}
             }
         }
-
         Ok(())
     }
 }
