@@ -2,6 +2,58 @@ use super::*;
 
 impl<'a> Codegen<'a> {
     pub(super) fn emit(&mut self, plan: &Plan) -> Result<(), CompileError> {
+        self.declare_functions(plan);
+        let deleting_dtor_structs = self.reserve_deleting_dtors();
+        self.emit_vtables(plan);
+        self.register_address_taken_table(plan);
+
+        if !self.vtable_func_indices.is_empty() {
+            let count = self.vtable_func_indices.len() as u32;
+            self.module.table = Some((count, Some(count)));
+            self.module
+                .elements
+                .push((0, self.vtable_func_indices.clone()));
+        }
+
+        // Emit runtime bodies in the same order their indices were reserved in
+        // `prepare`.
+
+        self.emit_runtime_bodies(plan);
+        self.compile_reachable_bodies(plan)?;
+        self.emit_deleting_dtors(&deleting_dtor_structs);
+        self.emit_string_data();
+
+        // Global 0: Stack pointer (starts at 8MB + 64KB = 8454144)
+        self.module
+            .globals
+            .push((TYPE_I32, true, memory_layout::DATA_BASE as i32));
+        self.module
+            .exports
+            .push(("__stack_pointer".to_string(), 3, 0));
+
+        // Global 1: Heap pointer (starts at next_data_offset aligned to 16)
+        let heap_start = (self.next_data_offset + 15) & !15;
+        self.module
+            .globals
+            .push((TYPE_I32, true, heap_start as i32));
+        self.module.exports.push(("__heap_base".to_string(), 3, 1));
+
+        // Global 2: Free list head pointer (starts at 0)
+        self.module.globals.push((TYPE_I32, true, 0));
+
+        // Memory export: calculate needed pages covering stack, data, BSS
+        let needed_pages =
+            memory_layout::pages_for(heap_start).max(memory_layout::DEFAULT_MEMORY_PAGES);
+        // WebAssembly32 memories cannot exceed 65536 pages. Clamp user input
+        // before it can overflow the page calculation.
+        let requested_pages = self.max_memory_mb.saturating_mul(16).min(65_536);
+        let max_pages = requested_pages.max(needed_pages).min(65_536);
+        self.module.memory_pages = (needed_pages, Some(max_pages));
+        self.module.exports.push(("memory".to_string(), 2, 0));
+        Ok(())
+    }
+
+    fn declare_functions(&mut self, plan: &Plan) {
         for (idx, cand) in plan.candidates.iter().enumerate() {
             if !plan.reachable.contains(&idx) {
                 continue;
@@ -132,9 +184,9 @@ impl<'a> Codegen<'a> {
                 }
             }
         }
+    }
 
-        // Reserve one deleting-destructor body per class with a virtual
-        // destructor. Its table slot is filled below.
+    fn reserve_deleting_dtors(&mut self) -> Vec<String> {
         let mut deleting_dtor_structs = Vec::new();
         for name in &self.sema.struct_order {
             if let Some(layout) = self.sema.struct_layouts.get(name)
@@ -148,9 +200,10 @@ impl<'a> Codegen<'a> {
                 deleting_dtor_structs.push(name.clone());
             }
         }
+        deleting_dtor_structs
+    }
 
-        // Lay out vtables in the data section. Each slot stores an element
-        // index into the function table rather than a raw function index.
+    fn emit_vtables(&mut self, plan: &Plan) {
         for name in &self.sema.struct_order {
             if let Some(layout) = self.sema.struct_layouts.get(name)
                 && layout.has_vtable
@@ -185,9 +238,9 @@ impl<'a> Codegen<'a> {
                 self.next_data_offset += (layout.vtable_slots.len() * 4) as u32;
             }
         }
+    }
 
-        // Give every address-taken function one table index; all of its
-        // aliases share that entry.
+    fn register_address_taken_table(&mut self, plan: &Plan) {
         for (idx, cand) in plan.candidates.iter().enumerate() {
             if !plan.reachable.contains(&idx) {
                 continue;
@@ -202,17 +255,9 @@ impl<'a> Codegen<'a> {
                 }
             }
         }
+    }
 
-        if !self.vtable_func_indices.is_empty() {
-            let count = self.vtable_func_indices.len() as u32;
-            self.module.table = Some((count, Some(count)));
-            self.module
-                .elements
-                .push((0, self.vtable_func_indices.clone()));
-        }
-
-        // Emit runtime bodies in the same order their indices were reserved in
-        // `prepare`.
+    fn emit_runtime_bodies(&mut self, plan: &Plan) {
         if plan.need_printf {
             self.module.codes.push(crate::runtime::emit_printf(0, 1, 2));
         }
@@ -225,8 +270,9 @@ impl<'a> Codegen<'a> {
                 .codes
                 .push(crate::runtime::emit_pure_virtual_trap());
         }
+    }
 
-        // Compile bodies only for functions that survived reachability analysis.
+    fn compile_reachable_bodies(&mut self, plan: &Plan) -> Result<(), CompileError> {
         for (idx, cand) in plan.candidates.iter().enumerate() {
             if !plan.reachable.contains(&idx) {
                 continue;
@@ -266,10 +312,11 @@ impl<'a> Codegen<'a> {
                 }
             }
         }
+        Ok(())
+    }
 
-        // Deleting destructors run the complete destructor chain and then free
-        // the object, so `delete base_ptr` can dispatch through a vtable slot.
-        for name in &deleting_dtor_structs {
+    fn emit_deleting_dtors(&mut self, deleting_dtor_structs: &[String]) {
+        for name in deleting_dtor_structs {
             let mut code = Vec::new();
             let dtor_name = format!("{}_~{}", name, name);
             if let Some(&dtor_idx) = self.func_indices.get(&dtor_name) {
@@ -285,8 +332,9 @@ impl<'a> Codegen<'a> {
             code.push(OP_END);
             self.module.codes.push((vec![], code));
         }
+    }
 
-        // Copy interned string bytes into the data segment.
+    fn emit_string_data(&mut self) {
         let mut string_entries: Vec<(&String, &u32)> = self.string_table.iter().collect();
         string_entries.sort_by_key(|&(_, offset)| *offset);
         for (s, &offset) in string_entries {
@@ -294,35 +342,5 @@ impl<'a> Codegen<'a> {
             bytes.push(0);
             self.module.data.push((offset, bytes));
         }
-
-        // Global 0: Stack pointer (starts at 8MB + 64KB = 8454144)
-        self.module
-            .globals
-            .push((TYPE_I32, true, memory_layout::DATA_BASE as i32));
-        self.module
-            .exports
-            .push(("__stack_pointer".to_string(), 3, 0));
-
-        // Global 1: Heap pointer (starts at next_data_offset aligned to 16)
-        let heap_start = (self.next_data_offset + 15) & !15;
-        self.module
-            .globals
-            .push((TYPE_I32, true, heap_start as i32));
-        self.module.exports.push(("__heap_base".to_string(), 3, 1));
-
-        // Global 2: Free list head pointer (starts at 0)
-        self.module.globals.push((TYPE_I32, true, 0));
-
-        // Memory export: calculate needed pages covering stack, data, BSS
-        let needed_pages =
-            memory_layout::pages_for(heap_start).max(memory_layout::DEFAULT_MEMORY_PAGES);
-        // WebAssembly32 memories cannot exceed 65536 pages. Clamp user input
-        // before it can overflow the page calculation.
-        let requested_pages = self.max_memory_mb.saturating_mul(16).min(65_536);
-        let max_pages = requested_pages.max(needed_pages).min(65_536);
-        self.module.memory_pages = (needed_pages, Some(max_pages));
-        self.module.exports.push(("memory".to_string(), 2, 0));
-
-        Ok(())
     }
 }
