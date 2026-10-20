@@ -39,6 +39,7 @@ impl Sema {
     }
 
     pub(super) fn analyze_stmt(&mut self, stmt: &mut Stmt) -> Result<(), CompileError> {
+        let _guard = self.depth.enter(stmt.line, stmt.col)?;
         self.current_line = stmt.line;
         self.current_col = stmt.col;
         match &mut stmt.kind {
@@ -157,12 +158,13 @@ impl Sema {
                 self.analyze_expr(expr)?;
             }
             StmtKind::If {
-                cond,
-                then_stmt,
+                branches,
                 else_stmt,
             } => {
-                self.analyze_expr(cond)?;
-                self.analyze_stmt(then_stmt)?;
+                for (cond, then_stmt) in branches {
+                    self.analyze_expr(cond)?;
+                    self.analyze_stmt(then_stmt)?;
+                }
                 if let Some(el) = else_stmt {
                     self.analyze_stmt(el)?;
                 }

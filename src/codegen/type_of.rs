@@ -25,7 +25,7 @@ impl<'a> Codegen<'a> {
             }
 
             Expr::Identifier(name) => self.type_of_identifier(name, ctx),
-            Expr::Binary { op, left, right } => self.type_of_binary(op, left, right, ctx),
+            Expr::Binary { .. } => self.type_of_binary_chain(expr, ctx),
             Expr::Unary { op, expr } => self.type_of_unary(op, expr, ctx),
             Expr::Assign { target, .. } => self.get_expr_type(target, ctx),
             Expr::CompoundAssign { op, target, value } => {
@@ -82,22 +82,43 @@ impl<'a> Codegen<'a> {
         }
     }
 
-    fn type_of_binary(
-        &self,
-        op: &BinaryOp,
-        left: &Expr,
-        right: &Expr,
-        ctx: &FunctionContext,
-    ) -> Type {
-        let lty = self.get_expr_type(left, ctx);
-        let rty = self.get_expr_type(right, ctx);
+    /// Type of a left-associative binary expression, walking the operator
+    /// spine iteratively so long chains do not consume stack.
+    fn type_of_binary_chain(&self, expr: &Expr, ctx: &FunctionContext) -> Type {
+        // Logical operators always produce `bool`; the operands do not affect
+        // the result type, so stop before recursing into them.
+        if let Expr::Binary { op, .. } = expr
+            && matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr)
+        {
+            return Type::Bool;
+        }
+        let mut spine: Vec<(&BinaryOp, &Expr)> = Vec::new();
+        let mut cur = expr;
+        while let Expr::Binary { op, left, right } = cur {
+            if matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
+                break;
+            }
+            spine.push((op, right));
+            cur = left;
+        }
+        let mut lty = self.get_expr_type(cur, ctx);
+        let mut result = lty.clone();
+        for (op, right) in spine.iter().rev() {
+            let rty = self.get_expr_type(right, ctx);
+            result = self.binary_result_type(op, &lty, &rty);
+            lty = result.strip_reference().clone();
+        }
+        result
+    }
+
+    pub(super) fn binary_result_type(&self, op: &BinaryOp, lty: &Type, rty: &Type) -> Type {
         if (matches!(lty.strip_const(), Type::Struct(_) | Type::Enum(_))
             || matches!(rty.strip_const(), Type::Struct(_) | Type::Enum(_)))
             && let Some(op_name) = op.op_name()
         {
             let clean_lty = lty.strip_const();
             if let Type::Struct(sname) = clean_lty
-                && let Some((_, sig)) = self.find_method(sname, op_name, std::slice::from_ref(&rty))
+                && let Some((_, sig)) = self.find_method(sname, op_name, std::slice::from_ref(rty))
             {
                 return sig.return_type.clone();
             }

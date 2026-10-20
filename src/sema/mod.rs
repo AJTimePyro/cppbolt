@@ -108,6 +108,7 @@ pub struct Sema {
     pub current_func_name: Option<String>,
     pub open_namespaces: Vec<String>,
     pub using_decls: HashMap<String, String>,
+    depth: crate::depth::DepthCounter,
 }
 
 impl Sema {
@@ -131,6 +132,7 @@ impl Sema {
             current_func_name: None,
             open_namespaces: Vec::new(),
             using_decls: HashMap::new(),
+            depth: crate::depth::DepthCounter::new(),
         };
 
         // Built-in printf: variadic, mangled as "printf"

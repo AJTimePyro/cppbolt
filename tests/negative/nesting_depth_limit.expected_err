@@ -1,1 +1,1 @@
-tests/negative/nesting_depth_limit.cpp:1:277: error: Nesting depth exceeds the supported limit
+tests/negative/nesting_depth_limit.cpp:1:2019: error: Nesting depth exceeds the supported limit

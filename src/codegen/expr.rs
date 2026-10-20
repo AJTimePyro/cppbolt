@@ -7,6 +7,9 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let _guard = self
+            .depth
+            .enter(self.sema.current_line, self.sema.current_col)?;
         match expr {
             Expr::IntLiteral(val, ty) => {
                 if *ty == Type::LongLong || *ty == Type::UnsignedLongLong {

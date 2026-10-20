@@ -7,7 +7,6 @@ use crate::lexer::{Token, TokenKind};
 use crate::name::QualifiedName;
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
 
 mod atom;
 mod decl;
@@ -19,24 +18,9 @@ mod structs;
 mod types;
 mod unsupported;
 
-/// Maximum recursion depth accepted by the parser. This is deliberately far
-/// below the native and WebAssembly stack limits so deeply nested sources get a
-/// diagnostic instead of a stack overflow. It leaves room for roughly 255
-/// nested parentheses after the surrounding declaration and statement frames.
-const MAX_NESTING: usize = 258;
-
 /// Decrements the parser's nesting counter when a recursive parse completes,
 /// including on an early error return.
-struct NestingGuard {
-    depth: Rc<Cell<usize>>,
-}
-
-impl Drop for NestingGuard {
-    fn drop(&mut self) {
-        let depth = self.depth.get();
-        self.depth.set(depth.saturating_sub(1));
-    }
-}
+use crate::depth::DepthCounter;
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -46,7 +30,7 @@ pub struct Parser {
     pub type_aliases: HashMap<String, Type>,
     pub current_namespace: Vec<String>,
     pub open_namespaces: Vec<String>,
-    nesting: Rc<Cell<usize>>,
+    nesting: DepthCounter,
     nesting_exceeded: Cell<bool>,
 }
 
@@ -98,27 +82,20 @@ impl Parser {
             type_aliases,
             current_namespace: Vec::new(),
             open_namespaces: Vec::new(),
-            nesting: Rc::new(Cell::new(0)),
+            nesting: DepthCounter::new(),
             nesting_exceeded: Cell::new(false),
         }
     }
 
     /// Reserves one nesting level for the duration of a recursive parse.
-    fn enter_nesting(&self) -> Result<NestingGuard, CompileError> {
-        let depth = self.nesting.get() + 1;
-        if depth > MAX_NESTING {
-            self.nesting_exceeded.set(true);
-            return Err(CompileError::new(
-                "Nesting depth exceeds the supported limit",
-                self.current().line,
-                self.current().col,
-            )
-            .with_kind(ErrorKind::Syntax));
+    fn enter_nesting(&self) -> Result<crate::depth::DepthGuard, CompileError> {
+        match self.nesting.enter(self.current().line, self.current().col) {
+            Ok(guard) => Ok(guard),
+            Err(error) => {
+                self.nesting_exceeded.set(true);
+                Err(error)
+            }
         }
-        self.nesting.set(depth);
-        Ok(NestingGuard {
-            depth: Rc::clone(&self.nesting),
-        })
     }
 
     pub(super) fn current(&self) -> &Token {
@@ -218,11 +195,11 @@ mod tests {
     }
 
     #[test]
-    pub(super) fn accepts_255_nested_parentheses() -> Result<(), Box<dyn std::error::Error>> {
+    pub(super) fn accepts_1000_nested_parentheses() -> Result<(), Box<dyn std::error::Error>> {
         let source = format!(
             "int main() {{ return {}1{}; }}",
-            "(".repeat(255),
-            ")".repeat(255)
+            "(".repeat(1000),
+            ")".repeat(1000)
         );
         let parsed = spawn_parse(source)?
             .join()
@@ -232,11 +209,11 @@ mod tests {
     }
 
     #[test]
-    pub(super) fn rejects_256_nested_parentheses() -> Result<(), Box<dyn std::error::Error>> {
+    pub(super) fn rejects_nesting_beyond_limit() -> Result<(), Box<dyn std::error::Error>> {
         let source = format!(
             "int main() {{ return {}1{}; }}",
-            "(".repeat(256),
-            ")".repeat(256)
+            "(".repeat(2500),
+            ")".repeat(2500)
         );
         let parsed = spawn_parse(source)?
             .join()
@@ -255,7 +232,7 @@ mod tests {
         source: String,
     ) -> Result<std::thread::JoinHandle<Result<Program, CompileError>>, std::io::Error> {
         std::thread::Builder::new()
-            .stack_size(32 * 1024 * 1024)
+            .stack_size(256 * 1024 * 1024)
             .spawn(move || {
                 let tokens = Lexer::new(&source).tokenize()?;
                 Parser::new(tokens).parse_program()

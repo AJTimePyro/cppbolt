@@ -62,6 +62,7 @@ pub struct Codegen<'a> {
     pub global_inits: Vec<(String, Type, Option<Expr>)>,
     pub global_dtors: Vec<(String, u32)>,
     pub func_table_indices: HashMap<String, u32>,
+    depth: crate::depth::DepthCounter,
 }
 
 impl<'a> Codegen<'a> {
@@ -130,6 +131,7 @@ impl<'a> Codegen<'a> {
             global_dtors: Vec::new(),
             func_table_indices: HashMap::new(),
             max_memory_mb: 256,
+            depth: crate::depth::DepthCounter::new(),
         }
     }
 }

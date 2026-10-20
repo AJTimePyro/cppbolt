@@ -1,0 +1,6 @@
+# The compiler itself is recursive over the AST. The WebAssembly-hosted build
+# gets an 8 MiB linear-memory stack so the shared depth limit (src/depth.rs) is
+# the same natively and on the wasm host. The native CLI runs the compiler on a
+# 64 MiB thread (src/main.rs) for the same reason.
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "link-arg=-zstack-size=8388608"]

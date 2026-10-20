@@ -140,15 +140,32 @@ fn main() {
         }
     }
 
-    match compile_with_provider(&source, &input_path, max_memory_mb, &includes) {
+    // Run the compiler on a thread with a large stack so the shared depth
+    // limit is governed by the wasm-hosted build's measured threshold rather
+    // than by the platform's default native stack.
+    let compiled = match std::thread::Builder::new()
+        .name("cppwasm-compile".to_string())
+        .stack_size(64 * 1024 * 1024)
+        .spawn(move || {
+            compile_with_provider(&source, &input_path, max_memory_mb, &includes)
+                .map_err(|error| error.to_string())
+        }) {
+        Ok(handle) => match handle.join() {
+            Ok(result) => result,
+            Err(_) => Err("compiler thread panicked".to_string()),
+        },
+        Err(error) => Err(format!("cannot start compiler thread: {error}")),
+    };
+
+    match compiled {
         Ok(wasm_bytes) => {
             if let Err(error) = fs::write(&output_file, wasm_bytes) {
                 eprintln!("Error writing '{}': {}", output_file, error);
                 process::exit(1);
             }
         }
-        Err(error) => {
-            eprintln!("{}", error);
+        Err(message) => {
+            eprintln!("{}", message);
             process::exit(1);
         }
     }

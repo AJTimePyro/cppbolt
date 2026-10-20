@@ -32,12 +32,13 @@ impl<'a> Codegen<'a> {
             StmtKind::VarDecl { init: Some(e), .. } => self.collect_strings_expr(e),
             StmtKind::Expr(e) => self.collect_strings_expr(e),
             StmtKind::If {
-                cond,
-                then_stmt,
+                branches,
                 else_stmt,
             } => {
-                self.collect_strings_expr(cond);
-                self.collect_strings_stmt(then_stmt);
+                for (cond, then_stmt) in branches {
+                    self.collect_strings_expr(cond);
+                    self.collect_strings_stmt(then_stmt);
+                }
                 if let Some(el) = else_stmt {
                     self.collect_strings_stmt(el);
                 }
@@ -77,52 +78,53 @@ impl<'a> Codegen<'a> {
     }
 
     pub(super) fn collect_strings_expr(&mut self, expr: &Expr) {
-        match expr {
-            Expr::StringLiteral(s) => {
-                if !self.string_table.contains_key(s) {
-                    let offset = self.next_data_offset;
-                    let mut bytes = s.as_bytes().to_vec();
-                    bytes.push(0);
-                    self.next_data_offset += (bytes.len() as u32 + 3) & !3;
-                    self.string_table.insert(s.clone(), offset);
+        let mut stack = vec![expr];
+        while let Some(expr) = stack.pop() {
+            let mut children: Vec<&Expr> = Vec::new();
+            match expr {
+                Expr::StringLiteral(s) => {
+                    if !self.string_table.contains_key(s) {
+                        let offset = self.next_data_offset;
+                        let mut bytes = s.as_bytes().to_vec();
+                        bytes.push(0);
+                        self.next_data_offset += (bytes.len() as u32 + 3) & !3;
+                        self.string_table.insert(s.clone(), offset);
+                    }
                 }
-            }
-            Expr::Binary { left, right, .. } => {
-                self.collect_strings_expr(left);
-                self.collect_strings_expr(right);
-            }
-            Expr::Unary { expr, .. } => self.collect_strings_expr(expr),
-            Expr::Assign { target, value } | Expr::CompoundAssign { target, value, .. } => {
-                self.collect_strings_expr(target);
-                self.collect_strings_expr(value);
-            }
-            Expr::Call { callee, args } => {
-                self.collect_strings_expr(callee);
-                for a in args {
-                    self.collect_strings_expr(a);
+                Expr::Binary { left, right, .. } => {
+                    children.push(left);
+                    children.push(right);
                 }
-            }
-            Expr::ArraySubscript { array, index } => {
-                self.collect_strings_expr(array);
-                self.collect_strings_expr(index);
-            }
-            Expr::MemberAccess { object, .. } => self.collect_strings_expr(object),
-            Expr::Ternary {
-                cond,
-                then_expr,
-                else_expr,
-            } => {
-                self.collect_strings_expr(cond);
-                self.collect_strings_expr(then_expr);
-                self.collect_strings_expr(else_expr);
-            }
-            Expr::Cast { expr, .. } => self.collect_strings_expr(expr),
-            Expr::InitializerList(list) => {
-                for item in list {
-                    self.collect_strings_expr(item);
+                Expr::Unary { expr, .. } => children.push(expr),
+                Expr::Assign { target, value } | Expr::CompoundAssign { target, value, .. } => {
+                    children.push(target);
+                    children.push(value);
                 }
+                Expr::Call { callee, args } => {
+                    children.push(callee);
+                    children.extend(args.iter());
+                }
+                Expr::ArraySubscript { array, index } => {
+                    children.push(array);
+                    children.push(index);
+                }
+                Expr::MemberAccess { object, .. } => children.push(object),
+                Expr::Ternary {
+                    cond,
+                    then_expr,
+                    else_expr,
+                } => {
+                    children.push(cond);
+                    children.push(then_expr);
+                    children.push(else_expr);
+                }
+                Expr::Cast { expr, .. } => children.push(expr),
+                Expr::InitializerList(list) => children.extend(list.iter()),
+                _ => {}
             }
-            _ => {}
+            // Preserve the original left-to-right visit order so string data
+            // offsets stay stable.
+            stack.extend(children.into_iter().rev());
         }
     }
 }

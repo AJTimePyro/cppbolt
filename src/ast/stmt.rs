@@ -27,8 +27,8 @@ pub enum StmtKind {
     },
     Expr(Expr),
     If {
-        cond: Expr,
-        then_stmt: Box<Stmt>,
+        /// The `if` arm followed by every `else if` arm, in source order.
+        branches: Vec<(Expr, Box<Stmt>)>,
         else_stmt: Option<Box<Stmt>>,
     },
     While {

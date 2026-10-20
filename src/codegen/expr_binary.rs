@@ -65,12 +65,55 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let Expr::Binary { op, left, right } = expr else {
+        let Expr::Binary { .. } = expr else {
             return Err(crate::internal_error!(0, 0, "unexpected expression kind"));
         };
 
-        let lty = self.get_expr_type(left, ctx);
-        let rty = self.get_expr_type(right, ctx);
+        // Walk the left-associative spine iteratively. The leftmost operand is
+        // compiled once; every later node consumes the previous result that is
+        // already on the stack, so a chain of `n` terms uses a constant number
+        // of Rust stack frames.
+        let mut spine: Vec<(&BinaryOp, &Expr)> = Vec::new();
+        let mut cur = expr;
+        while let Expr::Binary { op, left, right } = cur {
+            if matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
+                break;
+            }
+            spine.push((op, right));
+            cur = left;
+        }
+        let base = cur;
+
+        let mut lty = self.get_expr_type(base, ctx);
+        for index in (0..spine.len()).rev() {
+            let (op, right) = spine[index];
+            let rty = self.get_expr_type(right, ctx);
+            let left = if index + 1 == spine.len() {
+                Some(base)
+            } else {
+                None
+            };
+            self.emit_binary_node(op, &lty, &rty, left, right, ctx, code)?;
+            lty = self
+                .binary_result_type(op, &lty, &rty)
+                .strip_reference()
+                .clone();
+        }
+
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn emit_binary_node(
+        &mut self,
+        op: &BinaryOp,
+        lty: &Type,
+        rty: &Type,
+        left: Option<&Expr>,
+        right: &Expr,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
         let pointer_diff_elem = if *op == BinaryOp::Sub
             && lty.decay_array().is_pointer()
             && rty.decay_array().is_pointer()
@@ -95,9 +138,11 @@ impl<'a> Codegen<'a> {
             let clean_lty = lty.strip_const();
             if let Type::Struct(sname) = clean_lty
                 && let Some((m_idx, sig)) =
-                    self.find_method(sname, op_name, std::slice::from_ref(&rty))
+                    self.find_method(sname, op_name, std::slice::from_ref(rty))
             {
-                self.compile_lvalue_addr(left, ctx, code)?;
+                if let Some(left) = left {
+                    self.compile_lvalue_addr(left, ctx, code)?;
+                }
                 let param_ty = sig.param_types.get(1);
                 let is_r = param_ty.map(|p| p.is_reference()).unwrap_or(false);
                 if is_r {
@@ -105,7 +150,7 @@ impl<'a> Codegen<'a> {
                 } else {
                     self.compile_expr(right, ctx, code)?;
                     if let Some(pty) = param_ty {
-                        self.emit_conversion(&rty, pty, code);
+                        self.emit_conversion(rty, pty, code);
                     }
                 }
                 code.push(OP_CALL);
@@ -126,11 +171,15 @@ impl<'a> Codegen<'a> {
                 let param_ty0 = sig.param_types.first();
                 let is_r0 = param_ty0.map(|p| p.is_reference()).unwrap_or(false);
                 if is_r0 {
-                    self.compile_lvalue_addr(left, ctx, code)?;
+                    if let Some(left) = left {
+                        self.compile_lvalue_addr(left, ctx, code)?;
+                    }
                 } else {
-                    self.compile_expr(left, ctx, code)?;
+                    if let Some(left) = left {
+                        self.compile_expr(left, ctx, code)?;
+                    }
                     if let Some(pty) = param_ty0 {
-                        self.emit_conversion(&lty, pty, code);
+                        self.emit_conversion(lty, pty, code);
                     }
                 }
                 let param_ty1 = sig.param_types.get(1);
@@ -140,7 +189,7 @@ impl<'a> Codegen<'a> {
                 } else {
                     self.compile_expr(right, ctx, code)?;
                     if let Some(pty) = param_ty1 {
-                        self.emit_conversion(&rty, pty, code);
+                        self.emit_conversion(rty, pty, code);
                     }
                 }
                 code.push(OP_CALL);
@@ -166,7 +215,9 @@ impl<'a> Codegen<'a> {
         } else {
             arithmetic_common_type(lraw, rraw)
         };
-        self.compile_expr(left, ctx, code)?;
+        if let Some(left) = left {
+            self.compile_expr(left, ctx, code)?;
+        }
         Self::emit_operand_conversion(lraw, &common_ty, code);
         self.compile_expr(right, ctx, code)?;
         Self::emit_operand_conversion(rraw, &common_ty, code);

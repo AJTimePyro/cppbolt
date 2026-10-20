@@ -143,7 +143,7 @@ impl<'a> Codegen<'a> {
                         write_i32(code, goffset as i32);
                         code.push(OP_CALL);
                         write_u32(code, ctor_idx);
-                    } else if let Some(Expr::InitializerList(list)) = init_opt
+                    } else if let Some(Expr::InitializerList(list)) = init_opt.as_ref()
                         && let Some(layout) = self.sema.struct_layouts.get(sname)
                     {
                         for (i, item) in list.iter().enumerate() {
@@ -158,7 +158,7 @@ impl<'a> Codegen<'a> {
                         }
                     }
                 } else if let Type::Array(elem_ty, _) = gty.strip_const() {
-                    if let Some(Expr::InitializerList(list)) = init_opt {
+                    if let Some(Expr::InitializerList(list)) = init_opt.as_ref() {
                         let elem_size = elem_ty.size_of(&self.sema.struct_sizes) as u32;
                         for (i, item) in list.iter().enumerate() {
                             let item_offset = (goffset + (i as u32) * elem_size) as i32;

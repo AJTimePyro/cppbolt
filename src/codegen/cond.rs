@@ -43,72 +43,72 @@ impl<'a> Codegen<'a> {
     }
 
     pub(super) fn check_expr_has_indirect_call(&self, expr: &Expr) -> bool {
-        match expr {
-            Expr::Call { callee, args } => {
-                if let Expr::Identifier(name) = &**callee {
-                    if !self.sema.functions.contains_key(name)
-                        && name != "printf"
-                        && name != "std::printf"
-                        && !name.ends_with("::printf")
-                        && name != "malloc"
-                        && name != "free"
-                    {
+        let mut stack = vec![expr];
+        while let Some(expr) = stack.pop() {
+            match expr {
+                Expr::Call { callee, args } => {
+                    if let Expr::Identifier(name) = &**callee {
+                        if !self.sema.functions.contains_key(name)
+                            && name != "printf"
+                            && name != "std::printf"
+                            && !name.ends_with("::printf")
+                            && name != "malloc"
+                            && name != "free"
+                        {
+                            return true;
+                        }
+                    } else {
                         return true;
                     }
-                } else {
-                    return true;
+                    stack.extend(args.iter());
                 }
-                args.iter().any(|a| self.check_expr_has_indirect_call(a))
+                Expr::Binary { left, right, .. } => {
+                    stack.push(left);
+                    stack.push(right);
+                }
+                Expr::Unary { expr, .. } | Expr::Cast { expr, .. } => stack.push(expr),
+                Expr::MemberAccess { object, .. } => stack.push(object),
+                Expr::ArraySubscript { array, index } => {
+                    stack.push(array);
+                    stack.push(index);
+                }
+                Expr::InitializerList(list) => stack.extend(list.iter()),
+                Expr::Assign { target, value } => {
+                    stack.push(target);
+                    stack.push(value);
+                }
+                Expr::CompoundAssign { target, value, .. } => {
+                    stack.push(target);
+                    stack.push(value);
+                }
+                Expr::Ternary {
+                    cond,
+                    then_expr,
+                    else_expr,
+                } => {
+                    stack.push(cond);
+                    stack.push(then_expr);
+                    stack.push(else_expr);
+                }
+                Expr::New {
+                    args,
+                    array_size,
+                    placement,
+                    ..
+                } => {
+                    stack.extend(args.iter());
+                    if let Some(size) = array_size {
+                        stack.push(size);
+                    }
+                    if let Some(place) = placement {
+                        stack.push(place);
+                    }
+                }
+                Expr::Delete { expr, .. } => stack.push(expr),
+                _ => {}
             }
-            Expr::Binary { left, right, .. } => {
-                self.check_expr_has_indirect_call(left) || self.check_expr_has_indirect_call(right)
-            }
-            Expr::Unary { expr, .. } => self.check_expr_has_indirect_call(expr),
-            Expr::MemberAccess { object, .. } => self.check_expr_has_indirect_call(object),
-            Expr::ArraySubscript { array, index } => {
-                self.check_expr_has_indirect_call(array) || self.check_expr_has_indirect_call(index)
-            }
-            Expr::InitializerList(list) => {
-                list.iter().any(|a| self.check_expr_has_indirect_call(a))
-            }
-            Expr::Assign { target, value } => {
-                self.check_expr_has_indirect_call(target)
-                    || self.check_expr_has_indirect_call(value)
-            }
-            Expr::CompoundAssign { target, value, .. } => {
-                self.check_expr_has_indirect_call(target)
-                    || self.check_expr_has_indirect_call(value)
-            }
-            Expr::Ternary {
-                cond,
-                then_expr,
-                else_expr,
-            } => {
-                self.check_expr_has_indirect_call(cond)
-                    || self.check_expr_has_indirect_call(then_expr)
-                    || self.check_expr_has_indirect_call(else_expr)
-            }
-            Expr::Cast { expr, .. } => self.check_expr_has_indirect_call(expr),
-            Expr::New {
-                args,
-                array_size,
-                placement,
-                ..
-            } => {
-                args.iter()
-                    .any(|arg| self.check_expr_has_indirect_call(arg))
-                    || array_size
-                        .as_ref()
-                        .map(|size| self.check_expr_has_indirect_call(size))
-                        .unwrap_or(false)
-                    || placement
-                        .as_ref()
-                        .map(|place| self.check_expr_has_indirect_call(place))
-                        .unwrap_or(false)
-            }
-            Expr::Delete { expr, .. } => self.check_expr_has_indirect_call(expr),
-            _ => false,
         }
+        false
     }
 
     pub(super) fn check_stmt_has_indirect_call(&self, stmt: &Stmt) -> bool {
@@ -120,16 +120,16 @@ impl<'a> Codegen<'a> {
                 .unwrap_or(false),
             StmtKind::Compound(stmts) => stmts.iter().any(|s| self.check_stmt_has_indirect_call(s)),
             StmtKind::If {
-                cond,
-                then_stmt,
+                branches,
                 else_stmt,
             } => {
-                self.check_expr_has_indirect_call(cond)
-                    || self.check_stmt_has_indirect_call(then_stmt)
-                    || else_stmt
-                        .as_ref()
-                        .map(|s| self.check_stmt_has_indirect_call(s))
-                        .unwrap_or(false)
+                branches.iter().any(|(cond, then_stmt)| {
+                    self.check_expr_has_indirect_call(cond)
+                        || self.check_stmt_has_indirect_call(then_stmt)
+                }) || else_stmt
+                    .as_ref()
+                    .map(|s| self.check_stmt_has_indirect_call(s))
+                    .unwrap_or(false)
             }
             StmtKind::While { cond, body } | StmtKind::DoWhile { cond, body } => {
                 self.check_expr_has_indirect_call(cond) || self.check_stmt_has_indirect_call(body)

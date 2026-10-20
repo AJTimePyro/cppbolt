@@ -7,6 +7,7 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let _guard = self.depth.enter(stmt.line, stmt.col)?;
         match &stmt.kind {
             StmtKind::Compound(stmts) => {
                 ctx.enter_scope();
@@ -28,24 +29,33 @@ impl<'a> Codegen<'a> {
                 self.emit_clean_temporaries(ctx, code);
             }
             StmtKind::If {
-                cond,
-                then_stmt,
+                branches,
                 else_stmt,
             } => {
-                self.compile_cond(cond, ctx, code)?;
-                self.emit_clean_temporaries(ctx, code);
-                code.push(OP_IF);
-                code.push(0x40);
-                self.current_block_depth += 1;
-                self.compile_stmt(then_stmt, ctx, code)?;
+                // Emit the chain as nested `if` blocks without recursing once
+                // per branch, matching the byte-for-byte output of the former
+                // nested `if / else / if` representation.
+                for (index, (cond, then_stmt)) in branches.iter().enumerate() {
+                    self.compile_cond(cond, ctx, code)?;
+                    self.emit_clean_temporaries(ctx, code);
+                    code.push(OP_IF);
+                    code.push(0x40);
+                    self.current_block_depth += 1;
+                    self.compile_stmt(then_stmt, ctx, code)?;
+
+                    if index + 1 < branches.len() || else_stmt.is_some() {
+                        code.push(OP_ELSE);
+                    }
+                }
 
                 if let Some(else_s) = else_stmt {
-                    code.push(OP_ELSE);
                     self.compile_stmt(else_s, ctx, code)?;
                 }
 
-                code.push(OP_END);
-                self.current_block_depth -= 1;
+                for _ in branches {
+                    code.push(OP_END);
+                    self.current_block_depth -= 1;
+                }
             }
             StmtKind::While { cond, body } => {
                 code.push(OP_BLOCK);

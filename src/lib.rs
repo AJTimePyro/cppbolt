@@ -7,6 +7,7 @@
 
 pub(crate) mod ast;
 pub(crate) mod codegen;
+pub(crate) mod depth;
 pub(crate) mod diagnostics;
 pub mod ffi;
 pub(crate) mod lexer;

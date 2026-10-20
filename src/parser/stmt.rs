@@ -223,22 +223,37 @@ impl Parser {
 
     pub(super) fn parse_if_stmt(&mut self) -> Result<Stmt, CompileError> {
         let tok = self.current().clone();
-        self.advance();
-        self.expect(TokenKind::LParen)?;
-        let cond = self.parse_expr()?;
-        self.expect(TokenKind::RParen)?;
-        let then_stmt = Box::new(self.parse_stmt()?);
-        let else_stmt = if self.peek() == &TokenKind::KwElse {
+        // Parse `else if` chains iteratively so an arbitrarily long chain costs
+        // one parser frame, not one frame per branch.
+        let mut branches = Vec::new();
+        loop {
             self.advance();
-            Some(Box::new(self.parse_stmt()?))
-        } else {
-            None
-        };
+            self.expect(TokenKind::LParen)?;
+            let cond = self.parse_expr()?;
+            self.expect(TokenKind::RParen)?;
+            let then_stmt = Box::new(self.parse_stmt()?);
+            branches.push((cond, then_stmt));
+
+            if self.peek() != &TokenKind::KwElse {
+                break;
+            }
+            self.advance();
+            if self.peek() != &TokenKind::KwIf {
+                let else_stmt = Box::new(self.parse_stmt()?);
+                return Ok(Stmt::new(
+                    StmtKind::If {
+                        branches,
+                        else_stmt: Some(else_stmt),
+                    },
+                    tok.line,
+                    tok.col,
+                ));
+            }
+        }
         Ok(Stmt::new(
             StmtKind::If {
-                cond,
-                then_stmt,
-                else_stmt,
+                branches,
+                else_stmt: None,
             },
             tok.line,
             tok.col,
