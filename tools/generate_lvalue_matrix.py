@@ -201,7 +201,7 @@ def generate_file(target_cpp, expected_file, is_heldout):
 
 def main():
     generate_file("tests/c_basics/lvalue_matrix.cpp", "tests/c_basics/lvalue_matrix.expected", False)
-    generate_file("tests/c_basics_heldout/lvalue_matrix.cpp", "tests/c_basics_heldout/lvalue_matrix.expected", True)
+    generate_file("tests/c_basics_variant/lvalue_matrix.cpp", "tests/c_basics_variant/lvalue_matrix.expected", True)
 
 if __name__ == "__main__":
     main()

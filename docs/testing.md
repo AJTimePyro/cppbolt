@@ -36,5 +36,5 @@ The oracle replays every positive test through g++ and clang++ and compares nati
 instrumentation, and both compilers; the allocator-specific `free_list_reuse` outputs are reported as skips.
 Emitted modules should also be validated with a WebAssembly validator when one is installed.
 
-Held-out tests must differ in logic, names, or values; padding-only copies are not evidence of independent
+Variant tests must differ in logic, names, or values; padding-only copies are not evidence of independent
 coverage.

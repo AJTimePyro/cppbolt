@@ -1,23 +1,23 @@
-//! Held-out corpus checks used by the runner's regression gate.
+//! Variant and independent corpus checks used by the runner's regression gate.
 
 use super::cpp_files;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::Path;
 
-/// Rejects a `*_heldout` test whose source matches its main counterpart once
+/// Rejects a `*_variant` test whose source matches its main counterpart once
 /// comments and whitespace are removed, and warns when only identifiers and
 /// literals differ.
-pub(super) fn check_heldout_tests() -> usize {
+pub(super) fn check_variant_tests() -> usize {
     const PAIRS: &[(&str, &str)] = &[
-        ("c_basics_heldout", "c_basics"),
-        ("classes_oop_heldout", "classes_oop"),
-        ("memory_model_heldout", "memory_model"),
-        ("mini_stl_heldout", "mini_stl"),
+        ("c_basics_variant", "c_basics"),
+        ("classes_oop_variant", "classes_oop"),
+        ("memory_model_variant", "memory_model"),
+        ("mini_stl_variant", "mini_stl"),
     ];
     let mut failures = 0;
-    for (held, main) in PAIRS {
-        let directory = Path::new("tests").join(held);
+    for (variant, main) in PAIRS {
+        let directory = Path::new("tests").join(variant);
         let files = match cpp_files(&directory) {
             Ok(files) => files,
             Err(_) => continue,
@@ -30,19 +30,40 @@ pub(super) fn check_heldout_tests() -> usize {
             if !main_path.exists() {
                 continue;
             }
-            let held_source = fs::read_to_string(&path).unwrap_or_default();
+            let variant_source = fs::read_to_string(&path).unwrap_or_default();
             let main_source = fs::read_to_string(&main_path).unwrap_or_default();
-            if normalized_source(&held_source) == normalized_source(&main_source) {
-                eprintln!("[FAIL] duplicate held-out test: {held}/{name}");
-                failures += 1;
-            } else if skeleton_source(&held_source) == skeleton_source(&main_source) {
-                eprintln!(
-                    "warning: held-out test {held}/{name} differs only in identifiers or literals"
-                );
+            match classify_pair(&main_source, &variant_source) {
+                PairClass::Identical => {
+                    eprintln!("[FAIL] duplicate variant test: {variant}/{name}");
+                    failures += 1;
+                }
+                PairClass::IdentifierOrLiteralOnly => {
+                    eprintln!(
+                        "warning: variant test {variant}/{name} differs only in identifiers or literals"
+                    );
+                }
+                PairClass::Distinct => {}
             }
         }
     }
     failures
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum PairClass {
+    Identical,
+    IdentifierOrLiteralOnly,
+    Distinct,
+}
+
+fn classify_pair(main: &str, variant: &str) -> PairClass {
+    if normalized_source(main) == normalized_source(variant) {
+        PairClass::Identical
+    } else if skeleton_source(main) == skeleton_source(variant) {
+        PairClass::IdentifierOrLiteralOnly
+    } else {
+        PairClass::Distinct
+    }
 }
 
 /// Removes comments, then all whitespace, so formatting differences vanish.
@@ -152,4 +173,41 @@ fn strip_comments(text: &str) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PairClass, classify_pair};
+
+    #[test]
+    fn identical_sources_fail_the_variant_check() {
+        assert_eq!(
+            classify_pair("int main() { return 0; }", "int main() { return 0; }"),
+            PairClass::Identical
+        );
+    }
+
+    #[test]
+    fn whitespace_and_comment_only_changes_fail_the_variant_check() {
+        let main = "int main() {\n  // explain\n  return 0;\n}\n";
+        let variant = "int main(){/* same */return 0;}";
+        assert_eq!(classify_pair(main, variant), PairClass::Identical);
+    }
+
+    #[test]
+    fn identifier_and_literal_only_changes_warn() {
+        let main = "int main() { int x = 1; return x; }";
+        let variant = "int main() { int value = 2; return value; }";
+        assert_eq!(
+            classify_pair(main, variant),
+            PairClass::IdentifierOrLiteralOnly
+        );
+    }
+
+    #[test]
+    fn structural_changes_pass_silently() {
+        let main = "int main() { int x = 1; return x; }";
+        let variant = "int main() { int x = 1; x += 1; return x; }";
+        assert_eq!(classify_pair(main, variant), PairClass::Distinct);
+    }
 }

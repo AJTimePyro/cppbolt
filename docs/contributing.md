@@ -6,4 +6,4 @@ environment, threads, and browser APIs.
 
 Prefer typed enums and IDs over strings, `Result` over panics, and small modules with one responsibility.
 Comments should explain invariants or ABI decisions, not narrate changes. Do not add unsupported language
-features as part of cleanup work. New tests must prove behavior and held-out variants must not be padding copies.
+features as part of cleanup work. New tests must prove behavior and variant tests must not be padding copies.

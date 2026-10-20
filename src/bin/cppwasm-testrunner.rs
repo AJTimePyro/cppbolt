@@ -21,15 +21,15 @@ use std::process::{Command, ExitCode, Stdio};
 
 const FEATURES: &[&str] = &[
     "c_basics",
-    "c_basics_heldout",
+    "c_basics_variant",
     "classes_oop",
-    "classes_oop_heldout",
+    "classes_oop_variant",
     "memory_model",
-    "memory_model_heldout",
+    "memory_model_variant",
     "runtime_trap",
     "templates_operators",
     "mini_stl",
-    "mini_stl_heldout",
+    "mini_stl_variant",
 ];
 
 const NODE_RUNNER: &str = r#"
@@ -136,7 +136,7 @@ fn main() -> ExitCode {
     );
 
     let manifest_failures = check_manifest(&reports, reference_mode);
-    let duplicate_failures = checks::check_heldout_tests();
+    let duplicate_failures = checks::check_variant_tests();
     let _ = fs::remove_dir_all(&paths.work);
     if manifest_failures == 0 && duplicate_failures == 0 && executed == on_disk && failed == 0 {
         ExitCode::SUCCESS
@@ -145,7 +145,7 @@ fn main() -> ExitCode {
             eprintln!("{manifest_failures} PASSING manifest entries did not pass");
         }
         if duplicate_failures > 0 {
-            eprintln!("{duplicate_failures} held-out tests duplicate their main counterpart");
+            eprintln!("{duplicate_failures} variant tests duplicate their main counterpart");
         }
         ExitCode::FAILURE
     }
