@@ -6,6 +6,9 @@
 #[path = "cppwasm-testrunner/checks.rs"]
 mod checks;
 
+#[path = "cppwasm-testrunner/golden.rs"]
+mod golden;
+
 #[path = "cppwasm-testrunner/oracle.rs"]
 mod oracle;
 
@@ -70,6 +73,22 @@ fn main() -> ExitCode {
     let first = args.next();
     if first.as_deref() == Some("--oracle") {
         return oracle::run_oracle(args.next().as_deref());
+    }
+    if matches!(first.as_deref(), Some("--golden") | Some("--check-golden")) {
+        let mode = if first.as_deref() == Some("--golden") {
+            golden::Mode::Write
+        } else {
+            golden::Mode::Check
+        };
+        let Some(manifest) = args.next() else {
+            eprintln!("Usage: cppwasm-testrunner --golden|--check-golden <manifest> [compiler]");
+            return ExitCode::FAILURE;
+        };
+        let compiler = args
+            .next()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("target/release/cppwasm-cli"));
+        return golden::run(mode, Path::new(&manifest), compiler);
     }
     let compiler = first
         .map(PathBuf::from)
