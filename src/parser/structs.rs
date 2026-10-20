@@ -57,14 +57,23 @@ impl Parser {
         if self.peek() == &TokenKind::Colon {
             self.advance();
             loop {
-                if matches!(
-                    self.peek(),
-                    TokenKind::KwPublic
-                        | TokenKind::KwPrivate
-                        | TokenKind::KwProtected
-                        | TokenKind::KwVirtual
-                ) {
-                    self.advance();
+                loop {
+                    if self.peek() == &TokenKind::KwVirtual {
+                        let token = self.current();
+                        return Err(CompileError::new(
+                            "virtual inheritance is not supported",
+                            token.line,
+                            token.col,
+                        ));
+                    }
+                    if matches!(
+                        self.peek(),
+                        TokenKind::KwPublic | TokenKind::KwPrivate | TokenKind::KwProtected
+                    ) {
+                        self.advance();
+                    } else {
+                        break;
+                    }
                 }
                 match self.advance().kind.clone() {
                     TokenKind::Ident(base) => base_classes.push(base),

@@ -1,0 +1,1 @@
+tests/negative/virtual_inheritance.cpp:5:25: error: virtual inheritance is not supported
