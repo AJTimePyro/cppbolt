@@ -45,6 +45,33 @@ parameter matrices mechanically and are explicitly not independent.
 Some variants are generated rather than hand-written. For example, `tools/generate_lvalue_matrix.py` emits the
 large `lvalue_matrix` pair; see [Generated differential tests](#generated-differential-tests).
 
+### Name/value variants (anti-hardcoding only)
+
+The runner warns for the following 19 pairs because their sources differ only in identifiers or literals. They
+are retained as anti-hardcoding checks and are not independent or specification evidence; no separate
+independent tests were added for them.
+
+- `c_basics_variant/large_local_frame`
+- `c_basics_variant/lvalue_matrix`
+- `c_basics_variant/rounding_ties`
+- `classes_oop_variant/explicit_dtor`
+- `classes_oop_variant/global_static_objects`
+- `classes_oop_variant/implicit_copy_member_objects`
+- `classes_oop_variant/placement_new`
+- `classes_oop_variant/prvalue_elision`
+- `classes_oop_variant/pure_virtual`
+- `classes_oop_variant/raii_loop_break`
+- `classes_oop_variant/return_val_dtor_order`
+- `classes_oop_variant/self_assignment`
+- `classes_oop_variant/short_circuit_temporaries`
+- `classes_oop_variant/single_inheritance`
+- `classes_oop_variant/vcall_base_ctor_dtor`
+- `classes_oop_variant/virtual_destructor`
+- `classes_oop_variant/virtual_dispatch_hierarchy`
+- `memory_model_variant/free_list_reuse`
+- `mini_stl_variant/stream_edge_cases`
+
+
 ### Independent tests
 
 `tests/independent` is authored without access to the compiler source. Authors work from the C++17
