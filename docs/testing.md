@@ -4,6 +4,13 @@ The runner discovers tests by directory and reports on-disk, executed, passed, a
 group. Positive tests contain `.cpp` and `.expected` files; optional `.input` supplies stdin. Runtime-trap
 groups assert a nonzero Wasm trap. Negative tests contain `.expected_err` diagnostics.
 
+The command line is `cppwasm-testrunner [compiler|ref] [group]`. The first argument selects the compiler
+(``ref`` uses `g++`), and the second selects a single positive group; otherwise all positive groups and the
+negative suite run. A filtered invocation only checks `tests/PASSING.txt` entries, and passing tests, for the
+groups it actually ran. The process exits 0 only when every selected test passed, every selected passing test is
+listed in `tests/PASSING.txt`, the variant gate passes, and the independent manifest matches. It exits 1 for a
+test failure, an unlisted passing test, a missing manifest test, a variant-gate failure, or a manifest mismatch.
+
 The current baseline is 218 tests, 218 executed, 199 passed, and 19 expected failures: six template tests and
 thirteen container/algorithm tests. Reproduce it with:
 
@@ -85,7 +92,7 @@ intentional.
 The runner can also replay a group through the native reference path:
 
 ```sh
-cargo run --bin cppwasm-testrunner -- c_basics ref
+cargo run --bin cppwasm-testrunner -- ref c_basics
 ```
 
 Reference mode compiles each positive test with `g++ -std=c++17 -O0` and compares its output with the checked-in

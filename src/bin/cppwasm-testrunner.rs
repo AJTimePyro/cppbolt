@@ -147,7 +147,7 @@ fn main() -> ExitCode {
         ExitCode::SUCCESS
     } else {
         if manifest_failures > 0 {
-            eprintln!("{manifest_failures} PASSING manifest entries did not pass");
+            eprintln!("{manifest_failures} PASSING manifest violations");
         }
         if duplicate_failures > 0 {
             eprintln!("{duplicate_failures} variant tests duplicate their main counterpart");
@@ -377,6 +377,10 @@ fn check_manifest(reports: &[Report], reference_mode: bool) -> usize {
             return 1;
         }
     };
+    let ran_features: BTreeSet<&str> = reports
+        .iter()
+        .map(|report| report.feature.as_str())
+        .collect();
     let passed: BTreeSet<(&str, &str)> = reports
         .iter()
         .flat_map(|report| {
@@ -387,7 +391,8 @@ fn check_manifest(reports: &[Report], reference_mode: bool) -> usize {
         })
         .collect();
 
-    let mut missing = 0;
+    let mut failures = 0;
+    let mut listed: BTreeSet<(&str, &str)> = BTreeSet::new();
     for line in manifest.lines() {
         let line = line.trim();
         if line.is_empty() {
@@ -395,16 +400,29 @@ fn check_manifest(reports: &[Report], reference_mode: bool) -> usize {
         }
         let Some((feature, name)) = line.split_once('/') else {
             eprintln!("malformed PASSING entry: {line}");
-            missing += 1;
+            failures += 1;
             continue;
         };
+        listed.insert((feature, name));
+        if !ran_features.contains(feature) {
+            continue;
+        }
         if reference_mode && feature == "negative" {
             continue;
         }
         if !passed.contains(&(feature, name)) {
             eprintln!("PASSING entry did not pass: {line}");
-            missing += 1;
+            failures += 1;
         }
     }
-    missing
+
+    // A test that passes but is absent from the manifest is invisible to the
+    // baseline. Only inspect groups that this invocation actually ran.
+    for (feature, name) in &passed {
+        if !listed.contains(&(*feature, *name)) {
+            eprintln!("passing test missing from tests/PASSING.txt: {feature}/{name}");
+            failures += 1;
+        }
+    }
+    failures
 }
