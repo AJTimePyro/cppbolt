@@ -166,97 +166,10 @@ impl<'a> Codegen<'a> {
         } else {
             arithmetic_common_type(lraw, rraw)
         };
-        let is_double = common_ty == Type::Double;
-        let is_fp = matches!(common_ty, Type::Float | Type::Double);
-        let is_i64 = matches!(common_ty, Type::LongLong | Type::UnsignedLongLong);
-        let is_unsigned = !common_ty.is_signed();
-
         self.compile_expr(left, ctx, code)?;
-        if is_double {
-            if matches!(lraw, Type::Float) {
-                code.push(OP_F64_PROMOTE_F32);
-            } else if matches!(lraw, Type::LongLong | Type::UnsignedLongLong) {
-                code.push(if lraw.is_signed() {
-                    OP_F64_CONVERT_I64_S
-                } else {
-                    OP_F64_CONVERT_I64_U
-                });
-            } else if lraw.is_integer() {
-                code.push(if lraw.is_signed() {
-                    OP_F64_CONVERT_I32_S
-                } else {
-                    OP_F64_CONVERT_I32_U
-                });
-            }
-        } else if is_fp {
-            if matches!(lraw, Type::LongLong | Type::UnsignedLongLong) {
-                code.push(if lraw.is_signed() {
-                    OP_F32_CONVERT_I64_S
-                } else {
-                    OP_F32_CONVERT_I64_U
-                });
-            } else if lraw.is_integer() {
-                code.push(if lraw.is_signed() {
-                    OP_F32_CONVERT_I32_S
-                } else {
-                    OP_F32_CONVERT_I32_U
-                });
-            }
-        } else if is_i64 {
-            if !matches!(lraw, Type::LongLong | Type::UnsignedLongLong) {
-                code.push(if lraw.is_signed() {
-                    OP_I64_EXTEND_I32_S
-                } else {
-                    OP_I64_EXTEND_I32_U
-                });
-            }
-        } else if matches!(lraw, Type::LongLong | Type::UnsignedLongLong) {
-            code.push(OP_I32_WRAP_I64);
-        }
-
+        Self::emit_operand_conversion(lraw, &common_ty, code);
         self.compile_expr(right, ctx, code)?;
-        if is_double {
-            if matches!(rraw, Type::Float) {
-                code.push(OP_F64_PROMOTE_F32);
-            } else if matches!(rraw, Type::LongLong | Type::UnsignedLongLong) {
-                code.push(if rraw.is_signed() {
-                    OP_F64_CONVERT_I64_S
-                } else {
-                    OP_F64_CONVERT_I64_U
-                });
-            } else if rraw.is_integer() {
-                code.push(if rraw.is_signed() {
-                    OP_F64_CONVERT_I32_S
-                } else {
-                    OP_F64_CONVERT_I32_U
-                });
-            }
-        } else if is_fp {
-            if matches!(rraw, Type::LongLong | Type::UnsignedLongLong) {
-                code.push(if rraw.is_signed() {
-                    OP_F32_CONVERT_I64_S
-                } else {
-                    OP_F32_CONVERT_I64_U
-                });
-            } else if rraw.is_integer() {
-                code.push(if rraw.is_signed() {
-                    OP_F32_CONVERT_I32_S
-                } else {
-                    OP_F32_CONVERT_I32_U
-                });
-            }
-        } else if is_i64 {
-            if !matches!(rraw, Type::LongLong | Type::UnsignedLongLong) {
-                code.push(if rraw.is_signed() {
-                    OP_I64_EXTEND_I32_S
-                } else {
-                    OP_I64_EXTEND_I32_U
-                });
-            }
-        } else if matches!(rraw, Type::LongLong | Type::UnsignedLongLong) {
-            code.push(OP_I32_WRAP_I64);
-        }
-
+        Self::emit_operand_conversion(rraw, &common_ty, code);
         if (lty.is_pointer() || lty.is_array())
             && rty.is_integer()
             && (op == &BinaryOp::Add || op == &BinaryOp::Sub)
@@ -286,6 +199,70 @@ impl<'a> Codegen<'a> {
             write_u32(code, ctx.scratch1);
         }
 
+        Self::emit_binary_op(op, &common_ty, code);
+        if let Some(elem_size) = pointer_diff_elem
+            && elem_size > 1
+        {
+            code.push(OP_I32_CONST);
+            write_i32(code, elem_size);
+            code.push(OP_I32_DIV_S);
+        }
+
+        Ok(())
+    }
+
+    fn emit_operand_conversion(raw: &Type, common_ty: &Type, code: &mut Vec<u8>) {
+        let is_double = *common_ty == Type::Double;
+        let is_fp = matches!(common_ty, Type::Float | Type::Double);
+        let is_i64 = matches!(common_ty, Type::LongLong | Type::UnsignedLongLong);
+        if is_double {
+            if matches!(raw, Type::Float) {
+                code.push(OP_F64_PROMOTE_F32);
+            } else if matches!(raw, Type::LongLong | Type::UnsignedLongLong) {
+                code.push(if raw.is_signed() {
+                    OP_F64_CONVERT_I64_S
+                } else {
+                    OP_F64_CONVERT_I64_U
+                });
+            } else if raw.is_integer() {
+                code.push(if raw.is_signed() {
+                    OP_F64_CONVERT_I32_S
+                } else {
+                    OP_F64_CONVERT_I32_U
+                });
+            }
+        } else if is_fp {
+            if matches!(raw, Type::LongLong | Type::UnsignedLongLong) {
+                code.push(if raw.is_signed() {
+                    OP_F32_CONVERT_I64_S
+                } else {
+                    OP_F32_CONVERT_I64_U
+                });
+            } else if raw.is_integer() {
+                code.push(if raw.is_signed() {
+                    OP_F32_CONVERT_I32_S
+                } else {
+                    OP_F32_CONVERT_I32_U
+                });
+            }
+        } else if is_i64 {
+            if !matches!(raw, Type::LongLong | Type::UnsignedLongLong) {
+                code.push(if raw.is_signed() {
+                    OP_I64_EXTEND_I32_S
+                } else {
+                    OP_I64_EXTEND_I32_U
+                });
+            }
+        } else if matches!(raw, Type::LongLong | Type::UnsignedLongLong) {
+            code.push(OP_I32_WRAP_I64);
+        }
+    }
+
+    fn emit_binary_op(op: &BinaryOp, common_ty: &Type, code: &mut Vec<u8>) {
+        let is_double = *common_ty == Type::Double;
+        let is_fp = matches!(common_ty, Type::Float | Type::Double);
+        let is_i64 = matches!(common_ty, Type::LongLong | Type::UnsignedLongLong);
+        let is_unsigned = !common_ty.is_signed();
         if is_double {
             match op {
                 BinaryOp::Add => code.push(OP_F64_ADD),
@@ -416,15 +393,5 @@ impl<'a> Codegen<'a> {
                 }
             }
         }
-
-        if let Some(elem_size) = pointer_diff_elem
-            && elem_size > 1
-        {
-            code.push(OP_I32_CONST);
-            write_i32(code, elem_size);
-            code.push(OP_I32_DIV_S);
-        }
-
-        Ok(())
     }
 }
