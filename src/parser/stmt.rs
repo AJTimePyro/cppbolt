@@ -176,6 +176,7 @@ impl Parser {
                 Type::Struct(name) => Some(Expr::Call {
                     callee: Box::new(Expr::Identifier(name.clone())),
                     args,
+                    pos: ExprPos::new(tok.line, tok.col),
                 }),
                 // For every other type it stays a parenthesized list.
                 _ => Some(Expr::InitializerList(args)),

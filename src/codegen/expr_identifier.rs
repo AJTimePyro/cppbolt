@@ -8,7 +8,11 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let Expr::Identifier(name) = expr else {
-            return Err(crate::internal_error!(0, 0, "unexpected expression kind"));
+            return Err(crate::internal_error!(
+                self.current_line,
+                self.current_col,
+                "unexpected expression kind"
+            ));
         };
 
         if let Some(&(offset, ref ty)) = ctx.static_var_offsets.get(name) {
@@ -60,8 +64,8 @@ impl<'a> Codegen<'a> {
         }
         Err(CompileError::new(
             format!("Undefined variable '{}'", name),
-            1,
-            1,
+            self.current_line,
+            self.current_col,
         ))
     }
 
@@ -149,8 +153,8 @@ impl<'a> Codegen<'a> {
         }
         Err(CompileError::new(
             format!("Undefined variable '{}'", name),
-            1,
-            1,
+            self.current_line,
+            self.current_col,
         ))
     }
 

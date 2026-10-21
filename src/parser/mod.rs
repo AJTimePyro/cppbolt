@@ -151,6 +151,12 @@ impl Parser {
         &self.current().kind
     }
 
+    /// The position of the token the parser is looking at.
+    pub(super) fn current_pos(&self) -> ExprPos {
+        let token = self.current();
+        ExprPos::new(token.line, token.col)
+    }
+
     pub(super) fn peek_ahead(&self, n: usize) -> &TokenKind {
         self.tokens
             .get(self.pos + n)

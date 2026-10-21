@@ -10,7 +10,11 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let StmtKind::Return(expr_opt) = &stmt.kind else {
-            return Err(crate::internal_error!(0, 0, "unexpected statement kind"));
+            return Err(crate::internal_error!(
+                self.current_line,
+                self.current_col,
+                "unexpected statement kind"
+            ));
         };
 
         if let Some(expr) = expr_opt {

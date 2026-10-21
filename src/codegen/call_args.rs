@@ -44,16 +44,16 @@ impl<'a> Codegen<'a> {
         let Some(param_ty) = param_ty else {
             return Err(CompileError::new(
                 "internal compiler error: missing reference parameter type",
-                1,
-                1,
+                self.current_line,
+                self.current_col,
             )
             .with_kind(crate::diagnostics::ErrorKind::Internal));
         };
         let Some(clean_p) = param_ty.deref_type() else {
             return Err(CompileError::new(
                 "internal compiler error: invalid reference parameter type",
-                1,
-                1,
+                self.current_line,
+                self.current_col,
             )
             .with_kind(crate::diagnostics::ErrorKind::Internal));
         };
@@ -99,8 +99,9 @@ impl<'a> Codegen<'a> {
             type_name: psname,
             ctor_idx,
         } = ctor;
-        let size = i32::try_from(clean_p.size_of(&self.sema.struct_sizes))
-            .map_err(|_| crate::internal_error!(0, 0, "object is too large"))?;
+        let size = i32::try_from(clean_p.size_of(&self.sema.struct_sizes)).map_err(|_| {
+            crate::internal_error!(self.current_line, self.current_col, "object is too large")
+        })?;
         let temp_ptr_slot = ctx.alloc_frame(4, 4)?;
         code.push(OP_I32_CONST);
         write_i32(code, size);
@@ -184,8 +185,9 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let size = i32::try_from(self.sema.struct_sizes.get(sname).copied().unwrap_or(4))
-            .map_err(|_| crate::internal_error!(0, 0, "object is too large"))?;
+        let size = i32::try_from(self.sema.struct_sizes.get(sname).copied().unwrap_or(4)).map_err(
+            |_| crate::internal_error!(self.current_line, self.current_col, "object is too large"),
+        )?;
         let temp_ptr_slot = ctx.alloc_frame(4, 4)?;
         code.push(OP_I32_CONST);
         write_i32(code, size);

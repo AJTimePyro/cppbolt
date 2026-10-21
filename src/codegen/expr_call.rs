@@ -10,8 +10,12 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let Expr::Call { callee, args } = expr else {
-            return Err(crate::internal_error!(0, 0, "unexpected expression kind"));
+        let Expr::Call { callee, args, .. } = expr else {
+            return Err(crate::internal_error!(
+                self.current_line,
+                self.current_col,
+                "unexpected expression kind"
+            ));
         };
 
         let mut arg_types = Vec::new();
@@ -24,6 +28,7 @@ impl<'a> Codegen<'a> {
                 object,
                 member,
                 is_arrow,
+                ..
             } => self.compile_member_call(
                 MemberAccess {
                     object,
@@ -113,8 +118,8 @@ impl<'a> Codegen<'a> {
         }
         Err(CompileError::new(
             format!("Undefined function '{}'", name),
-            1,
-            1,
+            self.current_line,
+            self.current_col,
         ))
     }
 
@@ -129,8 +134,8 @@ impl<'a> Codegen<'a> {
         if args.len() != 1 {
             return Err(CompileError::new(
                 format!("{} expects one argument", name),
-                1,
-                1,
+                self.current_line,
+                self.current_col,
             ));
         }
         self.compile_expr(&args[0], ctx, code)?;
@@ -219,8 +224,8 @@ impl<'a> Codegen<'a> {
         }
         Err(CompileError::new(
             format!("Undefined function '{}'", name),
-            1,
-            1,
+            self.current_line,
+            self.current_col,
         ))
     }
 
@@ -234,8 +239,9 @@ impl<'a> Codegen<'a> {
     ) -> Result<(), CompileError> {
         // A struct-valued call such as `Item(args)` produces a prvalue
         // in a heap temporary; the caller materializes and cleans it up.
-        let size = i32::try_from(self.sema.struct_layouts[name].size)
-            .map_err(|_| crate::internal_error!(0, 0, "object is too large"))?;
+        let size = i32::try_from(self.sema.struct_layouts[name].size).map_err(|_| {
+            crate::internal_error!(self.current_line, self.current_col, "object is too large")
+        })?;
         let temp_ptr_slot = ctx.alloc_frame(4, 4)?;
         code.push(OP_I32_CONST);
         write_i32(code, size);
@@ -336,6 +342,7 @@ impl<'a> Codegen<'a> {
         if let Expr::Unary {
             op: UnaryOp::Deref,
             expr,
+            ..
         } = callee
         {
             self.compile_expr(expr, ctx, code)?;

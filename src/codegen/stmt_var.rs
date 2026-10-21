@@ -14,7 +14,11 @@ impl<'a> Codegen<'a> {
             is_static,
         } = &stmt.kind
         else {
-            return Err(crate::internal_error!(0, 0, "unexpected statement kind"));
+            return Err(crate::internal_error!(
+                self.current_line,
+                self.current_col,
+                "unexpected statement kind"
+            ));
         };
 
         if *is_static {
@@ -190,7 +194,7 @@ impl<'a> Codegen<'a> {
                     code,
                 )?;
             }
-            Expr::Call { callee, args } if matches!(&**callee, Expr::Identifier(cname) if cname == sname) =>
+            Expr::Call { callee, args, .. } if matches!(&**callee, Expr::Identifier(cname) if cname == sname) =>
             {
                 self.compile_struct_constructor_call(sname, args, offset, ctx, code)?;
             }
@@ -332,8 +336,8 @@ impl<'a> Codegen<'a> {
                         "Cannot initialize struct \x27{}\x27 with value of type {:?}",
                         sname, init_ty
                     ),
-                    1,
-                    1,
+                    self.current_line,
+                    self.current_col,
                 ));
             }
         }

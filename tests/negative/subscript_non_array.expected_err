@@ -1,0 +1,1 @@
+tests/negative/subscript_non_array.cpp:3:18: error: Subscripted value is not an array or pointer: int

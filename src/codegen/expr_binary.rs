@@ -11,9 +11,14 @@ impl<'a> Codegen<'a> {
             op: BinaryOp::LogicalAnd,
             left,
             right,
+            ..
         } = expr
         else {
-            return Err(crate::internal_error!(0, 0, "unexpected expression kind"));
+            return Err(crate::internal_error!(
+                self.current_line,
+                self.current_col,
+                "unexpected expression kind"
+            ));
         };
 
         self.compile_cond(left, ctx, code)?;
@@ -40,9 +45,14 @@ impl<'a> Codegen<'a> {
             op: BinaryOp::LogicalOr,
             left,
             right,
+            ..
         } = expr
         else {
-            return Err(crate::internal_error!(0, 0, "unexpected expression kind"));
+            return Err(crate::internal_error!(
+                self.current_line,
+                self.current_col,
+                "unexpected expression kind"
+            ));
         };
 
         self.compile_cond(left, ctx, code)?;
@@ -66,7 +76,11 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let Expr::Binary { .. } = expr else {
-            return Err(crate::internal_error!(0, 0, "unexpected expression kind"));
+            return Err(crate::internal_error!(
+                self.current_line,
+                self.current_col,
+                "unexpected expression kind"
+            ));
         };
 
         // Walk the left-associative spine iteratively. The leftmost operand is
@@ -75,7 +89,10 @@ impl<'a> Codegen<'a> {
         // of Rust stack frames.
         let mut spine: Vec<(&BinaryOp, &Expr)> = Vec::new();
         let mut cur = expr;
-        while let Expr::Binary { op, left, right } = cur {
+        while let Expr::Binary {
+            op, left, right, ..
+        } = cur
+        {
             if matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
                 break;
             }
@@ -209,7 +226,11 @@ impl<'a> Codegen<'a> {
                 .unwrap_or(1)
                 .max(1);
             Ok(Some(i32::try_from(size).map_err(|_| {
-                crate::internal_error!(0, 0, "pointer element is too large")
+                crate::internal_error!(
+                    self.current_line,
+                    self.current_col,
+                    "pointer element is too large"
+                )
             })?))
         } else {
             Ok(None)

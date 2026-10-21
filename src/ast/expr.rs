@@ -1,5 +1,23 @@
 use super::types::Type;
 
+/// The source position of an expression node.
+///
+/// The position is the line and column of the first token of the expression
+/// in the preprocessed text.  The preprocessor maps it back to the file and
+/// line of the original source, so a diagnostic inside a built-in header
+/// names the header.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ExprPos {
+    pub line: usize,
+    pub col: usize,
+}
+
+impl ExprPos {
+    pub const fn new(line: usize, col: usize) -> Self {
+        Self { line, col }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryOp {
     Add,
@@ -73,32 +91,39 @@ pub enum Expr {
         op: BinaryOp,
         left: Box<Expr>,
         right: Box<Expr>,
+        pos: ExprPos,
     },
     Unary {
         op: UnaryOp,
         expr: Box<Expr>,
+        pos: ExprPos,
     },
     Assign {
         target: Box<Expr>,
         value: Box<Expr>,
+        pos: ExprPos,
     },
     CompoundAssign {
         op: BinaryOp,
         target: Box<Expr>,
         value: Box<Expr>,
+        pos: ExprPos,
     },
     Call {
         callee: Box<Expr>,
         args: Vec<Expr>,
+        pos: ExprPos,
     },
     ArraySubscript {
         array: Box<Expr>,
         index: Box<Expr>,
+        pos: ExprPos,
     },
     MemberAccess {
         object: Box<Expr>,
         member: String,
         is_arrow: bool,
+        pos: ExprPos,
     },
     Ternary {
         cond: Box<Expr>,
@@ -152,7 +177,7 @@ fn take_expr_children(expr: &mut Expr, out: &mut Vec<Expr>) {
         Expr::Unary { expr, .. } | Expr::Cast { expr, .. } | Expr::SizeofExpr(expr) => {
             take_box(expr, out);
         }
-        Expr::Assign { target, value } => {
+        Expr::Assign { target, value, .. } => {
             take_box(target, out);
             take_box(value, out);
         }
@@ -160,11 +185,11 @@ fn take_expr_children(expr: &mut Expr, out: &mut Vec<Expr>) {
             take_box(target, out);
             take_box(value, out);
         }
-        Expr::Call { callee, args } => {
+        Expr::Call { callee, args, .. } => {
             take_box(callee, out);
             out.append(&mut std::mem::take(args));
         }
-        Expr::ArraySubscript { array, index } => {
+        Expr::ArraySubscript { array, index, .. } => {
             take_box(array, out);
             take_box(index, out);
         }

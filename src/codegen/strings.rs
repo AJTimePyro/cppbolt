@@ -96,15 +96,15 @@ impl<'a> Codegen<'a> {
                     children.push(right);
                 }
                 Expr::Unary { expr, .. } => children.push(expr),
-                Expr::Assign { target, value } | Expr::CompoundAssign { target, value, .. } => {
+                Expr::Assign { target, value, .. } | Expr::CompoundAssign { target, value, .. } => {
                     children.push(target);
                     children.push(value);
                 }
-                Expr::Call { callee, args } => {
+                Expr::Call { callee, args, .. } => {
                     children.push(callee);
                     children.extend(args.iter());
                 }
-                Expr::ArraySubscript { array, index } => {
+                Expr::ArraySubscript { array, index, .. } => {
                     children.push(array);
                     children.push(index);
                 }

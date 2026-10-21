@@ -13,17 +13,17 @@ fn check_expr_has_new_delete(expr: &Expr) -> bool {
                 stack.push(right);
             }
             Expr::Unary { expr, .. } | Expr::Cast { expr, .. } => stack.push(expr),
-            Expr::Call { callee, args } => {
+            Expr::Call { callee, args, .. } => {
                 stack.push(callee);
                 stack.extend(args.iter());
             }
             Expr::MemberAccess { object, .. } => stack.push(object),
-            Expr::ArraySubscript { array, index } => {
+            Expr::ArraySubscript { array, index, .. } => {
                 stack.push(array);
                 stack.push(index);
             }
             Expr::InitializerList(list) => stack.extend(list.iter()),
-            Expr::Assign { target, value } => {
+            Expr::Assign { target, value, .. } => {
                 stack.push(target);
                 stack.push(value);
             }
@@ -148,7 +148,7 @@ pub(super) fn collect_address_taken_expr(expr: &Expr, address_taken: &mut HashSe
     let mut stack = vec![expr];
     while let Some(expr) = stack.pop() {
         match expr {
-            Expr::Call { callee, args } => {
+            Expr::Call { callee, args, .. } => {
                 if !matches!(&**callee, Expr::Identifier(_)) {
                     stack.push(callee);
                 }
@@ -161,6 +161,7 @@ pub(super) fn collect_address_taken_expr(expr: &Expr, address_taken: &mut HashSe
             Expr::Unary {
                 op: UnaryOp::AddrOf,
                 expr,
+                ..
             } => {
                 if let Expr::Identifier(name) = &**expr {
                     address_taken.insert(name.clone());
@@ -173,11 +174,11 @@ pub(super) fn collect_address_taken_expr(expr: &Expr, address_taken: &mut HashSe
                 stack.push(left);
                 stack.push(right);
             }
-            Expr::Assign { target, value } | Expr::CompoundAssign { target, value, .. } => {
+            Expr::Assign { target, value, .. } | Expr::CompoundAssign { target, value, .. } => {
                 stack.push(target);
                 stack.push(value);
             }
-            Expr::ArraySubscript { array, index } => {
+            Expr::ArraySubscript { array, index, .. } => {
                 stack.push(array);
                 stack.push(index);
             }
@@ -265,11 +266,11 @@ fn collect_expr_calls(expr: &Expr, calls: &mut HashSet<String>) {
 
 fn collect_call_node<'a>(expr: &'a Expr, calls: &mut HashSet<String>, stack: &mut Vec<&'a Expr>) {
     match expr {
-        Expr::Call { callee, args } => collect_call_expr(callee, args, calls, stack),
+        Expr::Call { callee, args, .. } => collect_call_expr(callee, args, calls, stack),
         Expr::Identifier(name) => {
             calls.insert(name.clone());
         }
-        Expr::Unary { op, expr } => {
+        Expr::Unary { op, expr, .. } => {
             stack.push(expr);
             if matches!(op, UnaryOp::Not) {
                 calls.insert("operator!".to_string());
@@ -288,7 +289,9 @@ fn collect_call_node<'a>(expr: &'a Expr, calls: &mut HashSet<String>, stack: &mu
                 calls.insert("operator--".to_string());
             }
         }
-        Expr::Binary { op, left, right } => {
+        Expr::Binary {
+            op, left, right, ..
+        } => {
             stack.push(left);
             stack.push(right);
             if matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
@@ -299,17 +302,19 @@ fn collect_call_node<'a>(expr: &'a Expr, calls: &mut HashSet<String>, stack: &mu
                 calls.insert(format!("std::{}", op_name));
             }
         }
-        Expr::Assign { target, value } => {
+        Expr::Assign { target, value, .. } => {
             stack.push(target);
             stack.push(value);
             calls.insert("operator=".to_string());
         }
-        Expr::CompoundAssign { op, target, value } => {
+        Expr::CompoundAssign {
+            op, target, value, ..
+        } => {
             stack.push(target);
             stack.push(value);
             calls.insert(compound_assign_call_name(op));
         }
-        Expr::ArraySubscript { array, index } => {
+        Expr::ArraySubscript { array, index, .. } => {
             calls.insert("operator[]".to_string());
             stack.push(array);
             stack.push(index);

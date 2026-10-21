@@ -2,7 +2,7 @@ use super::*;
 
 impl Sema {
     pub(super) fn analyze_call(&mut self, expr: &mut Expr) -> Result<Type, CompileError> {
-        let Expr::Call { callee, args } = expr else {
+        let Expr::Call { callee, args, pos } = expr else {
             return Err(crate::internal_error!(
                 self.current_line,
                 self.current_col,
@@ -43,6 +43,7 @@ impl Sema {
                     object: Box::new(Expr::This),
                     member: name.to_string(),
                     is_arrow: true,
+                    pos: *pos,
                 };
             }
         }
@@ -64,7 +65,7 @@ impl Sema {
                     return Ok((**return_type).clone());
                 }
             }
-            return self.resolve_named_call(&name, args, &arg_types, callee);
+            return self.resolve_named_call(&name, args, &arg_types, callee, *pos);
         }
 
         // No named function matched: treat the callee as a function pointer.
@@ -193,6 +194,7 @@ impl Sema {
             object,
             member,
             is_arrow,
+            pos,
         } = &mut *callee
         {
             let obj_ty = self.analyze_expr(object.as_mut())?;
@@ -204,16 +206,16 @@ impl Sema {
                         _ => {
                             return Err(CompileError::new(
                                 "Arrow member access on non-struct pointer",
-                                self.current_line,
-                                self.current_col,
+                                pos.line,
+                                pos.col,
                             ));
                         }
                     }
                 } else {
                     return Err(CompileError::new(
                         "Arrow member access on non-pointer",
-                        self.current_line,
-                        self.current_col,
+                        pos.line,
+                        pos.col,
                     ));
                 }
             } else {
@@ -228,8 +230,8 @@ impl Sema {
                     _ => {
                         return Err(CompileError::new(
                             "Dot member access on non-struct",
-                            self.current_line,
-                            self.current_col,
+                            pos.line,
+                            pos.col,
                         ));
                     }
                 }
@@ -249,8 +251,8 @@ impl Sema {
             } else {
                 return Err(CompileError::new(
                     format!("No member named '{}' in struct '{}'", member, struct_name),
-                    self.current_line,
-                    self.current_col,
+                    pos.line,
+                    pos.col,
                 ));
             }
         }
@@ -263,6 +265,7 @@ impl Sema {
         args: &mut Vec<Expr>,
         arg_types: &[Type],
         callee: &mut Expr,
+        pos: ExprPos,
     ) -> Result<Type, CompileError> {
         // Overload resolution: exact matches score best, followed by
         // reference binding, arithmetic conversions, and user conversions.
@@ -311,14 +314,14 @@ impl Sema {
                     cand.param_types.len(),
                     args.len()
                 ),
-                self.current_line,
-                self.current_col,
+                pos.line,
+                pos.col,
             ));
         }
         Err(CompileError::new(
             format!("Undefined function '{}'", name),
-            self.current_line,
-            self.current_col,
+            pos.line,
+            pos.col,
         ))
     }
     /// Scores how well a candidate matches the argument types.

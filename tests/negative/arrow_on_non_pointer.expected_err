@@ -1,0 +1,1 @@
+tests/negative/arrow_on_non_pointer.cpp:3:18: error: Arrow member access on non-pointer

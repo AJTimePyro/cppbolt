@@ -12,8 +12,9 @@ impl Parser {
             TokenKind::KwSizeof => self.parse_sizeof_expr(),
             TokenKind::LParen => self.parse_parenthesized_expr(),
             _ => {
+                let start = self.current_pos();
                 let atom = self.parse_atom()?;
-                self.parse_postfix(atom)
+                self.parse_postfix(atom, start)
             }
         }
     }
@@ -30,11 +31,13 @@ impl Parser {
             TokenKind::MinusMinus => UnaryOp::PreDec,
             _ => return Ok(None),
         };
+        let pos = self.current_pos();
         self.advance();
         let expr = self.parse_prefix()?;
         Ok(Some(Expr::Unary {
             op,
             expr: Box::new(expr),
+            pos,
         }))
     }
 
@@ -137,6 +140,7 @@ impl Parser {
     fn parse_parenthesized_expr(&mut self) -> Result<Expr, CompileError> {
         // One parenthesis costs one level of the parenthesis budget.
         let _guard = self.enter_parenthesis()?;
+        let start = self.current_pos();
         // Check if cast: (int)x or (char)x
         if self.is_cast_ahead() {
             let saved_pos = self.pos;
@@ -160,14 +164,14 @@ impl Parser {
                     self.advance();
                     let expr = self.parse_expr()?;
                     self.expect(TokenKind::RParen)?;
-                    self.parse_postfix(expr)
+                    self.parse_postfix(expr, start)
                 }
             }
         } else {
             self.advance();
             let expr = self.parse_expr()?;
             self.expect(TokenKind::RParen)?;
-            self.parse_postfix(expr)
+            self.parse_postfix(expr, start)
         }
     }
 

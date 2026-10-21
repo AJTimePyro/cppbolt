@@ -1,0 +1,1 @@
+tests/negative/call_non_function.cpp:3:18: error: Undefined function 'value'

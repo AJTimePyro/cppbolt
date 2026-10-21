@@ -7,6 +7,12 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        // Lowering errors that cannot name an expression report the position
+        // of the statement being lowered.
+        self.current_line = stmt.line;
+        self.current_col = stmt.col;
+        ctx.line = stmt.line;
+        ctx.col = stmt.col;
         // A compound block has its own budget, so a nested `if` with its
         // block costs one statement level and one block level.
         if let StmtKind::Compound(stmts) = &stmt.kind {

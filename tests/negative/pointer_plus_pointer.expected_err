@@ -1,1 +1,1 @@
-tests/negative/pointer_plus_pointer.cpp:2:5: error: invalid operands to binary expression: two pointers cannot be added
+tests/negative/pointer_plus_pointer.cpp:2:21: error: invalid operands to binary expression: two pointers cannot be added

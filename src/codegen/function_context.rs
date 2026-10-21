@@ -51,6 +51,8 @@ impl<'a> Codegen<'a> {
             temp_objects: Vec::new(),
             current_class: class_name.map(str::to_string),
             current_func_name: f.name.clone(),
+            line: f.line,
+            col: f.col,
             return_type: f.return_type.clone(),
             is_dtor,
             is_reference_return: f.return_type.is_reference(),

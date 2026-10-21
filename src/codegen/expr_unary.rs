@@ -7,8 +7,12 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let Expr::Unary { op, expr } = expr else {
-            return Err(crate::internal_error!(0, 0, "unexpected expression kind"));
+        let Expr::Unary { op, expr, .. } = expr else {
+            return Err(crate::internal_error!(
+                self.current_line,
+                self.current_col,
+                "unexpected expression kind"
+            ));
         };
 
         let ty = self.get_expr_type(expr, ctx);

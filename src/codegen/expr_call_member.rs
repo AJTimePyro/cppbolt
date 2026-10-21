@@ -51,8 +51,8 @@ impl<'a> Codegen<'a> {
         } else {
             return Err(CompileError::new(
                 format!("Method '{}' not found in class '{}'", member, sname),
-                1,
-                1,
+                self.current_line,
+                self.current_col,
             ));
         }
         Ok(())
@@ -125,8 +125,8 @@ impl<'a> Codegen<'a> {
         else {
             return Err(CompileError::new(
                 format!("Method '{}' not found in class '{}'", member, sname),
-                1,
-                1,
+                self.current_line,
+                self.current_col,
             ));
         };
 

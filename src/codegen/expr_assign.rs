@@ -9,8 +9,12 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let Expr::Assign { target, value } = expr else {
-            return Err(crate::internal_error!(0, 0, "unexpected expression kind"));
+        let Expr::Assign { target, value, .. } = expr else {
+            return Err(crate::internal_error!(
+                self.current_line,
+                self.current_col,
+                "unexpected expression kind"
+            ));
         };
 
         let target_ty = self.get_expr_type(target, ctx);
@@ -219,8 +223,15 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let Expr::CompoundAssign { op, target, value } = expr else {
-            return Err(crate::internal_error!(0, 0, "unexpected expression kind"));
+        let Expr::CompoundAssign {
+            op, target, value, ..
+        } = expr
+        else {
+            return Err(crate::internal_error!(
+                self.current_line,
+                self.current_col,
+                "unexpected expression kind"
+            ));
         };
 
         let ty = self.get_expr_type(target, ctx);

@@ -124,7 +124,7 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<bool, CompileError> {
-        let Some(Expr::Call { callee, args }) = global.init.as_ref() else {
+        let Some(Expr::Call { callee, args, .. }) = global.init.as_ref() else {
             return Ok(false);
         };
         if !matches!(&**callee, Expr::Identifier(cname) if cname == sname) {

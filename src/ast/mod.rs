@@ -6,5 +6,5 @@ pub mod stmt;
 pub mod types;
 
 pub use decl::{Decl, FunctionDecl, Param, Program};
-pub use expr::{BinaryOp, Expr, UnaryOp};
+pub use expr::{BinaryOp, Expr, ExprPos, UnaryOp};
 pub use stmt::{Stmt, StmtKind};

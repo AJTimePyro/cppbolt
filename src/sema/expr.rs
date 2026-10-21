@@ -9,6 +9,21 @@ impl Sema {
         let ty = self.analyze_expr_raw(expr)?;
         Ok(ty.strip_reference().clone())
     }
+
+    /// Analyzes an expression and keeps a reference type.
+    ///
+    /// The caller needs the reference to tell an lvalue from a prvalue, so
+    /// the type is returned before the reference is dropped.
+    pub(super) fn analyze_expr_keeping_reference(
+        &mut self,
+        expr: &mut Expr,
+    ) -> Result<Type, CompileError> {
+        let _guard = self
+            .depth
+            .expressions()
+            .enter(self.current_line, self.current_col)?;
+        self.analyze_expr_raw(expr)
+    }
     pub(super) fn analyze_expr_raw(&mut self, expr: &mut Expr) -> Result<Type, CompileError> {
         match expr {
             Expr::IntLiteral(_, ty) => Ok(ty.clone()),
@@ -148,6 +163,7 @@ impl Sema {
                     object: Box::new(Expr::This),
                     member: name.to_string(),
                     is_arrow: true,
+                    pos: ExprPos::new(self.current_line, self.current_col),
                 };
                 Ok(fld.ty.clone())
             } else if let Some(var) = self.lookup_var(&format!("{}::{}", cls, name)) {

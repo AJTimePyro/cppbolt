@@ -91,7 +91,11 @@ impl Parser {
         Ok(id)
     }
 
-    pub(super) fn parse_postfix(&mut self, mut expr: Expr) -> Result<Expr, CompileError> {
+    pub(super) fn parse_postfix(
+        &mut self,
+        mut expr: Expr,
+        start: ExprPos,
+    ) -> Result<Expr, CompileError> {
         loop {
             match self.peek() {
                 TokenKind::LParen => {
@@ -100,6 +104,7 @@ impl Parser {
                     expr = Expr::Call {
                         callee: Box::new(expr),
                         args,
+                        pos: start,
                     };
                 }
                 TokenKind::LBracket => {
@@ -109,6 +114,7 @@ impl Parser {
                     expr = Expr::ArraySubscript {
                         array: Box::new(expr),
                         index: Box::new(index),
+                        pos: start,
                     };
                 }
                 TokenKind::Dot => {
@@ -118,6 +124,7 @@ impl Parser {
                         object: Box::new(expr),
                         member,
                         is_arrow: false,
+                        pos: start,
                     };
                 }
                 TokenKind::Arrow => {
@@ -127,6 +134,7 @@ impl Parser {
                         object: Box::new(expr),
                         member,
                         is_arrow: true,
+                        pos: start,
                     };
                 }
                 TokenKind::PlusPlus => {
@@ -134,6 +142,7 @@ impl Parser {
                     expr = Expr::Unary {
                         op: UnaryOp::PostInc,
                         expr: Box::new(expr),
+                        pos: start,
                     };
                 }
                 TokenKind::MinusMinus => {
@@ -141,6 +150,7 @@ impl Parser {
                     expr = Expr::Unary {
                         op: UnaryOp::PostDec,
                         expr: Box::new(expr),
+                        pos: start,
                     };
                 }
                 _ => break,

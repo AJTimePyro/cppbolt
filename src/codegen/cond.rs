@@ -46,7 +46,7 @@ impl<'a> Codegen<'a> {
         let mut stack = vec![expr];
         while let Some(expr) = stack.pop() {
             match expr {
-                Expr::Call { callee, args } => {
+                Expr::Call { callee, args, .. } => {
                     if let Expr::Identifier(name) = &**callee {
                         if !self.sema.functions.contains_key(name)
                             && name != "printf"
@@ -68,12 +68,12 @@ impl<'a> Codegen<'a> {
                 }
                 Expr::Unary { expr, .. } | Expr::Cast { expr, .. } => stack.push(expr),
                 Expr::MemberAccess { object, .. } => stack.push(object),
-                Expr::ArraySubscript { array, index } => {
+                Expr::ArraySubscript { array, index, .. } => {
                     stack.push(array);
                     stack.push(index);
                 }
                 Expr::InitializerList(list) => stack.extend(list.iter()),
-                Expr::Assign { target, value } => {
+                Expr::Assign { target, value, .. } => {
                     stack.push(target);
                     stack.push(value);
                 }

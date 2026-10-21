@@ -76,6 +76,12 @@ pub struct Codegen<'a> {
     pub global_inits: Vec<(String, Type, Option<Expr>)>,
     pub global_dtors: Vec<(String, u32)>,
     pub func_table_indices: HashMap<String, u32>,
+    /// The position of the statement being lowered.
+    ///
+    /// Lowering errors that cannot name an expression report this position,
+    /// so a diagnostic never points at a fabricated line and column.
+    pub current_line: usize,
+    pub current_col: usize,
     depth: crate::depth::DepthCounters,
 }
 
@@ -144,6 +150,8 @@ impl<'a> Codegen<'a> {
             global_inits: Vec::new(),
             global_dtors: Vec::new(),
             func_table_indices: HashMap::new(),
+            current_line: 1,
+            current_col: 1,
             max_memory_mb: 256,
             depth: crate::depth::DepthCounters::new(),
         }
@@ -198,6 +206,9 @@ pub struct FunctionContext {
     pub temp_objects: Vec<(String, u32, bool)>,
     pub current_class: Option<String>,
     pub current_func_name: String,
+    /// The position of the statement being lowered.
+    pub line: usize,
+    pub col: usize,
     pub return_type: Type,
     pub is_dtor: bool,
     pub is_reference_return: bool,
@@ -282,8 +293,10 @@ impl FunctionContext {
             .next_local_offset
             .checked_add(align - 1)
             .map(|value| value & !(align - 1))
-            .ok_or_else(frame_too_large)?;
-        self.next_local_offset = offset.checked_add(size).ok_or_else(frame_too_large)?;
+            .ok_or_else(|| frame_too_large(self.line, self.col))?;
+        self.next_local_offset = offset
+            .checked_add(size)
+            .ok_or_else(|| frame_too_large(self.line, self.col))?;
         Ok(offset)
     }
 
@@ -299,12 +312,13 @@ impl FunctionContext {
 
     /// Patches every emitted frame-size placeholder once the final size is known.
     pub fn patch_frame_sizes(&self, code: &mut [u8]) -> Result<(), CompileError> {
-        let value = u32::try_from(self.frame_size).map_err(|_| frame_too_large())?;
+        let value =
+            u32::try_from(self.frame_size).map_err(|_| frame_too_large(self.line, self.col))?;
         for &position in &self.frame_size_patches {
             let Some(immediate) = code.get_mut(position..position.saturating_add(5)) else {
                 return Err(crate::internal_error!(
-                    0,
-                    0,
+                    self.line,
+                    self.col,
                     "invalid frame-size patch position"
                 ));
             };
@@ -322,8 +336,9 @@ fn restore_binding<T>(bindings: &mut HashMap<String, T>, name: String, previous:
     }
 }
 
-fn frame_too_large() -> CompileError {
-    CompileError::new("stack frame is too large", 1, 1)
+/// Reports a stack frame that does not fit in the address space.
+fn frame_too_large(line: usize, col: usize) -> CompileError {
+    CompileError::new("stack frame is too large", line, col)
         .with_kind(crate::diagnostics::ErrorKind::Internal)
 }
 
@@ -374,6 +389,8 @@ mod tests {
             temp_objects: Vec::new(),
             current_class: None,
             current_func_name: "test".to_string(),
+            line: 1,
+            col: 1,
             return_type: Type::Void,
             is_dtor: false,
             is_reference_return: false,
@@ -455,6 +472,7 @@ mod tests {
         let expr = Expr::ArraySubscript {
             array: Box::new(Expr::Identifier("values".to_string())),
             index: Box::new(Expr::IntLiteral(3, Type::LongLong)),
+            pos: ExprPos::default(),
         };
         let mut code = Vec::new();
         assert!(

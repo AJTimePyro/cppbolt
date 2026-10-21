@@ -1,0 +1,1 @@
+tests/negative/dereference_non_pointer.cpp:3:18: error: Cannot dereference non-pointer type int

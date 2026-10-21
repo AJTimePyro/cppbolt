@@ -6,6 +6,7 @@ impl Sema {
             object,
             member,
             is_arrow,
+            pos,
         } = expr
         else {
             return Err(crate::internal_error!(
@@ -16,7 +17,7 @@ impl Sema {
         };
 
         let obj_ty = self.analyze_expr(object)?;
-        let struct_name = self.member_struct_name(&obj_ty, *is_arrow)?;
+        let struct_name = self.member_struct_name(&obj_ty, *is_arrow, *pos)?;
 
         if let Some(layout) = self.struct_layouts.get(&struct_name)
             && layout.private_members.contains(member)
@@ -30,8 +31,8 @@ impl Sema {
             if !in_class {
                 return Err(CompileError::new(
                     format!("'{}' is a private member of '{}'", member, struct_name),
-                    self.current_line,
-                    self.current_col,
+                    pos.line,
+                    pos.col,
                 ));
             }
         }
@@ -46,14 +47,19 @@ impl Sema {
         } else {
             Err(CompileError::new(
                 format!("No member named '{}' in struct '{}'", member, struct_name),
-                1,
-                1,
+                pos.line,
+                pos.col,
             ))
         }
     }
 
     /// Resolves the class of a member access target.
-    fn member_struct_name(&self, obj_ty: &Type, is_arrow: bool) -> Result<String, CompileError> {
+    fn member_struct_name(
+        &self,
+        obj_ty: &Type,
+        is_arrow: bool,
+        pos: ExprPos,
+    ) -> Result<String, CompileError> {
         let struct_name = if is_arrow {
             let stripped = obj_ty.strip_const();
             if let Type::Pointer(inner) | Type::Reference(inner) = stripped {
@@ -62,16 +68,16 @@ impl Sema {
                     _ => {
                         return Err(CompileError::new(
                             "Arrow member access on non-struct pointer",
-                            1,
-                            1,
+                            pos.line,
+                            pos.col,
                         ));
                     }
                 }
             } else {
                 return Err(CompileError::new(
                     "Arrow member access on non-pointer",
-                    1,
-                    1,
+                    pos.line,
+                    pos.col,
                 ));
             }
         } else {
@@ -84,7 +90,11 @@ impl Sema {
             match target_ty {
                 Type::Struct(s) => s.clone(),
                 _ => {
-                    return Err(CompileError::new("Dot member access on non-struct", 1, 1));
+                    return Err(CompileError::new(
+                        "Dot member access on non-struct",
+                        pos.line,
+                        pos.col,
+                    ));
                 }
             }
         };

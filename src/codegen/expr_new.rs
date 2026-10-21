@@ -19,7 +19,11 @@ impl<'a> Codegen<'a> {
             placement,
         } = expr
         else {
-            return Err(crate::internal_error!(0, 0, "unexpected expression kind"));
+            return Err(crate::internal_error!(
+                self.current_line,
+                self.current_col,
+                "unexpected expression kind"
+            ));
         };
 
         if let Some(place_expr) = placement {
@@ -106,10 +110,19 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let elem_size = i32::try_from(ty.size_of(&self.sema.struct_sizes))
-            .map_err(|_| crate::internal_error!(0, 0, "array element is too large"))?;
+        let elem_size = i32::try_from(ty.size_of(&self.sema.struct_sizes)).map_err(|_| {
+            crate::internal_error!(
+                self.current_line,
+                self.current_col,
+                "array element is too large"
+            )
+        })?;
         if elem_size <= 0 {
-            return Err(crate::internal_error!(0, 0, "array element has no size"));
+            return Err(crate::internal_error!(
+                self.current_line,
+                self.current_col,
+                "array element has no size"
+            ));
         }
         let has_struct = if let Type::Struct(sname) = ty.strip_const() {
             Some(sname.clone())
@@ -411,10 +424,15 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let size = i32::try_from(ty.size_of(&self.sema.struct_sizes))
-            .map_err(|_| crate::internal_error!(0, 0, "object is too large"))?;
+        let size = i32::try_from(ty.size_of(&self.sema.struct_sizes)).map_err(|_| {
+            crate::internal_error!(self.current_line, self.current_col, "object is too large")
+        })?;
         if size <= 0 {
-            return Err(crate::internal_error!(0, 0, "object has no size"));
+            return Err(crate::internal_error!(
+                self.current_line,
+                self.current_col,
+                "object has no size"
+            ));
         }
         let obj_slot = ctx.alloc_frame(4, 4)?;
         code.push(OP_I32_CONST);

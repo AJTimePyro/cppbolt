@@ -76,8 +76,13 @@ impl<'a> Codegen<'a> {
         // Copy parameter locals into the frame; the body addresses locals
         // relative to the frame pointer.
         for (i, p) in f.params.iter().enumerate() {
-            let psize = u32::try_from(p.ty.size_of(&self.sema.struct_sizes))
-                .map_err(|_| crate::internal_error!(0, 0, "parameter is too large"))?;
+            let psize = u32::try_from(p.ty.size_of(&self.sema.struct_sizes)).map_err(|_| {
+                crate::internal_error!(
+                    self.current_line,
+                    self.current_col,
+                    "parameter is too large"
+                )
+            })?;
             let palign = u32::try_from(p.ty.align_of(&self.sema.struct_aligns))
                 .unwrap_or(4)
                 .max(4);
@@ -93,8 +98,8 @@ impl<'a> Codegen<'a> {
                 let Some(scope) = ctx.scope_objects.last_mut() else {
                     return Err(CompileError::new(
                         "internal compiler error: missing object scope",
-                        1,
-                        1,
+                        self.current_line,
+                        self.current_col,
                     )
                     .with_kind(crate::diagnostics::ErrorKind::Internal));
                 };
@@ -121,9 +126,9 @@ impl<'a> Codegen<'a> {
             .next_local_offset
             .checked_add(15)
             .map(|size| size & !15)
-            .ok_or_else(frame_too_large)?;
+            .ok_or_else(|| frame_too_large(ctx.line, ctx.col))?;
         ctx.frame_size = i32::try_from(frame_size)
-            .map_err(|_| crate::internal_error!(0, 0, "frame too large"))?;
+            .map_err(|_| crate::internal_error!(ctx.line, ctx.col, "frame too large"))?;
 
         // Epilogue: restore stack pointer
         code.push(OP_LOCAL_GET);

@@ -13,7 +13,11 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let Expr::Delete { expr, is_array } = expr else {
-            return Err(crate::internal_error!(0, 0, "unexpected expression kind"));
+            return Err(crate::internal_error!(
+                self.current_line,
+                self.current_col,
+                "unexpected expression kind"
+            ));
         };
 
         let ty = self.get_expr_type(expr, ctx);
@@ -57,8 +61,13 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let elem_size = i32::try_from(inner.size_of(&self.sema.struct_sizes))
-            .map_err(|_| crate::internal_error!(0, 0, "array element is too large"))?;
+        let elem_size = i32::try_from(inner.size_of(&self.sema.struct_sizes)).map_err(|_| {
+            crate::internal_error!(
+                self.current_line,
+                self.current_col,
+                "array element is too large"
+            )
+        })?;
         let dtor_name = format!("{}_~{}", sname, sname);
         let dtor_idx = self.func_indices.get(&dtor_name).copied();
 

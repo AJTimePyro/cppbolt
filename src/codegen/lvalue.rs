@@ -8,7 +8,7 @@ impl<'a> Codegen<'a> {
                 op: UnaryOp::Deref, ..
             } => true,
             Expr::ArraySubscript { .. } => true,
-            Expr::Call { callee, args } => {
+            Expr::Call { callee, args, .. } => {
                 let arg_types: Vec<Type> =
                     args.iter().map(|a| self.get_expr_type(a, ctx)).collect();
                 if let Expr::Identifier(name) = &**callee {
@@ -40,14 +40,16 @@ impl<'a> Codegen<'a> {
             Expr::Unary {
                 op: UnaryOp::Deref,
                 expr,
+                ..
             } => self.compile_expr(expr, ctx, code),
-            Expr::ArraySubscript { array, index } => {
+            Expr::ArraySubscript { array, index, .. } => {
                 self.compile_lvalue_subscript(array, index, ctx, code)
             }
             Expr::MemberAccess {
                 object,
                 member,
                 is_arrow,
+                ..
             } => self.compile_lvalue_member(object, member, is_arrow, ctx, code),
             Expr::Call { .. }
             | Expr::Binary { .. }
@@ -122,8 +124,8 @@ impl<'a> Codegen<'a> {
         }
         Err(CompileError::new(
             format!("Undefined variable for lvalue: {}", name),
-            1,
-            1,
+            self.current_line,
+            self.current_col,
         ))
     }
 
@@ -152,8 +154,8 @@ impl<'a> Codegen<'a> {
         }
         Err(CompileError::new(
             format!("Undefined variable for lvalue: {}", name),
-            1,
-            1,
+            self.current_line,
+            self.current_col,
         ))
     }
 
@@ -283,8 +285,13 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let ty = self.get_expr_type(expr, ctx);
-        let size = u32::try_from(ty.size_of(&self.sema.struct_sizes))
-            .map_err(|_| crate::internal_error!(0, 0, "temporary is too large"))?;
+        let size = u32::try_from(ty.size_of(&self.sema.struct_sizes)).map_err(|_| {
+            crate::internal_error!(
+                self.current_line,
+                self.current_col,
+                "temporary is too large"
+            )
+        })?;
         let align = u32::try_from(ty.align_of(&self.sema.struct_aligns))
             .unwrap_or(4)
             .max(4);

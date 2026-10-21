@@ -1,0 +1,1 @@
+tests/negative/assign_to_rvalue.cpp:2:5: error: lvalue required as left operand of assignment

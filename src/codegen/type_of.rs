@@ -34,18 +34,19 @@ impl<'a> Codegen<'a> {
 
             Expr::Identifier(name) => self.type_of_identifier(name, ctx),
             Expr::Binary { .. } => self.type_of_binary_chain(expr, ctx),
-            Expr::Unary { op, expr } => self.type_of_unary(op, expr, ctx),
+            Expr::Unary { op, expr, .. } => self.type_of_unary(op, expr, ctx),
             Expr::Assign { target, .. } => self.get_expr_type(target, ctx),
-            Expr::CompoundAssign { op, target, value } => {
-                self.type_of_compound_assign(op, target, value, ctx)
-            }
+            Expr::CompoundAssign {
+                op, target, value, ..
+            } => self.type_of_compound_assign(op, target, value, ctx),
             Expr::Call { callee, .. } => self.type_of_call(callee, ctx),
             Expr::MemberAccess {
                 object,
                 member,
                 is_arrow,
+                ..
             } => self.type_of_member_access(object, member, *is_arrow, ctx),
-            Expr::ArraySubscript { array, index } => {
+            Expr::ArraySubscript { array, index, .. } => {
                 self.type_of_array_subscript(array, index, ctx)
             }
             Expr::Ternary {
@@ -110,7 +111,10 @@ impl<'a> Codegen<'a> {
         }
         let mut spine: Vec<(&BinaryOp, &Expr)> = Vec::new();
         let mut cur = expr;
-        while let Expr::Binary { op, left, right } = cur {
+        while let Expr::Binary {
+            op, left, right, ..
+        } = cur
+        {
             if matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
                 break;
             }
@@ -242,6 +246,7 @@ impl<'a> Codegen<'a> {
                 object,
                 member,
                 is_arrow,
+                ..
             } => self.type_of_member_call(object, member, is_arrow, ctx),
             _ => Type::Int,
         }

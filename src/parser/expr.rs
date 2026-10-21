@@ -7,6 +7,8 @@ impl Parser {
 
     pub(super) fn parse_expr_prec(&mut self, min_prec: u8) -> Result<Expr, CompileError> {
         let _guard = self.enter_expression()?;
+        // Every expression node records the position of its first token.
+        let start = self.current_pos();
         let mut lhs = self.parse_prefix()?;
 
         while let Some((op, prec, right_assoc)) = self.current_binary_op() {
@@ -23,15 +25,18 @@ impl Parser {
                     op: bop,
                     left: Box::new(lhs),
                     right: Box::new(rhs),
+                    pos: start,
                 },
                 BinaryOpChoice::Assign => Expr::Assign {
                     target: Box::new(lhs),
                     value: Box::new(rhs),
+                    pos: start,
                 },
                 BinaryOpChoice::Compound(bop) => Expr::CompoundAssign {
                     op: bop,
                     target: Box::new(lhs),
                     value: Box::new(rhs),
+                    pos: start,
                 },
             };
         }

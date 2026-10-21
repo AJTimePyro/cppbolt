@@ -1,0 +1,1 @@
+tests/negative/member_access_non_struct.cpp:3:18: error: Dot member access on non-struct
