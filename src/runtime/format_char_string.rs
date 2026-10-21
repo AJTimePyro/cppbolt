@@ -3,6 +3,12 @@ use crate::wasm::*;
 
 /// Emits the `%c` and `%s` conversions.
 pub(super) fn emit_char_string_conversion(code: &mut Vec<u8>, func_print_char: u32) {
+    emit_char_conversion(code, func_print_char);
+    emit_string_conversion(code, func_print_char);
+}
+
+/// Emits the `%c` conversion.
+fn emit_char_conversion(code: &mut Vec<u8>, func_print_char: u32) {
     // 'c' (99)
     code.push(OP_LOCAL_GET);
     write_u32(code, 2);
@@ -11,44 +17,9 @@ pub(super) fn emit_char_string_conversion(code: &mut Vec<u8>, func_print_char: u
     code.push(OP_I32_EQ);
     code.push(OP_IF);
     code.push(0x40);
-    // Load the character argument.
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 1);
-    code.push(OP_I32_LOAD);
-    write_u32(code, 2);
-    write_u32(code, 0);
-    code.push(OP_LOCAL_SET);
-    write_u32(code, 7);
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 1);
-    code.push(OP_I32_CONST);
-    write_i32(code, 4);
-    code.push(OP_I32_ADD);
-    code.push(OP_LOCAL_SET);
-    write_u32(code, 1);
+    emit_char_argument(code);
 
-    // Field width applies to %c; precision is ignored. The zero flag is also
-    // ignored, matching the native C library's space padding.
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 4);
-    code.push(OP_I32_CONST);
-    write_i32(code, 0);
-    code.push(OP_I32_GT_U);
-    code.push(OP_IF);
-    code.push(0x40);
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 4);
-    code.push(OP_I32_CONST);
-    write_i32(code, 1);
-    code.push(OP_I32_SUB);
-    code.push(OP_LOCAL_SET);
-    write_u32(code, 11);
-    code.push(OP_ELSE);
-    code.push(OP_I32_CONST);
-    write_i32(code, 0);
-    code.push(OP_LOCAL_SET);
-    write_u32(code, 11);
-    code.push(OP_END);
+    emit_char_width(code);
 
     // Right alignment pads before the character.
     code.push(OP_LOCAL_GET);
@@ -82,8 +53,51 @@ pub(super) fn emit_char_string_conversion(code: &mut Vec<u8>, func_print_char: u
     code.push(OP_BR);
     write_u32(code, 1);
     code.push(OP_END);
+}
 
-    emit_string_conversion(code, func_print_char);
+/// Loads the character argument of a `%c` conversion.
+fn emit_char_argument(code: &mut Vec<u8>) {
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 1);
+    code.push(OP_I32_LOAD);
+    write_u32(code, 2);
+    write_u32(code, 0);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 7);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 1);
+    code.push(OP_I32_CONST);
+    write_i32(code, 4);
+    code.push(OP_I32_ADD);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 1);
+}
+
+/// Computes the number of padding characters of a `%c` conversion.
+///
+/// Field width applies to %c; precision is ignored. The zero flag is also
+/// ignored, matching the native C library's space padding.
+fn emit_char_width(code: &mut Vec<u8>) {
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 4);
+    code.push(OP_I32_CONST);
+    write_i32(code, 0);
+    code.push(OP_I32_GT_U);
+    code.push(OP_IF);
+    code.push(0x40);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 4);
+    code.push(OP_I32_CONST);
+    write_i32(code, 1);
+    code.push(OP_I32_SUB);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 11);
+    code.push(OP_ELSE);
+    code.push(OP_I32_CONST);
+    write_i32(code, 0);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 11);
+    code.push(OP_END);
 }
 
 fn emit_string_conversion(code: &mut Vec<u8>, func_print_char: u32) {

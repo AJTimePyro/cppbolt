@@ -136,3 +136,13 @@ pub(super) struct ArraySlots {
     /// The frame slot that holds the element count.
     pub(super) count_slot: u32,
 }
+
+/// One namespace-scope object that is initialized before `main` runs.
+pub(super) struct GlobalInit<'e> {
+    /// The declared type.
+    pub(super) ty: &'e Type,
+    /// The initializer, if any.
+    pub(super) init: &'e Option<Expr>,
+    /// The offset of the object in the data section.
+    pub(super) offset: u32,
+}

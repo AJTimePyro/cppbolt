@@ -4,7 +4,8 @@
 //! for every positive test that compiles. `--check-golden <manifest>` recomputes
 //! the same values and reports added, removed, or changed entries.
 
-use super::{FEATURES, Paths, cpp_files, input_path, run_wasm};
+use super::run::{cpp_files, input_path, run_wasm};
+use super::{FEATURES, Paths};
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fs;

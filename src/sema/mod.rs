@@ -9,8 +9,10 @@ mod expr_ops;
 mod layout;
 mod lookup;
 mod stmt;
+mod stmt_decl;
 
 pub(crate) use layout::RecordLayout;
+pub(crate) use stmt_decl::VarDecl;
 
 use crate::ast::types::Type;
 use crate::ast::*;

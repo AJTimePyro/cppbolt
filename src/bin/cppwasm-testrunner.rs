@@ -5,6 +5,8 @@
 
 #[path = "cppwasm-testrunner/checks.rs"]
 mod checks;
+#[path = "cppwasm-testrunner/run.rs"]
+mod run;
 
 #[path = "cppwasm-testrunner/golden.rs"]
 mod golden;
@@ -15,9 +17,8 @@ mod oracle;
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitCode, Stdio};
+use std::process::ExitCode;
 
 const FEATURES: &[&str] = &[
     "c_basics",
@@ -119,59 +120,21 @@ fn main() -> ExitCode {
     }
     let paths = Paths { compiler, work };
 
-    let mut reports = Vec::new();
-    let groups: Vec<&str> = match filter.as_deref() {
-        Some("all") | None => FEATURES.to_vec(),
-        Some("negative") => Vec::new(),
-        Some(feature) => vec![feature],
-    };
-    for feature in groups {
-        reports.push(run_feature(&paths, feature, false));
-    }
-    let reference_mode = paths.compiler == Path::new("ref");
-    if !reference_mode && matches!(filter.as_deref(), Some("all") | Some("negative") | None) {
-        reports.push(run_feature(&paths, "negative", true));
-    }
+    let reports = run_groups(&paths, filter.as_deref());
+    print_reports(&reports);
+    let totals = Totals::of(&reports);
 
-    for report in &reports {
-        println!("\nFeature Group: [{}]", report.feature);
-        for failure in &report.failures {
-            println!("  [FAIL] {failure}");
-        }
-        println!(
-            "Summary for {}: on-disk {}, executed {}, passed {}, failed {}.",
-            report.feature, report.on_disk, report.executed, report.passed, report.failed
-        );
-    }
-
-    let on_disk: usize = reports.iter().map(|report| report.on_disk).sum();
-    let executed: usize = reports.iter().map(|report| report.executed).sum();
-    let passed: usize = reports.iter().map(|report| report.passed).sum();
-    let failed: usize = reports.iter().map(|report| report.failed).sum();
-    println!(
-        "\nOverall: on-disk {on_disk}, executed {executed}, passed {passed}, failed {failed}."
-    );
-
-    let listed = listed_tests();
-    let mut expected_failures = 0;
-    for report in &reports {
-        for name in &report.failed_names {
-            if !listed.contains(&(report.feature.clone(), name.clone())) {
-                expected_failures += 1;
-            }
-        }
-    }
-    let unexpected_failures = failed.saturating_sub(expected_failures);
+    let (expected_failures, unexpected_failures) = count_failures(&reports, totals.failed);
     if expected_failures > 0 {
         println!("Expected failures (not in tests/PASSING.txt): {expected_failures}.");
     }
 
-    let manifest_failures = check_manifest(&reports, reference_mode);
+    let manifest_failures = check_manifest(&reports, paths.compiler == Path::new("ref"));
     let duplicate_failures = checks::check_variant_tests();
     let _ = fs::remove_dir_all(&paths.work);
     if manifest_failures == 0
         && duplicate_failures == 0
-        && executed == on_disk
+        && totals.executed == totals.on_disk
         && unexpected_failures == 0
     {
         ExitCode::SUCCESS
@@ -189,9 +152,81 @@ fn main() -> ExitCode {
     }
 }
 
+/// Counts the failures that the pass manifest expects and the ones it does
+/// not.
+fn count_failures(reports: &[Report], failed: usize) -> (usize, usize) {
+    let listed = listed_tests();
+    let mut expected_failures = 0;
+    for report in reports {
+        for name in &report.failed_names {
+            if !listed.contains(&(report.feature.clone(), name.clone())) {
+                expected_failures += 1;
+            }
+        }
+    }
+    (expected_failures, failed.saturating_sub(expected_failures))
+}
+
+/// The totals of every group that was run.
+struct Totals {
+    on_disk: usize,
+    executed: usize,
+    passed: usize,
+    failed: usize,
+}
+
+impl Totals {
+    fn of(reports: &[Report]) -> Self {
+        Self {
+            on_disk: reports.iter().map(|report| report.on_disk).sum(),
+            executed: reports.iter().map(|report| report.executed).sum(),
+            passed: reports.iter().map(|report| report.passed).sum(),
+            failed: reports.iter().map(|report| report.failed).sum(),
+        }
+    }
+}
+
+/// Runs the selected feature groups.
+fn run_groups(paths: &Paths, filter: Option<&str>) -> Vec<Report> {
+    let mut reports = Vec::new();
+    let groups: Vec<&str> = match filter {
+        Some("all") | None => FEATURES.to_vec(),
+        Some("negative") => Vec::new(),
+        Some(feature) => vec![feature],
+    };
+    for feature in groups {
+        reports.push(run_feature(paths, feature, false));
+    }
+    let reference_mode = paths.compiler == Path::new("ref");
+    if !reference_mode && matches!(filter, Some("all") | Some("negative") | None) {
+        reports.push(run_feature(paths, "negative", true));
+    }
+    reports
+}
+
+/// Prints the per-group summaries and the overall accounting.
+fn print_reports(reports: &[Report]) {
+    for report in reports {
+        println!("\nFeature Group: [{}]", report.feature);
+        for failure in &report.failures {
+            println!("  [FAIL] {failure}");
+        }
+        println!(
+            "Summary for {}: on-disk {}, executed {}, passed {}, failed {}.",
+            report.feature, report.on_disk, report.executed, report.passed, report.failed
+        );
+    }
+
+    let totals = Totals::of(reports);
+    println!(
+        "\nOverall: on-disk {}, executed {}, passed {}, failed {}.",
+        totals.on_disk, totals.executed, totals.passed, totals.failed
+    );
+}
+
 fn run_feature(paths: &Paths, feature: &str, negative: bool) -> Report {
     let directory = Path::new("tests").join(feature);
-    let mut tests = match cpp_files(&directory) {
+    let mut tests = match run::cpp_files(&directory) {
         Ok(tests) => tests,
         Err(error) => {
             return Report {
@@ -227,9 +262,9 @@ fn run_feature(paths: &Paths, feature: &str, negative: bool) -> Report {
             .to_string();
         report.executed += 1;
         let result = if negative {
-            check_negative(paths, feature, &name, &cpp)
+            run::check_negative(paths, feature, &name, &cpp)
         } else {
-            check_positive(paths, feature, &name, &cpp)
+            run::check_positive(paths, feature, &name, &cpp)
         };
         match result {
             Ok(()) => {
@@ -244,165 +279,6 @@ fn run_feature(paths: &Paths, feature: &str, negative: bool) -> Report {
         }
     }
     report
-}
-
-fn cpp_files(directory: &Path) -> std::io::Result<Vec<PathBuf>> {
-    let mut files = Vec::new();
-    for entry in fs::read_dir(directory)? {
-        let path = entry?.path();
-        if path.extension() == Some(OsStr::new("cpp")) {
-            files.push(path);
-        }
-    }
-    Ok(files)
-}
-
-fn check_positive(paths: &Paths, feature: &str, name: &str, cpp: &Path) -> Result<(), String> {
-    let feature_dir = paths.work.join(feature);
-    fs::create_dir_all(&feature_dir).map_err(|error| error.to_string())?;
-
-    if paths.compiler == Path::new("ref") {
-        let native = paths.output(feature, name, "native");
-        let compiled = Command::new("timeout")
-            .arg("5s")
-            .arg("g++")
-            .arg("-std=c++17")
-            .arg("-O0")
-            .arg(cpp)
-            .arg("-o")
-            .arg(&native)
-            .output()
-            .map_err(|error| format!("cannot run g++: {error}"))?;
-        if !compiled.status.success() {
-            return Err("compilation error or timeout".to_string());
-        }
-        let output = run_with_input(&native, &input_path(feature, name))
-            .map_err(|error| format!("cannot run native binary: {error}"))?;
-        if feature == "runtime_trap" {
-            return if output.status.success() {
-                Err("expected native trap".to_string())
-            } else {
-                Ok(())
-            };
-        }
-        return compare_output(&output, feature, name);
-    }
-
-    let wasm = paths.output(feature, name, "wasm");
-    let compiled = Command::new("timeout")
-        .arg("5s")
-        .arg(&paths.compiler)
-        .arg(cpp)
-        .arg("-o")
-        .arg(&wasm)
-        .output()
-        .map_err(|error| format!("cannot run compiler: {error}"))?;
-    if !compiled.status.success() {
-        return Err("compilation error or timeout".to_string());
-    }
-    let output = run_wasm(&wasm, &input_path(feature, name))
-        .map_err(|error| format!("cannot run node: {error}"))?;
-
-    if feature == "runtime_trap" {
-        let trapped = !output.status.success()
-            || String::from_utf8_lossy(&output.stderr).contains("WASM_TRAP");
-        return if trapped {
-            Ok(())
-        } else {
-            Err("expected wasm trap".to_string())
-        };
-    }
-    compare_output(&output, feature, name)
-}
-
-fn check_negative(paths: &Paths, feature: &str, name: &str, cpp: &Path) -> Result<(), String> {
-    let feature_dir = paths.work.join(feature);
-    fs::create_dir_all(&feature_dir).map_err(|error| error.to_string())?;
-    let wasm = paths.output(feature, name, "wasm");
-    let compiled = Command::new("timeout")
-        .arg("5s")
-        .arg(&paths.compiler)
-        .arg(cpp)
-        .arg("-o")
-        .arg(&wasm)
-        .output()
-        .map_err(|error| format!("cannot run compiler: {error}"))?;
-
-    if compiled.status.success() {
-        return Err("diagnostic mismatch or accepted".to_string());
-    }
-    let expected_path = Path::new("tests")
-        .join(feature)
-        .join(format!("{name}.expected_err"));
-    let expected = fs::read_to_string(&expected_path)
-        .map_err(|error| format!("cannot read {}: {error}", expected_path.display()))?;
-    let expected = expected.lines().next().unwrap_or_default();
-    let actual = String::from_utf8_lossy(&compiled.stderr);
-    let actual = actual.lines().next().unwrap_or_default();
-    if actual == expected {
-        Ok(())
-    } else {
-        Err(format!("diagnostic mismatch: {actual}"))
-    }
-}
-
-fn input_path(feature: &str, name: &str) -> Option<PathBuf> {
-    let path = Path::new("tests")
-        .join(feature)
-        .join(format!("{name}.input"));
-    path.exists().then_some(path)
-}
-
-fn run_wasm(wasm: &Path, input: &Option<PathBuf>) -> std::io::Result<std::process::Output> {
-    let mut command = Command::new("timeout");
-    command
-        .arg("5s")
-        .arg("node")
-        .arg("-e")
-        .arg(NODE_RUNNER)
-        .arg(wasm);
-    if let Some(input) = input {
-        command.arg(input);
-    }
-    command.output()
-}
-
-fn run_with_input(binary: &Path, input: &Option<PathBuf>) -> std::io::Result<std::process::Output> {
-    let mut command = Command::new("timeout");
-    command.arg("5s").arg(binary);
-    match input {
-        Some(path) => {
-            let text = fs::read(path)?;
-            let mut child = command
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()?;
-            if let Some(mut stdin) = child.stdin.take() {
-                stdin.write_all(&text)?;
-            }
-            child.wait_with_output()
-        }
-        None => command.output(),
-    }
-}
-
-fn compare_output(output: &std::process::Output, feature: &str, name: &str) -> Result<(), String> {
-    if !output.status.success() {
-        return Err(format!("runtime exit {}", output.status));
-    }
-    let expected_path = Path::new("tests")
-        .join(feature)
-        .join(format!("{name}.expected"));
-    let expected = fs::read(&expected_path)
-        .map_err(|error| format!("cannot read {}: {error}", expected_path.display()))?;
-    let mut actual = output.stdout.clone();
-    actual.extend_from_slice(&output.stderr);
-    if actual == expected {
-        Ok(())
-    } else {
-        Err("output mismatch".to_string())
-    }
 }
 
 fn listed_tests() -> BTreeSet<(String, String)> {

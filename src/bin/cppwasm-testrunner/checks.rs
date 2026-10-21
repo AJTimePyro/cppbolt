@@ -1,7 +1,7 @@
 //! Variant and independent corpus checks used by the runner's regression gate.
 
-use super::cpp_files;
 use super::golden::sha256_hex;
+use super::run::cpp_files;
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fs;

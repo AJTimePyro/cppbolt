@@ -10,6 +10,7 @@ use std::collections::{HashMap, HashSet};
 
 mod atom;
 mod decl;
+mod decl_func;
 mod enums_operators;
 mod expr;
 mod prefix;

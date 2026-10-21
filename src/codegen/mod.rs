@@ -9,7 +9,9 @@ mod emit_context;
 mod expr;
 mod expr_assign;
 mod expr_binary;
+mod expr_binary_operator;
 mod expr_call;
+mod expr_call_member;
 mod expr_delete;
 mod expr_identifier;
 mod expr_new;
@@ -17,6 +19,8 @@ mod expr_printf;
 mod expr_unary;
 mod function;
 mod function_context;
+mod function_global_init;
+mod function_lifecycle;
 mod function_lookup;
 mod lvalue;
 mod memory;
@@ -30,6 +34,7 @@ mod stmt;
 mod stmt_loop;
 mod stmt_return;
 mod stmt_var;
+mod stmt_var_init;
 mod strings;
 mod type_of;
 
@@ -46,8 +51,8 @@ use analysis::{
     collect_address_taken_stmt, collect_static_vars, collect_stmt_calls, collect_type_lifecycle,
 };
 use emit_context::{
-    ArrayLocal, ArraySlots, BinaryTypes, CallSite, CtorCall, LocalDecl, MemberAccess, NamedCall,
-    ScalarAssign, StructInit, SwitchSlots,
+    ArrayLocal, ArraySlots, BinaryTypes, CallSite, CtorCall, GlobalInit, LocalDecl, MemberAccess,
+    NamedCall, ScalarAssign, StructInit, SwitchSlots,
 };
 use program::Plan;
 use std::collections::{HashMap, HashSet};

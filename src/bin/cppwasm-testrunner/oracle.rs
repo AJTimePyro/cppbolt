@@ -2,7 +2,8 @@
 //! `clang++` and checks that their native output matches the recorded
 //! `.expected` file. Compilers that are not installed are skipped.
 
-use super::{FEATURES, compare_output, cpp_files, input_path, run_with_input};
+use super::FEATURES;
+use super::run::{compare_output, cpp_files, input_path, run_with_input};
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
