@@ -1,0 +1,10 @@
+scale 21
+s=21
+multi 1 2 5
+m=8
+multi 1 20 5
+n=26
+base 4 3
+derived
+scale 14
+p=14
