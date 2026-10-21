@@ -119,6 +119,26 @@ impl<'a> Codegen<'a> {
         let count_slot = ctx.alloc_frame(4, 4)?;
         let base_slot = ctx.alloc_frame(4, 4)?;
 
+        self.compile_array_new_count(array_size, count_slot, ctx, code)?;
+        self.compile_array_new_size_check(elem_size, ctx, code);
+        match has_struct {
+            Some(sname) => {
+                self.compile_array_new_struct(&sname, elem_size, count_slot, base_slot, ctx, code);
+            }
+            None => self.compile_array_new_plain(ctx, code),
+        }
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch1);
+        Ok(())
+    }
+
+    fn compile_array_new_count(
+        &mut self,
+        array_size: Option<&Expr>,
+        count_slot: u32,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
         if let Some(sz_expr) = array_size {
             let size_ty = self.get_expr_type(sz_expr, ctx);
             self.compile_expr(sz_expr, ctx, code)?;
@@ -147,7 +167,15 @@ impl<'a> Codegen<'a> {
         code.push(0x40);
         code.push(OP_UNREACHABLE);
         code.push(OP_END);
+        Ok(())
+    }
 
+    fn compile_array_new_size_check(
+        &mut self,
+        elem_size: i32,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) {
         // Compute the payload size in 64 bits and trap if it does not fit a
         // signed 32-bit allocation (with room for the array cookie).
         code.push(OP_LOCAL_GET);
@@ -167,157 +195,188 @@ impl<'a> Codegen<'a> {
         code.push(0x40);
         code.push(OP_UNREACHABLE);
         code.push(OP_END);
+    }
 
-        if let Some(sname) = has_struct {
-            // Allocation size: count * elem_size + 4 (for cookie)
+    fn compile_array_new_struct(
+        &mut self,
+        sname: &str,
+        elem_size: i32,
+        count_slot: u32,
+        base_slot: u32,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) {
+        self.emit_array_struct_alloc(count_slot, base_slot, ctx, code);
+
+        let ctor_idx = self.find_constructor(sname, &[]);
+        let v_off = self.vtable_offsets.get(sname).copied();
+
+        if ctor_idx.is_some() || v_off.is_some() {
+            self.emit_array_element_loop(ctor_idx, v_off, elem_size, count_slot, ctx, code);
+            // Constructors may clobber scratch locals, so reload the
+            // user pointer from its frame slot.
+            self.emit_array_reload_user_ptr(base_slot, ctx, code);
+        } else {
+            self.emit_array_reload_user_ptr(base_slot, ctx, code);
+        }
+    }
+
+    /// Allocates the array payload and stores the element-count cookie.
+    fn emit_array_struct_alloc(
+        &mut self,
+        count_slot: u32,
+        base_slot: u32,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) {
+        // Allocation size: count * elem_size + 4 (for cookie)
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch_i64);
+        code.push(OP_I32_WRAP_I64);
+        code.push(OP_I32_CONST);
+        write_i32(code, 4);
+        code.push(OP_I32_ADD);
+        code.push(OP_CALL);
+        write_u32(code, self.func_indices["malloc"]);
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.scratch1); // base ptr
+        emit_new_null_check(code, ctx.scratch1);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch1);
+        code.push(OP_I32_STORE);
+        write_u32(code, 2);
+        write_u32(code, base_slot);
+
+        // Store count cookie at offset 0
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch1);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, count_slot);
+        code.push(OP_I32_STORE);
+        write_u32(code, 2);
+        write_u32(code, 0);
+
+        // user ptr = base ptr + 4
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch1);
+        code.push(OP_I32_CONST);
+        write_i32(code, 4);
+        code.push(OP_I32_ADD);
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.scratch1); // user ptr
+    }
+
+    /// Installs each element's vtable and runs its constructor.
+    fn emit_array_element_loop(
+        &mut self,
+        ctor_idx: Option<u32>,
+        v_off: Option<u32>,
+        elem_size: i32,
+        count_slot: u32,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) {
+        code.push(OP_I32_CONST);
+        write_i32(code, 0);
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.ret_temp_i32); // loop index i
+
+        code.push(OP_BLOCK);
+        code.push(0x40);
+        code.push(OP_LOOP);
+        code.push(0x40);
+
+        // if i >= count break;
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.ret_temp_i32);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, count_slot);
+        code.push(OP_I32_GE_S);
+        code.push(OP_BR_IF);
+        write_u32(code, 1);
+
+        // Install each element's vtable, then construct it.
+        if let Some(vo) = v_off {
             code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.scratch_i64);
-            code.push(OP_I32_WRAP_I64);
+            write_u32(code, ctx.scratch1);
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.ret_temp_i32);
             code.push(OP_I32_CONST);
-            write_i32(code, 4);
+            write_i32(code, elem_size);
+            code.push(OP_I32_MUL);
             code.push(OP_I32_ADD);
-            code.push(OP_CALL);
-            write_u32(code, self.func_indices["malloc"]);
-            code.push(OP_LOCAL_SET);
-            write_u32(code, ctx.scratch1); // base ptr
-            emit_new_null_check(code, ctx.scratch1);
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.fp_local);
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.scratch1);
-            code.push(OP_I32_STORE);
-            write_u32(code, 2);
-            write_u32(code, base_slot);
-
-            // Store count cookie at offset 0
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.scratch1);
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.fp_local);
-            code.push(OP_I32_LOAD);
-            write_u32(code, 2);
-            write_u32(code, count_slot);
+            code.push(OP_I32_CONST);
+            write_i32(code, vo as i32);
             code.push(OP_I32_STORE);
             write_u32(code, 2);
             write_u32(code, 0);
-
-            // user ptr = base ptr + 4
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.scratch1);
-            code.push(OP_I32_CONST);
-            write_i32(code, 4);
-            code.push(OP_I32_ADD);
-            code.push(OP_LOCAL_SET);
-            write_u32(code, ctx.scratch1); // user ptr
-
-            let ctor_idx = self.find_constructor(&sname, &[]);
-            let v_off = self.vtable_offsets.get(&sname).copied();
-
-            if ctor_idx.is_some() || v_off.is_some() {
-                code.push(OP_I32_CONST);
-                write_i32(code, 0);
-                code.push(OP_LOCAL_SET);
-                write_u32(code, ctx.ret_temp_i32); // loop index i
-
-                code.push(OP_BLOCK);
-                code.push(0x40);
-                code.push(OP_LOOP);
-                code.push(0x40);
-
-                // if i >= count break;
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.ret_temp_i32);
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.fp_local);
-                code.push(OP_I32_LOAD);
-                write_u32(code, 2);
-                write_u32(code, count_slot);
-                code.push(OP_I32_GE_S);
-                code.push(OP_BR_IF);
-                write_u32(code, 1);
-
-                // Install each element's vtable, then construct it.
-                if let Some(vo) = v_off {
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.scratch1);
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.ret_temp_i32);
-                    code.push(OP_I32_CONST);
-                    write_i32(code, elem_size);
-                    code.push(OP_I32_MUL);
-                    code.push(OP_I32_ADD);
-                    code.push(OP_I32_CONST);
-                    write_i32(code, vo as i32);
-                    code.push(OP_I32_STORE);
-                    write_u32(code, 2);
-                    write_u32(code, 0);
-                }
-
-                if let Some(ci) = ctor_idx {
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.scratch1);
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.ret_temp_i32);
-                    code.push(OP_I32_CONST);
-                    write_i32(code, elem_size);
-                    code.push(OP_I32_MUL);
-                    code.push(OP_I32_ADD); // this
-                    code.push(OP_CALL);
-                    write_u32(code, ci);
-                }
-
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.ret_temp_i32);
-                code.push(OP_I32_CONST);
-                write_i32(code, 1);
-                code.push(OP_I32_ADD);
-                code.push(OP_LOCAL_SET);
-                write_u32(code, ctx.ret_temp_i32);
-
-                code.push(OP_BR);
-                write_u32(code, 0);
-
-                code.push(OP_END);
-                code.push(OP_END);
-
-                // Constructors may clobber scratch locals, so reload the
-                // user pointer from its frame slot.
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.fp_local);
-                code.push(OP_I32_LOAD);
-                write_u32(code, 2);
-                write_u32(code, base_slot);
-                code.push(OP_I32_CONST);
-                write_i32(code, 4);
-                code.push(OP_I32_ADD);
-                code.push(OP_LOCAL_SET);
-                write_u32(code, ctx.scratch1);
-            } else {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.fp_local);
-                code.push(OP_I32_LOAD);
-                write_u32(code, 2);
-                write_u32(code, base_slot);
-                code.push(OP_I32_CONST);
-                write_i32(code, 4);
-                code.push(OP_I32_ADD);
-                code.push(OP_LOCAL_SET);
-                write_u32(code, ctx.scratch1);
-            }
-        } else {
-            // Plain arrays have no cookie and no element constructors.
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.scratch_i64);
-            code.push(OP_I32_WRAP_I64);
-            code.push(OP_CALL);
-            write_u32(code, self.func_indices["malloc"]);
-            code.push(OP_LOCAL_SET);
-            write_u32(code, ctx.scratch1);
-            emit_new_null_check(code, ctx.scratch1);
         }
+
+        if let Some(ci) = ctor_idx {
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.scratch1);
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.ret_temp_i32);
+            code.push(OP_I32_CONST);
+            write_i32(code, elem_size);
+            code.push(OP_I32_MUL);
+            code.push(OP_I32_ADD); // this
+            code.push(OP_CALL);
+            write_u32(code, ci);
+        }
+
         code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.ret_temp_i32);
+        code.push(OP_I32_CONST);
+        write_i32(code, 1);
+        code.push(OP_I32_ADD);
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.ret_temp_i32);
+
+        code.push(OP_BR);
+        write_u32(code, 0);
+
+        code.push(OP_END);
+        code.push(OP_END);
+    }
+
+    /// Reloads the user pointer from its frame slot.
+    fn emit_array_reload_user_ptr(
+        &mut self,
+        base_slot: u32,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) {
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, base_slot);
+        code.push(OP_I32_CONST);
+        write_i32(code, 4);
+        code.push(OP_I32_ADD);
+        code.push(OP_LOCAL_SET);
         write_u32(code, ctx.scratch1);
-        Ok(())
+    }
+
+    fn compile_array_new_plain(&mut self, ctx: &mut FunctionContext, code: &mut Vec<u8>) {
+        // Plain arrays have no cookie and no element constructors.
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch_i64);
+        code.push(OP_I32_WRAP_I64);
+        code.push(OP_CALL);
+        write_u32(code, self.func_indices["malloc"]);
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.scratch1);
+        emit_new_null_check(code, ctx.scratch1);
     }
 
     fn compile_scalar_new(

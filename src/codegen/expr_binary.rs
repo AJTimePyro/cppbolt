@@ -114,89 +114,9 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let pointer_diff_elem = if *op == BinaryOp::Sub
-            && lty.decay_array().is_pointer()
-            && rty.decay_array().is_pointer()
-        {
-            let size = lty
-                .decay_array()
-                .deref_type()
-                .map(|inner| inner.size_of(&self.sema.struct_sizes))
-                .unwrap_or(1)
-                .max(1);
-            Some(
-                i32::try_from(size)
-                    .map_err(|_| crate::internal_error!(0, 0, "pointer element is too large"))?,
-            )
-        } else {
-            None
-        };
-        if (matches!(lty.strip_const(), Type::Struct(_) | Type::Enum(_))
-            || matches!(rty.strip_const(), Type::Struct(_) | Type::Enum(_)))
-            && let Some(op_name) = op.op_name()
-        {
-            let clean_lty = lty.strip_const();
-            if let Type::Struct(sname) = clean_lty
-                && let Some((m_idx, sig)) =
-                    self.find_method(sname, op_name, std::slice::from_ref(rty))
-            {
-                if let Some(left) = left {
-                    self.compile_lvalue_addr(left, ctx, code)?;
-                }
-                let param_ty = sig.param_types.get(1);
-                let is_r = param_ty.map(|p| p.is_reference()).unwrap_or(false);
-                if is_r {
-                    self.compile_lvalue_addr(right, ctx, code)?;
-                } else {
-                    self.compile_expr(right, ctx, code)?;
-                    if let Some(pty) = param_ty {
-                        self.emit_conversion(rty, pty, code);
-                    }
-                }
-                code.push(OP_CALL);
-                write_u32(code, m_idx);
-                self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
-                return Ok(());
-            }
-
-            if let Some((f_idx, sig)) = self
-                .find_function(op_name, &[lty.clone(), rty.clone()])
-                .or_else(|| {
-                    self.find_function(&format!("std::{}", op_name), &[lty.clone(), rty.clone()])
-                })
-                .or_else(|| {
-                    self.find_function(&format!("std::{}", op_name), &[lty.clone(), rty.clone()])
-                })
-            {
-                let param_ty0 = sig.param_types.first();
-                let is_r0 = param_ty0.map(|p| p.is_reference()).unwrap_or(false);
-                if is_r0 {
-                    if let Some(left) = left {
-                        self.compile_lvalue_addr(left, ctx, code)?;
-                    }
-                } else {
-                    if let Some(left) = left {
-                        self.compile_expr(left, ctx, code)?;
-                    }
-                    if let Some(pty) = param_ty0 {
-                        self.emit_conversion(lty, pty, code);
-                    }
-                }
-                let param_ty1 = sig.param_types.get(1);
-                let is_r1 = param_ty1.map(|p| p.is_reference()).unwrap_or(false);
-                if is_r1 {
-                    self.compile_lvalue_addr(right, ctx, code)?;
-                } else {
-                    self.compile_expr(right, ctx, code)?;
-                    if let Some(pty) = param_ty1 {
-                        self.emit_conversion(rty, pty, code);
-                    }
-                }
-                code.push(OP_CALL);
-                write_u32(code, f_idx);
-                self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
-                return Ok(());
-            }
+        let pointer_diff_elem = self.pointer_difference_element(op, lty, rty)?;
+        if self.emit_overloaded_binary_node(op, lty, rty, left, right, ctx, code)? {
+            return Ok(());
         }
         let lraw = lty.strip_const();
         let rraw = rty.strip_const();
@@ -262,6 +182,109 @@ impl<'a> Codegen<'a> {
         Ok(())
     }
 
+    fn pointer_difference_element(
+        &self,
+        op: &BinaryOp,
+        lty: &Type,
+        rty: &Type,
+    ) -> Result<Option<i32>, CompileError> {
+        if *op == BinaryOp::Sub && lty.decay_array().is_pointer() && rty.decay_array().is_pointer()
+        {
+            let size = lty
+                .decay_array()
+                .deref_type()
+                .map(|inner| inner.size_of(&self.sema.struct_sizes))
+                .unwrap_or(1)
+                .max(1);
+            Ok(Some(i32::try_from(size).map_err(|_| {
+                crate::internal_error!(0, 0, "pointer element is too large")
+            })?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn emit_overloaded_binary_node(
+        &mut self,
+        op: &BinaryOp,
+        lty: &Type,
+        rty: &Type,
+        left: Option<&Expr>,
+        right: &Expr,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<bool, CompileError> {
+        if (matches!(lty.strip_const(), Type::Struct(_) | Type::Enum(_))
+            || matches!(rty.strip_const(), Type::Struct(_) | Type::Enum(_)))
+            && let Some(op_name) = op.op_name()
+        {
+            let clean_lty = lty.strip_const();
+            if let Type::Struct(sname) = clean_lty
+                && let Some((m_idx, sig)) =
+                    self.find_method(sname, op_name, std::slice::from_ref(rty))
+            {
+                if let Some(left) = left {
+                    self.compile_lvalue_addr(left, ctx, code)?;
+                }
+                let param_ty = sig.param_types.get(1);
+                let is_r = param_ty.map(|p| p.is_reference()).unwrap_or(false);
+                if is_r {
+                    self.compile_lvalue_addr(right, ctx, code)?;
+                } else {
+                    self.compile_expr(right, ctx, code)?;
+                    if let Some(pty) = param_ty {
+                        self.emit_conversion(rty, pty, code);
+                    }
+                }
+                code.push(OP_CALL);
+                write_u32(code, m_idx);
+                self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
+                return Ok(true);
+            }
+
+            if let Some((f_idx, sig)) = self
+                .find_function(op_name, &[lty.clone(), rty.clone()])
+                .or_else(|| {
+                    self.find_function(&format!("std::{}", op_name), &[lty.clone(), rty.clone()])
+                })
+                .or_else(|| {
+                    self.find_function(&format!("std::{}", op_name), &[lty.clone(), rty.clone()])
+                })
+            {
+                let param_ty0 = sig.param_types.first();
+                let is_r0 = param_ty0.map(|p| p.is_reference()).unwrap_or(false);
+                if is_r0 {
+                    if let Some(left) = left {
+                        self.compile_lvalue_addr(left, ctx, code)?;
+                    }
+                } else {
+                    if let Some(left) = left {
+                        self.compile_expr(left, ctx, code)?;
+                    }
+                    if let Some(pty) = param_ty0 {
+                        self.emit_conversion(lty, pty, code);
+                    }
+                }
+                let param_ty1 = sig.param_types.get(1);
+                let is_r1 = param_ty1.map(|p| p.is_reference()).unwrap_or(false);
+                if is_r1 {
+                    self.compile_lvalue_addr(right, ctx, code)?;
+                } else {
+                    self.compile_expr(right, ctx, code)?;
+                    if let Some(pty) = param_ty1 {
+                        self.emit_conversion(rty, pty, code);
+                    }
+                }
+                code.push(OP_CALL);
+                write_u32(code, f_idx);
+                self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     fn emit_operand_conversion(raw: &Type, common_ty: &Type, code: &mut Vec<u8>) {
         let is_double = *common_ty == Type::Double;
         let is_fp = matches!(common_ty, Type::Float | Type::Double);
@@ -310,138 +333,150 @@ impl<'a> Codegen<'a> {
     }
 
     fn emit_binary_op(op: &BinaryOp, common_ty: &Type, code: &mut Vec<u8>) {
-        let is_double = *common_ty == Type::Double;
-        let is_fp = matches!(common_ty, Type::Float | Type::Double);
-        let is_i64 = matches!(common_ty, Type::LongLong | Type::UnsignedLongLong);
-        let is_unsigned = !common_ty.is_signed();
-        if is_double {
-            match op {
-                BinaryOp::Add => code.push(OP_F64_ADD),
-                BinaryOp::Sub => code.push(OP_F64_SUB),
-                BinaryOp::Mul => code.push(OP_F64_MUL),
-                BinaryOp::Div => code.push(OP_F64_DIV),
-                BinaryOp::Eq => code.push(OP_F64_EQ),
-                BinaryOp::Ne => code.push(OP_F64_NE),
-                BinaryOp::Lt => code.push(OP_F64_LT),
-                BinaryOp::Le => code.push(OP_F64_LE),
-                BinaryOp::Gt => code.push(OP_F64_GT),
-                BinaryOp::Ge => code.push(OP_F64_GE),
-                _ => {}
-            }
-        } else if is_fp {
-            match op {
-                BinaryOp::Add => code.push(OP_F32_ADD),
-                BinaryOp::Sub => code.push(OP_F32_SUB),
-                BinaryOp::Mul => code.push(OP_F32_MUL),
-                BinaryOp::Div => code.push(OP_F32_DIV),
-                BinaryOp::Eq => code.push(OP_F32_EQ),
-                BinaryOp::Ne => code.push(OP_F32_NE),
-                BinaryOp::Lt => code.push(OP_F32_LT),
-                BinaryOp::Le => code.push(OP_F32_LE),
-                BinaryOp::Gt => code.push(OP_F32_GT),
-                BinaryOp::Ge => code.push(OP_F32_GE),
-                _ => {}
-            }
-        } else if is_i64 {
-            match op {
-                BinaryOp::Add => code.push(OP_I64_ADD),
-                BinaryOp::Sub => code.push(OP_I64_SUB),
-                BinaryOp::Mul => code.push(OP_I64_MUL),
-                BinaryOp::Div => code.push(if is_unsigned {
-                    OP_I64_DIV_U
-                } else {
-                    OP_I64_DIV_S
-                }),
-                BinaryOp::Rem => code.push(if is_unsigned {
-                    OP_I64_REM_U
-                } else {
-                    OP_I64_REM_S
-                }),
-                BinaryOp::BitAnd => code.push(OP_I64_AND),
-                BinaryOp::BitOr => code.push(OP_I64_OR),
-                BinaryOp::BitXor => code.push(OP_I64_XOR),
-                BinaryOp::Shl => code.push(OP_I64_SHL),
-                BinaryOp::Shr => code.push(if is_unsigned {
-                    OP_I64_SHR_U
-                } else {
-                    OP_I64_SHR_S
-                }),
-                BinaryOp::Eq => code.push(OP_I64_EQ),
-                BinaryOp::Ne => code.push(OP_I64_NE),
-                BinaryOp::Lt => code.push(if is_unsigned {
-                    OP_I64_LT_U
-                } else {
-                    OP_I64_LT_S
-                }),
-                BinaryOp::Le => code.push(if is_unsigned {
-                    OP_I64_LE_U
-                } else {
-                    OP_I64_LE_S
-                }),
-                BinaryOp::Gt => code.push(if is_unsigned {
-                    OP_I64_GT_U
-                } else {
-                    OP_I64_GT_S
-                }),
-                BinaryOp::Ge => code.push(if is_unsigned {
-                    OP_I64_GE_U
-                } else {
-                    OP_I64_GE_S
-                }),
-                _ => {}
-            }
+        if *common_ty == Type::Double {
+            Self::emit_f64_binary_op(op, code);
+        } else if matches!(common_ty, Type::Float | Type::Double) {
+            Self::emit_f32_binary_op(op, code);
+        } else if matches!(common_ty, Type::LongLong | Type::UnsignedLongLong) {
+            Self::emit_i64_binary_op(op, code, !common_ty.is_signed());
         } else {
-            match op {
-                BinaryOp::Add => code.push(OP_I32_ADD),
-                BinaryOp::Sub => code.push(OP_I32_SUB),
-                BinaryOp::Mul => code.push(OP_I32_MUL),
-                BinaryOp::Div => code.push(if is_unsigned {
-                    OP_I32_DIV_U
-                } else {
-                    OP_I32_DIV_S
-                }),
-                BinaryOp::Rem => code.push(if is_unsigned {
-                    OP_I32_REM_U
-                } else {
-                    OP_I32_REM_S
-                }),
-                BinaryOp::BitAnd => code.push(OP_I32_AND),
-                BinaryOp::BitOr => code.push(OP_I32_OR),
-                BinaryOp::BitXor => code.push(OP_I32_XOR),
-                BinaryOp::Shl => code.push(OP_I32_SHL),
-                BinaryOp::Shr => code.push(if is_unsigned {
-                    OP_I32_SHR_U
-                } else {
-                    OP_I32_SHR_S
-                }),
-                BinaryOp::Eq => code.push(OP_I32_EQ),
-                BinaryOp::Ne => code.push(OP_I32_NE),
-                BinaryOp::Lt => code.push(if is_unsigned {
-                    OP_I32_LT_U
-                } else {
-                    OP_I32_LT_S
-                }),
-                BinaryOp::Le => code.push(if is_unsigned {
-                    OP_I32_LE_U
-                } else {
-                    OP_I32_LE_S
-                }),
-                BinaryOp::Gt => code.push(if is_unsigned {
-                    OP_I32_GT_U
-                } else {
-                    OP_I32_GT_S
-                }),
-                BinaryOp::Ge => code.push(if is_unsigned {
-                    OP_I32_GE_U
-                } else {
-                    OP_I32_GE_S
-                }),
-                BinaryOp::LogicalAnd => {
-                    code.push(OP_I32_AND);
-                }
-                BinaryOp::LogicalOr => {
-                    code.push(OP_I32_OR);
-                }
+            Self::emit_i32_binary_op(op, code, !common_ty.is_signed());
+        }
+    }
+
+    fn emit_f64_binary_op(op: &BinaryOp, code: &mut Vec<u8>) {
+        match op {
+            BinaryOp::Add => code.push(OP_F64_ADD),
+            BinaryOp::Sub => code.push(OP_F64_SUB),
+            BinaryOp::Mul => code.push(OP_F64_MUL),
+            BinaryOp::Div => code.push(OP_F64_DIV),
+            BinaryOp::Eq => code.push(OP_F64_EQ),
+            BinaryOp::Ne => code.push(OP_F64_NE),
+            BinaryOp::Lt => code.push(OP_F64_LT),
+            BinaryOp::Le => code.push(OP_F64_LE),
+            BinaryOp::Gt => code.push(OP_F64_GT),
+            BinaryOp::Ge => code.push(OP_F64_GE),
+            _ => {}
+        }
+    }
+
+    fn emit_f32_binary_op(op: &BinaryOp, code: &mut Vec<u8>) {
+        match op {
+            BinaryOp::Add => code.push(OP_F32_ADD),
+            BinaryOp::Sub => code.push(OP_F32_SUB),
+            BinaryOp::Mul => code.push(OP_F32_MUL),
+            BinaryOp::Div => code.push(OP_F32_DIV),
+            BinaryOp::Eq => code.push(OP_F32_EQ),
+            BinaryOp::Ne => code.push(OP_F32_NE),
+            BinaryOp::Lt => code.push(OP_F32_LT),
+            BinaryOp::Le => code.push(OP_F32_LE),
+            BinaryOp::Gt => code.push(OP_F32_GT),
+            BinaryOp::Ge => code.push(OP_F32_GE),
+            _ => {}
+        }
+    }
+
+    fn emit_i64_binary_op(op: &BinaryOp, code: &mut Vec<u8>, is_unsigned: bool) {
+        match op {
+            BinaryOp::Add => code.push(OP_I64_ADD),
+            BinaryOp::Sub => code.push(OP_I64_SUB),
+            BinaryOp::Mul => code.push(OP_I64_MUL),
+            BinaryOp::Div => code.push(if is_unsigned {
+                OP_I64_DIV_U
+            } else {
+                OP_I64_DIV_S
+            }),
+            BinaryOp::Rem => code.push(if is_unsigned {
+                OP_I64_REM_U
+            } else {
+                OP_I64_REM_S
+            }),
+            BinaryOp::BitAnd => code.push(OP_I64_AND),
+            BinaryOp::BitOr => code.push(OP_I64_OR),
+            BinaryOp::BitXor => code.push(OP_I64_XOR),
+            BinaryOp::Shl => code.push(OP_I64_SHL),
+            BinaryOp::Shr => code.push(if is_unsigned {
+                OP_I64_SHR_U
+            } else {
+                OP_I64_SHR_S
+            }),
+            BinaryOp::Eq => code.push(OP_I64_EQ),
+            BinaryOp::Ne => code.push(OP_I64_NE),
+            BinaryOp::Lt => code.push(if is_unsigned {
+                OP_I64_LT_U
+            } else {
+                OP_I64_LT_S
+            }),
+            BinaryOp::Le => code.push(if is_unsigned {
+                OP_I64_LE_U
+            } else {
+                OP_I64_LE_S
+            }),
+            BinaryOp::Gt => code.push(if is_unsigned {
+                OP_I64_GT_U
+            } else {
+                OP_I64_GT_S
+            }),
+            BinaryOp::Ge => code.push(if is_unsigned {
+                OP_I64_GE_U
+            } else {
+                OP_I64_GE_S
+            }),
+            _ => {}
+        }
+    }
+
+    fn emit_i32_binary_op(op: &BinaryOp, code: &mut Vec<u8>, is_unsigned: bool) {
+        match op {
+            BinaryOp::Add => code.push(OP_I32_ADD),
+            BinaryOp::Sub => code.push(OP_I32_SUB),
+            BinaryOp::Mul => code.push(OP_I32_MUL),
+            BinaryOp::Div => code.push(if is_unsigned {
+                OP_I32_DIV_U
+            } else {
+                OP_I32_DIV_S
+            }),
+            BinaryOp::Rem => code.push(if is_unsigned {
+                OP_I32_REM_U
+            } else {
+                OP_I32_REM_S
+            }),
+            BinaryOp::BitAnd => code.push(OP_I32_AND),
+            BinaryOp::BitOr => code.push(OP_I32_OR),
+            BinaryOp::BitXor => code.push(OP_I32_XOR),
+            BinaryOp::Shl => code.push(OP_I32_SHL),
+            BinaryOp::Shr => code.push(if is_unsigned {
+                OP_I32_SHR_U
+            } else {
+                OP_I32_SHR_S
+            }),
+            BinaryOp::Eq => code.push(OP_I32_EQ),
+            BinaryOp::Ne => code.push(OP_I32_NE),
+            BinaryOp::Lt => code.push(if is_unsigned {
+                OP_I32_LT_U
+            } else {
+                OP_I32_LT_S
+            }),
+            BinaryOp::Le => code.push(if is_unsigned {
+                OP_I32_LE_U
+            } else {
+                OP_I32_LE_S
+            }),
+            BinaryOp::Gt => code.push(if is_unsigned {
+                OP_I32_GT_U
+            } else {
+                OP_I32_GT_S
+            }),
+            BinaryOp::Ge => code.push(if is_unsigned {
+                OP_I32_GE_U
+            } else {
+                OP_I32_GE_S
+            }),
+            BinaryOp::LogicalAnd => {
+                code.push(OP_I32_AND);
+            }
+            BinaryOp::LogicalOr => {
+                code.push(OP_I32_OR);
             }
         }
     }
