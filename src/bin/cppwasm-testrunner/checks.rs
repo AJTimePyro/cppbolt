@@ -64,38 +64,7 @@ pub(super) fn check_independent_manifest() -> usize {
         }
     };
 
-    let mut failures = 0;
-    let mut expected = BTreeMap::new();
-    for line in text.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let fields: Vec<&str> = line.split_whitespace().collect();
-        if fields.len() != 2 {
-            eprintln!("[FAIL] independent manifest: malformed entry: {line}");
-            failures += 1;
-            continue;
-        }
-        let path = normalize_manifest_path(fields[1]);
-        if path == "MANIFEST.sha256" {
-            eprintln!("[FAIL] independent manifest: the manifest cannot list itself");
-            failures += 1;
-            continue;
-        }
-        if path.starts_with('/') || path.split('/').any(|part| part == "..") {
-            eprintln!("[FAIL] independent manifest: path escapes the directory: {path}");
-            failures += 1;
-            continue;
-        }
-        if expected
-            .insert(path.clone(), fields[0].to_string())
-            .is_some()
-        {
-            eprintln!("[FAIL] independent manifest: duplicate entry: {path}");
-            failures += 1;
-        }
-    }
+    let (expected, mut failures) = parse_independent_manifest(&text);
 
     let mut actual = BTreeMap::new();
     if let Err(error) = collect_independent_files(root, root, &mut actual) {
@@ -139,6 +108,44 @@ pub(super) fn check_independent_manifest() -> usize {
         );
     }
     failures
+}
+
+/// Parses the committed manifest of the independent test files.
+fn parse_independent_manifest(text: &str) -> (BTreeMap<String, String>, usize) {
+    let mut failures = 0;
+    let mut expected = BTreeMap::new();
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if fields.len() != 2 {
+            eprintln!("[FAIL] independent manifest: malformed entry: {line}");
+            failures += 1;
+            continue;
+        }
+        let path = normalize_manifest_path(fields[1]);
+        if path == "MANIFEST.sha256" {
+            eprintln!("[FAIL] independent manifest: the manifest cannot list itself");
+            failures += 1;
+            continue;
+        }
+        if path.starts_with('/') || path.split('/').any(|part| part == "..") {
+            eprintln!("[FAIL] independent manifest: path escapes the directory: {path}");
+            failures += 1;
+            continue;
+        }
+        if expected
+            .insert(path.clone(), fields[0].to_string())
+            .is_some()
+        {
+            eprintln!("[FAIL] independent manifest: duplicate entry: {path}");
+            failures += 1;
+        }
+    }
+
+    (expected, failures)
 }
 
 fn collect_independent_files(

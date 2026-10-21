@@ -69,6 +69,30 @@ impl Paths {
     }
 }
 
+/// Runs the golden-manifest mode when the first argument selects it.
+fn run_golden_mode(
+    first: Option<&str>,
+    args: &mut impl Iterator<Item = String>,
+) -> Option<ExitCode> {
+    if !matches!(first, Some("--golden") | Some("--check-golden")) {
+        return None;
+    }
+    let mode = if first == Some("--golden") {
+        golden::Mode::Write
+    } else {
+        golden::Mode::Check
+    };
+    let Some(manifest) = args.next() else {
+        eprintln!("Usage: cppwasm-testrunner --golden|--check-golden <manifest> [compiler]");
+        return Some(ExitCode::FAILURE);
+    };
+    let compiler = args
+        .next()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("target/release/cppwasm-cli"));
+    Some(golden::run(mode, Path::new(&manifest), compiler))
+}
+
 fn main() -> ExitCode {
     if checks::check_independent_manifest() > 0 {
         return ExitCode::FAILURE;
@@ -79,21 +103,8 @@ fn main() -> ExitCode {
     if first.as_deref() == Some("--oracle") {
         return oracle::run_oracle(args.next().as_deref());
     }
-    if matches!(first.as_deref(), Some("--golden") | Some("--check-golden")) {
-        let mode = if first.as_deref() == Some("--golden") {
-            golden::Mode::Write
-        } else {
-            golden::Mode::Check
-        };
-        let Some(manifest) = args.next() else {
-            eprintln!("Usage: cppwasm-testrunner --golden|--check-golden <manifest> [compiler]");
-            return ExitCode::FAILURE;
-        };
-        let compiler = args
-            .next()
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("target/release/cppwasm-cli"));
-        return golden::run(mode, Path::new(&manifest), compiler);
+    if let Some(code) = run_golden_mode(first.as_deref(), &mut args) {
+        return code;
     }
     let compiler = first
         .map(PathBuf::from)

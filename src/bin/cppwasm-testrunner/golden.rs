@@ -214,69 +214,74 @@ pub(super) fn sha256_hex(data: &[u8]) -> String {
     message.extend_from_slice(&bit_len.to_be_bytes());
 
     for chunk in message.as_chunks::<64>().0 {
-        let mut words = [0u32; 64];
-        for (index, word) in words.iter_mut().take(16).enumerate() {
-            let start = index * 4;
-            *word = u32::from_be_bytes([
-                chunk[start],
-                chunk[start + 1],
-                chunk[start + 2],
-                chunk[start + 3],
-            ]);
-        }
-        for index in 16..64 {
-            let s0 = words[index - 15].rotate_right(7)
-                ^ words[index - 15].rotate_right(18)
-                ^ (words[index - 15] >> 3);
-            let s1 = words[index - 2].rotate_right(17)
-                ^ words[index - 2].rotate_right(19)
-                ^ (words[index - 2] >> 10);
-            words[index] = words[index - 16]
-                .wrapping_add(s0)
-                .wrapping_add(words[index - 7])
-                .wrapping_add(s1);
-        }
-
-        let mut a = state[0];
-        let mut b = state[1];
-        let mut c = state[2];
-        let mut d = state[3];
-        let mut e = state[4];
-        let mut f = state[5];
-        let mut g = state[6];
-        let mut h = state[7];
-        for (round, word) in K.iter().zip(words.iter()) {
-            let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
-            let ch = (e & f) ^ ((!e) & g);
-            let temp1 = h
-                .wrapping_add(s1)
-                .wrapping_add(ch)
-                .wrapping_add(*round)
-                .wrapping_add(*word);
-            let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
-            let maj = (a & b) ^ (a & c) ^ (b & c);
-            let temp2 = s0.wrapping_add(maj);
-            h = g;
-            g = f;
-            f = e;
-            e = d.wrapping_add(temp1);
-            d = c;
-            c = b;
-            b = a;
-            a = temp1.wrapping_add(temp2);
-        }
-
-        state[0] = state[0].wrapping_add(a);
-        state[1] = state[1].wrapping_add(b);
-        state[2] = state[2].wrapping_add(c);
-        state[3] = state[3].wrapping_add(d);
-        state[4] = state[4].wrapping_add(e);
-        state[5] = state[5].wrapping_add(f);
-        state[6] = state[6].wrapping_add(g);
-        state[7] = state[7].wrapping_add(h);
+        sha256_compress(&mut state, chunk, &K);
     }
 
     state.iter().map(|word| format!("{word:08x}")).collect()
+}
+
+/// Mixes one 64-byte block into the SHA-256 state.
+fn sha256_compress(state: &mut [u32; 8], chunk: &[u8], k: &[u32; 64]) {
+    let mut words = [0u32; 64];
+    for (index, word) in words.iter_mut().take(16).enumerate() {
+        let start = index * 4;
+        *word = u32::from_be_bytes([
+            chunk[start],
+            chunk[start + 1],
+            chunk[start + 2],
+            chunk[start + 3],
+        ]);
+    }
+    for index in 16..64 {
+        let s0 = words[index - 15].rotate_right(7)
+            ^ words[index - 15].rotate_right(18)
+            ^ (words[index - 15] >> 3);
+        let s1 = words[index - 2].rotate_right(17)
+            ^ words[index - 2].rotate_right(19)
+            ^ (words[index - 2] >> 10);
+        words[index] = words[index - 16]
+            .wrapping_add(s0)
+            .wrapping_add(words[index - 7])
+            .wrapping_add(s1);
+    }
+
+    let mut a = state[0];
+    let mut b = state[1];
+    let mut c = state[2];
+    let mut d = state[3];
+    let mut e = state[4];
+    let mut f = state[5];
+    let mut g = state[6];
+    let mut h = state[7];
+    for (round, word) in k.iter().zip(words.iter()) {
+        let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
+        let ch = (e & f) ^ ((!e) & g);
+        let temp1 = h
+            .wrapping_add(s1)
+            .wrapping_add(ch)
+            .wrapping_add(*round)
+            .wrapping_add(*word);
+        let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
+        let maj = (a & b) ^ (a & c) ^ (b & c);
+        let temp2 = s0.wrapping_add(maj);
+        h = g;
+        g = f;
+        f = e;
+        e = d.wrapping_add(temp1);
+        d = c;
+        c = b;
+        b = a;
+        a = temp1.wrapping_add(temp2);
+    }
+
+    state[0] = state[0].wrapping_add(a);
+    state[1] = state[1].wrapping_add(b);
+    state[2] = state[2].wrapping_add(c);
+    state[3] = state[3].wrapping_add(d);
+    state[4] = state[4].wrapping_add(e);
+    state[5] = state[5].wrapping_add(f);
+    state[6] = state[6].wrapping_add(g);
+    state[7] = state[7].wrapping_add(h);
 }
 
 #[cfg(test)]
