@@ -27,8 +27,10 @@ function binaryChain(terms) {
 }
 
 function stringConcat(terms) {
-    const termsList = new Array(terms).fill('"x"').join("+");
-    return `#include <string>\nint main() { std::string s; s = ${termsList}; return (int)s.size(); }\n`;
+    // Two string literals cannot be added, so the chain starts at a
+    // `std::string` seed and appends one literal at a time.
+    const termsList = new Array(terms).fill('"x"').join(" + ");
+    return `#include <string>\nint main() { std::string s = "seed"; s = s + ${termsList}; return (int)s.size(); }\n`;
 }
 
 function elseIfChain(branches) {
