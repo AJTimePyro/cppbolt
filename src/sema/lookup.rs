@@ -17,7 +17,14 @@ impl Sema {
 
     pub fn find_field_in_class(&self, class_name: &str, field_name: &str) -> Option<StructField> {
         if let Some(layout) = self.struct_layouts.get(class_name) {
-            if let Some(fld) = layout.fields.iter().find(|f| f.name == field_name) {
+            // Base fields are flattened before this class's own fields. Search
+            // backwards so a derived field hides a same-named base field.
+            if let Some(fld) = layout
+                .fields
+                .iter()
+                .rev()
+                .find(|f| f.name == field_name)
+            {
                 return Some(fld.clone());
             }
             for b in &layout.base_classes {

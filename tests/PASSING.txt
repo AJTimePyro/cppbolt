@@ -211,3 +211,5 @@ classes_oop/member_reference_return
 classes_oop_variant/member_reference_return
 classes_oop/chained_compound_assign
 classes_oop_variant/chained_compound_assign
+classes_oop/derived_member_hiding
+classes_oop_variant/derived_member_hiding

@@ -237,16 +237,11 @@ impl<'a> Codegen<'a> {
                 String::new()
             }
         };
-        let offset = if let Some(layout) = self.sema.struct_layouts.get(&sname) {
-            layout
-                .fields
-                .iter()
-                .find(|f| f.name == member)
-                .map(|f| f.offset as i32)
-                .unwrap_or(0)
-        } else {
-            0
-        };
+        let offset = self
+            .sema
+            .find_field_in_class(&sname, member)
+            .map(|field| field.offset as i32)
+            .unwrap_or(0);
 
         if *is_arrow {
             self.compile_expr(object, ctx, code)?;
