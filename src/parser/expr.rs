@@ -6,7 +6,7 @@ impl Parser {
     }
 
     pub(super) fn parse_expr_prec(&mut self, min_prec: u8) -> Result<Expr, CompileError> {
-        let _guard = self.enter_nesting()?;
+        let _guard = self.enter_expression()?;
         let mut lhs = self.parse_prefix()?;
 
         while let Some((op, prec, right_assoc)) = self.current_binary_op() {

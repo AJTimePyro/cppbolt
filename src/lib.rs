@@ -24,6 +24,45 @@ pub use diagnostics::CompileError;
 pub use name::QualifiedName;
 pub use source::{FileId, IncludeProvider, NoIncludes, ResolvedInclude, SourceMap, Span};
 
+/// The nesting limits of the compiler, one per nesting construct.
+///
+/// The limits are measured on the WebAssembly-hosted build under Node/V8 and
+/// apply to the native build as well, so the same input is accepted or
+/// rejected on both hosts.
+#[derive(Debug, Clone, Copy)]
+pub struct NestingLimits {
+    /// Nested expressions.
+    pub expressions: usize,
+    /// Nested parentheses.
+    pub parentheses: usize,
+    /// Nested call argument lists.
+    pub calls: usize,
+    /// Nested statements.
+    pub statements: usize,
+    /// Nested compound blocks.
+    pub blocks: usize,
+    /// Nested declarations.
+    pub declarations: usize,
+    /// Nested type expressions.
+    pub types: usize,
+    /// Nested preprocessor conditions.
+    pub preprocessor: usize,
+}
+
+/// The nesting limits of the compiler.
+pub fn nesting_limits() -> NestingLimits {
+    NestingLimits {
+        expressions: depth::MAX_EXPRESSION_DEPTH,
+        parentheses: depth::MAX_PARENTHESIS_DEPTH,
+        calls: depth::MAX_CALL_DEPTH,
+        statements: depth::MAX_STATEMENT_DEPTH,
+        blocks: depth::MAX_BLOCK_DEPTH,
+        declarations: depth::MAX_DECLARATION_DEPTH,
+        types: depth::MAX_TYPE_DEPTH,
+        preprocessor: depth::MAX_PREPROCESSOR_DEPTH,
+    }
+}
+
 /// Runs only the preprocessor and returns the expanded source.
 pub fn preprocess(source: &str) -> Result<String, CompileError> {
     preprocessor::Preprocessor::new().process(source)

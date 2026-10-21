@@ -10,17 +10,34 @@ Source-map fidelity through nested macro expansion is incomplete. The code gener
 and its frame/scratch allocation is conservative. The corpus and ABI gates are Rust binaries plus Node-hosted
 JavaScript; there is no remaining shell test harness.
 
-The parser, semantic analyzer, code generator, and preprocessor share a single depth limit of 2000 AST or
-expression levels (`src/depth.rs`). Wide left-associative operator chains, `else-if` chains, and string
-concatenations are walked iteratively and do not consume depth per term: 20,000-term integer sums, 4,000 string
-concatenations, and 5,000-branch `else-if` chains compile. Recursive nesting beyond the limit is rejected with a
-normal diagnostic instead of exhausting the native or WebAssembly stack.
+The parser, the semantic analyzer, the code generator and the preprocessor each keep one nesting counter *per
+construct* (`src/depth.rs`), so one construct can no longer exhaust the budget of another: a parenthesis costs one
+level of the parenthesis budget, a compound block costs one level of the block budget, and a nested call costs one
+level of the call budget. The limits are:
 
-The limit was measured on the WebAssembly-hosted compiler under Node/V8. The wasm module is linked with an
-8 MiB stack (`.cargo/config.toml`); the native CLI runs the compiler on a 64 MiB thread (`src/main.rs`). With
-those stacks, 1000-deep nested calls, ternaries, namespaces, and blocks compile, while 5000-deep versions are
-rejected at the 2000 limit before the V8 call stack is exhausted (observed around 4000 recursive frames in the
-wasm build). Include depth is separately limited to 128 (129 is rejected).
+| construct | limit | deepest accepted input (native and wasm) |
+| --- | --- | --- |
+| expressions | 4000 | a parenthesized conditional costs two expression levels |
+| parentheses | 1600 | 1600 |
+| call argument lists | 1500 | 1500 |
+| statements | 1600 | 1599 nested `if` statements (the innermost statement is one level deeper) |
+| compound blocks | 1600 | 1599 nested blocks (the enclosing block is one level deeper) |
+| declarations | 1600 | - |
+| type expressions | 1600 | - |
+| preprocessor conditions | 1600 | - |
+
+The limits were measured on the WebAssembly-hosted compiler under Node/V8, which is the binding host: the
+WebAssembly build reaches 1600 nested parentheses, 1600 nested parenthesized conditionals, 1500 nested calls and
+1599 nested `if` statements, and the native CLI accepts exactly the same depths. A deeper input is rejected with
+the normal `Nesting depth exceeds the supported limit` diagnostic before the stack is exhausted, on both hosts.
+The native CLI runs the compiler on a 64 MiB thread (`src/main.rs`) and the WebAssembly build is linked with an
+8 MiB linear-memory stack (`.cargo/config.toml`); the recursion itself lives in the engine's shadow stack, so a
+host that compiles many deep programs in one process has less room for the last one - the depth check therefore
+runs before the stack is exhausted. Include depth is separately limited to 128 (129 is rejected).
+
+Wide left-associative operator chains, `else-if` chains, and string concatenations are walked iteratively and do
+not consume depth per term: 20,000-term integer sums, 4,000 string concatenations, and 5,000-branch `else-if`
+chains compile.
 
 The `printf` runtime implements `%d`, `%i`, `%u`, `%o`, `%x`, `%X`, `%c`, `%s`, `%e`, `%E`, `%f`, `%g`, and
 `%G`, including the `h`/`hh` length modifiers, with the `0`, `-`, `+`, space, and `#` flags. The `+` and space

@@ -21,7 +21,7 @@ mod unsupported;
 
 /// Decrements the parser's nesting counter when a recursive parse completes,
 /// including on an early error return.
-use crate::depth::DepthCounter;
+use crate::depth::{DepthCounters, DepthGuard};
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -31,7 +31,7 @@ pub struct Parser {
     pub type_aliases: HashMap<String, Type>,
     pub current_namespace: Vec<String>,
     pub open_namespaces: Vec<String>,
-    nesting: DepthCounter,
+    nesting: DepthCounters,
     nesting_exceeded: Cell<bool>,
 }
 
@@ -83,20 +83,58 @@ impl Parser {
             type_aliases,
             current_namespace: Vec::new(),
             open_namespaces: Vec::new(),
-            nesting: DepthCounter::new(),
+            nesting: DepthCounters::new(),
             nesting_exceeded: Cell::new(false),
         }
     }
 
-    /// Reserves one nesting level for the duration of a recursive parse.
-    fn enter_nesting(&self) -> Result<crate::depth::DepthGuard, CompileError> {
-        match self.nesting.enter(self.current().line, self.current().col) {
+    /// Reserves one level of the counter of one nesting construct.
+    fn enter_nesting_of(
+        &self,
+        counter: &crate::depth::DepthCounter,
+    ) -> Result<DepthGuard, CompileError> {
+        match counter.enter(self.current().line, self.current().col) {
             Ok(guard) => Ok(guard),
             Err(error) => {
                 self.nesting_exceeded.set(true);
                 Err(error)
             }
         }
+    }
+
+    /// Reserves one level of the expression counter.
+    fn enter_expression(&self) -> Result<DepthGuard, CompileError> {
+        self.enter_nesting_of(self.nesting.expressions())
+    }
+
+    /// Reserves one level of the parenthesis counter.
+    fn enter_parenthesis(&self) -> Result<DepthGuard, CompileError> {
+        self.enter_nesting_of(self.nesting.parentheses())
+    }
+
+    /// Reserves one level of the call counter.
+    fn enter_call(&self) -> Result<DepthGuard, CompileError> {
+        self.enter_nesting_of(self.nesting.calls())
+    }
+
+    /// Reserves one level of the statement counter.
+    fn enter_statement(&self) -> Result<DepthGuard, CompileError> {
+        self.enter_nesting_of(self.nesting.statements())
+    }
+
+    /// Reserves one level of the block counter.
+    fn enter_block(&self) -> Result<DepthGuard, CompileError> {
+        self.enter_nesting_of(self.nesting.blocks())
+    }
+
+    /// Reserves one level of the declaration counter.
+    fn enter_declaration(&self) -> Result<DepthGuard, CompileError> {
+        self.enter_nesting_of(self.nesting.declarations())
+    }
+
+    /// Reserves one level of the type counter.
+    fn enter_type(&self) -> Result<DepthGuard, CompileError> {
+        self.enter_nesting_of(self.nesting.types())
     }
 
     pub(super) fn current(&self) -> &Token {

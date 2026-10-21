@@ -43,7 +43,15 @@ impl Sema {
     /// Every statement kind is handled by its own helper so that this
     /// function stays a dispatcher.
     pub(super) fn analyze_stmt(&mut self, stmt: &mut Stmt) -> Result<(), CompileError> {
-        let _guard = self.depth.enter(stmt.line, stmt.col)?;
+        // A compound block has its own budget, so a nested `if` with its
+        // block costs one statement level and one block level.
+        if let StmtKind::Compound(stmts) = &mut stmt.kind {
+            let _guard = self.depth.blocks().enter(stmt.line, stmt.col)?;
+            self.current_line = stmt.line;
+            self.current_col = stmt.col;
+            return self.analyze_compound(stmts);
+        }
+        let _guard = self.depth.statements().enter(stmt.line, stmt.col)?;
         self.current_line = stmt.line;
         self.current_col = stmt.col;
         if self.analyze_simple_stmt(&mut stmt.kind)? {

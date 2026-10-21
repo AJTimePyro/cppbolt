@@ -9,6 +9,7 @@ impl<'a> Codegen<'a> {
     ) -> Result<(), CompileError> {
         let _guard = self
             .depth
+            .expressions()
             .enter(self.sema.current_line, self.sema.current_col)?;
         match expr {
             Expr::IntLiteral(..)

@@ -5,7 +5,7 @@ impl Parser {
         &mut self,
         declarations: &mut Vec<Decl>,
     ) -> Result<(), CompileError> {
-        let _guard = self.enter_nesting()?;
+        let _guard = self.enter_declaration()?;
         if self.peek() == &TokenKind::Semi {
             self.advance();
             return Ok(());

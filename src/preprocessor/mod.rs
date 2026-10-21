@@ -113,7 +113,7 @@ impl<'a> Preprocessor<'a> {
             includes,
             include_depth: 0,
             include_stack: Vec::new(),
-            depth: crate::depth::DepthCounter::new(),
+            depth: crate::depth::DepthCounter::new(crate::depth::MAX_PREPROCESSOR_DEPTH),
         }
     }
 

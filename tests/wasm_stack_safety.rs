@@ -13,9 +13,12 @@ fn wasm_hosted_compiler_stays_within_stack_limits() -> Result<(), Box<dyn std::e
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let wasm = ensure_wasm_compiler(&root)?;
     let node = std::env::var("NODE").unwrap_or_else(|_| "node".to_string());
+    let limits = root.join("target/wasm-stack-limits.json");
+    let limits = write_limits(&limits)?;
     let output = Command::new(node)
         .arg(root.join("tests/wasm_stack_safety.js"))
         .arg(&wasm)
+        .arg(&limits)
         .output()?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -27,9 +30,25 @@ fn wasm_hosted_compiler_stays_within_stack_limits() -> Result<(), Box<dyn std::e
     Ok(())
 }
 
+/// Writes the per-construct nesting limits as JSON for the JavaScript check.
+fn write_limits(path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let limits = cppwasm::nesting_limits();
+    let json = format!(
+        "{{\"parentheses\": {}, \"calls\": {}, \"statements\": {}}}",
+        limits.parentheses, limits.calls, limits.statements
+    );
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, json)?;
+    Ok(path.to_path_buf())
+}
+
 fn ensure_wasm_compiler(root: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let isolated = root.join("target/abi-wasm");
-    let wasm = isolated.join("wasm32-unknown-unknown/fast/cppwasm.wasm");
+    // The release build is the one hosts use, and the one the nesting
+    // limits are measured on.
+    let wasm = isolated.join("wasm32-unknown-unknown/release/cppwasm.wasm");
     if wasm.exists() {
         return Ok(wasm);
     }
@@ -37,8 +56,7 @@ fn ensure_wasm_compiler(root: &Path) -> Result<PathBuf, Box<dyn std::error::Erro
     let status = Command::new(cargo)
         .args([
             "build",
-            "--profile",
-            "fast",
+            "--release",
             "--target",
             "wasm32-unknown-unknown",
             "--lib",

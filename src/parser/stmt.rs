@@ -2,7 +2,12 @@ use super::*;
 
 impl Parser {
     pub(super) fn parse_stmt(&mut self) -> Result<Stmt, CompileError> {
-        let _guard = self.enter_nesting()?;
+        // A compound block has its own budget, so a nested `if` with its
+        // block costs one statement level and one block level.
+        if self.peek() == &TokenKind::LBrace {
+            return self.parse_compound_stmt();
+        }
+        let _guard = self.enter_statement()?;
         let tok = self.current().clone();
         let line = tok.line;
         let col = tok.col;
@@ -118,6 +123,8 @@ impl Parser {
     }
 
     pub(super) fn parse_compound_stmt(&mut self) -> Result<Stmt, CompileError> {
+        // One compound block costs one level of the block budget.
+        let _guard = self.enter_block()?;
         let tok = self.current().clone();
         self.expect(TokenKind::LBrace)?;
         let mut stmts = Vec::new();
@@ -221,7 +228,7 @@ impl Parser {
     }
 
     pub(super) fn parse_initializer(&mut self) -> Result<Expr, CompileError> {
-        let _guard = self.enter_nesting()?;
+        let _guard = self.enter_expression()?;
         if self.peek() == &TokenKind::LBrace {
             self.advance();
             let mut list = Vec::new();

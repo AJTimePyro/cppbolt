@@ -150,6 +150,8 @@ impl Parser {
     }
 
     fn parse_call_args(&mut self) -> Result<Vec<Expr>, CompileError> {
+        // One call costs one level of the call budget.
+        let _guard = self.enter_call()?;
         let mut args = Vec::new();
         while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
             args.push(self.parse_expr()?);

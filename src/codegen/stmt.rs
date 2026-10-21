@@ -7,7 +7,13 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let _guard = self.depth.enter(stmt.line, stmt.col)?;
+        // A compound block has its own budget, so a nested `if` with its
+        // block costs one statement level and one block level.
+        if let StmtKind::Compound(stmts) = &stmt.kind {
+            let _guard = self.depth.blocks().enter(stmt.line, stmt.col)?;
+            return self.compile_compound_stmt(stmts, ctx, code);
+        }
+        let _guard = self.depth.statements().enter(stmt.line, stmt.col)?;
         match &stmt.kind {
             StmtKind::Compound(stmts) => self.compile_compound_stmt(stmts, ctx, code)?,
             StmtKind::VarDecl { .. } => self.compile_var_decl(stmt, ctx, code)?,

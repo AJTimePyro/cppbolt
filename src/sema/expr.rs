@@ -2,7 +2,10 @@ use super::*;
 
 impl Sema {
     pub fn analyze_expr(&mut self, expr: &mut Expr) -> Result<Type, CompileError> {
-        let _guard = self.depth.enter(self.current_line, self.current_col)?;
+        let _guard = self
+            .depth
+            .expressions()
+            .enter(self.current_line, self.current_col)?;
         let ty = self.analyze_expr_raw(expr)?;
         Ok(ty.strip_reference().clone())
     }

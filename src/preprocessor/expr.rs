@@ -459,7 +459,7 @@ mod tests {
     use super::*;
 
     fn eval(text: &str) -> Result<i64, CompileError> {
-        let depth = DepthCounter::new();
+        let depth = DepthCounter::new(crate::depth::MAX_PREPROCESSOR_DEPTH);
         IfExpr::new(text, &depth, 1).evaluate()
     }
 
@@ -480,7 +480,7 @@ mod tests {
 
     #[test]
     fn rejects_division_by_zero() -> Result<(), Box<dyn std::error::Error>> {
-        let depth = DepthCounter::new();
+        let depth = DepthCounter::new(crate::depth::MAX_PREPROCESSOR_DEPTH);
         let error = match IfExpr::new("1 / 0", &depth, 1).evaluate() {
             Ok(_) => return Err("expected a division-by-zero diagnostic".into()),
             Err(error) => error,

@@ -135,6 +135,8 @@ impl Parser {
     }
 
     fn parse_parenthesized_expr(&mut self) -> Result<Expr, CompileError> {
+        // One parenthesis costs one level of the parenthesis budget.
+        let _guard = self.enter_parenthesis()?;
         // Check if cast: (int)x or (char)x
         if self.is_cast_ahead() {
             let saved_pos = self.pos;

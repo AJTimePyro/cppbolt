@@ -56,7 +56,7 @@ impl Parser {
     }
 
     pub fn parse_type(&mut self) -> Result<Type, CompileError> {
-        let _guard = self.enter_nesting()?;
+        let _guard = self.enter_type()?;
         let mut is_const = false;
         while self.peek() == &TokenKind::KwConst {
             self.advance();
