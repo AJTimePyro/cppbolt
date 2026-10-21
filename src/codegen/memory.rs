@@ -62,27 +62,7 @@ impl<'a> Codegen<'a> {
         let from = from.strip_const().strip_reference();
         let to = to.strip_const().strip_reference();
         if to == &Type::Bool && from != &Type::Bool {
-            match from {
-                Type::Float => {
-                    code.push(OP_F32_CONST);
-                    code.extend_from_slice(&0.0f32.to_le_bytes());
-                    code.push(OP_F32_NE);
-                }
-                Type::Double => {
-                    code.push(OP_F64_CONST);
-                    code.extend_from_slice(&0.0f64.to_le_bytes());
-                    code.push(OP_F64_NE);
-                }
-                Type::LongLong | Type::UnsignedLongLong => {
-                    code.push(OP_I64_EQZ);
-                    code.push(OP_I32_EQZ);
-                }
-                _ => {
-                    code.push(OP_I32_CONST);
-                    write_i32(code, 0);
-                    code.push(OP_I32_NE);
-                }
-            }
+            Self::emit_bool_conversion(from, code);
             return;
         }
         if from == to {
@@ -92,6 +72,35 @@ impl<'a> Codegen<'a> {
             emit_integer_narrowing(to, code);
             return;
         }
+        Self::emit_scalar_conversion(from, to, code);
+        emit_integer_narrowing(to, code);
+    }
+
+    fn emit_bool_conversion(from: &Type, code: &mut Vec<u8>) {
+        match from {
+            Type::Float => {
+                code.push(OP_F32_CONST);
+                code.extend_from_slice(&0.0f32.to_le_bytes());
+                code.push(OP_F32_NE);
+            }
+            Type::Double => {
+                code.push(OP_F64_CONST);
+                code.extend_from_slice(&0.0f64.to_le_bytes());
+                code.push(OP_F64_NE);
+            }
+            Type::LongLong | Type::UnsignedLongLong => {
+                code.push(OP_I64_EQZ);
+                code.push(OP_I32_EQZ);
+            }
+            _ => {
+                code.push(OP_I32_CONST);
+                write_i32(code, 0);
+                code.push(OP_I32_NE);
+            }
+        }
+    }
+
+    fn emit_scalar_conversion(from: &Type, to: &Type, code: &mut Vec<u8>) {
         if matches!(to, Type::LongLong | Type::UnsignedLongLong) {
             if from == &Type::Double {
                 code.push(if to.is_signed() {
@@ -157,7 +166,6 @@ impl<'a> Codegen<'a> {
         } else if from == &Type::Double && to == &Type::Float {
             code.push(OP_F32_DEMOTE_F64);
         }
-        emit_integer_narrowing(to, code);
     }
 
     /// Emits a load of `ty` from `[address + offset]`.

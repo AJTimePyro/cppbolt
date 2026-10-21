@@ -221,99 +221,111 @@ impl<'a> Codegen<'a> {
 
     fn type_of_call(&self, callee: &Expr, ctx: &FunctionContext) -> Type {
         match callee {
-            Expr::Identifier(name) => {
-                if name == "printf"
-                    || name == "std::printf"
-                    || name.ends_with("::printf")
-                    || name == "__builtin_wasm_memory_size"
-                {
-                    Type::Int
-                } else if name == "print_char"
-                    || name == "print_int"
-                    || name == "print_double"
-                    || name == "free"
-                    || name == "exit"
-                {
-                    Type::Void
-                } else if name == "read_char" {
-                    Type::Int
-                } else if self.sema.struct_layouts.contains_key(name) {
-                    Type::Struct(name.clone())
-                } else if let Some(ty) = ctx.var_types.get(name) {
-                    if let Type::Pointer(inner) = ty.strip_const() {
-                        if let Type::Function { return_type, .. } = &**inner {
-                            (**return_type).clone()
-                        } else {
-                            Type::Int
-                        }
-                    } else if let Type::Function { return_type, .. } = ty.strip_const() {
-                        (**return_type).clone()
-                    } else {
-                        Type::Int
-                    }
-                } else if let Some(sym) = self.sema.global_vars.get(name) {
-                    if let Type::Pointer(inner) = sym.ty.strip_const() {
-                        if let Type::Function { return_type, .. } = &**inner {
-                            (**return_type).clone()
-                        } else {
-                            Type::Int
-                        }
-                    } else if let Type::Function { return_type, .. } = sym.ty.strip_const() {
-                        (**return_type).clone()
-                    } else {
-                        Type::Int
-                    }
-                } else {
-                    let mut found_ret = None;
-                    if let Some(cls) = &ctx.current_class
-                        && let Some(sig) = self.sema.find_method_in_class(cls, name)
-                    {
-                        found_ret = Some(sig.return_type.clone());
-                    }
-                    if found_ret.is_none()
-                        && let Some(cands) = self
-                            .sema
-                            .functions
-                            .get(name)
-                            .or_else(|| self.sema.functions.get(&format!("std::{}", name)))
-                            .or_else(|| self.sema.functions.get(QualifiedName::new(name).plain()))
-                    {
-                        found_ret = Some(cands[0].return_type.clone());
-                    }
-                    found_ret.unwrap_or(Type::Int)
-                }
-            }
+            Expr::Identifier(name) => self.type_of_named_call(name, ctx),
             Expr::MemberAccess {
                 object,
                 member,
                 is_arrow,
-            } => {
-                let obj_ty = self.get_expr_type_raw(object, ctx);
-                let is_ref = obj_ty.is_reference();
-                let sname = if *is_arrow || is_ref {
-                    if let Type::Pointer(inner) | Type::Reference(inner) = obj_ty.strip_const() {
-                        if let Type::Struct(s) = inner.strip_const() {
-                            s.clone()
-                        } else {
-                            String::new()
-                        }
-                    } else {
-                        String::new()
-                    }
-                } else {
-                    if let Type::Struct(s) = obj_ty.strip_const() {
-                        s.clone()
-                    } else {
-                        String::new()
-                    }
-                };
-                if let Some(sig) = self.sema.find_method_in_class(&sname, member) {
-                    sig.return_type.clone()
+            } => self.type_of_member_call(object, member, is_arrow, ctx),
+            _ => Type::Int,
+        }
+    }
+
+    /// The result type of a call through a plain name.
+    fn type_of_named_call(&self, name: &str, ctx: &FunctionContext) -> Type {
+        if name == "printf"
+            || name == "std::printf"
+            || name.ends_with("::printf")
+            || name == "__builtin_wasm_memory_size"
+        {
+            Type::Int
+        } else if name == "print_char"
+            || name == "print_int"
+            || name == "print_double"
+            || name == "free"
+            || name == "exit"
+        {
+            Type::Void
+        } else if name == "read_char" {
+            Type::Int
+        } else if self.sema.struct_layouts.contains_key(name) {
+            Type::Struct(name.to_string())
+        } else if let Some(ty) = ctx.var_types.get(name) {
+            if let Type::Pointer(inner) = ty.strip_const() {
+                if let Type::Function { return_type, .. } = &**inner {
+                    (**return_type).clone()
                 } else {
                     Type::Int
                 }
+            } else if let Type::Function { return_type, .. } = ty.strip_const() {
+                (**return_type).clone()
+            } else {
+                Type::Int
             }
-            _ => Type::Int,
+        } else if let Some(sym) = self.sema.global_vars.get(name) {
+            if let Type::Pointer(inner) = sym.ty.strip_const() {
+                if let Type::Function { return_type, .. } = &**inner {
+                    (**return_type).clone()
+                } else {
+                    Type::Int
+                }
+            } else if let Type::Function { return_type, .. } = sym.ty.strip_const() {
+                (**return_type).clone()
+            } else {
+                Type::Int
+            }
+        } else {
+            let mut found_ret = None;
+            if let Some(cls) = &ctx.current_class
+                && let Some(sig) = self.sema.find_method_in_class(cls, name)
+            {
+                found_ret = Some(sig.return_type.clone());
+            }
+            if found_ret.is_none()
+                && let Some(cands) = self
+                    .sema
+                    .functions
+                    .get(name)
+                    .or_else(|| self.sema.functions.get(&format!("std::{}", name)))
+                    .or_else(|| self.sema.functions.get(QualifiedName::new(name).plain()))
+            {
+                found_ret = Some(cands[0].return_type.clone());
+            }
+            found_ret.unwrap_or(Type::Int)
+        }
+    }
+
+    /// The result type of a call through a member access.
+    fn type_of_member_call(
+        &self,
+        object: &Expr,
+        member: &str,
+        is_arrow: &bool,
+        ctx: &FunctionContext,
+    ) -> Type {
+        let obj_ty = self.get_expr_type_raw(object, ctx);
+        let is_ref = obj_ty.is_reference();
+        let sname = if *is_arrow || is_ref {
+            if let Type::Pointer(inner) | Type::Reference(inner) = obj_ty.strip_const() {
+                if let Type::Struct(s) = inner.strip_const() {
+                    s.clone()
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            }
+        } else {
+            if let Type::Struct(s) = obj_ty.strip_const() {
+                s.clone()
+            } else {
+                String::new()
+            }
+        };
+        if let Some(sig) = self.sema.find_method_in_class(&sname, member) {
+            sig.return_type.clone()
+        } else {
+            Type::Int
         }
     }
 

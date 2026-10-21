@@ -129,103 +129,124 @@ impl<'a> Codegen<'a> {
         let mut candidates = Vec::new();
         for decl in &program.declarations {
             if let Decl::Function(f) = decl {
-                let mangled = self.sema.mangle_name(&f.name, &f.params);
-                let aliases = vec![
-                    f.name.clone(),
-                    QualifiedName::new(&f.name).alternate().into_owned(),
-                    mangled.clone(),
-                    QualifiedName::new(&mangled).alternate().into_owned(),
-                ];
-                let mut calls = HashSet::new();
-                if let Some(body) = &f.body {
-                    collect_stmt_calls(body, &mut calls);
-                }
-                let is_address_taken = aliases.iter().any(|a| address_taken.contains(a));
-                let is_root = f.name == "main" || is_address_taken;
-                if f.name == "main" {
-                    for (_, gty, _) in &self.global_inits {
-                        collect_type_lifecycle(gty, &mut calls);
-                    }
-                }
-                candidates.push(FuncCandidate {
-                    decl: FuncDeclRef::Function(f),
-                    is_root,
-                    aliases,
-                    calls,
-                });
+                candidates.push(self.build_function_candidate(f, address_taken));
             } else if let Decl::StructDecl { name, methods, .. } = decl {
                 for m in methods {
-                    if !m.is_pure_virtual {
-                        let mut aliases = Vec::new();
-                        aliases.push(m.name.clone());
-                        let qual_name = format!("{}::{}", name, m.name);
-                        aliases.push(qual_name.clone());
-                        aliases.push(format!("{}_{}", name, m.name));
-                        let mut calls = HashSet::new();
-                        if m.name == *name {
-                            aliases.push(format!("{}_{}", name, name));
-                            aliases.push(format!("{}::{}", name, name));
-                            calls.insert(format!("{}_~{}", name, name));
-                            calls.insert(format!("{}::~{}", name, name));
-                        }
-                        if m.name == format!("~{}", name) {
-                            aliases.push(format!("{}_~{}", name, name));
-                            aliases.push(format!("{}::~{}", name, name));
-                        }
-                        let mut params = m.params.clone();
-                        if !m.is_static {
-                            params.insert(
-                                0,
-                                Param {
-                                    name: "this".to_string(),
-                                    ty: Type::Pointer(Box::new(Type::Struct(name.clone()))),
-                                    default_val: None,
-                                },
-                            );
-                        }
-                        let mangled = self.sema.mangle_name(&qual_name, &params);
-                        aliases.push(mangled);
-                        if let Some(body) = &m.body {
-                            collect_stmt_calls(body, &mut calls);
-                        }
-
-                        // A constructor or destructor implicitly calls the
-                        // lifecycle methods of its bases and members.
-                        if let Some(layout) = self.sema.struct_layouts.get(name)
-                            && (m.name == *name || m.name == format!("~{}", name))
-                        {
-                            for b in &layout.base_classes {
-                                collect_type_lifecycle(&Type::Struct(b.clone()), &mut calls);
-                            }
-                            for fld in &layout.fields {
-                                collect_type_lifecycle(&fld.ty, &mut calls);
-                            }
-                        }
-
-                        // Virtual methods can be reached through any vtable,
-                        // so they are conservative roots.
-                        let is_vmethod = self
-                            .sema
-                            .struct_layouts
-                            .get(name)
-                            .map(|l| {
-                                l.vtable_slots.iter().any(|s| {
-                                    s == &m.name || (s.starts_with('~') && m.name.starts_with('~'))
-                                })
-                            })
-                            .unwrap_or(false);
-
-                        candidates.push(FuncCandidate {
-                            decl: FuncDeclRef::Method(name, m),
-                            is_root: is_vmethod,
-                            aliases,
-                            calls,
-                        });
+                    if m.is_pure_virtual {
+                        continue;
+                    }
+                    if let Some(candidate) = self.build_method_candidate(name, m) {
+                        candidates.push(candidate);
                     }
                 }
             }
         }
         candidates
+    }
+
+    /// Builds the reachability candidate of a free function.
+    fn build_function_candidate<'p>(
+        &mut self,
+        f: &'p FunctionDecl,
+        address_taken: &HashSet<String>,
+    ) -> FuncCandidate<'p> {
+        let mangled = self.sema.mangle_name(&f.name, &f.params);
+        let aliases = vec![
+            f.name.clone(),
+            QualifiedName::new(&f.name).alternate().into_owned(),
+            mangled.clone(),
+            QualifiedName::new(&mangled).alternate().into_owned(),
+        ];
+        let mut calls = HashSet::new();
+        if let Some(body) = &f.body {
+            collect_stmt_calls(body, &mut calls);
+        }
+        let is_address_taken = aliases.iter().any(|a| address_taken.contains(a));
+        let is_root = f.name == "main" || is_address_taken;
+        if f.name == "main" {
+            for (_, gty, _) in &self.global_inits {
+                collect_type_lifecycle(gty, &mut calls);
+            }
+        }
+        FuncCandidate {
+            decl: FuncDeclRef::Function(f),
+            is_root,
+            aliases,
+            calls,
+        }
+    }
+
+    /// Builds the reachability candidate of a class method.
+    fn build_method_candidate<'p>(
+        &mut self,
+        name: &'p String,
+        m: &'p FunctionDecl,
+    ) -> Option<FuncCandidate<'p>> {
+        let mut aliases = Vec::new();
+        aliases.push(m.name.clone());
+        let qual_name = format!("{}::{}", name, m.name);
+        aliases.push(qual_name.clone());
+        aliases.push(format!("{}_{}", name, m.name));
+        let mut calls = HashSet::new();
+        if m.name == *name {
+            aliases.push(format!("{}_{}", name, name));
+            aliases.push(format!("{}::{}", name, name));
+            calls.insert(format!("{}_~{}", name, name));
+            calls.insert(format!("{}::~{}", name, name));
+        }
+        if m.name == format!("~{}", name) {
+            aliases.push(format!("{}_~{}", name, name));
+            aliases.push(format!("{}::~{}", name, name));
+        }
+        let mut params = m.params.clone();
+        if !m.is_static {
+            params.insert(
+                0,
+                Param {
+                    name: "this".to_string(),
+                    ty: Type::Pointer(Box::new(Type::Struct(name.clone()))),
+                    default_val: None,
+                },
+            );
+        }
+        let mangled = self.sema.mangle_name(&qual_name, &params);
+        aliases.push(mangled);
+        if let Some(body) = &m.body {
+            collect_stmt_calls(body, &mut calls);
+        }
+
+        // A constructor or destructor implicitly calls the lifecycle methods
+        // of its bases and members.
+        if let Some(layout) = self.sema.struct_layouts.get(name)
+            && (m.name == *name || m.name == format!("~{}", name))
+        {
+            for b in &layout.base_classes {
+                collect_type_lifecycle(&Type::Struct(b.clone()), &mut calls);
+            }
+            for fld in &layout.fields {
+                collect_type_lifecycle(&fld.ty, &mut calls);
+            }
+        }
+
+        // Virtual methods can be reached through any vtable, so they are
+        // conservative roots.
+        let is_vmethod = self
+            .sema
+            .struct_layouts
+            .get(name)
+            .map(|l| {
+                l.vtable_slots
+                    .iter()
+                    .any(|s| s == &m.name || (s.starts_with('~') && m.name.starts_with('~')))
+            })
+            .unwrap_or(false);
+
+        Some(FuncCandidate {
+            decl: FuncDeclRef::Method(name, m),
+            is_root: is_vmethod,
+            aliases,
+            calls,
+        })
     }
 
     fn compute_reachable(candidates: &[FuncCandidate<'_>]) -> HashSet<usize> {

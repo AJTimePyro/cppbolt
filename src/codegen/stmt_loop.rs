@@ -98,6 +98,64 @@ impl<'a> Codegen<'a> {
         self.compile_expr(expr, ctx, code)?;
         self.emit_clean_temporaries(ctx, code);
 
+        let (target_slot, matched_slot, any_match_slot) =
+            self.emit_switch_slots(switch_is_wide, ctx, code)?;
+
+        self.emit_switch_default_scan(body, target_slot, any_match_slot, switch_is_wide, ctx, code);
+
+        code.push(OP_BLOCK);
+        code.push(0x40); // break block
+        let break_target_abs = self.current_block_depth;
+        self.current_block_depth += 1;
+        // `0` means this construct has no continue target.
+        self.loop_depths
+            .push((break_target_abs, 0, ctx.scope_objects.len()));
+
+        ctx.enter_scope();
+        ctx.scope_objects.push(Vec::new());
+        if let StmtKind::Compound(stmts) = &body.kind {
+            for s in stmts {
+                match &s.kind {
+                    StmtKind::Case(val) => {
+                        self.emit_switch_case(
+                            s,
+                            *val,
+                            target_slot,
+                            matched_slot,
+                            switch_is_wide,
+                            ctx,
+                            code,
+                        )?;
+                    }
+                    StmtKind::Default => {
+                        self.emit_switch_default(s, matched_slot, any_match_slot, ctx, code)?;
+                    }
+                    _ => {
+                        self.emit_switch_fallthrough(s, matched_slot, ctx, code)?;
+                    }
+                }
+            }
+        }
+
+        self.loop_depths.pop();
+        if let Some(scope) = ctx.scope_objects.last() {
+            self.emit_dtor_for_scope(scope, ctx, code);
+        }
+        ctx.scope_objects.pop();
+        code.push(OP_END);
+        self.current_block_depth -= 1;
+        ctx.exit_scope();
+
+        Ok(())
+    }
+
+    /// Stores the switch value and the match state in frame slots.
+    fn emit_switch_slots(
+        &mut self,
+        switch_is_wide: bool,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(u32, u32, u32), CompileError> {
         // Case expressions and bodies may call functions, which can clobber
         // scratch locals. Keep the switch value and match state in frame slots.
         let target_slot = if switch_is_wide {
@@ -139,8 +197,21 @@ impl<'a> Codegen<'a> {
             write_u32(code, slot);
         }
 
-        // Default starts only when no case label matches. Compute that once
-        // because case bodies may clobber scratch locals.
+        Ok((target_slot, matched_slot, any_match_slot))
+    }
+
+    /// Default starts only when no case label matches. Compute that once
+    /// because case bodies may clobber scratch locals.
+    fn emit_switch_default_scan(
+        &mut self,
+        body: &Stmt,
+        target_slot: u32,
+        any_match_slot: u32,
+        switch_is_wide: bool,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) {
+        // Compute that once because case bodies may clobber scratch locals.
         if let StmtKind::Compound(stmts) = &body.kind {
             for s in stmts {
                 if let StmtKind::Case(val) = &s.kind {
@@ -159,116 +230,118 @@ impl<'a> Codegen<'a> {
                 }
             }
         }
+    }
 
-        code.push(OP_BLOCK);
-        code.push(0x40); // break block
-        let break_target_abs = self.current_block_depth;
+    #[allow(clippy::too_many_arguments)]
+    fn emit_switch_case(
+        &mut self,
+        stmt: &Stmt,
+        val: i64,
+        target_slot: u32,
+        matched_slot: u32,
+        switch_is_wide: bool,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, matched_slot);
+        self.emit_switch_case_eq(target_slot, val, switch_is_wide, ctx, code);
+        code.push(OP_I32_OR);
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.scratch1);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch1);
+        code.push(OP_I32_STORE);
+        write_u32(code, 2);
+        write_u32(code, matched_slot);
+
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch1);
+        code.push(OP_IF);
+        code.push(0x40);
         self.current_block_depth += 1;
-        // `0` means this construct has no continue target.
-        self.loop_depths
-            .push((break_target_abs, 0, ctx.scope_objects.len()));
-
-        ctx.enter_scope();
-        ctx.scope_objects.push(Vec::new());
-        if let StmtKind::Compound(stmts) = &body.kind {
-            for s in stmts {
-                match &s.kind {
-                    StmtKind::Case(val) => {
-                        code.push(OP_LOCAL_GET);
-                        write_u32(code, ctx.fp_local);
-                        code.push(OP_I32_LOAD);
-                        write_u32(code, 2);
-                        write_u32(code, matched_slot);
-                        self.emit_switch_case_eq(target_slot, *val, switch_is_wide, ctx, code);
-                        code.push(OP_I32_OR);
-                        code.push(OP_LOCAL_SET);
-                        write_u32(code, ctx.scratch1);
-                        code.push(OP_LOCAL_GET);
-                        write_u32(code, ctx.fp_local);
-                        code.push(OP_LOCAL_GET);
-                        write_u32(code, ctx.scratch1);
-                        code.push(OP_I32_STORE);
-                        write_u32(code, 2);
-                        write_u32(code, matched_slot);
-
-                        code.push(OP_LOCAL_GET);
-                        write_u32(code, ctx.scratch1);
-                        code.push(OP_IF);
-                        code.push(0x40);
-                        self.current_block_depth += 1;
-                        self.compile_stmt(s, ctx, code)?;
-                        self.current_block_depth -= 1;
-                        code.push(OP_END);
-                    }
-                    StmtKind::Default => {
-                        code.push(OP_LOCAL_GET);
-                        write_u32(code, ctx.fp_local);
-                        code.push(OP_I32_LOAD);
-                        write_u32(code, 2);
-                        write_u32(code, any_match_slot);
-                        code.push(OP_I32_EQZ);
-                        code.push(OP_LOCAL_GET);
-                        write_u32(code, ctx.fp_local);
-                        code.push(OP_I32_LOAD);
-                        write_u32(code, 2);
-                        write_u32(code, matched_slot);
-                        code.push(OP_I32_EQZ);
-                        code.push(OP_I32_AND);
-                        code.push(OP_LOCAL_SET);
-                        write_u32(code, ctx.scratch1);
-
-                        // Once default starts, following case bodies fall through.
-                        code.push(OP_LOCAL_GET);
-                        write_u32(code, ctx.fp_local);
-                        code.push(OP_LOCAL_GET);
-                        write_u32(code, ctx.fp_local);
-                        code.push(OP_I32_LOAD);
-                        write_u32(code, 2);
-                        write_u32(code, matched_slot);
-                        code.push(OP_LOCAL_GET);
-                        write_u32(code, ctx.scratch1);
-                        code.push(OP_I32_OR);
-                        code.push(OP_I32_STORE);
-                        write_u32(code, 2);
-                        write_u32(code, matched_slot);
-
-                        code.push(OP_LOCAL_GET);
-                        write_u32(code, ctx.scratch1);
-                        code.push(OP_IF);
-                        code.push(0x40);
-                        self.current_block_depth += 1;
-                        self.compile_stmt(s, ctx, code)?;
-                        self.current_block_depth -= 1;
-                        code.push(OP_END);
-                    }
-                    _ => {
-                        code.push(OP_LOCAL_GET);
-                        write_u32(code, ctx.fp_local);
-                        code.push(OP_I32_LOAD);
-                        write_u32(code, 2);
-                        write_u32(code, matched_slot);
-                        code.push(OP_IF);
-                        code.push(0x40);
-                        self.current_block_depth += 1;
-                        self.compile_stmt(s, ctx, code)?;
-                        self.current_block_depth -= 1;
-                        code.push(OP_END);
-                    }
-                }
-            }
-        }
-
-        self.loop_depths.pop();
-        if let Some(scope) = ctx.scope_objects.last() {
-            self.emit_dtor_for_scope(scope, ctx, code);
-        }
-        ctx.scope_objects.pop();
-        code.push(OP_END);
+        self.compile_stmt(stmt, ctx, code)?;
         self.current_block_depth -= 1;
-        ctx.exit_scope();
-
+        code.push(OP_END);
         Ok(())
     }
+
+    fn emit_switch_default(
+        &mut self,
+        stmt: &Stmt,
+        matched_slot: u32,
+        any_match_slot: u32,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, any_match_slot);
+        code.push(OP_I32_EQZ);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, matched_slot);
+        code.push(OP_I32_EQZ);
+        code.push(OP_I32_AND);
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.scratch1);
+
+        // Once default starts, following case bodies fall through.
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, matched_slot);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch1);
+        code.push(OP_I32_OR);
+        code.push(OP_I32_STORE);
+        write_u32(code, 2);
+        write_u32(code, matched_slot);
+
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch1);
+        code.push(OP_IF);
+        code.push(0x40);
+        self.current_block_depth += 1;
+        self.compile_stmt(stmt, ctx, code)?;
+        self.current_block_depth -= 1;
+        code.push(OP_END);
+        Ok(())
+    }
+
+    fn emit_switch_fallthrough(
+        &mut self,
+        stmt: &Stmt,
+        matched_slot: u32,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, matched_slot);
+        code.push(OP_IF);
+        code.push(0x40);
+        self.current_block_depth += 1;
+        self.compile_stmt(stmt, ctx, code)?;
+        self.current_block_depth -= 1;
+        code.push(OP_END);
+        Ok(())
+    }
+
     /// Pushes `1` when the saved switch value equals `value`, without
     /// re-evaluating the switch expression.
     fn emit_switch_case_eq(

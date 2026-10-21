@@ -8,6 +8,7 @@ use std::process;
 
 /// Resolves includes against the including file, `-I` directories, and finally
 /// the process working directory.
+#[derive(Clone)]
 struct FilesystemIncludes {
     include_dirs: Vec<PathBuf>,
 }
@@ -67,7 +68,56 @@ fn main() {
         eprintln!("Usage: cppwasm-cli [--dump-record-layouts] [-o <out.wasm>] <input.cpp>");
         process::exit(1);
     }
+    let options = parse_args(&args);
 
+    let source = match fs::read_to_string(&options.input_path) {
+        Ok(source) => source,
+        Err(error) => {
+            eprintln!("Error reading '{}': {}", options.input_path, error);
+            process::exit(1);
+        }
+    };
+
+    if options.dump_layouts {
+        match cppwasm::dump_record_layouts_with_provider(
+            &source,
+            &options.input_path,
+            &options.includes,
+        ) {
+            Ok(layouts) => {
+                print!("{}", layouts);
+                process::exit(0);
+            }
+            Err(error) => {
+                eprintln!("{}", error);
+                process::exit(1);
+            }
+        }
+    }
+
+    match compile_source(&source, &options) {
+        Ok(wasm_bytes) => {
+            if let Err(error) = fs::write(&options.output_file, wasm_bytes) {
+                eprintln!("Error writing '{}': {}", options.output_file, error);
+                process::exit(1);
+            }
+        }
+        Err(message) => {
+            eprintln!("{}", message);
+            process::exit(1);
+        }
+    }
+}
+
+struct CliOptions {
+    output_file: String,
+    input_path: String,
+    dump_layouts: bool,
+    max_memory_mb: u32,
+    includes: FilesystemIncludes,
+}
+
+fn parse_args(args: &[String]) -> CliOptions {
     let mut output_file = "a.out.wasm".to_string();
     let mut input_file = None;
     let mut dump_layouts = false;
@@ -118,32 +168,24 @@ fn main() {
         process::exit(1);
     };
 
-    let source = match fs::read_to_string(&input_path) {
-        Ok(source) => source,
-        Err(error) => {
-            eprintln!("Error reading '{}': {}", input_path, error);
-            process::exit(1);
-        }
-    };
-
-    let includes = FilesystemIncludes { include_dirs };
-    if dump_layouts {
-        match cppwasm::dump_record_layouts_with_provider(&source, &input_path, &includes) {
-            Ok(layouts) => {
-                print!("{}", layouts);
-                process::exit(0);
-            }
-            Err(error) => {
-                eprintln!("{}", error);
-                process::exit(1);
-            }
-        }
+    CliOptions {
+        output_file,
+        input_path,
+        dump_layouts,
+        max_memory_mb,
+        includes: FilesystemIncludes { include_dirs },
     }
+}
 
+fn compile_source(source: &str, options: &CliOptions) -> Result<Vec<u8>, String> {
     // Run the compiler on a thread with a large stack so the shared depth
     // limit is governed by the wasm-hosted build's measured threshold rather
     // than by the platform's default native stack.
-    let compiled = match std::thread::Builder::new()
+    let source = source.to_string();
+    let input_path = options.input_path.clone();
+    let includes = options.includes.clone();
+    let max_memory_mb = options.max_memory_mb;
+    match std::thread::Builder::new()
         .name("cppwasm-compile".to_string())
         .stack_size(64 * 1024 * 1024)
         .spawn(move || {
@@ -155,19 +197,6 @@ fn main() {
             Err(_) => Err("compiler thread panicked".to_string()),
         },
         Err(error) => Err(format!("cannot start compiler thread: {error}")),
-    };
-
-    match compiled {
-        Ok(wasm_bytes) => {
-            if let Err(error) = fs::write(&output_file, wasm_bytes) {
-                eprintln!("Error writing '{}': {}", output_file, error);
-                process::exit(1);
-            }
-        }
-        Err(message) => {
-            eprintln!("{}", message);
-            process::exit(1);
-        }
     }
 }
 

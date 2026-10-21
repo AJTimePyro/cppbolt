@@ -59,130 +59,89 @@ impl<'a> Codegen<'a> {
                 continue;
             }
             match &cand.decl {
-                FuncDeclRef::Function(f) => {
-                    if f.body.is_none() {
-                        continue;
-                    }
-                    let mangled = self.sema.mangle_name(&f.name, &f.params);
-                    let params_wasm: Vec<u8> = f
-                        .params
-                        .iter()
-                        .map(|p| {
-                            p.ty.to_wasm_type()
-                                .map(|w| match w {
-                                    WasmType::I32 => TYPE_I32,
-                                    WasmType::I64 => TYPE_I64,
-                                    WasmType::F32 => TYPE_F32,
-                                    WasmType::F64 => TYPE_F64,
-                                })
-                                .unwrap_or(TYPE_I32)
-                        })
-                        .collect();
-
-                    let results_wasm: Vec<u8> = f
-                        .return_type
-                        .to_wasm_type()
-                        .map(|w| match w {
-                            WasmType::I32 => vec![TYPE_I32],
-                            WasmType::I64 => vec![TYPE_I64],
-                            WasmType::F32 => vec![TYPE_F32],
-                            WasmType::F64 => vec![TYPE_F64],
-                        })
-                        .unwrap_or_default();
-
-                    let type_idx = self.module.add_type(params_wasm, results_wasm);
-                    let func_idx = (self.module.imports.len() + self.module.functions.len()) as u32;
-                    self.module.functions.push(type_idx);
-                    self.func_indices.insert(
-                        QualifiedName::new(mangled.as_str())
-                            .alternate()
-                            .into_owned(),
-                        func_idx,
-                    );
-                    self.func_indices.insert(
-                        QualifiedName::new(f.name.as_str()).alternate().into_owned(),
-                        func_idx,
-                    );
-                    self.func_indices.insert(mangled.clone(), func_idx);
-                    self.func_indices.insert(f.name.clone(), func_idx);
-                    if f.name == "main" {
-                        self.module.exports.push(("main".to_string(), 0, func_idx));
-                    }
-                }
-                FuncDeclRef::Method(name, m) => {
-                    let mut params = m.params.clone();
-                    if !m.is_static {
-                        let this_inner = if m.is_const {
-                            Type::Const(Box::new(Type::Struct(name.to_string())))
-                        } else {
-                            Type::Struct(name.to_string())
-                        };
-                        params.insert(
-                            0,
-                            Param {
-                                name: "this".to_string(),
-                                ty: Type::Pointer(Box::new(this_inner)),
-                                default_val: None,
-                            },
-                        );
-                    }
-                    let qual_name = format!("{}::{}", name, m.name);
-                    let mangled = self.sema.mangle_name(&qual_name, &params);
-                    let params_wasm: Vec<u8> = params
-                        .iter()
-                        .map(|p| {
-                            p.ty.to_wasm_type()
-                                .map(|w| match w {
-                                    WasmType::I32 => TYPE_I32,
-                                    WasmType::I64 => TYPE_I64,
-                                    WasmType::F32 => TYPE_F32,
-                                    WasmType::F64 => TYPE_F64,
-                                })
-                                .unwrap_or(TYPE_I32)
-                        })
-                        .collect();
-
-                    let results_wasm: Vec<u8> = m
-                        .return_type
-                        .to_wasm_type()
-                        .map(|w| match w {
-                            WasmType::I32 => vec![TYPE_I32],
-                            WasmType::I64 => vec![TYPE_I64],
-                            WasmType::F32 => vec![TYPE_F32],
-                            WasmType::F64 => vec![TYPE_F64],
-                        })
-                        .unwrap_or_default();
-
-                    let type_idx = self.module.add_type(params_wasm, results_wasm);
-                    let func_idx = (self.module.imports.len() + self.module.functions.len()) as u32;
-                    self.module.functions.push(type_idx);
-
-                    self.func_indices.insert(
-                        QualifiedName::new(mangled.as_str())
-                            .alternate()
-                            .into_owned(),
-                        func_idx,
-                    );
-                    self.func_indices.insert(
-                        QualifiedName::new(qual_name.as_str())
-                            .alternate()
-                            .into_owned(),
-                        func_idx,
-                    );
-                    self.func_indices.insert(mangled, func_idx);
-                    self.func_indices.insert(qual_name, func_idx);
-                    self.func_indices
-                        .insert(format!("{}_{}", name, m.name), func_idx);
-                    if m.name == *name {
-                        self.func_indices
-                            .insert(format!("{}_{}", name, name), func_idx);
-                    }
-                    if m.name == format!("~{}", name) {
-                        self.func_indices
-                            .insert(format!("{}_~{}", name, name), func_idx);
-                    }
-                }
+                FuncDeclRef::Function(f) => self.declare_function(f),
+                FuncDeclRef::Method(name, m) => self.declare_method(name, m),
             }
+        }
+    }
+
+    fn declare_function(&mut self, f: &FunctionDecl) {
+        if f.body.is_none() {
+            return;
+        }
+        let mangled = self.sema.mangle_name(&f.name, &f.params);
+        let params_wasm = wasm_params(&f.params);
+        let results_wasm = wasm_results(&f.return_type);
+
+        let type_idx = self.module.add_type(params_wasm, results_wasm);
+        let func_idx = (self.module.imports.len() + self.module.functions.len()) as u32;
+        self.module.functions.push(type_idx);
+        self.func_indices.insert(
+            QualifiedName::new(mangled.as_str())
+                .alternate()
+                .into_owned(),
+            func_idx,
+        );
+        self.func_indices.insert(
+            QualifiedName::new(f.name.as_str()).alternate().into_owned(),
+            func_idx,
+        );
+        self.func_indices.insert(mangled.clone(), func_idx);
+        self.func_indices.insert(f.name.clone(), func_idx);
+        if f.name == "main" {
+            self.module.exports.push(("main".to_string(), 0, func_idx));
+        }
+    }
+
+    fn declare_method(&mut self, name: &str, m: &FunctionDecl) {
+        let mut params = m.params.clone();
+        if !m.is_static {
+            let this_inner = if m.is_const {
+                Type::Const(Box::new(Type::Struct(name.to_string())))
+            } else {
+                Type::Struct(name.to_string())
+            };
+            params.insert(
+                0,
+                Param {
+                    name: "this".to_string(),
+                    ty: Type::Pointer(Box::new(this_inner)),
+                    default_val: None,
+                },
+            );
+        }
+        let qual_name = format!("{}::{}", name, m.name);
+        let mangled = self.sema.mangle_name(&qual_name, &params);
+        let params_wasm = wasm_params(&params);
+        let results_wasm = wasm_results(&m.return_type);
+
+        let type_idx = self.module.add_type(params_wasm, results_wasm);
+        let func_idx = (self.module.imports.len() + self.module.functions.len()) as u32;
+        self.module.functions.push(type_idx);
+
+        self.func_indices.insert(
+            QualifiedName::new(mangled.as_str())
+                .alternate()
+                .into_owned(),
+            func_idx,
+        );
+        self.func_indices.insert(
+            QualifiedName::new(qual_name.as_str())
+                .alternate()
+                .into_owned(),
+            func_idx,
+        );
+        self.func_indices.insert(mangled, func_idx);
+        self.func_indices.insert(qual_name, func_idx);
+        self.func_indices
+            .insert(format!("{}_{}", name, m.name), func_idx);
+        if m.name == *name {
+            self.func_indices
+                .insert(format!("{}_{}", name, name), func_idx);
+        }
+        if m.name == format!("~{}", name) {
+            self.func_indices
+                .insert(format!("{}_~{}", name, name), func_idx);
         }
     }
 
@@ -343,4 +302,31 @@ impl<'a> Codegen<'a> {
             self.module.data.push((offset, bytes));
         }
     }
+}
+
+pub(crate) fn wasm_params(params: &[Param]) -> Vec<u8> {
+    params
+        .iter()
+        .map(|p| {
+            p.ty.to_wasm_type()
+                .map(|w| match w {
+                    WasmType::I32 => TYPE_I32,
+                    WasmType::I64 => TYPE_I64,
+                    WasmType::F32 => TYPE_F32,
+                    WasmType::F64 => TYPE_F64,
+                })
+                .unwrap_or(TYPE_I32)
+        })
+        .collect()
+}
+
+pub(crate) fn wasm_results(ty: &Type) -> Vec<u8> {
+    ty.to_wasm_type()
+        .map(|w| match w {
+            WasmType::I32 => vec![TYPE_I32],
+            WasmType::I64 => vec![TYPE_I64],
+            WasmType::F32 => vec![TYPE_F32],
+            WasmType::F64 => vec![TYPE_F64],
+        })
+        .unwrap_or_default()
 }

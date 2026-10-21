@@ -259,107 +259,101 @@ pub(super) fn collect_address_taken_stmt(stmt: &Stmt, address_taken: &mut HashSe
 fn collect_expr_calls(expr: &Expr, calls: &mut HashSet<String>) {
     let mut stack = vec![expr];
     while let Some(expr) = stack.pop() {
-        match expr {
-            Expr::Call { callee, args } => {
-                match &**callee {
-                    Expr::Identifier(name) => {
-                        calls.insert(name.clone());
-                        calls.insert(QualifiedName::new(name).alternate().into_owned());
-                    }
-                    Expr::MemberAccess { object, member, .. } => {
-                        calls.insert(member.clone());
-                        stack.push(object);
-                    }
-                    _ => stack.push(callee),
-                }
-                stack.extend(args.iter());
-            }
-            Expr::Identifier(name) => {
-                calls.insert(name.clone());
-            }
-            Expr::Unary { op, expr } => {
-                stack.push(expr);
-                if matches!(op, UnaryOp::Not) {
-                    calls.insert("operator!".to_string());
-                    calls.insert("operator bool".to_string());
-                } else if matches!(op, UnaryOp::Neg) {
-                    calls.insert("operator-".to_string());
-                } else if matches!(op, UnaryOp::PreInc) {
-                    calls.insert("operator++".to_string());
-                } else if matches!(op, UnaryOp::PreDec) {
-                    calls.insert("operator--".to_string());
-                }
-            }
-            Expr::Binary { op, left, right } => {
-                stack.push(left);
-                stack.push(right);
-                if matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
-                    calls.insert("operator bool".to_string());
-                }
-                if let Some(op_name) = op.op_name() {
-                    calls.insert(op_name.to_string());
-                    calls.insert(format!("std::{}", op_name));
-                }
-            }
-            Expr::Assign { target, value } => {
-                stack.push(target);
-                stack.push(value);
-                calls.insert("operator=".to_string());
-            }
-            Expr::CompoundAssign { op, target, value } => {
-                stack.push(target);
-                stack.push(value);
-                let op_name = format!(
-                    "operator{}=",
-                    match op {
-                        BinaryOp::Add => "+",
-                        BinaryOp::Sub => "-",
-                        BinaryOp::Mul => "*",
-                        BinaryOp::Div => "/",
-                        BinaryOp::Rem => "%",
-                        BinaryOp::BitAnd => "&",
-                        BinaryOp::BitOr => "|",
-                        BinaryOp::BitXor => "^",
-                        BinaryOp::Shl => "<<",
-                        BinaryOp::Shr => ">>",
-                        _ => "",
-                    }
-                );
-                calls.insert(op_name);
-            }
-            Expr::ArraySubscript { array, index } => {
-                calls.insert("operator[]".to_string());
-                stack.push(array);
-                stack.push(index);
-            }
-            Expr::MemberAccess { object, member, .. } => {
-                calls.insert(member.clone());
-                stack.push(object);
-            }
-            Expr::Ternary {
-                cond,
-                then_expr,
-                else_expr,
-            } => {
-                calls.insert("operator bool".to_string());
-                stack.push(cond);
-                stack.push(then_expr);
-                stack.push(else_expr);
-            }
-            Expr::Cast { expr, .. } => stack.push(expr),
-            Expr::New { ty, args, .. } => {
-                if let Type::Struct(sname) = ty.strip_const() {
-                    calls.insert(format!("{}_{}", sname, sname));
-                    calls.insert(format!("{}::{}", sname, sname));
-                    calls.insert(format!("{}_~{}", sname, sname));
-                    calls.insert(format!("{}::~{}", sname, sname));
-                }
-                stack.extend(args.iter());
-            }
-            Expr::Delete { expr, .. } => stack.push(expr),
-            _ => {}
-        }
+        collect_call_node(expr, calls, &mut stack);
     }
+}
+
+fn collect_call_node<'a>(expr: &'a Expr, calls: &mut HashSet<String>, stack: &mut Vec<&'a Expr>) {
+    match expr {
+        Expr::Call { callee, args } => collect_call_expr(callee, args, calls, stack),
+        Expr::Identifier(name) => {
+            calls.insert(name.clone());
+        }
+        Expr::Unary { op, expr } => {
+            stack.push(expr);
+            if matches!(op, UnaryOp::Not) {
+                calls.insert("operator!".to_string());
+                calls.insert("operator bool".to_string());
+            } else if matches!(op, UnaryOp::Neg) {
+                calls.insert("operator-".to_string());
+            } else if matches!(op, UnaryOp::PreInc) {
+                calls.insert("operator++".to_string());
+            } else if matches!(op, UnaryOp::PreDec) {
+                calls.insert("operator--".to_string());
+            }
+        }
+        Expr::Binary { op, left, right } => {
+            stack.push(left);
+            stack.push(right);
+            if matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
+                calls.insert("operator bool".to_string());
+            }
+            if let Some(op_name) = op.op_name() {
+                calls.insert(op_name.to_string());
+                calls.insert(format!("std::{}", op_name));
+            }
+        }
+        Expr::Assign { target, value } => {
+            stack.push(target);
+            stack.push(value);
+            calls.insert("operator=".to_string());
+        }
+        Expr::CompoundAssign { op, target, value } => {
+            stack.push(target);
+            stack.push(value);
+            calls.insert(compound_assign_call_name(op));
+        }
+        Expr::ArraySubscript { array, index } => {
+            calls.insert("operator[]".to_string());
+            stack.push(array);
+            stack.push(index);
+        }
+        Expr::MemberAccess { object, member, .. } => {
+            calls.insert(member.clone());
+            stack.push(object);
+        }
+        Expr::Ternary {
+            cond,
+            then_expr,
+            else_expr,
+        } => {
+            calls.insert("operator bool".to_string());
+            stack.push(cond);
+            stack.push(then_expr);
+            stack.push(else_expr);
+        }
+        Expr::Cast { expr, .. } => stack.push(expr),
+        Expr::New { ty, args, .. } => {
+            if let Type::Struct(sname) = ty.strip_const() {
+                calls.insert(format!("{}_{}", sname, sname));
+                calls.insert(format!("{}::{}", sname, sname));
+                calls.insert(format!("{}_~{}", sname, sname));
+                calls.insert(format!("{}::~{}", sname, sname));
+            }
+            stack.extend(args.iter());
+        }
+        Expr::Delete { expr, .. } => stack.push(expr),
+        _ => {}
+    }
+}
+
+fn compound_assign_call_name(op: &BinaryOp) -> String {
+    format!(
+        "operator{}=",
+        match op {
+            BinaryOp::Add => "+",
+            BinaryOp::Sub => "-",
+            BinaryOp::Mul => "*",
+            BinaryOp::Div => "/",
+            BinaryOp::Rem => "%",
+            BinaryOp::BitAnd => "&",
+            BinaryOp::BitOr => "|",
+            BinaryOp::BitXor => "^",
+            BinaryOp::Shl => "<<",
+            BinaryOp::Shr => ">>",
+            _ => "",
+        }
+    )
 }
 
 pub(super) fn collect_type_lifecycle(ty: &Type, calls: &mut HashSet<String>) {
@@ -451,4 +445,25 @@ pub(super) struct FuncCandidate<'p> {
 pub(super) enum FuncDeclRef<'p> {
     Function(&'p FunctionDecl),
     Method(&'p str, &'p FunctionDecl),
+}
+
+/// Records the callee and arguments of a call expression.
+fn collect_call_expr<'a>(
+    callee: &'a Expr,
+    args: &'a [Expr],
+    calls: &mut HashSet<String>,
+    stack: &mut Vec<&'a Expr>,
+) {
+    match callee {
+        Expr::Identifier(name) => {
+            calls.insert(name.clone());
+            calls.insert(QualifiedName::new(name).alternate().into_owned());
+        }
+        Expr::MemberAccess { object, member, .. } => {
+            calls.insert(member.clone());
+            stack.push(object);
+        }
+        _ => stack.push(callee),
+    }
+    stack.extend(args.iter());
 }
