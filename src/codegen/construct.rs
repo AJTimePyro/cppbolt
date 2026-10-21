@@ -19,109 +19,88 @@ impl<'a> Codegen<'a> {
             short_name
         );
         for qual_name in &[&q1, &q2] {
-            if let Some(sigs) = self.sema.functions.get(*qual_name) {
-                let mut best_sig = None;
-                let mut best_score = usize::MAX;
-                for sig in sigs {
-                    let params = if !sig.param_types.is_empty() {
-                        &sig.param_types[1..]
-                    } else {
-                        &[]
-                    };
-                    if params.len() == arg_types.len() {
-                        // Lower is better: exact (0), const/reference (1-2),
-                        // arithmetic conversion (10), standard conversion (20),
-                        // user-defined conversion (1000).
-                        let mut score = 0;
-                        let mut ok = true;
-                        for (p, a) in params.iter().zip(arg_types) {
-                            let p_decay = p.decay_array();
-                            let a_decay = a.decay_array();
-                            if p_decay.strip_all_const() == a_decay.strip_all_const() {
-                                if p_decay == a_decay {
-                                    score += 0;
-                                } else {
-                                    score += 1;
-                                }
-                            } else if p.is_reference()
-                                && p.deref_type().map(|d| d.strip_all_const())
-                                    == Some(a_decay.strip_all_const())
-                            {
-                                score += 2;
-                            } else if (p.is_integer() && a.is_integer())
-                                || (p.is_floating() && a.is_floating())
-                            {
-                                score += 10;
-                            } else if self.sema.can_assign(p, a) {
-                                let is_user_conv =
-                                    matches!(p.strip_const().strip_reference(), Type::Struct(_))
-                                        && !matches!(
-                                            a.strip_const().strip_reference(),
-                                            Type::Struct(_)
-                                        );
-                                if is_user_conv {
-                                    score += 1000;
-                                } else {
-                                    score += 20;
-                                }
-                            } else {
-                                ok = false;
-                                break;
-                            }
-                        }
-                        if ok && score < best_score {
-                            best_score = score;
-                            best_sig = Some(sig.clone());
-                        }
-                    }
-                }
-                if let Some(sig) = best_sig {
-                    if let Some(&idx) = self.func_indices.get(&sig.mangled_name) {
-                        return Some((idx, sig));
-                    }
-                    if let Some(&idx) = self
-                        .func_indices
-                        .get(&format!("{}_{}", class_name, short_name))
-                    {
-                        return Some((idx, sig));
-                    }
-                }
+            let Some(sigs) = self.sema.functions.get(*qual_name) else {
+                continue;
+            };
+            let Some(sig) = self.best_constructor_overload(sigs, arg_types) else {
+                continue;
+            };
+            if let Some(&idx) = self.func_indices.get(&sig.mangled_name) {
+                return Some((idx, sig));
+            }
+            if let Some(&idx) = self
+                .func_indices
+                .get(&format!("{}_{}", class_name, short_name))
+            {
+                return Some((idx, sig));
             }
         }
         if arg_types.is_empty() {
-            let idx = self
-                .func_indices
-                .get(&format!("{}_{}", class_name, short_name))
-                .or_else(|| {
-                    self.func_indices
-                        .get(&format!("std::{}_{}", class_name, short_name))
-                })
-                .or_else(|| {
-                    self.func_indices.get(&format!(
-                        "{}_{}",
-                        QualifiedName::new(class_name).plain(),
-                        short_name
-                    ))
-                })
-                .copied();
-            idx.map(|i| {
-                (
-                    i,
-                    FunctionSig {
-                        name: format!("{}_{}", class_name, short_name),
-                        mangled_name: format!("{}_{}", class_name, short_name),
-                        return_type: Type::Void,
-                        param_types: vec![Type::Pointer(Box::new(Type::Struct(
-                            class_name.to_string(),
-                        )))],
-                        default_args: vec![],
-                        is_static: false,
-                    },
-                )
-            })
+            self.default_constructor_sig(class_name, short_name)
         } else {
             None
         }
+    }
+
+    /// Picks the lowest-cost constructor overload.
+    fn best_constructor_overload(
+        &self,
+        sigs: &[FunctionSig],
+        arg_types: &[Type],
+    ) -> Option<FunctionSig> {
+        let mut best_sig = None;
+        let mut best_score = usize::MAX;
+        for sig in sigs {
+            let params = if !sig.param_types.is_empty() {
+                &sig.param_types[1..]
+            } else {
+                &[]
+            };
+            let Some(score) = self.score_overload_params(params, arg_types) else {
+                continue;
+            };
+            if score < best_score {
+                best_score = score;
+                best_sig = Some(sig.clone());
+            }
+        }
+        best_sig
+    }
+
+    /// The implicit default constructor of a class, if it has one.
+    fn default_constructor_sig(
+        &self,
+        class_name: &str,
+        short_name: &str,
+    ) -> Option<(u32, FunctionSig)> {
+        let idx = self
+            .func_indices
+            .get(&format!("{}_{}", class_name, short_name))
+            .or_else(|| {
+                self.func_indices
+                    .get(&format!("std::{}_{}", class_name, short_name))
+            })
+            .or_else(|| {
+                self.func_indices.get(&format!(
+                    "{}_{}",
+                    QualifiedName::new(class_name).plain(),
+                    short_name
+                ))
+            })
+            .copied()?;
+        Some((
+            idx,
+            FunctionSig {
+                name: format!("{}_{}", class_name, short_name),
+                mangled_name: format!("{}_{}", class_name, short_name),
+                return_type: Type::Void,
+                param_types: vec![Type::Pointer(Box::new(Type::Struct(
+                    class_name.to_string(),
+                )))],
+                default_args: vec![],
+                is_static: false,
+            },
+        ))
     }
 
     /// Returns only the function index of the selected constructor.

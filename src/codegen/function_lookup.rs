@@ -4,86 +4,25 @@ impl<'a> Codegen<'a> {
     /// Resolves a free-function call, including ADL and the implicit `std`
     /// alias, selecting the lowest-cost overload.
     pub fn find_function(&self, name: &str, arg_types: &[Type]) -> Option<(u32, FunctionSig)> {
-        let mut candidate_names = vec![
-            name.to_string(),
-            QualifiedName::new(name).alternate().into_owned(),
-        ];
-        for arg in arg_types {
-            if let Type::Struct(sname) = arg.strip_const().strip_reference()
-                && let Some((ns, _)) = sname.rsplit_once("::")
-            {
-                let adl_name = format!("{}::{}", ns, name);
-                if !candidate_names.contains(&adl_name) {
-                    candidate_names.push(adl_name);
+        for q in candidate_function_names(name, arg_types) {
+            let Some(sigs) = self.sema.functions.get(&q) else {
+                continue;
+            };
+            let mut best_sig = None;
+            let mut best_score = usize::MAX;
+            for sig in sigs {
+                let Some(score) = self.score_signature(sig, arg_types) else {
+                    continue;
+                };
+                if score < best_score {
+                    best_score = score;
+                    best_sig = Some(sig.clone());
                 }
             }
-        }
-        for q in &candidate_names {
-            if let Some(sigs) = self.sema.functions.get(q) {
-                let mut best_sig = None;
-                let mut best_score = usize::MAX;
-                for sig in sigs {
-                    if sig.param_types.len() == arg_types.len() {
-                        let mut score = 0;
-                        let mut ok = true;
-                        for (p, a) in sig.param_types.iter().zip(arg_types) {
-                            let p_decay = p.decay_array();
-                            let a_decay = a.decay_array();
-                            if p_decay.strip_all_const() == a_decay.strip_all_const() {
-                                if p_decay == a_decay {
-                                    score += 0;
-                                } else {
-                                    score += 1;
-                                }
-                            } else if p.is_reference()
-                                && p.deref_type().map(|d| d.strip_all_const())
-                                    == Some(a_decay.strip_all_const())
-                            {
-                                score += 2;
-                            } else if (p.is_integer() && a.is_integer())
-                                || (p.is_floating() && a.is_floating())
-                            {
-                                score += 10;
-                            } else if self.sema.can_assign(p, a) {
-                                let is_user_conv =
-                                    matches!(p.strip_const().strip_reference(), Type::Struct(_))
-                                        && !matches!(
-                                            a.strip_const().strip_reference(),
-                                            Type::Struct(_)
-                                        );
-                                if is_user_conv {
-                                    score += 1000;
-                                } else {
-                                    score += 20;
-                                }
-                            } else {
-                                ok = false;
-                                break;
-                            }
-                        }
-                        if ok && score < best_score {
-                            best_score = score;
-                            best_sig = Some(sig.clone());
-                        }
-                    }
-                }
-                if let Some(sig) = best_sig {
-                    if let Some(&idx) = self.func_indices.get(&sig.mangled_name) {
-                        return Some((idx, sig));
-                    }
-                    if let Some(&idx) = self.func_indices.get(name) {
-                        return Some((idx, sig));
-                    }
-                    if let Some(&idx) = self
-                        .func_indices
-                        .get(QualifiedName::new(name).std_name().as_ref())
-                    {
-                        return Some((idx, sig));
-                    }
-                    if let Some(&idx) = self.func_indices.get(QualifiedName::new(name).plain()) {
-                        return Some((idx, sig));
-                    }
-                }
+            if let Some(sig) = best_sig
+                && let Some(idx) = self.resolve_signature_index(name, &sig)
+            {
+                return Some((idx, sig));
             }
         }
         self.func_indices
@@ -93,19 +32,58 @@ impl<'a> Codegen<'a> {
                     .get(QualifiedName::new(name).std_name().as_ref())
             })
             .or_else(|| self.func_indices.get(QualifiedName::new(name).plain()))
-            .map(|&idx| {
-                (
-                    idx,
-                    FunctionSig {
-                        name: name.to_string(),
-                        mangled_name: name.to_string(),
-                        return_type: Type::Int,
-                        param_types: vec![],
-                        default_args: vec![],
-                        is_static: false,
-                    },
-                )
-            })
+            .map(|&idx| (idx, default_signature(name)))
+    }
+
+    fn score_signature(&self, sig: &FunctionSig, arg_types: &[Type]) -> Option<usize> {
+        if sig.param_types.len() != arg_types.len() {
+            return None;
+        }
+        let mut score = 0;
+        for (p, a) in sig.param_types.iter().zip(arg_types) {
+            let p_decay = p.decay_array();
+            let a_decay = a.decay_array();
+            if p_decay.strip_all_const() == a_decay.strip_all_const() {
+                if p_decay != a_decay {
+                    score += 1;
+                }
+            } else if p.is_reference()
+                && p.deref_type().map(|d| d.strip_all_const()) == Some(a_decay.strip_all_const())
+            {
+                score += 2;
+            } else if (p.is_integer() && a.is_integer()) || (p.is_floating() && a.is_floating()) {
+                score += 10;
+            } else if self.sema.can_assign(p, a) {
+                let is_user_conv = matches!(p.strip_const().strip_reference(), Type::Struct(_))
+                    && !matches!(a.strip_const().strip_reference(), Type::Struct(_));
+                if is_user_conv {
+                    score += 1000;
+                } else {
+                    score += 20;
+                }
+            } else {
+                return None;
+            }
+        }
+        Some(score)
+    }
+
+    fn resolve_signature_index(&self, name: &str, sig: &FunctionSig) -> Option<u32> {
+        if let Some(&idx) = self.func_indices.get(&sig.mangled_name) {
+            return Some(idx);
+        }
+        if let Some(&idx) = self.func_indices.get(name) {
+            return Some(idx);
+        }
+        if let Some(&idx) = self
+            .func_indices
+            .get(QualifiedName::new(name).std_name().as_ref())
+        {
+            return Some(idx);
+        }
+        self.func_indices
+            .get(QualifiedName::new(name).plain())
+            .copied()
     }
 
     /// Looks up a virtual method on a class or one of its bases.
@@ -122,5 +100,34 @@ impl<'a> Codegen<'a> {
             }
         }
         None
+    }
+}
+
+fn candidate_function_names(name: &str, arg_types: &[Type]) -> Vec<String> {
+    let mut candidate_names = vec![
+        name.to_string(),
+        QualifiedName::new(name).alternate().into_owned(),
+    ];
+    for arg in arg_types {
+        if let Type::Struct(sname) = arg.strip_const().strip_reference()
+            && let Some((ns, _)) = sname.rsplit_once("::")
+        {
+            let adl_name = format!("{}::{}", ns, name);
+            if !candidate_names.contains(&adl_name) {
+                candidate_names.push(adl_name);
+            }
+        }
+    }
+    candidate_names
+}
+
+fn default_signature(name: &str) -> FunctionSig {
+    FunctionSig {
+        name: name.to_string(),
+        mangled_name: name.to_string(),
+        return_type: Type::Int,
+        param_types: vec![],
+        default_args: vec![],
+        is_static: false,
     }
 }

@@ -2,6 +2,7 @@
 
 mod analysis;
 mod call_args;
+mod call_types;
 mod cond;
 mod construct;
 mod expr;
@@ -11,12 +12,15 @@ mod expr_call;
 mod expr_delete;
 mod expr_identifier;
 mod expr_new;
+mod expr_printf;
 mod expr_unary;
 mod function;
+mod function_context;
 mod function_lookup;
 mod lvalue;
 mod memory;
 mod method_lookup;
+mod overload;
 mod program;
 mod program_emit;
 mod program_prepare;

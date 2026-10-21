@@ -1,3 +1,6 @@
+use super::call_types::{
+    callee_return_type, wasm_params_from_types, wasm_result_types, wasm_value_type,
+};
 use super::*;
 
 impl<'a> Codegen<'a> {
@@ -85,118 +88,13 @@ impl<'a> Codegen<'a> {
         let is_virtual = layout.and_then(|l| l.vtable_slots.iter().position(|s| s == member));
 
         if let Some(slot_idx) = is_virtual {
-            // Virtual dispatch via vtable
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.fp_local);
-            code.push(OP_I32_LOAD);
-            write_u32(code, 2);
-            write_u32(code, this_slot);
-            code.push(OP_I32_LOAD);
-            write_u32(code, 2);
-            write_u32(code, 0); // vptr
-            code.push(OP_I32_LOAD);
-            write_u32(code, 2);
-            write_u32(code, (slot_idx * 4) as u32); // table_idx
-            code.push(OP_LOCAL_SET);
-            write_u32(code, ctx.scratch2);
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.fp_local);
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.scratch2);
-            code.push(OP_I32_STORE);
-            write_u32(code, 2);
-            write_u32(code, fn_slot);
-
-            let Some(sig) = self.sema.find_method_in_class(&sname, member) else {
-                return Err(CompileError::new(
-                    format!("Method '{}' not found in class '{}'", member, sname),
-                    1,
-                    1,
-                ));
-            };
-
-            // The implicit `this` argument comes first.
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.fp_local);
-            code.push(OP_I32_LOAD);
-            write_u32(code, 2);
-            write_u32(code, this_slot);
-            for (i, a) in args.iter().enumerate() {
-                let param_ty = sig.param_types.get(i + 1);
-                let is_r = param_ty.map(|p| p.is_reference()).unwrap_or(false);
-                if is_r {
-                    self.compile_lvalue_addr(a, ctx, code)?;
-                } else {
-                    let aty = self.get_expr_type(a, ctx);
-                    self.compile_expr(a, ctx, code)?;
-                    if let Some(pty) = param_ty {
-                        self.emit_conversion(&aty, pty, code);
-                    }
-                }
-            }
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.fp_local);
-            code.push(OP_I32_LOAD);
-            write_u32(code, 2);
-            write_u32(code, fn_slot);
-
-            // The indirect call site needs the callee's exact Wasm
-            // signature type, including the implicit `this` parameter.
-            let params_wasm: Vec<u8> = sig
-                .param_types
-                .iter()
-                .map(|p| {
-                    p.to_wasm_type()
-                        .map(|w| match w {
-                            WasmType::I32 => TYPE_I32,
-                            WasmType::I64 => TYPE_I64,
-                            WasmType::F32 => TYPE_F32,
-                            WasmType::F64 => TYPE_F64,
-                        })
-                        .unwrap_or(TYPE_I32)
-                })
-                .collect();
-            let results_wasm = sig
-                .return_type
-                .to_wasm_type()
-                .map(|w| match w {
-                    WasmType::I32 => vec![TYPE_I32],
-                    WasmType::I64 => vec![TYPE_I64],
-                    WasmType::F32 => vec![TYPE_F32],
-                    WasmType::F64 => vec![TYPE_F64],
-                })
-                .unwrap_or_default();
-            let type_idx = self.module.add_type(params_wasm, results_wasm);
-
-            code.push(OP_CALL_INDIRECT);
-            write_u32(code, type_idx);
-            code.push(0);
-            self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
+            self.compile_member_call_virtual(
+                &sname, member, args, slot_idx, this_slot, fn_slot, ctx, code,
+            )?;
         } else if let Some((m_idx, sig)) = self.find_method(&sname, member, &arg_types) {
-            if !sig.is_static {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.fp_local);
-                code.push(OP_I32_LOAD);
-                write_u32(code, 2);
-                write_u32(code, this_slot);
-            }
-            for (i, a) in args.iter().enumerate() {
-                let param_index = if sig.is_static { i } else { i + 1 };
-                let param_ty = sig.param_types.get(param_index);
-                let is_r = param_ty.map(|p| p.is_reference()).unwrap_or(false);
-                if is_r {
-                    self.compile_lvalue_addr(a, ctx, code)?;
-                } else {
-                    let aty = self.get_expr_type(a, ctx);
-                    self.compile_expr(a, ctx, code)?;
-                    if let Some(pty) = param_ty {
-                        self.emit_conversion(&aty, pty, code);
-                    }
-                }
-            }
-            code.push(OP_CALL);
-            write_u32(code, m_idx);
-            self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
+            self.compile_member_call_direct(
+                &sname, member, args, &sig, m_idx, this_slot, ctx, code,
+            )?;
         } else {
             return Err(CompileError::new(
                 format!("Method '{}' not found in class '{}'", member, sname),
@@ -204,6 +102,127 @@ impl<'a> Codegen<'a> {
                 1,
             ));
         }
+        Ok(())
+    }
+
+    /// Emits a virtual method call through the object's vtable.
+    #[allow(clippy::too_many_arguments)]
+    fn compile_member_call_virtual(
+        &mut self,
+        sname: &str,
+        member: &str,
+        args: &[Expr],
+        slot_idx: usize,
+        this_slot: u32,
+        fn_slot: u32,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        // Virtual dispatch via vtable
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, this_slot);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, 0); // vptr
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, (slot_idx * 4) as u32); // table_idx
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.scratch2);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch2);
+        code.push(OP_I32_STORE);
+        write_u32(code, 2);
+        write_u32(code, fn_slot);
+
+        let Some(sig) = self.sema.find_method_in_class(sname, member) else {
+            return Err(CompileError::new(
+                format!("Method '{}' not found in class '{}'", member, sname),
+                1,
+                1,
+            ));
+        };
+
+        // The implicit `this` argument comes first.
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, this_slot);
+        for (i, a) in args.iter().enumerate() {
+            let param_ty = sig.param_types.get(i + 1);
+            let is_r = param_ty.map(|p| p.is_reference()).unwrap_or(false);
+            if is_r {
+                self.compile_lvalue_addr(a, ctx, code)?;
+            } else {
+                let aty = self.get_expr_type(a, ctx);
+                self.compile_expr(a, ctx, code)?;
+                if let Some(pty) = param_ty {
+                    self.emit_conversion(&aty, pty, code);
+                }
+            }
+        }
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, fn_slot);
+
+        // The indirect call site needs the callee's exact Wasm signature
+        // type, including the implicit `this` parameter.
+        let params_wasm = wasm_params_from_types(&sig.param_types);
+        let results_wasm = wasm_result_types(&sig.return_type);
+        let type_idx = self.module.add_type(params_wasm, results_wasm);
+
+        code.push(OP_CALL_INDIRECT);
+        write_u32(code, type_idx);
+        code.push(0);
+        self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
+        Ok(())
+    }
+
+    /// Emits a direct (non-virtual) method call.
+    #[allow(clippy::too_many_arguments)]
+    fn compile_member_call_direct(
+        &mut self,
+        _sname: &str,
+        _member: &str,
+        args: &[Expr],
+        sig: &FunctionSig,
+        m_idx: u32,
+        this_slot: u32,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        if !sig.is_static {
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.fp_local);
+            code.push(OP_I32_LOAD);
+            write_u32(code, 2);
+            write_u32(code, this_slot);
+        }
+        for (i, a) in args.iter().enumerate() {
+            let param_index = if sig.is_static { i } else { i + 1 };
+            let param_ty = sig.param_types.get(param_index);
+            let is_r = param_ty.map(|p| p.is_reference()).unwrap_or(false);
+            if is_r {
+                self.compile_lvalue_addr(a, ctx, code)?;
+            } else {
+                let aty = self.get_expr_type(a, ctx);
+                self.compile_expr(a, ctx, code)?;
+                if let Some(pty) = param_ty {
+                    self.emit_conversion(&aty, pty, code);
+                }
+            }
+        }
+        code.push(OP_CALL);
+        write_u32(code, m_idx);
+        self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
         Ok(())
     }
 
@@ -224,97 +243,26 @@ impl<'a> Codegen<'a> {
             _ => None,
         };
         if let Some(opcode) = math_opcode {
-            if args.len() != 1 {
-                return Err(CompileError::new(
-                    format!("{} expects one argument", name),
-                    1,
-                    1,
-                ));
-            }
-            self.compile_expr(&args[0], ctx, code)?;
-            code.push(opcode);
-        } else if name == "printf" || name == "std::printf" || name.ends_with("::printf") {
-            self.compile_printf_call(args, ctx, code)?;
-        } else if name == "__builtin_wasm_memory_size" {
+            return self.compile_math_builtin(opcode, name, args, ctx, code);
+        }
+        if name == "printf" || name == "std::printf" || name.ends_with("::printf") {
+            return self.compile_printf_call(args, ctx, code);
+        }
+        if name == "__builtin_wasm_memory_size" {
             code.push(OP_MEMORY_SIZE);
             code.push(0);
             return Ok(());
-        } else if self.sema.struct_layouts.contains_key(name) {
-            self.compile_struct_value_call(name, args, arg_types, ctx, code)?;
-        } else if ctx.var_offsets.contains_key(name) || self.global_offsets.contains_key(name) {
-            // Call through a function-pointer variable. Build the call-site
-            // signature from the actual argument types.
-            let mut params_wasm = Vec::new();
-            for a in args {
-                let aty = self.get_expr_type(a, ctx);
-                self.compile_expr(a, ctx, code)?;
-                params_wasm.push(
-                    aty.to_wasm_type()
-                        .map(|w| match w {
-                            WasmType::I32 => TYPE_I32,
-                            WasmType::I64 => TYPE_I64,
-                            WasmType::F32 => TYPE_F32,
-                            WasmType::F64 => TYPE_F64,
-                        })
-                        .unwrap_or(TYPE_I32),
-                );
-            }
-            self.compile_expr(callee, ctx, code)?;
-
-            let callee_ty = self.get_expr_type(callee, ctx);
-            let ret_ty = if let Type::Pointer(inner) = callee_ty.strip_const() {
-                if let Type::Function { return_type, .. } = &**inner {
-                    (**return_type).clone()
-                } else {
-                    Type::Int
-                }
-            } else if let Type::Function { return_type, .. } = callee_ty.strip_const() {
-                (**return_type).clone()
-            } else {
-                Type::Int
-            };
-
-            let results_wasm = ret_ty
-                .to_wasm_type()
-                .map(|w| match w {
-                    WasmType::I32 => vec![TYPE_I32],
-                    WasmType::I64 => vec![TYPE_I64],
-                    WasmType::F32 => vec![TYPE_F32],
-                    WasmType::F64 => vec![TYPE_F64],
-                })
-                .unwrap_or_default();
-
-            let type_idx = self.module.add_type(params_wasm, results_wasm);
-            code.push(OP_CALL_INDIRECT);
-            write_u32(code, type_idx);
-            code.push(0);
-        } else if let Some(cls) = &ctx.current_class.clone() {
-            if let Some((m_idx, sig)) = self.find_method(cls, name, arg_types) {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, 0); // this
-                for (i, a) in args.iter().enumerate() {
-                    let param_ty = sig.param_types.get(i + 1);
-                    self.compile_call_arg(a, param_ty, ctx, code)?;
-                }
-                code.push(OP_CALL);
-                write_u32(code, m_idx);
-                self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
-            } else if let Some((func_idx, sig)) = self.find_function(name, arg_types) {
-                for (i, a) in args.iter().enumerate() {
-                    let param_ty = sig.param_types.get(i);
-                    self.compile_call_arg(a, param_ty, ctx, code)?;
-                }
-                code.push(OP_CALL);
-                write_u32(code, func_idx);
-                self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
-            } else {
-                return Err(CompileError::new(
-                    format!("Undefined function '{}'", name),
-                    1,
-                    1,
-                ));
-            }
-        } else if let Some((func_idx, sig)) = self.find_function(name, arg_types) {
+        }
+        if self.sema.struct_layouts.contains_key(name) {
+            return self.compile_struct_value_call(name, args, arg_types, ctx, code);
+        }
+        if ctx.var_offsets.contains_key(name) || self.global_offsets.contains_key(name) {
+            return self.compile_function_pointer_call(callee, args, ctx, code);
+        }
+        if let Some(cls) = ctx.current_class.clone() {
+            return self.compile_in_class_call(&cls, name, args, arg_types, ctx, code);
+        }
+        if let Some((func_idx, sig)) = self.find_function(name, arg_types) {
             for (i, a) in args.iter().enumerate() {
                 let param_ty = sig.param_types.get(i);
                 self.compile_call_arg(a, param_ty, ctx, code)?;
@@ -322,80 +270,99 @@ impl<'a> Codegen<'a> {
             code.push(OP_CALL);
             write_u32(code, func_idx);
             self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
-        } else {
-            return Err(CompileError::new(
-                format!("Undefined function '{}'", name),
-                1,
-                1,
-            ));
+            return Ok(());
         }
-        Ok(())
+        Err(CompileError::new(
+            format!("Undefined function '{}'", name),
+            1,
+            1,
+        ))
     }
 
-    fn compile_printf_call(
+    fn compile_math_builtin(
         &mut self,
+        opcode: u8,
+        name: &str,
         args: &[Expr],
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        // Variadic arguments are laid out by value in a compact frame
-        // block. Floats are promoted to double, matching the runtime's
-        // 4/8-byte reader.
-        let mut vararg_bytes = 0u32;
-        for a in args.iter().skip(1) {
-            let aty = self.get_expr_type(a, ctx);
-            let size = match aty.strip_const().strip_reference() {
-                Type::Float | Type::Double | Type::LongLong | Type::UnsignedLongLong => 8,
-                _ => 4,
-            };
-            vararg_bytes = vararg_bytes
-                .checked_add(size)
-                .ok_or_else(|| crate::internal_error!(0, 0, "printf arguments are too large"))?;
+        if args.len() != 1 {
+            return Err(CompileError::new(
+                format!("{} expects one argument", name),
+                1,
+                1,
+            ));
         }
-        let varargs_base = ctx.alloc_frame(vararg_bytes, 8)?;
-        let mut arg_offset = varargs_base;
-
-        for a in args.iter().skip(1) {
-            let aty = self.get_expr_type(a, ctx);
-            let clean_aty = aty.strip_const().strip_reference();
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.fp_local);
-            self.compile_expr(a, ctx, code)?;
-
-            if matches!(clean_aty, Type::Float) {
-                code.push(OP_F64_PROMOTE_F32);
-                code.push(OP_F64_STORE);
-                write_u32(code, 3);
-                write_u32(code, arg_offset);
-                arg_offset += 8;
-            } else if matches!(clean_aty, Type::Double) {
-                code.push(OP_F64_STORE);
-                write_u32(code, 3);
-                write_u32(code, arg_offset);
-                arg_offset += 8;
-            } else if matches!(clean_aty, Type::LongLong | Type::UnsignedLongLong) {
-                code.push(OP_I64_STORE);
-                write_u32(code, 3);
-                write_u32(code, arg_offset);
-                arg_offset += 8;
-            } else {
-                code.push(OP_I32_STORE);
-                write_u32(code, 2);
-                write_u32(code, arg_offset);
-                arg_offset += 4;
-            }
-        }
-
         self.compile_expr(&args[0], ctx, code)?;
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_I32_CONST);
-        write_i32(code, varargs_base as i32);
-        code.push(OP_I32_ADD);
-
-        code.push(OP_CALL);
-        write_u32(code, self.func_printf);
+        code.push(opcode);
         Ok(())
+    }
+
+    /// Call through a function-pointer variable. Build the call-site
+    /// signature from the actual argument types.
+    fn compile_function_pointer_call(
+        &mut self,
+        callee: &Expr,
+        args: &[Expr],
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        let mut params_wasm = Vec::new();
+        for a in args {
+            let aty = self.get_expr_type(a, ctx);
+            self.compile_expr(a, ctx, code)?;
+            params_wasm.push(wasm_value_type(&aty));
+        }
+        self.compile_expr(callee, ctx, code)?;
+
+        let callee_ty = self.get_expr_type(callee, ctx);
+        let ret_ty = callee_return_type(&callee_ty);
+        let results_wasm = wasm_result_types(&ret_ty);
+
+        let type_idx = self.module.add_type(params_wasm, results_wasm);
+        code.push(OP_CALL_INDIRECT);
+        write_u32(code, type_idx);
+        code.push(0);
+        Ok(())
+    }
+
+    fn compile_in_class_call(
+        &mut self,
+        cls: &str,
+        name: &str,
+        args: &[Expr],
+        arg_types: &[Type],
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        if let Some((m_idx, sig)) = self.find_method(cls, name, arg_types) {
+            code.push(OP_LOCAL_GET);
+            write_u32(code, 0); // this
+            for (i, a) in args.iter().enumerate() {
+                let param_ty = sig.param_types.get(i + 1);
+                self.compile_call_arg(a, param_ty, ctx, code)?;
+            }
+            code.push(OP_CALL);
+            write_u32(code, m_idx);
+            self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
+            return Ok(());
+        }
+        if let Some((func_idx, sig)) = self.find_function(name, arg_types) {
+            for (i, a) in args.iter().enumerate() {
+                let param_ty = sig.param_types.get(i);
+                self.compile_call_arg(a, param_ty, ctx, code)?;
+            }
+            code.push(OP_CALL);
+            write_u32(code, func_idx);
+            self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
+            return Ok(());
+        }
+        Err(CompileError::new(
+            format!("Undefined function '{}'", name),
+            1,
+            1,
+        ))
     }
 
     fn compile_struct_value_call(
@@ -487,16 +454,7 @@ impl<'a> Codegen<'a> {
         for a in args {
             let aty = self.get_expr_type(a, ctx);
             self.compile_expr(a, ctx, code)?;
-            params_wasm.push(
-                aty.to_wasm_type()
-                    .map(|w| match w {
-                        WasmType::I32 => TYPE_I32,
-                        WasmType::I64 => TYPE_I64,
-                        WasmType::F32 => TYPE_F32,
-                        WasmType::F64 => TYPE_F64,
-                    })
-                    .unwrap_or(TYPE_I32),
-            );
+            params_wasm.push(wasm_value_type(&aty));
         }
         if let Expr::Unary {
             op: UnaryOp::Deref,
@@ -509,27 +467,8 @@ impl<'a> Codegen<'a> {
         }
 
         let callee_ty = self.get_expr_type(callee, ctx);
-        let ret_ty = if let Type::Pointer(inner) = callee_ty.strip_const() {
-            if let Type::Function { return_type, .. } = &**inner {
-                (**return_type).clone()
-            } else {
-                Type::Int
-            }
-        } else if let Type::Function { return_type, .. } = callee_ty.strip_const() {
-            (**return_type).clone()
-        } else {
-            Type::Int
-        };
-
-        let results_wasm = ret_ty
-            .to_wasm_type()
-            .map(|w| match w {
-                WasmType::I32 => vec![TYPE_I32],
-                WasmType::I64 => vec![TYPE_I64],
-                WasmType::F32 => vec![TYPE_F32],
-                WasmType::F64 => vec![TYPE_F64],
-            })
-            .unwrap_or_default();
+        let ret_ty = callee_return_type(&callee_ty);
+        let results_wasm = wasm_result_types(&ret_ty);
 
         let type_idx = self.module.add_type(params_wasm, results_wasm);
         code.push(OP_CALL_INDIRECT);
