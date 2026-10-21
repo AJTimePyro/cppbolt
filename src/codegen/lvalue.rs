@@ -285,13 +285,8 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let ty = self.get_expr_type(expr, ctx);
-        let size = u32::try_from(ty.size_of(&self.sema.struct_sizes)).map_err(|_| {
-            crate::internal_error!(
-                self.current_line,
-                self.current_col,
-                "temporary is too large"
-            )
-        })?;
+        let size = u32::try_from(ty.size_of(&self.sema.struct_sizes))
+            .map_err(|_| self.internal_error("temporary is too large"))?;
         let align = u32::try_from(ty.align_of(&self.sema.struct_aligns))
             .unwrap_or(4)
             .max(4);

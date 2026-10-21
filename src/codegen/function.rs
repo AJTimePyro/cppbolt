@@ -76,13 +76,8 @@ impl<'a> Codegen<'a> {
         // Copy parameter locals into the frame; the body addresses locals
         // relative to the frame pointer.
         for (i, p) in f.params.iter().enumerate() {
-            let psize = u32::try_from(p.ty.size_of(&self.sema.struct_sizes)).map_err(|_| {
-                crate::internal_error!(
-                    self.current_line,
-                    self.current_col,
-                    "parameter is too large"
-                )
-            })?;
+            let psize = u32::try_from(p.ty.size_of(&self.sema.struct_sizes))
+                .map_err(|_| self.internal_error("parameter is too large"))?;
             let palign = u32::try_from(p.ty.align_of(&self.sema.struct_aligns))
                 .unwrap_or(4)
                 .max(4);

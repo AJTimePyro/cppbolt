@@ -17,13 +17,9 @@ impl<'a> Codegen<'a> {
                 Type::Float | Type::Double | Type::LongLong | Type::UnsignedLongLong => 8,
                 _ => 4,
             };
-            vararg_bytes = vararg_bytes.checked_add(size).ok_or_else(|| {
-                crate::internal_error!(
-                    self.current_line,
-                    self.current_col,
-                    "printf arguments are too large"
-                )
-            })?;
+            vararg_bytes = vararg_bytes
+                .checked_add(size)
+                .ok_or_else(|| self.internal_error("printf arguments are too large"))?;
         }
         let varargs_base = ctx.alloc_frame(vararg_bytes, 8)?;
         let mut arg_offset = varargs_base;

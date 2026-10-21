@@ -14,11 +14,7 @@ impl<'a> Codegen<'a> {
             body,
         } = &stmt.kind
         else {
-            return Err(crate::internal_error!(
-                self.current_line,
-                self.current_col,
-                "unexpected statement kind"
-            ));
+            return Err(self.internal_error("unexpected statement kind"));
         };
 
         ctx.enter_scope();
@@ -91,11 +87,7 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let StmtKind::Switch { expr, body } = &stmt.kind else {
-            return Err(crate::internal_error!(
-                self.current_line,
-                self.current_col,
-                "unexpected statement kind"
-            ));
+            return Err(self.internal_error("unexpected statement kind"));
         };
 
         let switch_ty = self.get_expr_type(expr, ctx);

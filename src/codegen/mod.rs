@@ -342,6 +342,16 @@ fn frame_too_large(line: usize, col: usize) -> CompileError {
         .with_kind(crate::diagnostics::ErrorKind::Internal)
 }
 
+impl<'a> Codegen<'a> {
+    /// The diagnostic for a broken internal invariant.
+    ///
+    /// The position is the statement being lowered, so the diagnostic never
+    /// points at a fabricated line and column.
+    pub(super) fn internal_error(&self, message: &str) -> CompileError {
+        crate::internal_error!(self.current_line, self.current_col, "{message}")
+    }
+}
+
 /// Writes a positive LEB128 number into exactly five bytes, padding with
 /// continuation bits so the encoded length never changes.
 fn write_fixed_u32(bytes: &mut [u8], value: u32) {

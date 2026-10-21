@@ -374,26 +374,6 @@ impl Sema {
     }
 }
 
-/// Returns true when the conversion from `from` to `to` is a promotion.
-///
-/// A small integer or an enum promotes to `int`, and a `float` promotes to
-/// `double`.  Every other conversion is a plain conversion.
-pub(super) fn is_promotion(from: &Type, to: &Type) -> bool {
-    let from = from.strip_const();
-    let to = to.strip_const();
-    match from {
-        Type::Bool
-        | Type::Char
-        | Type::SignedChar
-        | Type::UnsignedChar
-        | Type::Short
-        | Type::UnsignedShort
-        | Type::Enum(_) => matches!(to, Type::Int | Type::UnsignedInt),
-        Type::Float => matches!(to, Type::Double),
-        _ => false,
-    }
-}
-
 /// Returns true when an expression names a storage location that an
 /// assignment may modify.
 ///

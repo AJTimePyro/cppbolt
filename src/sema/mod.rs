@@ -8,6 +8,7 @@ mod expr_member;
 mod expr_ops;
 mod layout;
 mod lookup;
+mod overload;
 mod stmt;
 mod stmt_decl;
 

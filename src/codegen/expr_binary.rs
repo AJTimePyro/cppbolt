@@ -14,11 +14,7 @@ impl<'a> Codegen<'a> {
             ..
         } = expr
         else {
-            return Err(crate::internal_error!(
-                self.current_line,
-                self.current_col,
-                "unexpected expression kind"
-            ));
+            return Err(self.internal_error("unexpected expression kind"));
         };
 
         self.compile_cond(left, ctx, code)?;
@@ -48,11 +44,7 @@ impl<'a> Codegen<'a> {
             ..
         } = expr
         else {
-            return Err(crate::internal_error!(
-                self.current_line,
-                self.current_col,
-                "unexpected expression kind"
-            ));
+            return Err(self.internal_error("unexpected expression kind"));
         };
 
         self.compile_cond(left, ctx, code)?;
@@ -76,11 +68,7 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let Expr::Binary { .. } = expr else {
-            return Err(crate::internal_error!(
-                self.current_line,
-                self.current_col,
-                "unexpected expression kind"
-            ));
+            return Err(self.internal_error("unexpected expression kind"));
         };
 
         // Walk the left-associative spine iteratively. The leftmost operand is
@@ -226,11 +214,7 @@ impl<'a> Codegen<'a> {
                 .unwrap_or(1)
                 .max(1);
             Ok(Some(i32::try_from(size).map_err(|_| {
-                crate::internal_error!(
-                    self.current_line,
-                    self.current_col,
-                    "pointer element is too large"
-                )
+                self.internal_error("pointer element is too large")
             })?))
         } else {
             Ok(None)

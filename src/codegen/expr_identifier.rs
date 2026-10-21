@@ -8,11 +8,7 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let Expr::Identifier(name) = expr else {
-            return Err(crate::internal_error!(
-                self.current_line,
-                self.current_col,
-                "unexpected expression kind"
-            ));
+            return Err(self.internal_error("unexpected expression kind"));
         };
 
         if let Some(&(offset, ref ty)) = ctx.static_var_offsets.get(name) {

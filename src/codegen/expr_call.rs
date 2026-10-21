@@ -11,11 +11,7 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let Expr::Call { callee, args, .. } = expr else {
-            return Err(crate::internal_error!(
-                self.current_line,
-                self.current_col,
-                "unexpected expression kind"
-            ));
+            return Err(self.internal_error("unexpected expression kind"));
         };
 
         let mut arg_types = Vec::new();
@@ -239,9 +235,8 @@ impl<'a> Codegen<'a> {
     ) -> Result<(), CompileError> {
         // A struct-valued call such as `Item(args)` produces a prvalue
         // in a heap temporary; the caller materializes and cleans it up.
-        let size = i32::try_from(self.sema.struct_layouts[name].size).map_err(|_| {
-            crate::internal_error!(self.current_line, self.current_col, "object is too large")
-        })?;
+        let size = i32::try_from(self.sema.struct_layouts[name].size)
+            .map_err(|_| self.internal_error("object is too large"))?;
         let temp_ptr_slot = ctx.alloc_frame(4, 4)?;
         code.push(OP_I32_CONST);
         write_i32(code, size);

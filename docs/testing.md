@@ -173,3 +173,14 @@ Emitted modules should also be validated with a WebAssembly validator when one i
 The oracle also runs as the cargo test `tests/oracle_gate.rs`, so a wrong `.expected` file cannot hide from a
 test run. A machine without g++ or clang++ cannot run the gate: the test reports `oracle skipped` and fails
 instead of passing silently.
+
+## Size census
+
+`tools/census.py` counts the functions that are longer than 60, 80, and 100 lines, the functions with more than
+five parameters, and the files with more than 500 lines:
+
+```sh
+python3 tools/census.py
+```
+
+The file budget keeps the modules readable: no file of `src/` is longer than 500 lines.

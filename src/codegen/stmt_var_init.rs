@@ -108,13 +108,9 @@ impl<'a> Codegen<'a> {
         if let Some(layout) = self.sema.struct_layouts.get(sname).cloned() {
             for (i, item) in list.iter().enumerate() {
                 if let Some(fld) = layout.fields.get(i) {
-                    let field_offset = offset.checked_add(fld.offset as u32).ok_or_else(|| {
-                        crate::internal_error!(
-                            self.current_line,
-                            self.current_col,
-                            "object is too large"
-                        )
-                    })?;
+                    let field_offset = offset
+                        .checked_add(fld.offset as u32)
+                        .ok_or_else(|| self.internal_error("object is too large"))?;
                     self.compile_aggregate_local(&fld.ty, item, field_offset, ctx, code)?;
                 }
             }
@@ -193,25 +189,16 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let elem_size = u32::try_from(elem_ty.size_of(&self.sema.struct_sizes)).map_err(|_| {
-            crate::internal_error!(self.current_line, self.current_col, "array is too large")
-        })?;
+        let elem_size = u32::try_from(elem_ty.size_of(&self.sema.struct_sizes))
+            .map_err(|_| self.internal_error("array is too large"))?;
         for (i, item) in list.iter().enumerate() {
             let item_offset = offset
-                .checked_add((i as u32).checked_mul(elem_size).ok_or_else(|| {
-                    crate::internal_error!(
-                        self.current_line,
-                        self.current_col,
-                        "array is too large"
-                    )
-                })?)
-                .ok_or_else(|| {
-                    crate::internal_error!(
-                        self.current_line,
-                        self.current_col,
-                        "array is too large"
-                    )
-                })?;
+                .checked_add(
+                    (i as u32)
+                        .checked_mul(elem_size)
+                        .ok_or_else(|| self.internal_error("array is too large"))?,
+                )
+                .ok_or_else(|| self.internal_error("array is too large"))?;
             self.compile_aggregate_local(elem_ty, item, item_offset, ctx, code)?;
         }
         Ok(())

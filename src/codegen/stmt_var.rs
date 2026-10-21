@@ -14,11 +14,7 @@ impl<'a> Codegen<'a> {
             is_static,
         } = &stmt.kind
         else {
-            return Err(crate::internal_error!(
-                self.current_line,
-                self.current_col,
-                "unexpected statement kind"
-            ));
+            return Err(self.internal_error("unexpected statement kind"));
         };
 
         if *is_static {
