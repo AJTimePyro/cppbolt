@@ -1,0 +1,1 @@
+tests/negative/function_string_argument.cpp:6:18: error: no matching conversion for argument 2 of 'add': cannot convert 'char *' to 'int'

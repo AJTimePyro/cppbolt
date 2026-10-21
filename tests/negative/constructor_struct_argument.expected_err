@@ -1,0 +1,1 @@
+tests/negative/constructor_struct_argument.cpp:12:5: error: no matching constructor for initialization of 'T'

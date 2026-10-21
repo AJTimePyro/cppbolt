@@ -1,0 +1,1 @@
+tests/negative/function_int_to_struct.cpp:10:5: error: no matching conversion for argument 1 of 'takes_struct': cannot convert 'int' to 'Other'

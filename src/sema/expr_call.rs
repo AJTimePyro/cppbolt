@@ -41,9 +41,19 @@ impl Sema {
                     *expr = inner;
                     return Ok(Type::Struct(sname));
                 }
-                // A constructor call may leave out arguments that have
-                // default values.
-                self.fill_constructor_defaults(&sname, &arg_types, args)?;
+                // The arguments must match a constructor of the class.
+                match self.find_constructor_for(&sname, &arg_types) {
+                    Some(sig) => {
+                        // A constructor call may leave out arguments that have
+                        // default values.
+                        self.fill_constructor_defaults(&sig, args)?;
+                    }
+                    None => {
+                        if !self.is_copy_initialization(&sname, &arg_types) {
+                            return Err(self.no_matching_constructor(&sname, *pos));
+                        }
+                    }
+                }
                 return Ok(Type::Struct(sname));
             }
 
@@ -59,7 +69,7 @@ impl Sema {
             }
         }
 
-        if let Some(return_type) = self.analyze_member_callee(callee, args)? {
+        if let Some(return_type) = self.analyze_member_callee(callee, args, &arg_types)? {
             return Ok(return_type);
         }
 
@@ -120,34 +130,44 @@ impl Sema {
         Ok(())
     }
 
-    /// Fills in the default arguments of a constructor call.
+    /// Finds the constructor of a class that accepts the given arguments.
     ///
     /// The constructor overload with the fewest defaulted arguments wins, and
-    /// the default expressions are analyzed like ordinary arguments.
-    fn fill_constructor_defaults(
-        &mut self,
-        class_name: &str,
-        arg_types: &[Type],
-        args: &mut Vec<Expr>,
-    ) -> Result<(), CompileError> {
+    /// an exact match beats a reference binding, which beats an arithmetic
+    /// conversion.
+    fn find_constructor_for(&self, class_name: &str, arg_types: &[Type]) -> Option<FunctionSig> {
         let short = class_name.split("::").last().unwrap_or(class_name);
-        let qualified = format!("{class_name}::{short}");
-        let Some(candidates) = self.functions.get(&qualified).cloned() else {
-            return Ok(());
-        };
+        let alternate = QualifiedName::new(class_name).alternate();
+        let mut candidates: Vec<FunctionSig> = Vec::new();
+        for name in [
+            format!("{class_name}::{short}"),
+            format!("{alternate}::{short}"),
+        ] {
+            if let Some(sigs) = self.functions.get(&name) {
+                candidates.extend(sigs.iter().cloned());
+            }
+        }
+        if candidates.is_empty() {
+            return None;
+        }
         let mut best: Option<FunctionSig> = None;
         let mut best_score = usize::MAX;
         for cand in &candidates {
-            if cand.param_types.len() < 2 {
-                continue;
-            }
-            let params = &cand.param_types[1..];
-            let defaults = &cand.default_args[1..];
-            if args.len() > params.len() || defaults.len() < params.len() {
+            let params = if cand.param_types.is_empty() {
+                &[][..]
+            } else {
+                &cand.param_types[1..]
+            };
+            let defaults = if cand.default_args.is_empty() {
+                &[][..]
+            } else {
+                &cand.default_args[1..]
+            };
+            if arg_types.len() > params.len() || defaults.len() < params.len() {
                 continue;
             }
             // Every omitted argument needs a default value.
-            if !defaults[args.len()..].iter().all(|d| d.is_some()) {
+            if !defaults[arg_types.len()..].iter().all(|d| d.is_some()) {
                 continue;
             }
             let mut score = 0;
@@ -175,17 +195,35 @@ impl Sema {
                 continue;
             }
             // Prefer the overload with the fewest defaulted arguments.
-            score += (params.len() - args.len()) * 100;
+            score += (params.len() - arg_types.len()) * 100;
             if score < best_score {
                 best_score = score;
                 best = Some(cand.clone());
             }
         }
-        let Some(sig) = best else {
-            return Ok(());
-        };
+        best
+    }
+
+    /// Returns true when the arguments describe a copy initialization.
+    ///
+    /// A single argument of the class itself is initialized with the copy
+    /// constructor, whether or not the class declares one.
+    fn is_copy_initialization(&self, class_name: &str, arg_types: &[Type]) -> bool {
+        arg_types.len() == 1
+            && matches!(arg_types[0].strip_const(), Type::Struct(other) if *other == class_name)
+    }
+
+    /// Fills in the default arguments of a constructor call.
+    ///
+    /// The default expressions are analyzed like ordinary arguments.
+    fn fill_constructor_defaults(
+        &mut self,
+        sig: &FunctionSig,
+        args: &mut Vec<Expr>,
+    ) -> Result<(), CompileError> {
         let given = args.len();
-        for index in given..sig.param_types.len() - 1 {
+        let last = sig.param_types.len().saturating_sub(1);
+        for index in given..last {
             if let Some(Some(default)) = sig.default_args.get(index + 1) {
                 args.push(default.clone());
             }
@@ -196,10 +234,41 @@ impl Sema {
         Ok(())
     }
 
+    /// The diagnostic for arguments that match no constructor of a class.
+    fn no_matching_constructor(&self, class_name: &str, pos: ExprPos) -> CompileError {
+        let message = if self.in_initializer {
+            format!("no matching constructor for initialization of '{class_name}'")
+        } else {
+            format!("no matching constructor for call to '{class_name}'")
+        };
+        CompileError::new(message, pos.line, pos.col)
+    }
+
+    /// The diagnostic for an argument that does not convert to its parameter.
+    fn no_matching_conversion(
+        &self,
+        name: &str,
+        failure: &ConversionFailure,
+        pos: ExprPos,
+    ) -> CompileError {
+        CompileError::new(
+            format!(
+                "no matching conversion for argument {} of '{}': cannot convert '{}' to '{}'",
+                failure.index + 1,
+                name,
+                failure.from.to_c_type(),
+                failure.to.to_c_type()
+            ),
+            pos.line,
+            pos.col,
+        )
+    }
+
     fn analyze_member_callee(
         &mut self,
         callee: &mut Expr,
         args: &mut Vec<Expr>,
+        arg_types: &[Type],
     ) -> Result<Option<Type>, CompileError> {
         if let Expr::MemberAccess {
             object,
@@ -255,6 +324,8 @@ impl Sema {
             if let Some(sig) =
                 self.find_method_in_class_for_receiver(&struct_name, member, receiver_const)
             {
+                // The arguments must match one of the overloads of the method.
+                self.check_member_arguments(&struct_name, member, receiver_const, arg_types, *pos)?;
                 // A member call may leave out arguments that have default
                 // values.
                 self.fill_member_defaults(&sig, args)?;
@@ -268,6 +339,64 @@ impl Sema {
             }
         }
         Ok(None)
+    }
+
+    /// Checks that the arguments of a method call match an overload.
+    ///
+    /// The first parameter of a method is the implicit `this`, so the
+    /// arguments start at the second one.
+    fn check_member_arguments(
+        &self,
+        class_name: &str,
+        member: &str,
+        receiver_const: bool,
+        arg_types: &[Type],
+        pos: ExprPos,
+    ) -> Result<(), CompileError> {
+        let overloads = self.find_method_overloads_in_class(class_name, member, receiver_const);
+        if overloads.is_empty() {
+            return Ok(());
+        }
+        let mut conversion_failure: Option<ConversionFailure> = None;
+        let mut expected: Option<usize> = None;
+        for sig in &overloads {
+            let params = if sig.param_types.is_empty() {
+                &[][..]
+            } else {
+                &sig.param_types[1..]
+            };
+            let defaults = if sig.default_args.is_empty() {
+                &[][..]
+            } else {
+                &sig.default_args[1..]
+            };
+            let min_args = defaults.iter().take_while(|d| d.is_none()).count();
+            if arg_types.len() < min_args || arg_types.len() > params.len() {
+                expected = Some(params.len());
+                continue;
+            }
+            match self.score_arguments(params, arg_types) {
+                Ok(_) => return Ok(()),
+                Err(failure) => {
+                    if conversion_failure.is_none() {
+                        conversion_failure = Some(failure);
+                    }
+                }
+            }
+        }
+        if let Some(failure) = conversion_failure {
+            return Err(self.no_matching_conversion(member, &failure, pos));
+        }
+        Err(CompileError::new(
+            format!(
+                "No matching function call for '{}': expected {} arguments, found {}",
+                member,
+                expected.unwrap_or(0),
+                arg_types.len()
+            ),
+            pos.line,
+            pos.col,
+        ))
     }
 
     fn resolve_named_call(
@@ -284,14 +413,21 @@ impl Sema {
         if let Some(candidates) = candidates {
             let mut best_candidate: Option<(&FunctionSig, Vec<Expr>)> = None;
             let mut best_score = usize::MAX;
+            let mut conversion_failure: Option<ConversionFailure> = None;
 
             for cand in &candidates {
                 let min_args = cand.default_args.iter().take_while(|d| d.is_none()).count();
                 let max_args = cand.param_types.len();
 
                 if args.len() >= min_args && args.len() <= max_args {
-                    let Some(score) = self.score_call_candidate(cand, arg_types) else {
-                        continue;
+                    let score = match self.score_call_candidate(cand, arg_types) {
+                        Ok(score) => score,
+                        Err(failure) => {
+                            if conversion_failure.is_none() {
+                                conversion_failure = Some(failure);
+                            }
+                            continue;
+                        }
                     };
 
                     if score < best_score {
@@ -317,6 +453,11 @@ impl Sema {
                 *args = full_args;
                 return Ok(ret_type);
             }
+            // The arguments fit an overload, but one of them does not
+            // convert to its parameter.
+            if let Some(failure) = conversion_failure {
+                return Err(self.no_matching_conversion(name, &failure, pos));
+            }
             let cand = &candidates[0];
             return Err(CompileError::new(
                 format!(
@@ -338,11 +479,35 @@ impl Sema {
     /// Scores how well a candidate matches the argument types.
     ///
     /// Exact matches add no penalty, reference bindings cost 1, and other
-    /// conversions cost 2. Returns `None` when the arguments do not match.
-    fn score_call_candidate(&self, cand: &FunctionSig, arg_types: &[Type]) -> Option<usize> {
+    /// conversions cost 2.  The error names the first argument that does not
+    /// convert to its parameter.
+    fn score_call_candidate(
+        &self,
+        cand: &FunctionSig,
+        arg_types: &[Type],
+    ) -> Result<usize, ConversionFailure> {
+        self.score_arguments(&cand.param_types, arg_types)
+    }
+
+    /// Scores the arguments against the parameters of a signature.
+    ///
+    /// Exact matches add no penalty, reference bindings cost 1, and other
+    /// conversions cost 2.  The error names the first argument that does not
+    /// convert to its parameter.
+    fn score_arguments(
+        &self,
+        params: &[Type],
+        arg_types: &[Type],
+    ) -> Result<usize, ConversionFailure> {
         let mut score = 0;
         for (i, arg_ty) in arg_types.iter().enumerate() {
-            let p = &cand.param_types[i];
+            let Some(p) = params.get(i) else {
+                return Err(ConversionFailure {
+                    index: i,
+                    from: arg_ty.clone(),
+                    to: Type::Void,
+                });
+            };
             let p_decay = p.decay_array();
             let a_decay = arg_ty.decay_array();
             let p_base = p_decay.strip_const();
@@ -356,10 +521,14 @@ impl Sema {
             } else if self.can_assign(p, arg_ty) {
                 score += 2;
             } else {
-                return None;
+                return Err(ConversionFailure {
+                    index: i,
+                    from: arg_ty.clone(),
+                    to: p.clone(),
+                });
             }
         }
-        Some(score)
+        Ok(score)
     }
 
     fn find_call_candidates(&mut self, name: &str, arg_types: &[Type]) -> Option<Vec<FunctionSig>> {

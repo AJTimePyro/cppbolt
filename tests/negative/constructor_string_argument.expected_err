@@ -1,0 +1,1 @@
+tests/negative/constructor_string_argument.cpp:7:5: error: no matching constructor for initialization of 'T'

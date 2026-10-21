@@ -1,0 +1,1 @@
+tests/negative/function_pointer_from_string.cpp:6:5: error: no matching conversion for argument 1 of 'store': cannot convert 'char *' to 'int *'

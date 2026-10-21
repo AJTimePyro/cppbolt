@@ -75,7 +75,15 @@ impl Sema {
         line: usize,
         col: usize,
     ) -> Result<(), CompileError> {
-        let init_ty = self.analyze_expr(init_expr)?;
+        let init_ty = {
+            // A constructor call in an initializer reports an
+            // initialization diagnostic.
+            let previous = self.in_initializer;
+            self.in_initializer = true;
+            let result = self.analyze_expr(init_expr);
+            self.in_initializer = previous;
+            result?
+        };
         if *ty == Type::Auto {
             *ty = init_ty.clone();
         } else if let Type::Pointer(inner) = ty

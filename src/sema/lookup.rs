@@ -88,6 +88,64 @@ impl Sema {
         methods
     }
 
+    /// Collects every overload of a method, including the ones of a base class.
+    ///
+    /// A const receiver only considers the const-qualified overloads.
+    pub fn find_method_overloads_in_class(
+        &self,
+        class_name: &str,
+        method_name: &str,
+        receiver_const: bool,
+    ) -> Vec<FunctionSig> {
+        let mut overloads = Vec::new();
+        let mut visited = Vec::new();
+        self.collect_method_overloads(
+            class_name,
+            method_name,
+            receiver_const,
+            &mut overloads,
+            &mut visited,
+        );
+        overloads
+    }
+
+    fn collect_method_overloads(
+        &self,
+        class_name: &str,
+        method_name: &str,
+        receiver_const: bool,
+        out: &mut Vec<FunctionSig>,
+        visited: &mut Vec<String>,
+    ) {
+        if visited.iter().any(|name| name == class_name) {
+            return;
+        }
+        visited.push(class_name.to_string());
+        let qual_name = format!("{class_name}::{method_name}");
+        if let Some(sigs) = self.functions.get(&qual_name) {
+            for sig in sigs {
+                if !receiver_const || crate::sema::sig_receiver_is_const(sig) {
+                    out.push(sig.clone());
+                }
+            }
+        }
+        if let Some(alias) = QualifiedName::new(class_name).implicit_alias() {
+            let alt = format!("{alias}::{method_name}");
+            if let Some(sigs) = self.functions.get(&alt) {
+                for sig in sigs {
+                    if !receiver_const || crate::sema::sig_receiver_is_const(sig) {
+                        out.push(sig.clone());
+                    }
+                }
+            }
+        }
+        if let Some(layout) = self.struct_layouts.get(class_name) {
+            for base in &layout.base_classes {
+                self.collect_method_overloads(base, method_name, receiver_const, out, visited);
+            }
+        }
+    }
+
     fn collect_static_methods(
         &self,
         class_name: &str,

@@ -1,0 +1,1 @@
+tests/negative/function_pointer_element_mismatch.cpp:7:5: error: no matching conversion for argument 1 of 'store': cannot convert 'double *' to 'int *'

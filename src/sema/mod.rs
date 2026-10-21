@@ -60,6 +60,17 @@ pub struct FunctionSig {
     pub is_static: bool,
 }
 
+/// The first argument of a call that does not convert to its parameter.
+#[derive(Debug, Clone)]
+pub(crate) struct ConversionFailure {
+    /// The index of the argument, counted from zero.
+    pub index: usize,
+    /// The type of the argument.
+    pub from: Type,
+    /// The type of the parameter.
+    pub to: Type,
+}
+
 /// Returns true when a type refers to a const-qualified object, looking
 /// through references and pointers.
 pub(crate) fn receiver_is_const_type(ty: &Type) -> bool {
@@ -112,6 +123,12 @@ pub struct Sema {
     pub current_func_name: Option<String>,
     pub open_namespaces: Vec<String>,
     pub using_decls: HashMap<String, String>,
+    /// Whether the analysis is inside the initializer of a variable.
+    ///
+    /// A constructor call in an initializer reports an initialization
+    /// diagnostic, while a constructor call in an expression reports a call
+    /// diagnostic.
+    pub in_initializer: bool,
     depth: crate::depth::DepthCounters,
 }
 
@@ -136,6 +153,7 @@ impl Sema {
             current_func_name: None,
             open_namespaces: Vec::new(),
             using_decls: HashMap::new(),
+            in_initializer: false,
             depth: crate::depth::DepthCounters::new(),
         };
 

@@ -1,0 +1,1 @@
+tests/negative/function_too_many_arguments.cpp:6:18: error: No matching function call for 'add': expected 2 arguments, found 3

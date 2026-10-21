@@ -1,0 +1,1 @@
+tests/negative/function_base_to_derived_pointer.cpp:15:5: error: no matching conversion for argument 1 of 'use': cannot convert 'Base *' to 'Derived *'
