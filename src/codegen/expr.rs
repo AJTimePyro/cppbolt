@@ -34,7 +34,14 @@ impl<'a> Codegen<'a> {
             Expr::CompoundAssign { .. } => self.compile_compound_assign(expr, ctx, code)?,
             Expr::New { .. } => self.compile_new(expr, ctx, code)?,
             Expr::Delete { .. } => self.compile_delete(expr, ctx, code)?,
-            Expr::Call { .. } => self.compile_call(expr, ctx, code)?,
+            Expr::Call { .. } => {
+                self.compile_call(expr, ctx, code)?;
+                let ty = self.get_expr_type_raw(expr, ctx);
+                let value_ty = ty.strip_const().strip_reference();
+                if ty.is_reference() && !matches!(value_ty, Type::Struct(_) | Type::Array(_, _)) {
+                    self.emit_load(value_ty, 0, code);
+                }
+            }
             Expr::ArraySubscript { .. } | Expr::MemberAccess { .. } => {
                 let ty = self.get_expr_type(expr, ctx);
                 self.compile_lvalue_addr(expr, ctx, code)?;

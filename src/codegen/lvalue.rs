@@ -265,7 +265,15 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let ty = self.get_expr_type_raw(expr, ctx);
-        if ty.is_reference() || matches!(ty.strip_const(), Type::Struct(_)) {
+        if ty.is_reference() {
+            if matches!(expr, Expr::Call { .. }) {
+                // A call returning a reference yields the referenced object's
+                // address; keep it untouched for an lvalue use.
+                self.compile_call(expr, ctx, code)
+            } else {
+                self.compile_expr(expr, ctx, code)
+            }
+        } else if matches!(ty.strip_const(), Type::Struct(_)) {
             self.compile_expr(expr, ctx, code)
         } else {
             self.compile_lvalue_temporary(expr, ctx, code)

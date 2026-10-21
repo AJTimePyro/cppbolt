@@ -207,3 +207,5 @@ negative/include_cycle
 negative/nesting_depth_limit
 negative/multiple_inheritance_access
 c_basics/printf_table
+classes_oop/member_reference_return
+classes_oop_variant/member_reference_return
