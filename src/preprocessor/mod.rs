@@ -6,6 +6,7 @@ mod expr_defined;
 mod include;
 mod lines;
 mod macros;
+mod macros_expand;
 
 use crate::diagnostics::CompileError;
 use crate::source::{IncludeProvider, NoIncludes};
