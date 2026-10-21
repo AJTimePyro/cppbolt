@@ -215,3 +215,5 @@ classes_oop/derived_member_hiding
 classes_oop_variant/derived_member_hiding
 c_basics/using_declaration_precedence
 c_basics_variant/using_declaration_precedence
+classes_oop/const_method_overload
+classes_oop_variant/const_method_overload

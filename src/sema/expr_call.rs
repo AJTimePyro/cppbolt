@@ -124,7 +124,10 @@ impl Sema {
             if member.starts_with('~') {
                 return Ok(Some(Type::Void));
             }
-            if let Some(sig) = self.find_method_in_class(&struct_name, member) {
+            let receiver_const = crate::sema::receiver_is_const_type(&obj_ty);
+            if let Some(sig) =
+                self.find_method_in_class_for_receiver(&struct_name, member, receiver_const)
+            {
                 return Ok(Some(sig.return_type.clone()));
             } else {
                 return Err(CompileError::new(

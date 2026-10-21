@@ -46,6 +46,7 @@ impl<'a> Codegen<'a> {
         let arg_types: Vec<Type> = args.iter().map(|a| self.get_expr_type(a, ctx)).collect();
         let obj_ty = self.get_expr_type_raw(object, ctx);
         let is_ref = obj_ty.is_reference();
+        let receiver_const = crate::sema::receiver_is_const_type(&obj_ty);
         let sname = if is_arrow || is_ref {
             if let Type::Pointer(inner) | Type::Reference(inner) = obj_ty.strip_const() {
                 if let Type::Struct(s) = inner.strip_const() {
@@ -89,9 +90,19 @@ impl<'a> Codegen<'a> {
 
         if let Some(slot_idx) = is_virtual {
             self.compile_member_call_virtual(
-                &sname, member, args, slot_idx, this_slot, fn_slot, ctx, code,
+                &sname,
+                member,
+                args,
+                slot_idx,
+                this_slot,
+                fn_slot,
+                receiver_const,
+                ctx,
+                code,
             )?;
-        } else if let Some((m_idx, sig)) = self.find_method(&sname, member, &arg_types) {
+        } else if let Some((m_idx, sig)) =
+            self.find_method_for_receiver(&sname, member, &arg_types, receiver_const)
+        {
             self.compile_member_call_direct(
                 &sname, member, args, &sig, m_idx, this_slot, ctx, code,
             )?;
@@ -115,6 +126,7 @@ impl<'a> Codegen<'a> {
         slot_idx: usize,
         this_slot: u32,
         fn_slot: u32,
+        receiver_const: bool,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
@@ -140,7 +152,10 @@ impl<'a> Codegen<'a> {
         write_u32(code, 2);
         write_u32(code, fn_slot);
 
-        let Some(sig) = self.sema.find_method_in_class(sname, member) else {
+        let Some(sig) = self
+            .sema
+            .find_method_in_class_for_receiver(sname, member, receiver_const)
+        else {
             return Err(CompileError::new(
                 format!("Method '{}' not found in class '{}'", member, sname),
                 1,
