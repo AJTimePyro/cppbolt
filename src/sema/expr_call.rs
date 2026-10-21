@@ -44,13 +44,44 @@ impl Sema {
             }
         }
 
+        if let Some(return_type) = self.analyze_member_callee(callee)? {
+            return Ok(return_type);
+        }
+
+        if let Expr::Identifier(raw_name) = &**callee {
+            let name = raw_name.strip_prefix("::").unwrap_or(raw_name).to_string();
+            if let Some(var) = self.lookup_var(&name) {
+                let stripped = var.ty.strip_const();
+                if let Type::Pointer(inner) = stripped {
+                    if let Type::Function { return_type, .. } = &**inner {
+                        return Ok((**return_type).clone());
+                    }
+                } else if let Type::Function { return_type, .. } = stripped {
+                    return Ok((**return_type).clone());
+                }
+            }
+            return self.resolve_named_call(&name, args, &arg_types, callee);
+        }
+
+        // No named function matched: treat the callee as a function pointer.
+        let callee_ty = self.analyze_expr(callee)?;
+        if let Type::Pointer(inner) = callee_ty.strip_const() {
+            if let Type::Function { return_type, .. } = &**inner {
+                return Ok((**return_type).clone());
+            }
+        } else if let Type::Function { return_type, .. } = callee_ty.strip_const() {
+            return Ok((**return_type).clone());
+        }
+        Ok(Type::Int)
+    }
+    fn analyze_member_callee(&mut self, callee: &mut Expr) -> Result<Option<Type>, CompileError> {
         if let Expr::MemberAccess {
             object,
             member,
             is_arrow,
-        } = &mut **callee
+        } = &mut *callee
         {
-            let obj_ty = self.analyze_expr(object)?;
+            let obj_ty = self.analyze_expr(object.as_mut())?;
             let struct_name = if *is_arrow {
                 let stripped = obj_ty.strip_const();
                 if let Type::Pointer(inner) | Type::Reference(inner) = stripped {
@@ -91,10 +122,10 @@ impl Sema {
             };
 
             if member.starts_with('~') {
-                return Ok(Type::Void);
+                return Ok(Some(Type::Void));
             }
             if let Some(sig) = self.find_method_in_class(&struct_name, member) {
-                return Ok(sig.return_type.clone());
+                return Ok(Some(sig.return_type.clone()));
             } else {
                 return Err(CompileError::new(
                     format!("No member named '{}' in struct '{}'", member, struct_name),
@@ -103,143 +134,138 @@ impl Sema {
                 ));
             }
         }
+        Ok(None)
+    }
 
-        if let Expr::Identifier(raw_name) = &**callee {
-            let name = raw_name.strip_prefix("::").unwrap_or(raw_name);
-            if let Some(var) = self.lookup_var(name) {
-                let stripped = var.ty.strip_const();
-                if let Type::Pointer(inner) = stripped {
-                    if let Type::Function { return_type, .. } = &**inner {
-                        return Ok((**return_type).clone());
-                    }
-                } else if let Type::Function { return_type, .. } = stripped {
-                    return Ok((**return_type).clone());
-                }
-            }
-            // Overload resolution: exact matches score best, followed by
-            // reference binding, arithmetic conversions, and user conversions.
-            let q1 = name.to_string();
-            let q2 = QualifiedName::new(name).alternate().into_owned();
-            let mut candidates = self
-                .functions
-                .get(&q1)
-                .or_else(|| self.functions.get(&q2))
-                .or_else(|| {
-                    self.open_namespaces
-                        .iter()
-                        .find_map(|ns| self.functions.get(&format!("{}::{}", ns, name)))
-                })
-                .or_else(|| {
-                    self.using_decls
-                        .get(name)
-                        .and_then(|full| self.functions.get(full))
-                })
-                .cloned();
-            if candidates.is_none() {
-                for aty in &arg_types {
-                    let clean = aty.strip_const().strip_reference();
-                    if let Type::Struct(s) = clean
-                        && let Some((ns, _)) = s.rsplit_once("::")
-                        && let Some(sigs) = self.functions.get(&format!("{}::{}", ns, name))
-                    {
-                        candidates = Some(sigs.clone());
-                        break;
+    fn resolve_named_call(
+        &mut self,
+        name: &str,
+        args: &mut Vec<Expr>,
+        arg_types: &[Type],
+        callee: &mut Expr,
+    ) -> Result<Type, CompileError> {
+        // Overload resolution: exact matches score best, followed by
+        // reference binding, arithmetic conversions, and user conversions.
+        let candidates = self.find_call_candidates(name, arg_types);
+        if let Some(candidates) = candidates {
+            let mut best_candidate: Option<(&FunctionSig, Vec<Expr>)> = None;
+            let mut best_score = usize::MAX;
+
+            for cand in &candidates {
+                let min_args = cand.default_args.iter().take_while(|d| d.is_none()).count();
+                let max_args = cand.param_types.len();
+
+                if args.len() >= min_args && args.len() <= max_args {
+                    let Some(score) = self.score_call_candidate(cand, arg_types) else {
+                        continue;
+                    };
+
+                    if score < best_score {
+                        best_score = score;
+                        let mut full_args = args.clone();
+                        for i in args.len()..max_args {
+                            if let Some(def_expr) = &cand.default_args[i] {
+                                full_args.push(def_expr.clone());
+                            }
+                        }
+                        best_candidate = Some((cand, full_args));
+                        if score == 0 {
+                            break; // No candidate can score lower.
+                        }
                     }
                 }
             }
-            if candidates.is_none()
-                && let Some((class_name, method_name)) = name.rsplit_once("::")
+
+            if let Some((cand, full_args)) = best_candidate {
+                let mangled = cand.mangled_name.clone();
+                let ret_type = cand.return_type.clone();
+                *callee = Expr::Identifier(mangled);
+                *args = full_args;
+                return Ok(ret_type);
+            }
+            let cand = &candidates[0];
+            return Err(CompileError::new(
+                format!(
+                    "No matching function call for '{}': expected {} arguments, found {}",
+                    name,
+                    cand.param_types.len(),
+                    args.len()
+                ),
+                self.current_line,
+                self.current_col,
+            ));
+        }
+        Err(CompileError::new(
+            format!("Undefined function '{}'", name),
+            self.current_line,
+            self.current_col,
+        ))
+    }
+    /// Scores how well a candidate matches the argument types.
+    ///
+    /// Exact matches add no penalty, reference bindings cost 1, and other
+    /// conversions cost 2. Returns `None` when the arguments do not match.
+    fn score_call_candidate(&self, cand: &FunctionSig, arg_types: &[Type]) -> Option<usize> {
+        let mut score = 0;
+        for (i, arg_ty) in arg_types.iter().enumerate() {
+            let p = &cand.param_types[i];
+            let p_decay = p.decay_array();
+            let a_decay = arg_ty.decay_array();
+            let p_base = p_decay.strip_const();
+            let a_base = a_decay.strip_const();
+            if p_base == a_base {
+                // Exact matches add no conversion penalty.
+            } else if p.is_reference()
+                && p.deref_type().map(|d| d.strip_const()) == Some(arg_ty.strip_const())
             {
-                let static_methods = self.find_static_methods_in_class(class_name, method_name);
-                if !static_methods.is_empty() {
-                    candidates = Some(static_methods);
-                }
-            }
-            if let Some(candidates) = candidates {
-                let mut best_candidate: Option<(&FunctionSig, Vec<Expr>)> = None;
-                let mut best_score = usize::MAX;
-
-                for cand in &candidates {
-                    let min_args = cand.default_args.iter().take_while(|d| d.is_none()).count();
-                    let max_args = cand.param_types.len();
-
-                    if args.len() >= min_args && args.len() <= max_args {
-                        let mut matches = true;
-                        let mut score = 0;
-                        for (i, arg_ty) in arg_types.iter().enumerate() {
-                            let p = &cand.param_types[i];
-                            let p_decay = p.decay_array();
-                            let a_decay = arg_ty.decay_array();
-                            let p_base = p_decay.strip_const();
-                            let a_base = a_decay.strip_const();
-                            if p_base == a_base {
-                                // Exact matches add no conversion penalty.
-                            } else if p.is_reference()
-                                && p.deref_type().map(|d| d.strip_const())
-                                    == Some(arg_ty.strip_const())
-                            {
-                                score += 1;
-                            } else if self.can_assign(p, arg_ty) {
-                                score += 2;
-                            } else {
-                                matches = false;
-                                break;
-                            }
-                        }
-
-                        if matches && score < best_score {
-                            best_score = score;
-                            let mut full_args = args.clone();
-                            for i in args.len()..max_args {
-                                if let Some(def_expr) = &cand.default_args[i] {
-                                    full_args.push(def_expr.clone());
-                                }
-                            }
-                            best_candidate = Some((cand, full_args));
-                            if score == 0 {
-                                break; // No candidate can score lower.
-                            }
-                        }
-                    }
-                }
-
-                if let Some((cand, full_args)) = best_candidate {
-                    let mangled = cand.mangled_name.clone();
-                    let ret_type = cand.return_type.clone();
-                    **callee = Expr::Identifier(mangled);
-                    *args = full_args;
-                    return Ok(ret_type);
-                } else {
-                    let cand = &candidates[0];
-                    return Err(CompileError::new(
-                        format!(
-                            "No matching function call for '{}': expected {} arguments, found {}",
-                            name,
-                            cand.param_types.len(),
-                            args.len()
-                        ),
-                        self.current_line,
-                        self.current_col,
-                    ));
-                }
+                score += 1;
+            } else if self.can_assign(p, arg_ty) {
+                score += 2;
             } else {
-                return Err(CompileError::new(
-                    format!("Undefined function '{}'", name),
-                    self.current_line,
-                    self.current_col,
-                ));
+                return None;
             }
         }
+        Some(score)
+    }
 
-        // No named function matched: treat the callee as a function pointer.
-        let callee_ty = self.analyze_expr(callee)?;
-        if let Type::Pointer(inner) = callee_ty.strip_const() {
-            if let Type::Function { return_type, .. } = &**inner {
-                return Ok((**return_type).clone());
+    fn find_call_candidates(&mut self, name: &str, arg_types: &[Type]) -> Option<Vec<FunctionSig>> {
+        let q1 = name.to_string();
+        let q2 = QualifiedName::new(name).alternate().into_owned();
+        let mut candidates = self
+            .functions
+            .get(&q1)
+            .or_else(|| self.functions.get(&q2))
+            .or_else(|| {
+                self.open_namespaces
+                    .iter()
+                    .find_map(|ns| self.functions.get(&format!("{}::{}", ns, name)))
+            })
+            .or_else(|| {
+                self.using_decls
+                    .get(name)
+                    .and_then(|full| self.functions.get(full))
+            })
+            .cloned();
+        if candidates.is_none() {
+            for aty in arg_types {
+                let clean = aty.strip_const().strip_reference();
+                if let Type::Struct(s) = clean
+                    && let Some((ns, _)) = s.rsplit_once("::")
+                    && let Some(sigs) = self.functions.get(&format!("{}::{}", ns, name))
+                {
+                    candidates = Some(sigs.clone());
+                    break;
+                }
             }
-        } else if let Type::Function { return_type, .. } = callee_ty.strip_const() {
-            return Ok((**return_type).clone());
         }
-        Ok(Type::Int)
+        if candidates.is_none()
+            && let Some((class_name, method_name)) = name.rsplit_once("::")
+        {
+            let static_methods = self.find_static_methods_in_class(class_name, method_name);
+            if !static_methods.is_empty() {
+                candidates = Some(static_methods);
+            }
+        }
+        candidates
     }
 }

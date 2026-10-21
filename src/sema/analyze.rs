@@ -97,21 +97,7 @@ impl Sema {
             .filter(|(_, layout)| layout.has_vtable)
             .map(|(name, _)| name.clone())
             .collect();
-        let mut any_ctor = std::collections::HashSet::new();
-        let mut default_ctor = std::collections::HashSet::new();
-        for decl in &program.declarations {
-            if let Decl::StructDecl { name, methods, .. } = decl {
-                let short = name.rsplit("::").next().unwrap_or(name);
-                for m in methods {
-                    if m.name == *name || m.name == short {
-                        any_ctor.insert(name.clone());
-                        if m.params.is_empty() {
-                            default_ctor.insert(name.clone());
-                        }
-                    }
-                }
-            }
-        }
+        let (mut any_ctor, mut default_ctor) = self.collect_explicit_constructors(program);
 
         loop {
             let mut changed = false;
@@ -171,6 +157,34 @@ impl Sema {
         }
     }
 
+    /// Collects the classes that declare a constructor, and those whose
+    /// constructor takes no arguments.
+    fn collect_explicit_constructors(
+        &self,
+        program: &Program,
+    ) -> (
+        std::collections::HashSet<String>,
+        std::collections::HashSet<String>,
+    ) {
+        let mut any_ctor = std::collections::HashSet::new();
+        let mut default_ctor = std::collections::HashSet::new();
+        for decl in &program.declarations {
+            if let Decl::StructDecl { name, methods, .. } = decl {
+                let short = name.rsplit("::").next().unwrap_or(name);
+                for m in methods {
+                    if m.name == *name || m.name == short {
+                        any_ctor.insert(name.clone());
+                        if m.params.is_empty() {
+                            default_ctor.insert(name.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        (any_ctor, default_ctor)
+    }
+
     fn register_declarations(&mut self, program: &Program) -> Result<(), CompileError> {
         let mut defined_functions = std::collections::HashSet::new();
         for decl in &program.declarations {
@@ -207,62 +221,136 @@ impl Sema {
                     static_fields,
                     ..
                 } => {
-                    for sf in static_fields {
-                        let qual_name = format!("{}::{}", name, sf.0);
-                        self.global_vars.insert(
-                            qual_name.clone(),
-                            VarSymbol {
-                                name: qual_name.clone(),
-                                ty: sf.1.clone(),
-                                is_global: true,
-                                stack_offset: 0,
-                            },
-                        );
-                        if let Some(alias) = QualifiedName::new(&qual_name).implicit_alias() {
-                            self.global_vars.insert(
-                                alias.to_string(),
-                                VarSymbol {
-                                    name: alias.to_string(),
-                                    ty: sf.1.clone(),
-                                    is_global: true,
-                                    stack_offset: 0,
-                                },
-                            );
-                        }
-                    }
-                    for m in methods {
-                        let mut params = m.params.clone();
-                        if !m.is_static {
-                            let this_inner = if m.is_const {
-                                Type::Const(Box::new(Type::Struct(name.clone())))
-                            } else {
-                                Type::Struct(name.clone())
-                            };
-                            params.insert(
-                                0,
-                                Param {
-                                    name: "this".to_string(),
-                                    ty: Type::Pointer(Box::new(this_inner)),
-                                    default_val: None,
-                                },
-                            );
-                        }
-                        let qual_name = format!("{}::{}", name, m.name);
-                        let mangled = self.mangle_name(&qual_name, &params);
-                        let sig = FunctionSig {
-                            name: m.name.clone(),
-                            mangled_name: mangled,
-                            return_type: m.return_type.clone(),
-                            param_types: params.iter().map(|p| p.ty.clone()).collect(),
-                            default_args: params.iter().map(|p| p.default_val.clone()).collect(),
-                            is_static: m.is_static,
-                        };
-                        self.register_function(sig.clone());
-                        self.functions.entry(qual_name).or_default().push(sig);
-                    }
+                    self.register_struct_declarations(name, methods, static_fields);
                 }
                 _ => {}
             }
+        }
+        Ok(())
+    }
+
+    /// Registers the static fields and methods of a class.
+    fn register_struct_declarations(
+        &mut self,
+        name: &String,
+        methods: &[FunctionDecl],
+        static_fields: &[(String, Type, Option<Expr>)],
+    ) {
+        for sf in static_fields {
+            let qual_name = format!("{}::{}", name, sf.0);
+            self.global_vars.insert(
+                qual_name.clone(),
+                VarSymbol {
+                    name: qual_name.clone(),
+                    ty: sf.1.clone(),
+                    is_global: true,
+                    stack_offset: 0,
+                },
+            );
+            if let Some(alias) = QualifiedName::new(&qual_name).implicit_alias() {
+                self.global_vars.insert(
+                    alias.to_string(),
+                    VarSymbol {
+                        name: alias.to_string(),
+                        ty: sf.1.clone(),
+                        is_global: true,
+                        stack_offset: 0,
+                    },
+                );
+            }
+        }
+        for m in methods {
+            let mut params = m.params.clone();
+            if !m.is_static {
+                let this_inner = if m.is_const {
+                    Type::Const(Box::new(Type::Struct(name.clone())))
+                } else {
+                    Type::Struct(name.clone())
+                };
+                params.insert(
+                    0,
+                    Param {
+                        name: "this".to_string(),
+                        ty: Type::Pointer(Box::new(this_inner)),
+                        default_val: None,
+                    },
+                );
+            }
+            let qual_name = format!("{}::{}", name, m.name);
+            let mangled = self.mangle_name(&qual_name, &params);
+            let sig = FunctionSig {
+                name: m.name.clone(),
+                mangled_name: mangled,
+                return_type: m.return_type.clone(),
+                param_types: params.iter().map(|p| p.ty.clone()).collect(),
+                default_args: params.iter().map(|p| p.default_val.clone()).collect(),
+                is_static: m.is_static,
+            };
+            self.register_function(sig.clone());
+            self.functions.entry(qual_name).or_default().push(sig);
+        }
+    }
+
+    /// Checks and records a global variable and its initializer.
+    fn analyze_global_var(
+        &mut self,
+        name: &String,
+        ty: &mut Type,
+        init: &mut Option<Expr>,
+        line: usize,
+        col: usize,
+    ) -> Result<(), CompileError> {
+        self.current_line = line;
+        self.current_col = col;
+        if let Type::Struct(sname) = ty.strip_const()
+            && let Some(layout) = self.struct_layouts.get(sname)
+            && layout.is_abstract
+        {
+            return Err(CompileError::new(
+                format!("Variable type '{}' is an abstract class", sname),
+                line,
+                col,
+            ));
+        }
+        if let Type::Array(elem, 0) = ty.clone()
+            && let Some(Expr::InitializerList(list)) = init
+        {
+            *ty = Type::Array(elem, list.len());
+        }
+        if let Some(init_expr) = init {
+            let init_ty = self.analyze_expr(init_expr)?;
+            if !self.can_assign(ty, &init_ty) {
+                return Err(CompileError::new(
+                    format!(
+                        "Type mismatch in global '{}': cannot assign {} to {}",
+                        name,
+                        init_ty.to_c_type(),
+                        ty.to_c_type()
+                    ),
+                    line,
+                    col,
+                ));
+            }
+        }
+        self.global_vars.insert(
+            name.clone(),
+            VarSymbol {
+                name: name.clone(),
+                ty: ty.clone(),
+                is_global: true,
+                stack_offset: 0,
+            },
+        );
+        if let Some(alias) = QualifiedName::new(name).implicit_alias() {
+            self.global_vars.insert(
+                alias.to_string(),
+                VarSymbol {
+                    name: alias.to_string(),
+                    ty: ty.clone(),
+                    is_global: true,
+                    stack_offset: 0,
+                },
+            );
         }
         Ok(())
     }
@@ -277,58 +365,7 @@ impl Sema {
                     line,
                     col,
                 } => {
-                    self.current_line = *line;
-                    self.current_col = *col;
-                    if let Type::Struct(sname) = ty.strip_const()
-                        && let Some(layout) = self.struct_layouts.get(sname)
-                        && layout.is_abstract
-                    {
-                        return Err(CompileError::new(
-                            format!("Variable type '{}' is an abstract class", sname),
-                            *line,
-                            *col,
-                        ));
-                    }
-                    if let Type::Array(elem, 0) = ty.clone()
-                        && let Some(Expr::InitializerList(list)) = init
-                    {
-                        *ty = Type::Array(elem, list.len());
-                    }
-                    if let Some(init_expr) = init {
-                        let init_ty = self.analyze_expr(init_expr)?;
-                        if !self.can_assign(ty, &init_ty) {
-                            return Err(CompileError::new(
-                                format!(
-                                    "Type mismatch in global '{}': cannot assign {} to {}",
-                                    name,
-                                    init_ty.to_c_type(),
-                                    ty.to_c_type()
-                                ),
-                                *line,
-                                *col,
-                            ));
-                        }
-                    }
-                    self.global_vars.insert(
-                        name.clone(),
-                        VarSymbol {
-                            name: name.clone(),
-                            ty: ty.clone(),
-                            is_global: true,
-                            stack_offset: 0,
-                        },
-                    );
-                    if let Some(alias) = QualifiedName::new(name).implicit_alias() {
-                        self.global_vars.insert(
-                            alias.to_string(),
-                            VarSymbol {
-                                name: alias.to_string(),
-                                ty: ty.clone(),
-                                is_global: true,
-                                stack_offset: 0,
-                            },
-                        );
-                    }
+                    self.analyze_global_var(name, ty, init, *line, *col)?;
                 }
                 Decl::Function(func) => {
                     self.current_line = func.line;

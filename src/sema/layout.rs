@@ -33,87 +33,24 @@ impl Sema {
             max_align = 4;
         }
 
-        // 1. Lay out every base subobject in declaration order. Only the
-        // primary base contributes the vtable; non-virtual multiple bases are
-        // laid out consecutively so inherited fields keep distinct offsets.
-        for (index, base_name) in base_classes.iter().enumerate() {
-            let Some(base_layout) = self.struct_layouts.get(base_name).cloned() else {
-                continue;
-            };
-            if index > 0 && base_layout.has_vtable {
-                return Err(CompileError::new(
-                    "multiple inheritance with a polymorphic secondary base is not supported",
-                    1,
-                    1,
-                ));
-            }
-            let base_offset = if index == 0
-                && offset == 0
-                && base_layout.fields.is_empty()
-                && !base_layout.has_vtable
-            {
-                0
-            } else {
-                let align = base_layout.align.max(1);
-                if offset % align != 0 {
-                    offset += align - (offset % align);
-                }
-                let base_offset = offset;
-                offset = offset
-                    .checked_add(base_layout.size)
-                    .ok_or_else(|| CompileError::new("object layout is too large", 1, 1))?;
-                base_offset
-            };
-            max_align = max_align.max(base_layout.align);
-            base_offsets.push((base_name.clone(), base_offset));
-            if index == 0 && base_layout.has_vtable {
-                vtable_slots = base_layout.vtable_slots.clone();
-            }
-            for mut bf in base_layout.fields {
-                bf.offset = base_offset
-                    .checked_add(bf.offset)
-                    .ok_or_else(|| CompileError::new("object layout is too large", 1, 1))?;
-                struct_fields.push(bf);
-            }
+        self.layout_base_subobjects(
+            base_classes,
+            &mut offset,
+            &mut max_align,
+            &mut struct_fields,
+            &mut base_offsets,
+            &mut vtable_slots,
+        )?;
+
+        self.layout_vtable_slots(methods, has_vtable, &mut vtable_slots);
+
+        self.layout_own_fields(fields, &mut offset, &mut max_align, &mut struct_fields);
+
+        if max_align > 0 && offset % max_align != 0 {
+            offset += max_align - (offset % max_align);
         }
-
-        // 2. Add newly introduced virtual methods to the inherited slot list.
-        // A virtual destructor occupies two slots: the destructor and the
-        // deleting destructor used by `delete` on a base pointer.
-        if has_vtable {
-            for m in methods {
-                if m.name.starts_with('~') {
-                    let is_virt_dtor = m.is_virtual || vtable_slots.iter().any(|s| s == "~");
-                    if is_virt_dtor && !vtable_slots.iter().any(|s| s == "~") {
-                        vtable_slots.push("~".to_string());
-                        vtable_slots.push("__deleting_dtor".to_string());
-                    }
-                } else {
-                    let is_override = vtable_slots.iter().any(|s| s == &m.name);
-                    if (m.is_virtual || is_override) && !is_override {
-                        vtable_slots.push(m.name.clone());
-                    }
-                }
-            }
-        }
-
-        // 3. Lay out this record's own fields after all base subobjects.
-        for (fname, ftype) in fields {
-            let fsize = ftype.size_of(&self.struct_sizes);
-            let falign = ftype.align_of(&self.struct_aligns);
-            max_align = max_align.max(falign);
-
-            if falign > 0 && offset % falign != 0 {
-                offset += falign - (offset % falign);
-            }
-
-            struct_fields.push(StructField {
-                name: fname.clone(),
-                ty: ftype.clone(),
-                offset,
-            });
-
-            offset += fsize;
+        if offset == 0 {
+            offset = 1;
         }
 
         if max_align > 0 && offset % max_align != 0 {
@@ -123,21 +60,7 @@ impl Sema {
             offset = 1;
         }
 
-        let mut pure_virtuals = std::collections::HashSet::new();
-        for base_name in base_classes {
-            if let Some(base_layout) = self.struct_layouts.get(base_name) {
-                for pv in &base_layout.pure_virtuals {
-                    pure_virtuals.insert(pv.clone());
-                }
-            }
-        }
-        for m in methods {
-            if m.is_pure_virtual {
-                pure_virtuals.insert(m.name.clone());
-            } else {
-                pure_virtuals.remove(&m.name);
-            }
-        }
+        let pure_virtuals = self.collect_pure_virtuals(base_classes, methods);
         let is_abstract = !pure_virtuals.is_empty();
 
         let layout = StructLayout {
@@ -154,6 +77,154 @@ impl Sema {
             pure_virtuals,
         };
 
+        self.record_struct_layout(name, layout, offset, max_align);
+
+        Ok(())
+    }
+
+    /// Lays out this record's own fields after all base subobjects.
+    fn layout_own_fields(
+        &mut self,
+        fields: &[(String, Type)],
+        offset: &mut usize,
+        max_align: &mut usize,
+        struct_fields: &mut Vec<StructField>,
+    ) {
+        // 3. Lay out this record's own fields after all base subobjects.
+        for (fname, ftype) in fields {
+            let fsize = ftype.size_of(&self.struct_sizes);
+            let falign = ftype.align_of(&self.struct_aligns);
+            *max_align = (*max_align).max(falign);
+
+            if falign > 0 && !(*offset).is_multiple_of(falign) {
+                *offset += falign - (*offset % falign);
+            }
+
+            struct_fields.push(StructField {
+                name: fname.clone(),
+                ty: ftype.clone(),
+                offset: *offset,
+            });
+
+            *offset += fsize;
+        }
+    }
+
+    /// Lays out every base subobject in declaration order. Only the primary
+    /// base contributes the vtable; non-virtual multiple bases are laid out
+    /// consecutively so inherited fields keep distinct offsets.
+    #[allow(clippy::too_many_arguments)]
+    fn layout_base_subobjects(
+        &mut self,
+        base_classes: &[String],
+        offset: &mut usize,
+        max_align: &mut usize,
+        struct_fields: &mut Vec<StructField>,
+        base_offsets: &mut Vec<(String, usize)>,
+        vtable_slots: &mut Vec<String>,
+    ) -> Result<(), CompileError> {
+        for (index, base_name) in base_classes.iter().enumerate() {
+            let Some(base_layout) = self.struct_layouts.get(base_name).cloned() else {
+                continue;
+            };
+            if index > 0 && base_layout.has_vtable {
+                return Err(CompileError::new(
+                    "multiple inheritance with a polymorphic secondary base is not supported",
+                    1,
+                    1,
+                ));
+            }
+            let base_offset = if index == 0
+                && *offset == 0
+                && base_layout.fields.is_empty()
+                && !base_layout.has_vtable
+            {
+                0
+            } else {
+                let align = base_layout.align.max(1);
+                if !(*offset).is_multiple_of(align) {
+                    *offset += align - (*offset % align);
+                }
+                let base_offset = *offset;
+                *offset = offset
+                    .checked_add(base_layout.size)
+                    .ok_or_else(|| CompileError::new("object layout is too large", 1, 1))?;
+                base_offset
+            };
+            *max_align = (*max_align).max(base_layout.align);
+            base_offsets.push((base_name.clone(), base_offset));
+            if index == 0 && base_layout.has_vtable {
+                *vtable_slots = base_layout.vtable_slots.clone();
+            }
+            for mut bf in base_layout.fields {
+                bf.offset = base_offset
+                    .checked_add(bf.offset)
+                    .ok_or_else(|| CompileError::new("object layout is too large", 1, 1))?;
+                struct_fields.push(bf);
+            }
+        }
+        Ok(())
+    }
+
+    /// Adds newly introduced virtual methods to the inherited slot list.
+    ///
+    /// A virtual destructor occupies two slots: the destructor and the
+    /// deleting destructor used by `delete` on a base pointer.
+    fn layout_vtable_slots(
+        &mut self,
+        methods: &[FunctionDecl],
+        has_vtable: bool,
+        vtable_slots: &mut Vec<String>,
+    ) {
+        if !has_vtable {
+            return;
+        }
+        for m in methods {
+            if m.name.starts_with('~') {
+                let is_virt_dtor = m.is_virtual || vtable_slots.iter().any(|s| s == "~");
+                if is_virt_dtor && !vtable_slots.iter().any(|s| s == "~") {
+                    vtable_slots.push("~".to_string());
+                    vtable_slots.push("__deleting_dtor".to_string());
+                }
+            } else {
+                let is_override = vtable_slots.iter().any(|s| s == &m.name);
+                if (m.is_virtual || is_override) && !is_override {
+                    vtable_slots.push(m.name.clone());
+                }
+            }
+        }
+    }
+
+    fn collect_pure_virtuals(
+        &self,
+        base_classes: &[String],
+        methods: &[FunctionDecl],
+    ) -> std::collections::HashSet<String> {
+        let mut pure_virtuals = std::collections::HashSet::new();
+        for base_name in base_classes {
+            if let Some(base_layout) = self.struct_layouts.get(base_name) {
+                for pv in &base_layout.pure_virtuals {
+                    pure_virtuals.insert(pv.clone());
+                }
+            }
+        }
+        for m in methods {
+            if m.is_pure_virtual {
+                pure_virtuals.insert(m.name.clone());
+            } else {
+                pure_virtuals.remove(&m.name);
+            }
+        }
+        pure_virtuals
+    }
+
+    fn record_struct_layout(
+        &mut self,
+        name: &str,
+        layout: StructLayout,
+        offset: usize,
+        max_align: usize,
+    ) {
         if !self.struct_order.contains(&name.to_string()) {
             self.struct_order.push(name.to_string());
         }
@@ -166,8 +237,6 @@ impl Sema {
             self.struct_layouts
                 .insert(alias.to_string(), layout.clone());
         }
-
-        Ok(())
     }
 
     pub(super) fn dump_base_layout(&self, base_name: &str, depth: usize, out: &mut String) {

@@ -16,40 +16,7 @@ impl Sema {
         };
 
         let obj_ty = self.analyze_expr(object)?;
-        let struct_name = if *is_arrow {
-            let stripped = obj_ty.strip_const();
-            if let Type::Pointer(inner) | Type::Reference(inner) = stripped {
-                match inner.strip_const() {
-                    Type::Struct(s) => s.clone(),
-                    _ => {
-                        return Err(CompileError::new(
-                            "Arrow member access on non-struct pointer",
-                            1,
-                            1,
-                        ));
-                    }
-                }
-            } else {
-                return Err(CompileError::new(
-                    "Arrow member access on non-pointer",
-                    1,
-                    1,
-                ));
-            }
-        } else {
-            let stripped = obj_ty.strip_const();
-            let target_ty = if let Type::Reference(inner) = stripped {
-                inner.strip_const()
-            } else {
-                stripped
-            };
-            match target_ty {
-                Type::Struct(s) => s.clone(),
-                _ => {
-                    return Err(CompileError::new("Dot member access on non-struct", 1, 1));
-                }
-            }
-        };
+        let struct_name = self.member_struct_name(&obj_ty, *is_arrow)?;
 
         if let Some(layout) = self.struct_layouts.get(&struct_name)
             && layout.private_members.contains(member)
@@ -83,5 +50,44 @@ impl Sema {
                 1,
             ))
         }
+    }
+
+    /// Resolves the class of a member access target.
+    fn member_struct_name(&self, obj_ty: &Type, is_arrow: bool) -> Result<String, CompileError> {
+        let struct_name = if is_arrow {
+            let stripped = obj_ty.strip_const();
+            if let Type::Pointer(inner) | Type::Reference(inner) = stripped {
+                match inner.strip_const() {
+                    Type::Struct(s) => s.clone(),
+                    _ => {
+                        return Err(CompileError::new(
+                            "Arrow member access on non-struct pointer",
+                            1,
+                            1,
+                        ));
+                    }
+                }
+            } else {
+                return Err(CompileError::new(
+                    "Arrow member access on non-pointer",
+                    1,
+                    1,
+                ));
+            }
+        } else {
+            let stripped = obj_ty.strip_const();
+            let target_ty = if let Type::Reference(inner) = stripped {
+                inner.strip_const()
+            } else {
+                stripped
+            };
+            match target_ty {
+                Type::Struct(s) => s.clone(),
+                _ => {
+                    return Err(CompileError::new("Dot member access on non-struct", 1, 1));
+                }
+            }
+        };
+        Ok(struct_name)
     }
 }

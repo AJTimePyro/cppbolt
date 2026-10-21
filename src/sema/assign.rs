@@ -2,21 +2,40 @@ use super::*;
 
 impl Sema {
     pub fn can_assign(&self, target: &Type, value: &Type) -> bool {
-        let target = target.strip_const();
-        let value = value.strip_const();
-        let target = if let Type::Reference(inner) = target {
-            inner.strip_const()
-        } else {
-            target
-        };
-        let value = if let Type::Reference(inner) = value {
-            inner.strip_const()
-        } else {
-            value
-        };
+        let target = strip_assign_type(target);
+        let value = strip_assign_type(value);
         if target == value {
             return true;
         }
+        if self.struct_assignable(target, value) {
+            return true;
+        }
+        if target.is_integer() && value.is_integer() {
+            return true;
+        }
+        if (target.is_floating() && value.is_integer())
+            || (target.is_integer() && value.is_floating())
+            || (target.is_floating() && value.is_floating())
+        {
+            return true;
+        }
+        if self.pointer_assignable(target, value) {
+            return true;
+        }
+        if let (Type::Reference(t_in), Type::Reference(v_in)) = (target, value)
+            && let (Type::Struct(base), Type::Struct(derived)) =
+                (t_in.strip_const(), v_in.strip_const())
+            && self.is_subclass(derived, base)
+        {
+            return true;
+        }
+        if let Type::Reference(inner) = target {
+            return self.can_assign(inner, value);
+        }
+        false
+    }
+
+    fn struct_assignable(&self, target: &Type, value: &Type) -> bool {
         let s_target = if let Type::Struct(s) = target {
             Some(QualifiedName::new(s).plain())
         } else {
@@ -67,53 +86,46 @@ impl Sema {
         {
             return true;
         }
-        if target.is_integer() && value.is_integer() {
+        false
+    }
+
+    fn pointer_assignable(&self, target: &Type, value: &Type) -> bool {
+        let Type::Pointer(t_elem) = target else {
+            return false;
+        };
+        if value.is_integer() {
+            // Accept integers as potential null pointers; this subset does
+            // not track the constant-expression rule here.
             return true;
         }
-        if (target.is_floating() && value.is_integer())
-            || (target.is_integer() && value.is_floating())
-            || (target.is_floating() && value.is_floating())
-        {
-            return true;
-        }
-        if let Type::Pointer(t_elem) = target {
-            if value.is_integer() {
-                // Accept integers as potential null pointers; this subset does
-                // not track the constant-expression rule here.
+        if let Type::Pointer(v_elem) = value {
+            if t_elem.strip_const() == &Type::Void || v_elem.strip_const() == &Type::Void {
                 return true;
             }
-            if let Type::Pointer(v_elem) = value {
-                if t_elem.strip_const() == &Type::Void || v_elem.strip_const() == &Type::Void {
-                    return true;
-                }
-                if t_elem.strip_const() == v_elem.strip_const() {
-                    return true;
-                }
-                if let (Type::Struct(base), Type::Struct(derived)) =
-                    (t_elem.strip_const(), v_elem.strip_const())
-                    && self.is_subclass(derived, base)
-                {
-                    return true;
-                }
+            if t_elem.strip_const() == v_elem.strip_const() {
+                return true;
             }
-            if let Type::Array(v_elem, _) = value
-                && (t_elem.strip_const() == &Type::Void
-                    || t_elem.strip_const() == v_elem.strip_const())
+            if let (Type::Struct(base), Type::Struct(derived)) =
+                (t_elem.strip_const(), v_elem.strip_const())
+                && self.is_subclass(derived, base)
             {
                 return true;
             }
-            return false;
         }
-        if let (Type::Reference(t_in), Type::Reference(v_in)) = (target, value)
-            && let (Type::Struct(base), Type::Struct(derived)) =
-                (t_in.strip_const(), v_in.strip_const())
-            && self.is_subclass(derived, base)
+        if let Type::Array(v_elem, _) = value
+            && (t_elem.strip_const() == &Type::Void || t_elem.strip_const() == v_elem.strip_const())
         {
             return true;
         }
-        if let Type::Reference(inner) = target {
-            return self.can_assign(inner, value);
-        }
         false
+    }
+}
+
+fn strip_assign_type(ty: &Type) -> &Type {
+    let ty = ty.strip_const();
+    if let Type::Reference(inner) = ty {
+        inner.strip_const()
+    } else {
+        ty
     }
 }
