@@ -30,6 +30,10 @@ pub(super) fn emit_char_string_conversion(code: &mut Vec<u8>, func_print_char: u
     write_u32(code, 1);
     code.push(OP_END);
 
+    emit_string_conversion(code, func_print_char);
+}
+
+fn emit_string_conversion(code: &mut Vec<u8>, func_print_char: u32) {
     // 's' (115)
     code.push(OP_LOCAL_GET);
     write_u32(code, 2);
@@ -38,6 +42,22 @@ pub(super) fn emit_char_string_conversion(code: &mut Vec<u8>, func_print_char: u
     code.push(OP_I32_EQ);
     code.push(OP_IF);
     code.push(0x40);
+    emit_string_body(code, func_print_char);
+    code.push(OP_BR);
+    write_u32(code, 1);
+    code.push(OP_END); // end 's'
+}
+
+fn emit_string_body(code: &mut Vec<u8>, func_print_char: u32) {
+    emit_load_string_pointer(code);
+    emit_measure_string(code);
+    emit_string_width(code);
+    emit_leading_string_padding(code, func_print_char);
+    emit_print_string(code, func_print_char);
+    emit_trailing_string_padding(code, func_print_char);
+}
+
+fn emit_load_string_pointer(code: &mut Vec<u8>) {
     code.push(OP_LOCAL_GET);
     write_u32(code, 1);
     code.push(OP_I32_LOAD);
@@ -61,7 +81,9 @@ pub(super) fn emit_char_string_conversion(code: &mut Vec<u8>, func_print_char: u
     write_i32(code, 0);
     code.push(OP_LOCAL_SET);
     write_u32(code, 11);
+}
 
+fn emit_measure_string(code: &mut Vec<u8>) {
     // Measure the string, stopping at NUL or at the requested precision.
     code.push(OP_BLOCK);
     code.push(0x40);
@@ -112,7 +134,9 @@ pub(super) fn emit_char_string_conversion(code: &mut Vec<u8>, func_print_char: u
     write_u32(code, 0);
     code.push(OP_END);
     code.push(OP_END);
+}
 
+fn emit_string_width(code: &mut Vec<u8>) {
     // local 2 = right-padding width, or zero.
     code.push(OP_I32_CONST);
     write_i32(code, 0);
@@ -133,7 +157,9 @@ pub(super) fn emit_char_string_conversion(code: &mut Vec<u8>, func_print_char: u
     code.push(OP_LOCAL_SET);
     write_u32(code, 2);
     code.push(OP_END);
+}
 
+fn emit_leading_string_padding(code: &mut Vec<u8>, func_print_char: u32) {
     // Right-aligned fields get leading spaces; '-' selects trailing spaces.
     code.push(OP_LOCAL_GET);
     write_u32(code, 3);
@@ -145,7 +171,9 @@ pub(super) fn emit_char_string_conversion(code: &mut Vec<u8>, func_print_char: u
     code.push(0x40);
     emit_spaces(code, func_print_char, 2);
     code.push(OP_END);
+}
 
+fn emit_print_string(code: &mut Vec<u8>, func_print_char: u32) {
     code.push(OP_LOCAL_GET);
     write_u32(code, 6);
     code.push(OP_LOCAL_SET);
@@ -185,7 +213,9 @@ pub(super) fn emit_char_string_conversion(code: &mut Vec<u8>, func_print_char: u
     write_u32(code, 0);
     code.push(OP_END);
     code.push(OP_END);
+}
 
+fn emit_trailing_string_padding(code: &mut Vec<u8>, func_print_char: u32) {
     code.push(OP_LOCAL_GET);
     write_u32(code, 3);
     code.push(OP_I32_CONST);
@@ -195,10 +225,6 @@ pub(super) fn emit_char_string_conversion(code: &mut Vec<u8>, func_print_char: u
     code.push(0x40);
     emit_spaces(code, func_print_char, 2);
     code.push(OP_END);
-
-    code.push(OP_BR);
-    write_u32(code, 1);
-    code.push(OP_END); // end 's'
 }
 
 fn emit_spaces(code: &mut Vec<u8>, func_print_char: u32, count_local: u32) {

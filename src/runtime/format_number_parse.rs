@@ -108,6 +108,48 @@ pub(super) fn emit_precision_parse(code: &mut Vec<u8>) {
     code.push(OP_I32_EQ);
     code.push(OP_IF);
     code.push(0x40);
+    emit_star_precision(code);
+    code.push(OP_ELSE);
+
+    emit_decimal_precision(code);
+    code.push(OP_END); // end else for '*'
+
+    code.push(OP_END); // end if '.'
+}
+
+/// Parses a `z`, `l`, or `ll` length modifier.
+pub(super) fn emit_length_parse(code: &mut Vec<u8>) {
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 0);
+    code.push(OP_I32_LOAD8_U);
+    write_u32(code, 0);
+    write_u32(code, 0);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 2);
+
+    emit_z_length(code);
+    emit_l_length(code);
+    emit_h_length(code);
+
+    // Read the conversion specifier and consume it.
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 0);
+    code.push(OP_I32_LOAD8_U);
+    write_u32(code, 0);
+    write_u32(code, 0);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 2);
+
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 0);
+    code.push(OP_I32_CONST);
+    write_i32(code, 1);
+    code.push(OP_I32_ADD);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 0);
+}
+
+fn emit_star_precision(code: &mut Vec<u8>) {
     // precision = mem[args_ptr]
     code.push(OP_LOCAL_GET);
     write_u32(code, 1);
@@ -131,8 +173,9 @@ pub(super) fn emit_precision_parse(code: &mut Vec<u8>) {
     code.push(OP_I32_ADD);
     code.push(OP_LOCAL_SET);
     write_u32(code, 0);
-    code.push(OP_ELSE);
+}
 
+fn emit_decimal_precision(code: &mut Vec<u8>) {
     // Accumulate decimal precision digits.
     code.push(OP_BLOCK);
     code.push(0x40);
@@ -189,21 +232,9 @@ pub(super) fn emit_precision_parse(code: &mut Vec<u8>) {
     write_u32(code, 1);
     code.push(OP_END);
     code.push(OP_END);
-    code.push(OP_END); // end else for '*'
-
-    code.push(OP_END); // end if '.'
 }
 
-/// Parses a `z`, `l`, or `ll` length modifier.
-pub(super) fn emit_length_parse(code: &mut Vec<u8>) {
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 0);
-    code.push(OP_I32_LOAD8_U);
-    write_u32(code, 0);
-    write_u32(code, 0);
-    code.push(OP_LOCAL_SET);
-    write_u32(code, 2);
-
+fn emit_z_length(code: &mut Vec<u8>) {
     // 'z' (122)
     code.push(OP_LOCAL_GET);
     write_u32(code, 2);
@@ -220,7 +251,9 @@ pub(super) fn emit_length_parse(code: &mut Vec<u8>) {
     code.push(OP_LOCAL_SET);
     write_u32(code, 0);
     code.push(OP_END);
+}
 
+fn emit_l_length(code: &mut Vec<u8>) {
     code.push(OP_LOCAL_GET);
     write_u32(code, 2);
     code.push(OP_I32_CONST);
@@ -261,7 +294,9 @@ pub(super) fn emit_length_parse(code: &mut Vec<u8>) {
     code.push(OP_END);
 
     code.push(OP_END); // end if 'l'
+}
 
+fn emit_h_length(code: &mut Vec<u8>) {
     // 'h' (104): `hd`/`hu` truncate to 16 bits, `hhd`/`hhu` to 8 bits.
     code.push(OP_LOCAL_GET);
     write_u32(code, 2);
@@ -304,21 +339,4 @@ pub(super) fn emit_length_parse(code: &mut Vec<u8>) {
     write_u32(code, 0);
     code.push(OP_END);
     code.push(OP_END);
-
-    // Read the conversion specifier and consume it.
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 0);
-    code.push(OP_I32_LOAD8_U);
-    write_u32(code, 0);
-    write_u32(code, 0);
-    code.push(OP_LOCAL_SET);
-    write_u32(code, 2);
-
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 0);
-    code.push(OP_I32_CONST);
-    write_i32(code, 1);
-    code.push(OP_I32_ADD);
-    code.push(OP_LOCAL_SET);
-    write_u32(code, 0);
 }

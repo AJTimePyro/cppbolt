@@ -3,6 +3,12 @@ use crate::wasm::*;
 
 /// Emits the floating-point conversions `%f`, `%e`/`%E`, and `%g`/`%G`.
 pub(super) fn emit_float_conversion(code: &mut Vec<u8>, func_print_double: u32) {
+    emit_fixed_float(code, func_print_double);
+    emit_scientific_float(code, func_print_double);
+    emit_general_float(code, func_print_double);
+}
+
+fn emit_fixed_float(code: &mut Vec<u8>, func_print_double: u32) {
     // 'f' (102)
     code.push(OP_LOCAL_GET);
     write_u32(code, 2);
@@ -41,7 +47,9 @@ pub(super) fn emit_float_conversion(code: &mut Vec<u8>, func_print_double: u32) 
     code.push(OP_BR);
     write_u32(code, 1);
     code.push(OP_END);
+}
 
+fn emit_scientific_float(code: &mut Vec<u8>, func_print_double: u32) {
     // 'e' (101) or 'E' (69)
     code.push(OP_LOCAL_GET);
     write_u32(code, 2);
@@ -101,7 +109,9 @@ pub(super) fn emit_float_conversion(code: &mut Vec<u8>, func_print_double: u32) 
     code.push(OP_BR);
     write_u32(code, 1);
     code.push(OP_END);
+}
 
+fn emit_general_float(code: &mut Vec<u8>, func_print_double: u32) {
     // 'g' (103) or 'G' (71)
     code.push(OP_LOCAL_GET);
     write_u32(code, 2);

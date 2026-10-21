@@ -71,228 +71,8 @@ pub fn emit_malloc(global_heap_base: u32, global_free_list: u32) -> FuncBody {
     write_u32(&mut code, 1);
     code.push(OP_END);
 
-    // 2. Search free list:
-    // prev = 0
-    code.push(OP_I32_CONST);
-    write_i32(&mut code, 0);
-    code.push(OP_LOCAL_SET);
-    write_u32(&mut code, 2);
-
-    // curr = global.get global_free_list
-    code.push(OP_GLOBAL_GET);
-    write_u32(&mut code, global_free_list);
-    code.push(OP_LOCAL_SET);
-    write_u32(&mut code, 3);
-
-    // block $break (depth 1)
-    code.push(OP_BLOCK);
-    code.push(0x40);
-    // loop $loop (depth 0)
-    code.push(OP_LOOP);
-    code.push(0x40);
-
-    // if curr == 0 -> break $break (branch depth 1)
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 3);
-    code.push(OP_I32_EQZ);
-    code.push(OP_BR_IF);
-    write_u32(&mut code, 1);
-
-    // chunk_sz = i32.load curr (offset 0)
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 3);
-    code.push(OP_I32_LOAD);
-    write_u32(&mut code, 2);
-    write_u32(&mut code, 0);
-    code.push(OP_LOCAL_SET);
-    write_u32(&mut code, 4);
-
-    // if chunk_sz >= alloc_size
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 4);
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 1);
-    code.push(OP_I32_GE_U);
-    code.push(OP_IF);
-    code.push(0x40);
-
-    // next = i32.load curr (offset 4)
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 3);
-    code.push(OP_I32_LOAD);
-    write_u32(&mut code, 2);
-    write_u32(&mut code, 4);
-    code.push(OP_LOCAL_SET);
-    write_u32(&mut code, 5);
-
-    // if prev == 0
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 2);
-    code.push(OP_I32_EQZ);
-    code.push(OP_IF);
-    code.push(0x40);
-    // global_free_list = next
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 5);
-    code.push(OP_GLOBAL_SET);
-    write_u32(&mut code, global_free_list);
-    code.push(OP_ELSE);
-    // i32.store (prev + 4), next
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 2);
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 5);
-    code.push(OP_I32_STORE);
-    write_u32(&mut code, 2);
-    write_u32(&mut code, 4);
-    code.push(OP_END);
-
-    // return curr + 8
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 3);
-    code.push(OP_I32_CONST);
-    write_i32(&mut code, 8);
-    code.push(OP_I32_ADD);
-    code.push(OP_RETURN);
-
-    code.push(OP_END); // end if chunk_sz >= alloc_size
-
-    // prev = curr
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 3);
-    code.push(OP_LOCAL_SET);
-    write_u32(&mut code, 2);
-
-    // curr = i32.load curr (offset 4)
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 3);
-    code.push(OP_I32_LOAD);
-    write_u32(&mut code, 2);
-    write_u32(&mut code, 4);
-    code.push(OP_LOCAL_SET);
-    write_u32(&mut code, 3);
-
-    // br $loop (depth 0)
-    code.push(OP_BR);
-    write_u32(&mut code, 0);
-
-    code.push(OP_END); // end loop
-    code.push(OP_END); // end block
-
-    // 3. Fallback: Bump allocate from global_heap_base
-    // ptr = global.get global_heap_base
-    code.push(OP_GLOBAL_GET);
-    write_u32(&mut code, global_heap_base);
-    code.push(OP_LOCAL_SET);
-    write_u32(&mut code, 6);
-
-    // new_heap_base = ptr + alloc_size + 8
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 6);
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 1);
-    code.push(OP_I32_ADD);
-    code.push(OP_I32_CONST);
-    write_i32(&mut code, 8);
-    code.push(OP_I32_ADD);
-    code.push(OP_LOCAL_SET);
-    write_u32(&mut code, 7);
-
-    // if (new_heap_base < cur_heap_base) -> unreachable trap (address space exhausted)
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 7);
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 6);
-    code.push(OP_I32_LT_U);
-    code.push(OP_IF);
-    code.push(0x40);
-    code.push(OP_I32_CONST);
-    write_i32(&mut code, 0);
-    code.push(OP_RETURN);
-    code.push(OP_END);
-
-    // cur_bytes = memory.size << 16
-    code.push(OP_MEMORY_SIZE);
-    code.push(0x00);
-    code.push(OP_I32_CONST);
-    write_i32(&mut code, 16);
-    code.push(OP_I32_SHL);
-    code.push(OP_LOCAL_SET);
-    write_u32(&mut code, 8);
-
-    // if (new_heap_base > cur_bytes) grow memory
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 7);
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 8);
-    code.push(OP_I32_GT_U);
-    code.push(OP_IF);
-    code.push(0x40);
-
-    // needed_pages = (new_heap_base - cur_bytes + 65535) >> 16
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 7);
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 8);
-    code.push(OP_I32_SUB);
-    code.push(OP_I32_CONST);
-    write_i32(&mut code, 65535);
-    code.push(OP_I32_ADD);
-    code.push(OP_I32_CONST);
-    write_i32(&mut code, 16);
-    code.push(OP_I32_SHR_U);
-    code.push(OP_LOCAL_SET);
-    write_u32(&mut code, 9);
-
-    // memory.grow(needed_pages)
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 9);
-    code.push(OP_MEMORY_GROW);
-    code.push(0x00);
-    // if res == -1 -> unreachable trap
-    code.push(OP_I32_CONST);
-    write_i32(&mut code, -1);
-    code.push(OP_I32_EQ);
-    code.push(OP_IF);
-    code.push(0x40);
-    code.push(OP_I32_CONST);
-    write_i32(&mut code, 0);
-    code.push(OP_RETURN);
-    code.push(OP_END);
-
-    code.push(OP_END); // end if
-
-    // i32.store ptr (offset 0), alloc_size
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 6);
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 1);
-    code.push(OP_I32_STORE);
-    write_u32(&mut code, 2);
-    write_u32(&mut code, 0);
-
-    // i32.store ptr (offset 4), 0
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 6);
-    code.push(OP_I32_CONST);
-    write_i32(&mut code, 0);
-    code.push(OP_I32_STORE);
-    write_u32(&mut code, 2);
-    write_u32(&mut code, 4);
-
-    // global_heap_base = new_heap_base
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 7);
-    code.push(OP_GLOBAL_SET);
-    write_u32(&mut code, global_heap_base);
-
-    // return ptr + 8
-    code.push(OP_LOCAL_GET);
-    write_u32(&mut code, 6);
-    code.push(OP_I32_CONST);
-    write_i32(&mut code, 8);
-    code.push(OP_I32_ADD);
-    code.push(OP_RETURN);
+    emit_free_list_search(&mut code, global_free_list);
+    emit_bump_allocation(&mut code, global_heap_base);
     code.push(OP_END);
 
     (vec![(9, TYPE_I32)], code)
@@ -349,4 +129,253 @@ pub fn emit_free(global_free_list: u32) -> FuncBody {
     code.push(OP_END);
 
     (vec![(2, TYPE_I32)], code)
+}
+fn emit_free_list_search(code: &mut Vec<u8>, global_free_list: u32) {
+    emit_free_list_init(code, global_free_list);
+
+    // block $break (depth 1)
+    code.push(OP_BLOCK);
+    code.push(0x40);
+    // loop $loop (depth 0)
+    code.push(OP_LOOP);
+    code.push(0x40);
+
+    // if curr == 0 -> break $break (branch depth 1)
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 3);
+    code.push(OP_I32_EQZ);
+    code.push(OP_BR_IF);
+    write_u32(code, 1);
+
+    // chunk_sz = i32.load curr (offset 0)
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 3);
+    code.push(OP_I32_LOAD);
+    write_u32(code, 2);
+    write_u32(code, 0);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 4);
+
+    emit_free_list_take(code, global_free_list);
+
+    emit_free_list_advance(code);
+
+    code.push(OP_END); // end loop
+    code.push(OP_END); // end block
+}
+
+fn emit_bump_allocation(code: &mut Vec<u8>, global_heap_base: u32) {
+    emit_bump_pointer(code, global_heap_base);
+    emit_bump_grow_memory(code);
+    emit_bump_store(code, global_heap_base);
+
+    // return ptr + 8
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 6);
+    code.push(OP_I32_CONST);
+    write_i32(code, 8);
+    code.push(OP_I32_ADD);
+    code.push(OP_RETURN);
+}
+
+fn emit_free_list_init(code: &mut Vec<u8>, global_free_list: u32) {
+    // 2. Search free list:
+    // prev = 0
+    code.push(OP_I32_CONST);
+    write_i32(code, 0);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 2);
+
+    // curr = global.get global_free_list
+    code.push(OP_GLOBAL_GET);
+    write_u32(code, global_free_list);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 3);
+}
+
+fn emit_free_list_advance(code: &mut Vec<u8>) {
+    // prev = curr
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 3);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 2);
+
+    // curr = i32.load curr (offset 4)
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 3);
+    code.push(OP_I32_LOAD);
+    write_u32(code, 2);
+    write_u32(code, 4);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 3);
+
+    // br $loop (depth 0)
+    code.push(OP_BR);
+    write_u32(code, 0);
+}
+
+fn emit_bump_pointer(code: &mut Vec<u8>, global_heap_base: u32) {
+    // 3. Fallback: Bump allocate from global_heap_base
+    // ptr = global.get global_heap_base
+    code.push(OP_GLOBAL_GET);
+    write_u32(code, global_heap_base);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 6);
+
+    // new_heap_base = ptr + alloc_size + 8
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 6);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 1);
+    code.push(OP_I32_ADD);
+    code.push(OP_I32_CONST);
+    write_i32(code, 8);
+    code.push(OP_I32_ADD);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 7);
+
+    // if (new_heap_base < cur_heap_base) -> unreachable trap (address space exhausted)
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 7);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 6);
+    code.push(OP_I32_LT_U);
+    code.push(OP_IF);
+    code.push(0x40);
+    code.push(OP_I32_CONST);
+    write_i32(code, 0);
+    code.push(OP_RETURN);
+    code.push(OP_END);
+}
+
+fn emit_bump_grow_memory(code: &mut Vec<u8>) {
+    // cur_bytes = memory.size << 16
+    code.push(OP_MEMORY_SIZE);
+    code.push(0x00);
+    code.push(OP_I32_CONST);
+    write_i32(code, 16);
+    code.push(OP_I32_SHL);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 8);
+
+    // if (new_heap_base > cur_bytes) grow memory
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 7);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 8);
+    code.push(OP_I32_GT_U);
+    code.push(OP_IF);
+    code.push(0x40);
+
+    // needed_pages = (new_heap_base - cur_bytes + 65535) >> 16
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 7);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 8);
+    code.push(OP_I32_SUB);
+    code.push(OP_I32_CONST);
+    write_i32(code, 65535);
+    code.push(OP_I32_ADD);
+    code.push(OP_I32_CONST);
+    write_i32(code, 16);
+    code.push(OP_I32_SHR_U);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 9);
+
+    // memory.grow(needed_pages)
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 9);
+    code.push(OP_MEMORY_GROW);
+    code.push(0x00);
+    // if res == -1 -> unreachable trap
+    code.push(OP_I32_CONST);
+    write_i32(code, -1);
+    code.push(OP_I32_EQ);
+    code.push(OP_IF);
+    code.push(0x40);
+    code.push(OP_I32_CONST);
+    write_i32(code, 0);
+    code.push(OP_RETURN);
+    code.push(OP_END);
+
+    code.push(OP_END); // end if
+}
+
+fn emit_bump_store(code: &mut Vec<u8>, global_heap_base: u32) {
+    // i32.store ptr (offset 0), alloc_size
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 6);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 1);
+    code.push(OP_I32_STORE);
+    write_u32(code, 2);
+    write_u32(code, 0);
+
+    // i32.store ptr (offset 4), 0
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 6);
+    code.push(OP_I32_CONST);
+    write_i32(code, 0);
+    code.push(OP_I32_STORE);
+    write_u32(code, 2);
+    write_u32(code, 4);
+
+    // global_heap_base = new_heap_base
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 7);
+    code.push(OP_GLOBAL_SET);
+    write_u32(code, global_heap_base);
+}
+
+/// Emits the code that removes a matching chunk from the free list.
+fn emit_free_list_take(code: &mut Vec<u8>, global_free_list: u32) {
+    // if chunk_sz >= alloc_size
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 4);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 1);
+    code.push(OP_I32_GE_U);
+    code.push(OP_IF);
+    code.push(0x40);
+
+    // next = i32.load curr (offset 4)
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 3);
+    code.push(OP_I32_LOAD);
+    write_u32(code, 2);
+    write_u32(code, 4);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 5);
+
+    // if prev == 0
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 2);
+    code.push(OP_I32_EQZ);
+    code.push(OP_IF);
+    code.push(0x40);
+    // global_free_list = next
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 5);
+    code.push(OP_GLOBAL_SET);
+    write_u32(code, global_free_list);
+    code.push(OP_ELSE);
+    // i32.store (prev + 4), next
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 2);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 5);
+    code.push(OP_I32_STORE);
+    write_u32(code, 2);
+    write_u32(code, 4);
+    code.push(OP_END);
+
+    // return curr + 8
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 3);
+    code.push(OP_I32_CONST);
+    write_i32(code, 8);
+    code.push(OP_I32_ADD);
+    code.push(OP_RETURN);
+
+    code.push(OP_END); // end if chunk_sz >= alloc_size
 }
