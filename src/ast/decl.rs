@@ -42,6 +42,8 @@ pub enum Decl {
         methods: Vec<FunctionDecl>,
         static_fields: Vec<(String, Type, Option<Expr>)>,
         private_members: Vec<String>,
+        line: usize,
+        col: usize,
     },
     EnumDecl {
         name: String,

@@ -1,0 +1,1 @@
+tests/negative/unterminated_if.cpp:2:1: error: Unterminated #if/#ifdef/#ifndef block at EOF

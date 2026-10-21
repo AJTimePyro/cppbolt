@@ -14,6 +14,8 @@ impl Sema {
         fields: &[(String, Type)],
         methods: &[FunctionDecl],
         private_members: &[String],
+        line: usize,
+        col: usize,
     ) -> Result<(), CompileError> {
         let mut offset = 0;
         let mut max_align = 1;
@@ -40,6 +42,8 @@ impl Sema {
             &mut struct_fields,
             &mut base_offsets,
             &mut vtable_slots,
+            line,
+            col,
         )?;
 
         self.layout_vtable_slots(methods, has_vtable, &mut vtable_slots);
@@ -122,6 +126,8 @@ impl Sema {
         struct_fields: &mut Vec<StructField>,
         base_offsets: &mut Vec<(String, usize)>,
         vtable_slots: &mut Vec<String>,
+        line: usize,
+        col: usize,
     ) -> Result<(), CompileError> {
         for (index, base_name) in base_classes.iter().enumerate() {
             let Some(base_layout) = self.struct_layouts.get(base_name).cloned() else {
@@ -130,8 +136,8 @@ impl Sema {
             if index > 0 && base_layout.has_vtable {
                 return Err(CompileError::new(
                     "multiple inheritance with a polymorphic secondary base is not supported",
-                    1,
-                    1,
+                    line,
+                    col,
                 ));
             }
             let base_offset = if index == 0

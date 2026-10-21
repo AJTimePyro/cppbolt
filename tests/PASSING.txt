@@ -200,3 +200,6 @@ negative/error_directive
 c_basics/line_continuation
 c_basics/if_ternary
 c_basics/macro_rescan
+negative/unterminated_if
+negative/stray_endif
+negative/multiple_inheritance

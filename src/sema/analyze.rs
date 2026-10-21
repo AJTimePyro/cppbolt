@@ -25,6 +25,8 @@ impl Sema {
                     fields,
                     methods,
                     private_members,
+                    line,
+                    col,
                     ..
                 } => {
                     self.compute_struct_layout(
@@ -34,6 +36,8 @@ impl Sema {
                         fields,
                         methods,
                         private_members,
+                        *line,
+                        *col,
                     )?;
                 }
                 _ => {}

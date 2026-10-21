@@ -158,7 +158,13 @@ impl<'a> Preprocessor<'a> {
             let directive_line = trimmed[1..].trim_start();
             let (directive, argument) = split_directive(directive_line);
 
-            if self.handle_conditional(directive, argument, &mut if_stack, line_number)? {
+            if self
+                .handle_conditional(directive, argument, &mut if_stack, line_number)
+                .map_err(|error| {
+                    let col = error.col;
+                    error.at(file, line_number, col)
+                })?
+            {
                 output_lines.push(SourceLine::empty(file, line_number));
                 continue;
             }
@@ -215,7 +221,8 @@ impl<'a> Preprocessor<'a> {
                 "Unterminated #if/#ifdef/#ifndef block at EOF",
                 physical_lines.max(1),
                 1,
-            ));
+            )
+            .at(file, physical_lines.max(1), 1));
         }
 
         Ok(output_lines)

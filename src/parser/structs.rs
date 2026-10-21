@@ -2,17 +2,20 @@ use super::*;
 
 impl Parser {
     pub(super) fn parse_struct(&mut self) -> Result<Decl, CompileError> {
+        let start = self.current().clone();
         let (name, is_class) = self.parse_struct_name()?;
 
         if self.peek() == &TokenKind::Semi {
             self.advance();
-            return Ok(StructBody::new(name, is_class).into_decl(Vec::new()));
+            return Ok(
+                StructBody::new(name, is_class, start.line, start.col).into_decl(Vec::new())
+            );
         }
 
         let base_classes = self.parse_base_classes()?;
         self.expect(TokenKind::LBrace)?;
 
-        let mut body = StructBody::new(name, is_class);
+        let mut body = StructBody::new(name, is_class, start.line, start.col);
         while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
             self.parse_struct_member(&mut body)?;
         }
@@ -145,10 +148,12 @@ struct StructBody {
     static_fields: Vec<(String, Type, Option<Expr>)>,
     private_members: Vec<String>,
     is_private: bool,
+    line: usize,
+    col: usize,
 }
 
 impl StructBody {
-    fn new(name: String, is_class: bool) -> Self {
+    fn new(name: String, is_class: bool, line: usize, col: usize) -> Self {
         Self {
             name,
             is_class,
@@ -157,6 +162,8 @@ impl StructBody {
             static_fields: Vec::new(),
             private_members: Vec::new(),
             is_private: is_class,
+            line,
+            col,
         }
     }
 
@@ -169,6 +176,8 @@ impl StructBody {
             methods: self.methods,
             static_fields: self.static_fields,
             private_members: self.private_members,
+            line: self.line,
+            col: self.col,
         }
     }
 }
