@@ -1,19 +1,8 @@
 //! Running the corpus tests and comparing their output.
 
 use super::*;
-use std::io::Write;
-use std::process::{Command, Stdio};
-
-pub(super) fn cpp_files(directory: &Path) -> std::io::Result<Vec<PathBuf>> {
-    let mut files = Vec::new();
-    for entry in fs::read_dir(directory)? {
-        let path = entry?.path();
-        if path.extension() == Some(OsStr::new("cpp")) {
-            files.push(path);
-        }
-    }
-    Ok(files)
-}
+use cppwasm::corpus::{compare_output, input_path, run_with_input};
+use std::process::Command;
 
 pub(super) fn check_positive(
     paths: &Paths,
@@ -114,13 +103,6 @@ pub(super) fn check_negative(
     }
 }
 
-pub(super) fn input_path(feature: &str, name: &str) -> Option<PathBuf> {
-    let path = Path::new("tests")
-        .join(feature)
-        .join(format!("{name}.input"));
-    path.exists().then_some(path)
-}
-
 pub(super) fn run_wasm(
     wasm: &Path,
     input: &Option<PathBuf>,
@@ -136,49 +118,4 @@ pub(super) fn run_wasm(
         command.arg(input);
     }
     command.output()
-}
-
-pub(super) fn run_with_input(
-    binary: &Path,
-    input: &Option<PathBuf>,
-) -> std::io::Result<std::process::Output> {
-    let mut command = Command::new("timeout");
-    command.arg("5s").arg(binary);
-    match input {
-        Some(path) => {
-            let text = fs::read(path)?;
-            let mut child = command
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()?;
-            if let Some(mut stdin) = child.stdin.take() {
-                stdin.write_all(&text)?;
-            }
-            child.wait_with_output()
-        }
-        None => command.output(),
-    }
-}
-
-pub(super) fn compare_output(
-    output: &std::process::Output,
-    feature: &str,
-    name: &str,
-) -> Result<(), String> {
-    if !output.status.success() {
-        return Err(format!("runtime exit {}", output.status));
-    }
-    let expected_path = Path::new("tests")
-        .join(feature)
-        .join(format!("{name}.expected"));
-    let expected = fs::read(&expected_path)
-        .map_err(|error| format!("cannot read {}: {error}", expected_path.display()))?;
-    let mut actual = output.stdout.clone();
-    actual.extend_from_slice(&output.stderr);
-    if actual == expected {
-        Ok(())
-    } else {
-        Err("output mismatch".to_string())
-    }
 }

@@ -17,7 +17,7 @@ the exit code reflects unexpected failures only. It exits 1 for a listed test fa
 a missing manifest test, a variant-gate failure, an independent-manifest mismatch, or a group that could not be
 executed.
 
-The current baseline is 253 tests, 253 executed, 234 passed, and 19 expected failures: six template tests and
+The current baseline is 283 tests, 283 executed, 264 passed, and 19 expected failures: six template tests and
 thirteen container/algorithm tests. Reproduce it with:
 
 ```sh
@@ -169,3 +169,7 @@ The oracle replays every positive test through g++ and clang++ and compares nati
 instrumentation, and both compilers; the allocator-specific `free_list_reuse` outputs and the
 sanitizer-incompatible `malloc_failure` runtime check are reported as skips.
 Emitted modules should also be validated with a WebAssembly validator when one is installed.
+
+The oracle also runs as the cargo test `tests/oracle_gate.rs`, so a wrong `.expected` file cannot hide from a
+test run. A machine without g++ or clang++ cannot run the gate: the test reports `oracle skipped` and fails
+instead of passing silently.

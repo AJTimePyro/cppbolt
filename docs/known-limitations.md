@@ -35,6 +35,9 @@ The native CLI runs the compiler on a 64 MiB thread (`src/main.rs`) and the WebA
 host that compiles many deep programs in one process has less room for the last one - the depth check therefore
 runs before the stack is exhausted. Include depth is separately limited to 128 (129 is rejected).
 
+The tests pin the same numbers as literals (`tests/nesting.rs` and `tests/wasm_stack_safety.rs`) and check that
+the compiler agrees with them, so changing a limit fails the tests instead of silently moving the boundary.
+
 Wide left-associative operator chains, `else-if` chains, and string concatenations are walked iteratively and do
 not consume depth per term: 20,000-term integer sums, 4,000 string concatenations, and 5,000-branch `else-if`
 chains compile.

@@ -1,0 +1,1 @@
+tests/negative/constructor_default_argument_undefined.cpp:10:5: error: Undeclared variable or identifier 'missing_name'

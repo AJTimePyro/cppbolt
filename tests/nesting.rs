@@ -2,13 +2,30 @@
 //!
 //! Wide left-associative chains must compile; deeply nested constructs must
 //! produce a normal diagnostic instead of aborting.  Every nesting construct
-//! has its own limit (see `cppwasm::nesting_limits`), and the tests check
-//! the last accepted depth and the first rejected one.  Programs run on an
-//! explicitly sized thread so unoptimized builds have room for the parser,
-//! semantic-analysis, and code-generation frames.
+//! has its own limit, pinned in the table below and in
+//! `docs/known-limitations.md`, and the tests check the last accepted depth
+//! and the first rejected one.  Programs run on an explicitly sized thread so
+//! unoptimized builds have room for the parser, semantic-analysis, and
+//! code-generation frames.
 
-use cppwasm::nesting_limits;
 use std::thread;
+
+/// The nesting limits of the compiler, pinned as literals.
+///
+/// The same table is in `docs/known-limitations.md`.  The limits are read
+/// from the compiler only to check that the two agree, so a changed limit
+/// fails this test instead of silently moving the boundary.
+const CALL_LIMIT: usize = 1500;
+const PARENTHESIS_LIMIT: usize = 1600;
+const STATEMENT_LIMIT: usize = 1600;
+
+#[test]
+fn the_pinned_limits_match_the_compiler() {
+    let limits = cppwasm::nesting_limits();
+    assert_eq!(limits.calls, CALL_LIMIT);
+    assert_eq!(limits.parentheses, PARENTHESIS_LIMIT);
+    assert_eq!(limits.statements, STATEMENT_LIMIT);
+}
 
 fn compile_on_big_stack(source: String) -> Result<Vec<u8>, String> {
     let handle = thread::Builder::new()
@@ -161,30 +178,27 @@ fn thousand_deep_calls_still_compile() -> Result<(), Box<dyn std::error::Error>>
 
 #[test]
 fn nested_calls_around_the_limit() -> Result<(), Box<dyn std::error::Error>> {
-    let limit = nesting_limits().calls;
-    compile_on_big_stack(nested_calls(limit - 1))?;
-    expect_diagnostic(nested_calls(limit + 1))
+    compile_on_big_stack(nested_calls(CALL_LIMIT - 1))?;
+    expect_diagnostic(nested_calls(CALL_LIMIT + 1))
 }
 
 #[test]
 fn nested_parentheses_around_the_limit() -> Result<(), Box<dyn std::error::Error>> {
-    let limit = nesting_limits().parentheses;
-    compile_on_big_stack(nested_parentheses(limit - 1))?;
-    expect_diagnostic(nested_parentheses(limit + 1))
+    compile_on_big_stack(nested_parentheses(PARENTHESIS_LIMIT - 1))?;
+    expect_diagnostic(nested_parentheses(PARENTHESIS_LIMIT + 1))
 }
 
 #[test]
 fn nested_parenthesized_ternaries_around_the_limit() -> Result<(), Box<dyn std::error::Error>> {
-    let limit = nesting_limits().parentheses;
-    compile_on_big_stack(nested_parenthesized_ternary(limit - 1))?;
-    expect_diagnostic(nested_parenthesized_ternary(limit + 1))
+    compile_on_big_stack(nested_parenthesized_ternary(PARENTHESIS_LIMIT - 1))?;
+    expect_diagnostic(nested_parenthesized_ternary(PARENTHESIS_LIMIT + 1))
 }
 
 #[test]
 fn nested_ifs_around_the_limit() -> Result<(), Box<dyn std::error::Error>> {
     // The innermost statement of the nest is one level deeper than the `if`
     // statements themselves.
-    let limit = nesting_limits().statements - 1;
+    let limit = STATEMENT_LIMIT - 1;
     compile_on_big_stack(nested_ifs(limit - 1))?;
     expect_diagnostic(nested_ifs(limit + 1))
 }

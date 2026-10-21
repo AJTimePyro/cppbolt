@@ -7,11 +7,13 @@
 
 pub(crate) mod ast;
 pub(crate) mod codegen;
+pub mod corpus;
 pub(crate) mod depth;
 pub(crate) mod diagnostics;
 pub mod ffi;
 pub(crate) mod lexer;
 pub(crate) mod name;
+pub mod oracle;
 pub(crate) mod parser;
 pub(crate) mod preprocessor;
 pub(crate) mod runtime;

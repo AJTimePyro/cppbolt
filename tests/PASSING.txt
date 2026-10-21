@@ -204,6 +204,7 @@ negative/builtin_header_error
 negative/call_non_function
 negative/const_assign
 negative/const_overload_unsupported
+negative/constructor_default_argument_undefined
 negative/contextual_bool_reject_bool
 negative/contextual_bool_reject_int
 negative/dereference_non_pointer

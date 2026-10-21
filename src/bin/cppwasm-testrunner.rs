@@ -14,25 +14,12 @@ mod golden;
 #[path = "cppwasm-testrunner/oracle.rs"]
 mod oracle;
 
+use cppwasm::corpus::{self, FEATURES};
 use std::collections::BTreeSet;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-
-const FEATURES: &[&str] = &[
-    "c_basics",
-    "c_basics_variant",
-    "classes_oop",
-    "classes_oop_variant",
-    "memory_model",
-    "memory_model_variant",
-    "runtime_trap",
-    "templates_operators",
-    "mini_stl",
-    "mini_stl_variant",
-    "independent",
-];
 
 const NODE_RUNNER: &str = r#"
 const fs=require("fs"), path=require("path");
@@ -226,7 +213,7 @@ fn print_reports(reports: &[Report]) {
 
 fn run_feature(paths: &Paths, feature: &str, negative: bool) -> Report {
     let directory = Path::new("tests").join(feature);
-    let mut tests = match run::cpp_files(&directory) {
+    let mut tests = match corpus::cpp_files(&directory) {
         Ok(tests) => tests,
         Err(error) => {
             return Report {
