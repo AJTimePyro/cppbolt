@@ -263,7 +263,7 @@ impl Sema {
 
         self.analyze_expr(cond)?;
         let t_ty = self.analyze_expr(then_expr)?;
-        let _e_ty = self.analyze_expr(else_expr)?;
-        Ok(t_ty)
+        let e_ty = self.analyze_expr(else_expr)?;
+        Ok(t_ty.conditional_result_type(&e_ty))
     }
 }

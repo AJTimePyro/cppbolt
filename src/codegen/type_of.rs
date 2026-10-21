@@ -40,7 +40,15 @@ impl<'a> Codegen<'a> {
             Expr::ArraySubscript { array, index } => {
                 self.type_of_array_subscript(array, index, ctx)
             }
-            Expr::Ternary { then_expr, .. } => self.get_expr_type(then_expr, ctx),
+            Expr::Ternary {
+                then_expr,
+                else_expr,
+                ..
+            } => {
+                let then_ty = self.get_expr_type(then_expr, ctx);
+                let else_ty = self.get_expr_type(else_expr, ctx);
+                then_ty.conditional_result_type(&else_ty)
+            }
             Expr::Cast { target_type, .. } => target_type.clone(),
             Expr::Delete { .. } => Type::Void,
             _ => Type::Int,

@@ -217,3 +217,5 @@ c_basics/using_declaration_precedence
 c_basics_variant/using_declaration_precedence
 classes_oop/const_method_overload
 classes_oop_variant/const_method_overload
+c_basics/ternary_mixed_types
+c_basics_variant/ternary_mixed_types

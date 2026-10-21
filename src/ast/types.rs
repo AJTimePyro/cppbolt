@@ -111,6 +111,21 @@ impl Type {
         }
     }
 
+    /// Returns the common type of a conditional expression whose branches
+    /// have the supplied types. Arithmetic branches use the usual arithmetic
+    /// conversions; other branches retain the first branch's type.
+    pub fn conditional_result_type(&self, other: &Type) -> Type {
+        let left = self.strip_reference();
+        let right = other.strip_reference();
+        let left_arithmetic = left.is_integer() || left.is_floating();
+        let right_arithmetic = right.is_integer() || right.is_floating();
+        if left_arithmetic && right_arithmetic {
+            left.usual_arithmetic_conversion(right)
+        } else {
+            left.clone()
+        }
+    }
+
     pub fn is_integer(&self) -> bool {
         matches!(
             self.strip_const(),
