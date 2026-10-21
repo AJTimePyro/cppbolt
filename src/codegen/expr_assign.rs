@@ -13,12 +13,11 @@ impl<'a> Codegen<'a> {
             return Err(crate::internal_error!(0, 0, "unexpected expression kind"));
         };
 
-        let ty = self.get_expr_type(target, ctx);
-        if let Type::Struct(sname) = ty.strip_const() {
+        let target_ty = self.get_expr_type(target, ctx);
+        if let Type::Struct(sname) = target_ty.strip_const() {
             return self.compile_assign_struct(target, value, sname, ctx, code);
         }
 
-        let target_ty = self.get_expr_type(target, ctx);
         let val_ty = self.get_expr_type(value, ctx);
         let dest_slot = ctx.alloc_frame(4, 4)?;
         self.compile_lvalue_addr(target, ctx, code)?;

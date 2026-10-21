@@ -13,11 +13,11 @@ impl<'a> Codegen<'a> {
 
         let ty = self.get_expr_type(expr, ctx);
         match op {
-            UnaryOp::Not => self.compile_unary_not(expr, ctx, code)?,
-            UnaryOp::BitNot => self.compile_unary_bitnot(expr, ctx, code)?,
+            UnaryOp::Not => self.compile_unary_not(expr, &ty, ctx, code)?,
+            UnaryOp::BitNot => self.compile_unary_bitnot(expr, &ty, ctx, code)?,
             UnaryOp::Neg => self.compile_unary_neg(expr, &ty, ctx, code)?,
             UnaryOp::Plus => self.compile_unary_plus(expr, ctx, code)?,
-            UnaryOp::AddrOf => self.compile_unary_addrof(expr, ctx, code)?,
+            UnaryOp::AddrOf => self.compile_unary_addrof(expr, &ty, ctx, code)?,
             UnaryOp::Deref => self.compile_unary_deref(expr, &ty, ctx, code)?,
             UnaryOp::PreInc | UnaryOp::PreDec => {
                 let is_inc = matches!(op, UnaryOp::PreInc);
@@ -35,10 +35,10 @@ impl<'a> Codegen<'a> {
     fn compile_unary_not(
         &mut self,
         expr: &Expr,
+        ty: &Type,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let ty = self.get_expr_type(expr, ctx);
         if let Type::Struct(sname) = ty.strip_const() {
             if let Some((m_idx, _)) = self.find_method(sname, "operator!", &[]) {
                 self.compile_lvalue_addr(expr, ctx, code)?;
@@ -51,7 +51,7 @@ impl<'a> Codegen<'a> {
                 write_u32(code, m_idx);
                 code.push(OP_I32_EQZ);
                 return Ok(());
-            } else if let Some((f_idx, sig)) = self.find_free_operator("operator!", &ty) {
+            } else if let Some((f_idx, sig)) = self.find_free_operator("operator!", ty) {
                 self.compile_call_arg(expr, sig.param_types.first(), ctx, code)?;
                 code.push(OP_CALL);
                 write_u32(code, f_idx);
@@ -66,10 +66,10 @@ impl<'a> Codegen<'a> {
     fn compile_unary_bitnot(
         &mut self,
         expr: &Expr,
+        ty: &Type,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let ty = self.get_expr_type(expr, ctx);
         if let Type::Struct(sname) = ty.strip_const() {
             if let Some((m_idx, sig)) = self.find_method(sname, "operator~", &[]) {
                 self.compile_lvalue_addr(expr, ctx, code)?;
@@ -78,7 +78,7 @@ impl<'a> Codegen<'a> {
                 self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
                 return Ok(());
             }
-            if let Some((f_idx, sig)) = self.find_free_operator("operator~", &ty) {
+            if let Some((f_idx, sig)) = self.find_free_operator("operator~", ty) {
                 self.compile_call_arg(expr, sig.param_types.first(), ctx, code)?;
                 code.push(OP_CALL);
                 write_u32(code, f_idx);
@@ -149,10 +149,10 @@ impl<'a> Codegen<'a> {
     fn compile_unary_addrof(
         &mut self,
         expr: &Expr,
+        ty: &Type,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let ty = self.get_expr_type(expr, ctx);
         if let Type::Struct(sname) = ty.strip_const() {
             if let Some((m_idx, sig)) = self.find_method(sname, "operator&", &[]) {
                 self.compile_lvalue_addr(expr, ctx, code)?;
@@ -161,7 +161,7 @@ impl<'a> Codegen<'a> {
                 self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
                 return Ok(());
             }
-            if let Some((f_idx, sig)) = self.find_free_operator("operator&", &ty) {
+            if let Some((f_idx, sig)) = self.find_free_operator("operator&", ty) {
                 self.compile_call_arg(expr, sig.param_types.first(), ctx, code)?;
                 code.push(OP_CALL);
                 write_u32(code, f_idx);

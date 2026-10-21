@@ -33,12 +33,11 @@ fn binary_chain(terms: usize) -> String {
 }
 
 fn string_concat(terms: usize) -> String {
-    let mut source = String::from("#include <string>\nint main() { std::string s; s = ");
-    for index in 0..terms {
-        if index > 0 {
-            source.push('+');
-        }
-        source.push_str("\"x\"");
+    // A string plus a literal is a valid concatenation; two string literals
+    // are not, so the chain starts at a string.
+    let mut source = String::from("#include <string>\nint main() { std::string s = \"\"; s = s");
+    for _ in 0..terms {
+        source.push_str(" + \"x\"");
     }
     source.push_str("; return (int)s.size(); }\n");
     source
