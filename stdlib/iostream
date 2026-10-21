@@ -47,6 +47,84 @@ namespace std {
         return out;
     }
 
+    // Length of the text produced by the double formatter below. Width is
+    // applied before printing, so this must match printf's %f/%g output for
+    // the values the mini standard library formats.
+    inline int __mini_stl_double_length(double val, int precision, bool fixed) {
+        bool neg = val < 0.0;
+        double a = neg ? -val : val;
+        int sign = neg ? 1 : 0;
+        if (a != a || a > 1.7976931348623157e308) {
+            return sign + 3;
+        }
+        int p = precision < 0 ? 6 : precision;
+        if (fixed) {
+            if (p < 0) p = 0;
+            if (a == 0.0) {
+                return sign + 1 + (p > 0 ? 1 + p : 0);
+            }
+            int int_digits = 1;
+            double scaled = a;
+            while (scaled >= 10.0) {
+                scaled /= 10.0;
+                int_digits++;
+            }
+            double tolerance = 0.5;
+            for (int i = 0; i < p; ++i) tolerance /= 10.0;
+            double limit = 1.0;
+            for (int i = 0; i < int_digits; ++i) limit *= 10.0;
+            if (a + tolerance >= limit) int_digits++;
+            return sign + int_digits + (p > 0 ? 1 + p : 0);
+        }
+        if (p == 0) p = 1;
+        if (a == 0.0) return sign + 1;
+        int exp = 0;
+        double norm = a;
+        while (norm >= 10.0) {
+            norm /= 10.0;
+            exp++;
+        }
+        while (norm < 1.0) {
+            norm *= 10.0;
+            exp--;
+        }
+        double tolerance = 0.5;
+        for (int i = 1; i < p; ++i) tolerance /= 10.0;
+        if (norm + tolerance >= 10.0) {
+            norm /= 10.0;
+            exp++;
+        }
+        if (exp < -4 || exp >= p) {
+            int frac = p - 1;
+            double scaled = norm;
+            for (int i = 1; i < p; ++i) scaled *= 10.0;
+            long long digits = (long long)(scaled + 0.5);
+            while (frac > 0 && digits > 0 && digits % 10 == 0) {
+                digits /= 10;
+                frac--;
+            }
+            int e = exp < 0 ? -exp : exp;
+            int edigits = 1;
+            while (e >= 10) {
+                e /= 10;
+                edigits++;
+            }
+            if (edigits < 2) edigits = 2;
+            return sign + 1 + (frac > 0 ? 1 + frac : 0) + 1 + 1 + edigits;
+        }
+        int decimals = p - 1 - exp;
+        if (decimals < 0) decimals = 0;
+        double power = 1.0;
+        for (int i = 0; i < decimals; ++i) power *= 10.0;
+        long long digits = (long long)(a * power + 0.5);
+        while (decimals > 0 && digits > 0 && digits % 10 == 0) {
+            digits /= 10;
+            decimals--;
+        }
+        int int_digits = exp >= 0 ? exp + 1 : 1;
+        return sign + int_digits + (decimals > 0 ? 1 + decimals : 0);
+    }
+
     class ios_base {
     public:
         static bool sync_with_stdio(bool sync = true) {
@@ -157,6 +235,7 @@ namespace std {
 
         ostream& operator<<(double val) {
             int p = _precision_set ? _precision : 6;
+            _pad_before(__mini_stl_double_length(val, p, _fixed));
             if (_fixed) {
                 std::printf("%.*f", p, val);
             } else {
