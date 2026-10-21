@@ -198,9 +198,11 @@ impl<'a> Preprocessor<'a> {
                     } else {
                         format!("#error {argument}")
                     };
-                    return Err(
-                        CompileError::new(message, line_number, col).at(file, line_number, col)
-                    );
+                    return Err(CompileError::new(message, line_number, col).at(
+                        file,
+                        line_number,
+                        col,
+                    ));
                 }
                 "warning" => {
                     let col = directive_column(&line);

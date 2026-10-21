@@ -1,5 +1,54 @@
 use super::*;
 
+/// The declaration of one record plus the source position used for layout
+/// diagnostics.
+pub(crate) struct RecordLayout<'a> {
+    pub(super) name: &'a str,
+    pub(super) is_class: bool,
+    pub(super) base_classes: &'a [String],
+    pub(super) fields: &'a [(String, Type)],
+    pub(super) methods: &'a [FunctionDecl],
+    pub(super) private_members: &'a [String],
+    pub(super) line: usize,
+    pub(super) col: usize,
+}
+
+/// Accumulates the offsets, fields and vtable slots produced while laying out
+/// one record.
+struct LayoutAccumulator {
+    offset: usize,
+    max_align: usize,
+    struct_fields: Vec<StructField>,
+    base_offsets: Vec<(String, usize)>,
+    vtable_slots: Vec<String>,
+}
+
+impl LayoutAccumulator {
+    fn new() -> Self {
+        Self {
+            offset: 0,
+            max_align: 1,
+            struct_fields: Vec::new(),
+            base_offsets: Vec::new(),
+            vtable_slots: Vec::new(),
+        }
+    }
+
+    /// Rounds the running offset up to the alignment and keeps an empty record
+    /// at least one byte large.
+    ///
+    /// The pass runs twice while laying out a record: the first pass aligns the
+    /// fields, the second re-aligns the one-byte minimum of an empty record.
+    fn round_up(&mut self) {
+        if self.max_align > 0 && !self.offset.is_multiple_of(self.max_align) {
+            self.offset += self.max_align - (self.offset % self.max_align);
+        }
+        if self.offset == 0 {
+            self.offset = 1;
+        }
+    }
+}
+
 impl Sema {
     /// Computes field offsets, base-subobject offset, and vtable slot order.
     ///
@@ -7,22 +56,12 @@ impl Sema {
     /// subobject. A single polymorphic base contributes the vtable.
     pub(super) fn compute_struct_layout(
         &mut self,
-        name: &str,
-        is_class: bool,
-        base_classes: &[String],
-        fields: &[(String, Type)],
-        methods: &[FunctionDecl],
-        private_members: &[String],
-        line: usize,
-        col: usize,
+        input: RecordLayout<'_>,
     ) -> Result<(), CompileError> {
-        let mut offset = 0;
-        let mut max_align = 1;
-        let mut struct_fields = Vec::new();
-        let mut base_offsets = Vec::new();
-        let mut vtable_slots = Vec::new();
-        let has_virtual_methods = methods.iter().any(|m| m.is_virtual);
-        let primary_has_vtable = base_classes
+        let mut acc = LayoutAccumulator::new();
+        let has_virtual_methods = input.methods.iter().any(|m| m.is_virtual);
+        let primary_has_vtable = input
+            .base_classes
             .first()
             .and_then(|base| self.struct_layouts.get(base))
             .map(|layout| layout.has_vtable)
@@ -30,100 +69,69 @@ impl Sema {
         let has_vtable = has_virtual_methods || primary_has_vtable;
         if has_virtual_methods && !primary_has_vtable {
             // A vtable pointer precedes the primary base subobject.
-            offset = 4;
-            max_align = 4;
+            acc.offset = 4;
+            acc.max_align = 4;
         }
 
-        self.layout_base_subobject(
-            base_classes.first(),
-            &mut offset,
-            &mut max_align,
-            &mut struct_fields,
-            &mut base_offsets,
-            &mut vtable_slots,
-            line,
-            col,
-        )?;
+        self.layout_base_subobject(input.base_classes.first(), &mut acc, input.line, input.col)?;
 
-        self.layout_vtable_slots(methods, has_vtable, &mut vtable_slots);
+        self.layout_vtable_slots(input.methods, has_vtable, &mut acc.vtable_slots);
 
-        self.layout_own_fields(fields, &mut offset, &mut max_align, &mut struct_fields);
+        self.layout_own_fields(input.fields, &mut acc);
 
-        if max_align > 0 && offset % max_align != 0 {
-            offset += max_align - (offset % max_align);
-        }
-        if offset == 0 {
-            offset = 1;
-        }
+        acc.round_up();
+        acc.round_up();
 
-        if max_align > 0 && offset % max_align != 0 {
-            offset += max_align - (offset % max_align);
-        }
-        if offset == 0 {
-            offset = 1;
-        }
-
-        let pure_virtuals = self.collect_pure_virtuals(base_classes, methods);
+        let pure_virtuals = self.collect_pure_virtuals(input.base_classes, input.methods);
         let is_abstract = !pure_virtuals.is_empty();
 
         let layout = StructLayout {
-            is_class,
-            base_classes: base_classes.to_vec(),
-            base_offsets,
-            fields: struct_fields,
-            size: offset,
-            align: max_align,
+            is_class: input.is_class,
+            base_classes: input.base_classes.to_vec(),
+            base_offsets: acc.base_offsets,
+            fields: acc.struct_fields,
+            size: acc.offset,
+            align: acc.max_align,
             has_vtable,
-            vtable_slots,
-            private_members: private_members.iter().cloned().collect(),
+            vtable_slots: acc.vtable_slots,
+            private_members: input.private_members.iter().cloned().collect(),
             is_abstract,
             pure_virtuals,
         };
 
-        self.record_struct_layout(name, layout, offset, max_align);
+        self.record_struct_layout(input.name, layout, acc.offset, acc.max_align);
 
         Ok(())
     }
 
     /// Lays out this record's own fields after all base subobjects.
-    fn layout_own_fields(
-        &mut self,
-        fields: &[(String, Type)],
-        offset: &mut usize,
-        max_align: &mut usize,
-        struct_fields: &mut Vec<StructField>,
-    ) {
+    fn layout_own_fields(&mut self, fields: &[(String, Type)], acc: &mut LayoutAccumulator) {
         // 3. Lay out this record's own fields after all base subobjects.
         for (fname, ftype) in fields {
             let fsize = ftype.size_of(&self.struct_sizes);
             let falign = ftype.align_of(&self.struct_aligns);
-            *max_align = (*max_align).max(falign);
+            acc.max_align = acc.max_align.max(falign);
 
-            if falign > 0 && !(*offset).is_multiple_of(falign) {
-                *offset += falign - (*offset % falign);
+            if falign > 0 && !acc.offset.is_multiple_of(falign) {
+                acc.offset += falign - (acc.offset % falign);
             }
 
-            struct_fields.push(StructField {
+            acc.struct_fields.push(StructField {
                 name: fname.clone(),
                 ty: ftype.clone(),
-                offset: *offset,
+                offset: acc.offset,
             });
 
-            *offset += fsize;
+            acc.offset += fsize;
         }
     }
 
     /// Lays out the single supported base subobject. Only one base is allowed;
     /// the parser rejects a second base specifier.
-    #[allow(clippy::too_many_arguments)]
     fn layout_base_subobject(
         &mut self,
         base_class: Option<&String>,
-        offset: &mut usize,
-        max_align: &mut usize,
-        struct_fields: &mut Vec<StructField>,
-        base_offsets: &mut Vec<(String, usize)>,
-        vtable_slots: &mut Vec<String>,
+        acc: &mut LayoutAccumulator,
         line: usize,
         col: usize,
     ) -> Result<(), CompileError> {
@@ -133,32 +141,31 @@ impl Sema {
         let Some(base_layout) = self.struct_layouts.get(base_name).cloned() else {
             return Ok(());
         };
-        let base_offset = if *offset == 0
-            && base_layout.fields.is_empty()
-            && !base_layout.has_vtable
-        {
-            0
-        } else {
-            let align = base_layout.align.max(1);
-            if !(*offset).is_multiple_of(align) {
-                *offset += align - (*offset % align);
-            }
-            let base_offset = *offset;
-            *offset = offset
-                .checked_add(base_layout.size)
-                .ok_or_else(|| CompileError::new("object layout is too large", line, col))?;
-            base_offset
-        };
-        *max_align = (*max_align).max(base_layout.align);
-        base_offsets.push((base_name.clone(), base_offset));
+        let base_offset =
+            if acc.offset == 0 && base_layout.fields.is_empty() && !base_layout.has_vtable {
+                0
+            } else {
+                let align = base_layout.align.max(1);
+                if !acc.offset.is_multiple_of(align) {
+                    acc.offset += align - (acc.offset % align);
+                }
+                let base_offset = acc.offset;
+                acc.offset = acc
+                    .offset
+                    .checked_add(base_layout.size)
+                    .ok_or_else(|| CompileError::new("object layout is too large", line, col))?;
+                base_offset
+            };
+        acc.max_align = acc.max_align.max(base_layout.align);
+        acc.base_offsets.push((base_name.clone(), base_offset));
         if base_layout.has_vtable {
-            *vtable_slots = base_layout.vtable_slots.clone();
+            acc.vtable_slots = base_layout.vtable_slots.clone();
         }
         for mut bf in base_layout.fields {
             bf.offset = base_offset
                 .checked_add(bf.offset)
                 .ok_or_else(|| CompileError::new("object layout is too large", line, col))?;
-            struct_fields.push(bf);
+            acc.struct_fields.push(bf);
         }
         Ok(())
     }
@@ -198,11 +205,11 @@ impl Sema {
         methods: &[FunctionDecl],
     ) -> std::collections::HashSet<String> {
         let mut pure_virtuals = std::collections::HashSet::new();
-        if let Some(base_name) = base_classes.first() {
-            if let Some(base_layout) = self.struct_layouts.get(base_name) {
-                for pv in &base_layout.pure_virtuals {
-                    pure_virtuals.insert(pv.clone());
-                }
+        if let Some(base_name) = base_classes.first()
+            && let Some(base_layout) = self.struct_layouts.get(base_name)
+        {
+            for pv in &base_layout.pure_virtuals {
+                pure_virtuals.insert(pv.clone());
             }
         }
         for m in methods {

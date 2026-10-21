@@ -88,43 +88,29 @@ impl<'a> Codegen<'a> {
                             .iter()
                             .map(|arg| self.get_expr_type(arg, ctx))
                             .collect();
-                        if let Some((ctor_idx, sig)) =
-                            self.find_constructor_sig(sname, &arg_types)
+                        if let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types)
                         {
                             code.push(OP_I32_CONST);
                             write_i32(code, goffset as i32);
                             for (i, arg) in args.iter().enumerate() {
-                                self.compile_call_arg(
-                                    arg,
-                                    sig.param_types.get(i + 1),
-                                    ctx,
-                                    code,
-                                )?;
+                                self.compile_call_arg(arg, sig.param_types.get(i + 1), ctx, code)?;
                             }
                             code.push(OP_CALL);
                             write_u32(code, ctor_idx);
                             constructed = true;
                         }
                     }
-                    if !constructed
-                        && let Some(Expr::InitializerList(list)) = init_opt.as_ref()
-                    {
+                    if !constructed && let Some(Expr::InitializerList(list)) = init_opt.as_ref() {
                         let arg_types: Vec<Type> = list
                             .iter()
                             .map(|arg| self.get_expr_type(arg, ctx))
                             .collect();
-                        if let Some((ctor_idx, sig)) =
-                            self.find_constructor_sig(sname, &arg_types)
+                        if let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types)
                         {
                             code.push(OP_I32_CONST);
                             write_i32(code, goffset as i32);
                             for (i, arg) in list.iter().enumerate() {
-                                self.compile_call_arg(
-                                    arg,
-                                    sig.param_types.get(i + 1),
-                                    ctx,
-                                    code,
-                                )?;
+                                self.compile_call_arg(arg, sig.param_types.get(i + 1), ctx, code)?;
                             }
                             code.push(OP_CALL);
                             write_u32(code, ctor_idx);

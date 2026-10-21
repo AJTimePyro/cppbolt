@@ -406,10 +406,7 @@ mod tests {
             expand(&["ID(x) x", "INC(x) ((x)+1)"], "ID(INC)(4)")?,
             "((4)+1)"
         );
-        assert_eq!(
-            expand(&["G F", "F(x) ((x)+1)"], "G(4)")?,
-            "((4)+1)"
-        );
+        assert_eq!(expand(&["G F", "F(x) ((x)+1)"], "G(4)")?, "((4)+1)");
         Ok(())
     }
 

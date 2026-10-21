@@ -10,6 +10,8 @@ mod layout;
 mod lookup;
 mod stmt;
 
+pub(crate) use layout::RecordLayout;
+
 use crate::ast::types::Type;
 use crate::ast::*;
 use crate::diagnostics::CompileError;

@@ -7,9 +7,7 @@ impl Parser {
 
         if self.peek() == &TokenKind::Semi {
             self.advance();
-            return Ok(
-                StructBody::new(name, is_class, start.line, start.col).into_decl(Vec::new())
-            );
+            return Ok(StructBody::new(name, is_class, start.line, start.col).into_decl(Vec::new()));
         }
 
         let base_classes = self.parse_base_classes()?;

@@ -19,12 +19,7 @@ impl Sema {
         if let Some(layout) = self.struct_layouts.get(class_name) {
             // Base fields are flattened before this class's own fields. Search
             // backwards so a derived field hides a same-named base field.
-            if let Some(fld) = layout
-                .fields
-                .iter()
-                .rev()
-                .find(|f| f.name == field_name)
-            {
+            if let Some(fld) = layout.fields.iter().rev().find(|f| f.name == field_name) {
                 return Some(fld.clone());
             }
             for b in &layout.base_classes {

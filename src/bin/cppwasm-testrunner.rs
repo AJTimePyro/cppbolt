@@ -163,9 +163,7 @@ fn main() -> ExitCode {
     }
     let unexpected_failures = failed.saturating_sub(expected_failures);
     if expected_failures > 0 {
-        println!(
-            "Expected failures (not in tests/PASSING.txt): {expected_failures}."
-        );
+        println!("Expected failures (not in tests/PASSING.txt): {expected_failures}.");
     }
 
     let manifest_failures = check_manifest(&reports, reference_mode);

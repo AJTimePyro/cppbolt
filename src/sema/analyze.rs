@@ -29,16 +29,16 @@ impl Sema {
                     col,
                     ..
                 } => {
-                    self.compute_struct_layout(
-                        name,
-                        *is_class,
+                    self.compute_struct_layout(RecordLayout {
+                        name: name.as_str(),
+                        is_class: *is_class,
                         base_classes,
                         fields,
                         methods,
                         private_members,
-                        *line,
-                        *col,
-                    )?;
+                        line: *line,
+                        col: *col,
+                    })?;
                 }
                 _ => {}
             }
