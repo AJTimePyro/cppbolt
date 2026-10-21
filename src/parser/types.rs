@@ -64,6 +64,58 @@ impl Parser {
         }
 
         let mut base_type = match self.peek() {
+            TokenKind::KwVoid
+            | TokenKind::KwBool
+            | TokenKind::KwChar
+            | TokenKind::KwInt
+            | TokenKind::KwShort
+            | TokenKind::KwLong
+            | TokenKind::KwFloat
+            | TokenKind::KwDouble
+            | TokenKind::KwAuto
+            | TokenKind::KwSigned
+            | TokenKind::KwUnsigned => self.parse_builtin_type()?,
+            TokenKind::KwDecltype | TokenKind::ColonColon | TokenKind::Ident(_) => {
+                self.parse_named_type()?
+            }
+            _ => {
+                return Err(CompileError::new(
+                    format!(
+                        "Expected type specifier, found {}",
+                        self.peek().diagnostic_name()
+                    ),
+                    self.current().line,
+                    self.current().col,
+                ));
+            }
+        };
+
+        if is_const {
+            base_type = Type::Const(Box::new(base_type));
+        }
+
+        // Pointer / Reference qualifiers
+        loop {
+            if self.peek() == &TokenKind::KwConst {
+                self.advance();
+                base_type = Type::Const(Box::new(base_type));
+                continue;
+            }
+            if self.peek() == &TokenKind::Star {
+                self.advance();
+                base_type = Type::Pointer(Box::new(base_type));
+            } else if self.peek() == &TokenKind::Amp {
+                self.advance();
+                base_type = Type::Reference(Box::new(base_type));
+            } else {
+                break;
+            }
+        }
+        Ok(base_type)
+    }
+
+    fn parse_builtin_type(&mut self) -> Result<Type, CompileError> {
+        let ty = match self.peek() {
             TokenKind::KwVoid => {
                 self.advance();
                 Type::Void
@@ -114,6 +166,14 @@ impl Parser {
                 self.advance();
                 Type::Auto
             }
+            TokenKind::KwSigned | TokenKind::KwUnsigned => self.parse_signed_type()?,
+            _ => unreachable!(),
+        };
+        Ok(ty)
+    }
+
+    fn parse_signed_type(&mut self) -> Result<Type, CompileError> {
+        let ty = match self.peek() {
             TokenKind::KwSigned => {
                 self.advance();
                 if self.peek() == &TokenKind::KwChar {
@@ -160,6 +220,13 @@ impl Parser {
                     Type::UnsignedInt
                 }
             }
+            _ => unreachable!(),
+        };
+        Ok(ty)
+    }
+
+    fn parse_named_type(&mut self) -> Result<Type, CompileError> {
+        let ty = match self.peek() {
             TokenKind::KwDecltype => {
                 self.advance();
                 self.expect(TokenKind::LParen)?;
@@ -218,40 +285,9 @@ impl Parser {
                     ));
                 }
             }
-            _ => {
-                return Err(CompileError::new(
-                    format!(
-                        "Expected type specifier, found {}",
-                        self.peek().diagnostic_name()
-                    ),
-                    self.current().line,
-                    self.current().col,
-                ));
-            }
+            _ => unreachable!(),
         };
-
-        if is_const {
-            base_type = Type::Const(Box::new(base_type));
-        }
-
-        // Pointer / Reference qualifiers
-        loop {
-            if self.peek() == &TokenKind::KwConst {
-                self.advance();
-                base_type = Type::Const(Box::new(base_type));
-                continue;
-            }
-            if self.peek() == &TokenKind::Star {
-                self.advance();
-                base_type = Type::Pointer(Box::new(base_type));
-            } else if self.peek() == &TokenKind::Amp {
-                self.advance();
-                base_type = Type::Reference(Box::new(base_type));
-            } else {
-                break;
-            }
-        }
-        Ok(base_type)
+        Ok(ty)
     }
 
     pub(super) fn parse_array_suffix(&mut self, elem_type: Type) -> Result<Type, CompileError> {

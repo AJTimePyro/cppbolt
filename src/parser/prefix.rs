@@ -2,201 +2,170 @@ use super::*;
 
 impl Parser {
     pub(super) fn parse_prefix(&mut self) -> Result<Expr, CompileError> {
+        if let Some(expr) = self.parse_unary_prefix()? {
+            return Ok(expr);
+        }
         match self.peek() {
-            TokenKind::Plus => {
-                self.advance();
-                let expr = self.parse_prefix()?;
-                Ok(Expr::Unary {
-                    op: UnaryOp::Plus,
-                    expr: Box::new(expr),
-                })
+            TokenKind::KwNew => self.parse_new_expr(),
+            TokenKind::KwDelete => self.parse_delete_expr(),
+            TokenKind::KwStaticCast => self.parse_static_cast_expr(),
+            TokenKind::KwSizeof => self.parse_sizeof_expr(),
+            TokenKind::LParen => self.parse_parenthesized_expr(),
+            _ => {
+                let atom = self.parse_atom()?;
+                self.parse_postfix(atom)
             }
-            TokenKind::Minus => {
-                self.advance();
-                let expr = self.parse_prefix()?;
-                Ok(Expr::Unary {
-                    op: UnaryOp::Neg,
-                    expr: Box::new(expr),
-                })
-            }
-            TokenKind::Bang => {
-                self.advance();
-                let expr = self.parse_prefix()?;
-                Ok(Expr::Unary {
-                    op: UnaryOp::Not,
-                    expr: Box::new(expr),
-                })
-            }
-            TokenKind::Tilde => {
-                self.advance();
-                let expr = self.parse_prefix()?;
-                Ok(Expr::Unary {
-                    op: UnaryOp::BitNot,
-                    expr: Box::new(expr),
-                })
-            }
-            TokenKind::KwNew => {
-                self.advance();
-                let placement = if self.peek() == &TokenKind::LParen {
+        }
+    }
+
+    fn parse_unary_prefix(&mut self) -> Result<Option<Expr>, CompileError> {
+        let op = match self.peek() {
+            TokenKind::Plus => UnaryOp::Plus,
+            TokenKind::Minus => UnaryOp::Neg,
+            TokenKind::Bang => UnaryOp::Not,
+            TokenKind::Tilde => UnaryOp::BitNot,
+            TokenKind::Star => UnaryOp::Deref,
+            TokenKind::Amp => UnaryOp::AddrOf,
+            TokenKind::PlusPlus => UnaryOp::PreInc,
+            TokenKind::MinusMinus => UnaryOp::PreDec,
+            _ => return Ok(None),
+        };
+        self.advance();
+        let expr = self.parse_prefix()?;
+        Ok(Some(Expr::Unary {
+            op,
+            expr: Box::new(expr),
+        }))
+    }
+
+    fn parse_new_expr(&mut self) -> Result<Expr, CompileError> {
+        self.advance();
+        let placement = if self.peek() == &TokenKind::LParen {
+            self.advance();
+            let p_expr = self.parse_expr()?;
+            self.expect(TokenKind::RParen)?;
+            Some(Box::new(p_expr))
+        } else {
+            None
+        };
+        let ty = self.parse_type()?;
+        if self.peek() == &TokenKind::LBracket {
+            self.advance();
+            let size = self.parse_expr()?;
+            self.expect(TokenKind::RBracket)?;
+            Ok(Expr::New {
+                ty,
+                args: vec![],
+                is_array: true,
+                array_size: Some(Box::new(size)),
+                placement,
+            })
+        } else if self.peek() == &TokenKind::LParen {
+            self.advance();
+            let mut args = Vec::new();
+            while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
+                args.push(self.parse_expr()?);
+                if self.peek() == &TokenKind::Comma {
                     self.advance();
-                    let p_expr = self.parse_expr()?;
-                    self.expect(TokenKind::RParen)?;
-                    Some(Box::new(p_expr))
                 } else {
-                    None
-                };
+                    break;
+                }
+            }
+            self.expect(TokenKind::RParen)?;
+            Ok(Expr::New {
+                ty,
+                args,
+                is_array: false,
+                array_size: None,
+                placement,
+            })
+        } else {
+            Ok(Expr::New {
+                ty,
+                args: vec![],
+                is_array: false,
+                array_size: None,
+                placement,
+            })
+        }
+    }
+
+    fn parse_delete_expr(&mut self) -> Result<Expr, CompileError> {
+        self.advance();
+        let is_array = if self.peek() == &TokenKind::LBracket {
+            self.advance();
+            self.expect(TokenKind::RBracket)?;
+            true
+        } else {
+            false
+        };
+        let expr = self.parse_prefix()?;
+        Ok(Expr::Delete {
+            expr: Box::new(expr),
+            is_array,
+        })
+    }
+
+    fn parse_static_cast_expr(&mut self) -> Result<Expr, CompileError> {
+        self.advance();
+        self.expect(TokenKind::Lt)?;
+        let target_type = self.parse_type()?;
+        self.expect(TokenKind::Gt)?;
+        self.expect(TokenKind::LParen)?;
+        let expr = self.parse_expr()?;
+        self.expect(TokenKind::RParen)?;
+        Ok(Expr::Cast {
+            target_type,
+            expr: Box::new(expr),
+        })
+    }
+
+    fn parse_sizeof_expr(&mut self) -> Result<Expr, CompileError> {
+        self.advance();
+        self.expect(TokenKind::LParen)?;
+        if self.is_type_start() {
+            let ty = self.parse_type()?;
+            self.expect(TokenKind::RParen)?;
+            Ok(Expr::SizeofType(ty))
+        } else {
+            let expr = self.parse_expr()?;
+            self.expect(TokenKind::RParen)?;
+            Ok(Expr::SizeofExpr(Box::new(expr)))
+        }
+    }
+
+    fn parse_parenthesized_expr(&mut self) -> Result<Expr, CompileError> {
+        // Check if cast: (int)x or (char)x
+        if self.is_cast_ahead() {
+            let saved_pos = self.pos;
+            self.advance();
+            let cast_res = (|| -> Result<Expr, CompileError> {
                 let ty = self.parse_type()?;
-                if self.peek() == &TokenKind::LBracket {
-                    self.advance();
-                    let size = self.parse_expr()?;
-                    self.expect(TokenKind::RBracket)?;
-                    Ok(Expr::New {
-                        ty,
-                        args: vec![],
-                        is_array: true,
-                        array_size: Some(Box::new(size)),
-                        placement,
-                    })
-                } else if self.peek() == &TokenKind::LParen {
-                    self.advance();
-                    let mut args = Vec::new();
-                    while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
-                        args.push(self.parse_expr()?);
-                        if self.peek() == &TokenKind::Comma {
-                            self.advance();
-                        } else {
-                            break;
-                        }
-                    }
-                    self.expect(TokenKind::RParen)?;
-                    Ok(Expr::New {
-                        ty,
-                        args,
-                        is_array: false,
-                        array_size: None,
-                        placement,
-                    })
-                } else {
-                    Ok(Expr::New {
-                        ty,
-                        args: vec![],
-                        is_array: false,
-                        array_size: None,
-                        placement,
-                    })
-                }
-            }
-            TokenKind::KwDelete => {
-                self.advance();
-                let is_array = if self.peek() == &TokenKind::LBracket {
-                    self.advance();
-                    self.expect(TokenKind::RBracket)?;
-                    true
-                } else {
-                    false
-                };
-                let expr = self.parse_prefix()?;
-                Ok(Expr::Delete {
-                    expr: Box::new(expr),
-                    is_array,
-                })
-            }
-            TokenKind::Star => {
-                self.advance();
-                let expr = self.parse_prefix()?;
-                Ok(Expr::Unary {
-                    op: UnaryOp::Deref,
-                    expr: Box::new(expr),
-                })
-            }
-            TokenKind::Amp => {
-                self.advance();
-                let expr = self.parse_prefix()?;
-                Ok(Expr::Unary {
-                    op: UnaryOp::AddrOf,
-                    expr: Box::new(expr),
-                })
-            }
-            TokenKind::PlusPlus => {
-                self.advance();
-                let expr = self.parse_prefix()?;
-                Ok(Expr::Unary {
-                    op: UnaryOp::PreInc,
-                    expr: Box::new(expr),
-                })
-            }
-            TokenKind::MinusMinus => {
-                self.advance();
-                let expr = self.parse_prefix()?;
-                Ok(Expr::Unary {
-                    op: UnaryOp::PreDec,
-                    expr: Box::new(expr),
-                })
-            }
-            TokenKind::KwStaticCast => {
-                self.advance();
-                self.expect(TokenKind::Lt)?;
-                let target_type = self.parse_type()?;
-                self.expect(TokenKind::Gt)?;
-                self.expect(TokenKind::LParen)?;
-                let expr = self.parse_expr()?;
                 self.expect(TokenKind::RParen)?;
+                let expr = self.parse_prefix()?;
                 Ok(Expr::Cast {
-                    target_type,
+                    target_type: ty,
                     expr: Box::new(expr),
                 })
-            }
-            TokenKind::KwSizeof => {
-                self.advance();
-                self.expect(TokenKind::LParen)?;
-                if self.is_type_start() {
-                    let ty = self.parse_type()?;
-                    self.expect(TokenKind::RParen)?;
-                    Ok(Expr::SizeofType(ty))
-                } else {
-                    let expr = self.parse_expr()?;
-                    self.expect(TokenKind::RParen)?;
-                    Ok(Expr::SizeofExpr(Box::new(expr)))
-                }
-            }
-            TokenKind::LParen => {
-                // Check if cast: (int)x or (char)x
-                if self.is_cast_ahead() {
-                    let saved_pos = self.pos;
-                    self.advance();
-                    let cast_res = (|| -> Result<Expr, CompileError> {
-                        let ty = self.parse_type()?;
-                        self.expect(TokenKind::RParen)?;
-                        let expr = self.parse_prefix()?;
-                        Ok(Expr::Cast {
-                            target_type: ty,
-                            expr: Box::new(expr),
-                        })
-                    })();
-                    match cast_res {
-                        Ok(cast_expr) => Ok(cast_expr),
-                        Err(error) => {
-                            if self.nesting_exceeded.get() {
-                                return Err(error);
-                            }
-                            self.pos = saved_pos;
-                            self.advance();
-                            let expr = self.parse_expr()?;
-                            self.expect(TokenKind::RParen)?;
-                            self.parse_postfix(expr)
-                        }
+            })();
+            match cast_res {
+                Ok(cast_expr) => Ok(cast_expr),
+                Err(error) => {
+                    if self.nesting_exceeded.get() {
+                        return Err(error);
                     }
-                } else {
+                    self.pos = saved_pos;
                     self.advance();
                     let expr = self.parse_expr()?;
                     self.expect(TokenKind::RParen)?;
                     self.parse_postfix(expr)
                 }
             }
-            _ => {
-                let atom = self.parse_atom()?;
-                self.parse_postfix(atom)
-            }
+        } else {
+            self.advance();
+            let expr = self.parse_expr()?;
+            self.expect(TokenKind::RParen)?;
+            self.parse_postfix(expr)
         }
     }
 

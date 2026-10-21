@@ -31,7 +31,7 @@ impl Parser {
             TokenKind::CharLiteral(val) => Ok(Expr::CharLiteral(val)),
             TokenKind::StringLiteral(val) => Ok(Expr::StringLiteral(val)),
             TokenKind::ColonColon => {
-                let mut id = match self.advance().kind.clone() {
+                let first = match self.advance().kind.clone() {
                     TokenKind::Ident(sub) => sub,
                     _ => {
                         return Err(CompileError::new(
@@ -41,46 +41,17 @@ impl Parser {
                         ));
                     }
                 };
-                while self.peek() == &TokenKind::ColonColon {
-                    self.advance();
-                    match self.advance().kind.clone() {
-                        TokenKind::Ident(sub) => {
-                            id = format!("{}::{}", id, sub);
-                        }
-                        _ => {
-                            return Err(CompileError::new(
-                                "Expected identifier after '::'",
-                                tok.line,
-                                tok.col,
-                            ));
-                        }
-                    }
-                }
-                if id.starts_with("std::") {
-                    id = id["std::".len()..].to_string();
-                    Ok(Expr::Identifier(id))
+                let id = self.parse_qualified_identifier(first, tok.line, tok.col)?;
+                if let Some(stripped) = id.strip_prefix("std::") {
+                    Ok(Expr::Identifier(stripped.to_string()))
                 } else {
                     Ok(Expr::Identifier(format!("::{}", id)))
                 }
             }
-            TokenKind::Ident(mut id) => {
-                while self.peek() == &TokenKind::ColonColon {
-                    self.advance();
-                    match self.advance().kind.clone() {
-                        TokenKind::Ident(sub) => {
-                            id = format!("{}::{}", id, sub);
-                        }
-                        _ => {
-                            return Err(CompileError::new(
-                                "Expected identifier after '::'",
-                                tok.line,
-                                tok.col,
-                            ));
-                        }
-                    }
-                }
-                if id.starts_with("std::") {
-                    id = id["std::".len()..].to_string();
+            TokenKind::Ident(id) => {
+                let mut id = self.parse_qualified_identifier(id, tok.line, tok.col)?;
+                if let Some(stripped) = id.strip_prefix("std::") {
+                    id = stripped.to_string();
                 }
                 Ok(Expr::Identifier(id))
             }
@@ -95,21 +66,37 @@ impl Parser {
         }
     }
 
+    /// Parses the `::`-separated tail of a qualified name.
+    fn parse_qualified_identifier(
+        &mut self,
+        mut id: String,
+        line: usize,
+        col: usize,
+    ) -> Result<String, CompileError> {
+        while self.peek() == &TokenKind::ColonColon {
+            self.advance();
+            match self.advance().kind.clone() {
+                TokenKind::Ident(sub) => {
+                    id = format!("{}::{}", id, sub);
+                }
+                _ => {
+                    return Err(CompileError::new(
+                        "Expected identifier after '::'",
+                        line,
+                        col,
+                    ));
+                }
+            }
+        }
+        Ok(id)
+    }
+
     pub(super) fn parse_postfix(&mut self, mut expr: Expr) -> Result<Expr, CompileError> {
         loop {
             match self.peek() {
                 TokenKind::LParen => {
                     self.advance();
-                    let mut args = Vec::new();
-                    while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
-                        args.push(self.parse_expr()?);
-                        if self.peek() == &TokenKind::Comma {
-                            self.advance();
-                        } else {
-                            break;
-                        }
-                    }
-                    self.expect(TokenKind::RParen)?;
+                    let args = self.parse_call_args()?;
                     expr = Expr::Call {
                         callee: Box::new(expr),
                         args,
@@ -126,30 +113,7 @@ impl Parser {
                 }
                 TokenKind::Dot => {
                     self.advance();
-                    let member = if self.peek() == &TokenKind::Tilde {
-                        self.advance();
-                        match self.advance().kind.clone() {
-                            TokenKind::Ident(id) => format!("~{}", id),
-                            _ => {
-                                return Err(CompileError::new(
-                                    "Expected destructor name after '~'",
-                                    self.current().line,
-                                    self.current().col,
-                                ));
-                            }
-                        }
-                    } else {
-                        match self.advance().kind.clone() {
-                            TokenKind::Ident(id) => id,
-                            _ => {
-                                return Err(CompileError::new(
-                                    "Expected member name after '.'",
-                                    self.current().line,
-                                    self.current().col,
-                                ));
-                            }
-                        }
-                    };
+                    let member = self.parse_member_name(".")?;
                     expr = Expr::MemberAccess {
                         object: Box::new(expr),
                         member,
@@ -158,30 +122,7 @@ impl Parser {
                 }
                 TokenKind::Arrow => {
                     self.advance();
-                    let member = if self.peek() == &TokenKind::Tilde {
-                        self.advance();
-                        match self.advance().kind.clone() {
-                            TokenKind::Ident(id) => format!("~{}", id),
-                            _ => {
-                                return Err(CompileError::new(
-                                    "Expected destructor name after '~'",
-                                    self.current().line,
-                                    self.current().col,
-                                ));
-                            }
-                        }
-                    } else {
-                        match self.advance().kind.clone() {
-                            TokenKind::Ident(id) => id,
-                            _ => {
-                                return Err(CompileError::new(
-                                    "Expected member name after '->'",
-                                    self.current().line,
-                                    self.current().col,
-                                ));
-                            }
-                        }
-                    };
+                    let member = self.parse_member_name("->")?;
                     expr = Expr::MemberAccess {
                         object: Box::new(expr),
                         member,
@@ -206,5 +147,42 @@ impl Parser {
             }
         }
         Ok(expr)
+    }
+
+    fn parse_call_args(&mut self) -> Result<Vec<Expr>, CompileError> {
+        let mut args = Vec::new();
+        while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
+            args.push(self.parse_expr()?);
+            if self.peek() == &TokenKind::Comma {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        self.expect(TokenKind::RParen)?;
+        Ok(args)
+    }
+
+    fn parse_member_name(&mut self, operator: &str) -> Result<String, CompileError> {
+        if self.peek() == &TokenKind::Tilde {
+            self.advance();
+            match self.advance().kind.clone() {
+                TokenKind::Ident(id) => Ok(format!("~{}", id)),
+                _ => Err(CompileError::new(
+                    "Expected destructor name after '~'",
+                    self.current().line,
+                    self.current().col,
+                )),
+            }
+        } else {
+            match self.advance().kind.clone() {
+                TokenKind::Ident(id) => Ok(id),
+                _ => Err(CompileError::new(
+                    format!("Expected member name after '{}'", operator),
+                    self.current().line,
+                    self.current().col,
+                )),
+            }
+        }
     }
 }

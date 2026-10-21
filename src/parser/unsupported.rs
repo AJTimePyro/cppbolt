@@ -2,40 +2,50 @@ use super::*;
 
 impl Parser {
     pub fn validate_supported_features(&self) -> Result<(), CompileError> {
+        if let Some(error) = self.reject_operator_overloads() {
+            return Err(error);
+        }
+        if let Some(error) = self.reject_namespace_aliases() {
+            return Err(error);
+        }
+        if let Some(error) = self.reject_const_overloading() {
+            return Err(error);
+        }
+        if let Some(error) = self.reject_range_for() {
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    fn reject_operator_overloads(&self) -> Option<CompileError> {
         for window in self.tokens.windows(4) {
             if matches!(window[0].kind, TokenKind::KwOperator)
                 && matches!(window[1].kind, TokenKind::LParen)
                 && matches!(window[2].kind, TokenKind::RParen)
             {
-                return Err(CompileError::new(
-                    "operator() is not supported",
-                    window[0].line,
-                    window[0].col,
-                )
-                .with_kind(ErrorKind::Unsupported));
+                return Some(
+                    CompileError::new("operator() is not supported", window[0].line, window[0].col)
+                        .with_kind(ErrorKind::Unsupported),
+                );
             }
             if matches!(window[0].kind, TokenKind::KwOperator)
                 && matches!(window[1].kind, TokenKind::Arrow)
                 && matches!(window[2].kind, TokenKind::LParen)
             {
-                return Err(CompileError::new(
-                    "operator-> is not supported",
-                    window[0].line,
-                    window[0].col,
-                )
-                .with_kind(ErrorKind::Unsupported));
+                return Some(
+                    CompileError::new("operator-> is not supported", window[0].line, window[0].col)
+                        .with_kind(ErrorKind::Unsupported),
+                );
             }
             if matches!(window[0].kind, TokenKind::KwOperator)
                 && matches!(window[1].kind, TokenKind::Star)
                 && matches!(window[2].kind, TokenKind::LParen)
                 && matches!(window[3].kind, TokenKind::RParen)
             {
-                return Err(CompileError::new(
-                    "operator* is not supported",
-                    window[0].line,
-                    window[0].col,
-                )
-                .with_kind(ErrorKind::Unsupported));
+                return Some(
+                    CompileError::new("operator* is not supported", window[0].line, window[0].col)
+                        .with_kind(ErrorKind::Unsupported),
+                );
             }
         }
         let has_postfix_overload = self.tokens.windows(5).any(|window| {
@@ -54,39 +64,57 @@ impl Parser {
                     && matches!(window[4].kind, TokenKind::RParen)
             })
         {
-            return Err(CompileError::new(
-                "postfix ++/-- is not supported",
-                window[0].line,
-                window[0].col,
-            )
-            .with_kind(ErrorKind::Unsupported));
+            return Some(
+                CompileError::new(
+                    "postfix ++/-- is not supported",
+                    window[0].line,
+                    window[0].col,
+                )
+                .with_kind(ErrorKind::Unsupported),
+            );
         }
+        None
+    }
+
+    fn reject_namespace_aliases(&self) -> Option<CompileError> {
         for window in self.tokens.windows(3) {
             if matches!(window[0].kind, TokenKind::KwNamespace)
                 && matches!(window[1].kind, TokenKind::Ident(_))
                 && matches!(window[2].kind, TokenKind::Assign)
             {
-                return Err(CompileError::new(
-                    "namespace aliases are not supported",
-                    window[2].line,
-                    window[2].col,
-                )
-                .with_kind(ErrorKind::Unsupported));
+                return Some(
+                    CompileError::new(
+                        "namespace aliases are not supported",
+                        window[2].line,
+                        window[2].col,
+                    )
+                    .with_kind(ErrorKind::Unsupported),
+                );
             }
         }
+        None
+    }
+
+    fn reject_const_overloading(&self) -> Option<CompileError> {
         for window in self.tokens.windows(3) {
             if matches!(window[0].kind, TokenKind::RParen)
                 && matches!(window[1].kind, TokenKind::KwConst)
                 && matches!(window[2].kind, TokenKind::Amp)
             {
-                return Err(CompileError::new(
-                    "const overloading is not supported",
-                    window[1].line,
-                    window[1].col,
-                )
-                .with_kind(ErrorKind::Unsupported));
+                return Some(
+                    CompileError::new(
+                        "const overloading is not supported",
+                        window[1].line,
+                        window[1].col,
+                    )
+                    .with_kind(ErrorKind::Unsupported),
+                );
             }
         }
+        None
+    }
+
+    fn reject_range_for(&self) -> Option<CompileError> {
         for (index, window) in self.tokens.windows(2).enumerate() {
             if matches!(window[0].kind, TokenKind::KwFor)
                 && matches!(window[1].kind, TokenKind::LParen)
@@ -104,18 +132,20 @@ impl Parser {
                         }
                         TokenKind::Semi if depth == 1 => has_semicolon = true,
                         TokenKind::Colon if depth == 1 && !has_semicolon => {
-                            return Err(CompileError::new(
-                                "range-based for is not supported",
-                                token.line,
-                                token.col,
-                            )
-                            .with_kind(ErrorKind::Unsupported));
+                            return Some(
+                                CompileError::new(
+                                    "range-based for is not supported",
+                                    token.line,
+                                    token.col,
+                                )
+                                .with_kind(ErrorKind::Unsupported),
+                            );
                         }
                         _ => {}
                     }
                 }
             }
         }
-        Ok(())
+        None
     }
 }

@@ -4,24 +4,13 @@ impl Parser {
     pub(super) fn parse_stmt(&mut self) -> Result<Stmt, CompileError> {
         let _guard = self.enter_nesting()?;
         let tok = self.current().clone();
+        let line = tok.line;
+        let col = tok.col;
         match self.peek() {
-            TokenKind::KwUsing => {
-                self.advance();
-                if self.peek() == &TokenKind::KwNamespace {
-                    self.advance();
-                    let ns = self.parse_qualified_name()?;
-                    self.expect(TokenKind::Semi)?;
-                    self.open_namespaces.push(ns.clone());
-                    Ok(Stmt::new(StmtKind::UsingNamespace(ns), tok.line, tok.col))
-                } else {
-                    let name = self.parse_qualified_name()?;
-                    self.expect(TokenKind::Semi)?;
-                    Ok(Stmt::new(StmtKind::UsingDecl(name), tok.line, tok.col))
-                }
-            }
+            TokenKind::KwUsing => self.parse_using_stmt(line, col),
             TokenKind::Semi => {
                 self.advance();
-                Ok(Stmt::new(StmtKind::Empty, tok.line, tok.col))
+                Ok(Stmt::new(StmtKind::Empty, line, col))
             }
             TokenKind::LBrace => self.parse_compound_stmt(),
             TokenKind::KwIf => self.parse_if_stmt(),
@@ -29,79 +18,102 @@ impl Parser {
             TokenKind::KwDo => self.parse_do_while_stmt(),
             TokenKind::KwFor => self.parse_for_stmt(),
             TokenKind::KwSwitch => self.parse_switch_stmt(),
-            TokenKind::KwCase => {
-                self.advance();
-                let expr = self.parse_expr()?;
-                let val = match expr {
-                    Expr::IntLiteral(n, _) => n,
-                    _ => {
-                        return Err(CompileError::new(
-                            "Case value must be integer constant",
-                            self.current().line,
-                            self.current().col,
-                        ));
-                    }
-                };
-                self.expect(TokenKind::Colon)?;
-                Ok(Stmt::new(StmtKind::Case(val), tok.line, tok.col))
-            }
+            TokenKind::KwCase => self.parse_case_label(line, col),
             TokenKind::KwDefault => {
                 self.advance();
                 self.expect(TokenKind::Colon)?;
-                Ok(Stmt::new(StmtKind::Default, tok.line, tok.col))
+                Ok(Stmt::new(StmtKind::Default, line, col))
             }
             TokenKind::KwBreak => {
                 self.advance();
                 self.expect(TokenKind::Semi)?;
-                Ok(Stmt::new(StmtKind::Break, tok.line, tok.col))
+                Ok(Stmt::new(StmtKind::Break, line, col))
             }
             TokenKind::KwContinue => {
                 self.advance();
                 self.expect(TokenKind::Semi)?;
-                Ok(Stmt::new(StmtKind::Continue, tok.line, tok.col))
+                Ok(Stmt::new(StmtKind::Continue, line, col))
             }
-            TokenKind::KwReturn => {
-                self.advance();
-                let expr = if self.peek() != &TokenKind::Semi {
-                    Some(self.parse_expr()?)
-                } else {
-                    None
-                };
-                self.expect(TokenKind::Semi)?;
-                Ok(Stmt::new(StmtKind::Return(expr), tok.line, tok.col))
-            }
-            TokenKind::KwStatic => {
-                self.advance();
-                let mut stmt = self.parse_var_decl()?;
-                if let StmtKind::VarDecl {
-                    ref mut is_static, ..
-                } = stmt.kind
-                {
-                    *is_static = true;
-                }
-                Ok(stmt)
-            }
+            TokenKind::KwReturn => self.parse_return_stmt(line, col),
+            TokenKind::KwStatic => self.parse_static_stmt(),
+            _ => self.parse_expr_or_decl_stmt(line, col),
+        }
+    }
+
+    fn parse_using_stmt(&mut self, line: usize, col: usize) -> Result<Stmt, CompileError> {
+        self.advance();
+        if self.peek() == &TokenKind::KwNamespace {
+            self.advance();
+            let ns = self.parse_qualified_name()?;
+            self.expect(TokenKind::Semi)?;
+            self.open_namespaces.push(ns.clone());
+            Ok(Stmt::new(StmtKind::UsingNamespace(ns), line, col))
+        } else {
+            let name = self.parse_qualified_name()?;
+            self.expect(TokenKind::Semi)?;
+            Ok(Stmt::new(StmtKind::UsingDecl(name), line, col))
+        }
+    }
+
+    fn parse_case_label(&mut self, line: usize, col: usize) -> Result<Stmt, CompileError> {
+        self.advance();
+        let expr = self.parse_expr()?;
+        let val = match expr {
+            Expr::IntLiteral(n, _) => n,
             _ => {
-                if self.is_type_start() {
-                    let saved_pos = self.pos;
-                    match self.parse_var_decl() {
-                        Ok(stmt) => Ok(stmt),
-                        Err(error) => {
-                            if self.nesting_exceeded.get() {
-                                return Err(error);
-                            }
-                            self.pos = saved_pos;
-                            let expr = self.parse_expr()?;
-                            self.expect(TokenKind::Semi)?;
-                            Ok(Stmt::new(StmtKind::Expr(expr), tok.line, tok.col))
-                        }
+                return Err(CompileError::new(
+                    "Case value must be integer constant",
+                    self.current().line,
+                    self.current().col,
+                ));
+            }
+        };
+        self.expect(TokenKind::Colon)?;
+        Ok(Stmt::new(StmtKind::Case(val), line, col))
+    }
+
+    fn parse_return_stmt(&mut self, line: usize, col: usize) -> Result<Stmt, CompileError> {
+        self.advance();
+        let expr = if self.peek() != &TokenKind::Semi {
+            Some(self.parse_expr()?)
+        } else {
+            None
+        };
+        self.expect(TokenKind::Semi)?;
+        Ok(Stmt::new(StmtKind::Return(expr), line, col))
+    }
+
+    fn parse_static_stmt(&mut self) -> Result<Stmt, CompileError> {
+        self.advance();
+        let mut stmt = self.parse_var_decl()?;
+        if let StmtKind::VarDecl {
+            ref mut is_static, ..
+        } = stmt.kind
+        {
+            *is_static = true;
+        }
+        Ok(stmt)
+    }
+
+    fn parse_expr_or_decl_stmt(&mut self, line: usize, col: usize) -> Result<Stmt, CompileError> {
+        if self.is_type_start() {
+            let saved_pos = self.pos;
+            match self.parse_var_decl() {
+                Ok(stmt) => Ok(stmt),
+                Err(error) => {
+                    if self.nesting_exceeded.get() {
+                        return Err(error);
                     }
-                } else {
+                    self.pos = saved_pos;
                     let expr = self.parse_expr()?;
                     self.expect(TokenKind::Semi)?;
-                    Ok(Stmt::new(StmtKind::Expr(expr), tok.line, tok.col))
+                    Ok(Stmt::new(StmtKind::Expr(expr), line, col))
                 }
             }
+        } else {
+            let expr = self.parse_expr()?;
+            self.expect(TokenKind::Semi)?;
+            Ok(Stmt::new(StmtKind::Expr(expr), line, col))
         }
     }
 
@@ -121,39 +133,7 @@ impl Parser {
         let base_type = self.parse_type()?;
         let (final_ty, name) =
             if self.peek() == &TokenKind::LParen && self.peek_ahead(1) == &TokenKind::Star {
-                // Function-pointer local: Base (*name)(args).
-                self.advance();
-                self.advance();
-                let id = match self.advance().kind.clone() {
-                    TokenKind::Ident(id) => id,
-                    _ => {
-                        return Err(CompileError::new(
-                            "Expected variable name",
-                            self.current().line,
-                            self.current().col,
-                        ));
-                    }
-                };
-                self.expect(TokenKind::RParen)?;
-                self.expect(TokenKind::LParen)?;
-                let mut fn_params = Vec::new();
-                while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
-                    let pt = self.parse_type()?;
-                    fn_params.push(pt);
-                    if self.peek() == &TokenKind::Comma {
-                        self.advance();
-                    } else {
-                        break;
-                    }
-                }
-                self.expect(TokenKind::RParen)?;
-                (
-                    Type::Pointer(Box::new(Type::Function {
-                        return_type: Box::new(base_type),
-                        param_types: fn_params,
-                    })),
-                    id,
-                )
+                self.parse_function_pointer_local(base_type)?
             } else {
                 let id = match self.advance().kind.clone() {
                     TokenKind::Ident(id) => id,
@@ -198,6 +178,45 @@ impl Parser {
             },
             tok.line,
             tok.col,
+        ))
+    }
+
+    /// Parses a function-pointer local: Base (*name)(args).
+    fn parse_function_pointer_local(
+        &mut self,
+        base_type: Type,
+    ) -> Result<(Type, String), CompileError> {
+        self.advance();
+        self.advance();
+        let id = match self.advance().kind.clone() {
+            TokenKind::Ident(id) => id,
+            _ => {
+                return Err(CompileError::new(
+                    "Expected variable name",
+                    self.current().line,
+                    self.current().col,
+                ));
+            }
+        };
+        self.expect(TokenKind::RParen)?;
+        self.expect(TokenKind::LParen)?;
+        let mut fn_params = Vec::new();
+        while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
+            let pt = self.parse_type()?;
+            fn_params.push(pt);
+            if self.peek() == &TokenKind::Comma {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        self.expect(TokenKind::RParen)?;
+        Ok((
+            Type::Pointer(Box::new(Type::Function {
+                return_type: Box::new(base_type),
+                param_types: fn_params,
+            })),
+            id,
         ))
     }
 
