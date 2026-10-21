@@ -92,6 +92,23 @@ impl Sema {
         }
     }
 
+    /// Reports a name that is visible through a using-declaration and through
+    /// a using-directive at the same time.
+    pub(super) fn check_ambiguous_name(&self, name: &str) -> Result<(), CompileError> {
+        if self.using_decls.contains_key(name) {
+            for ns in &self.open_namespaces {
+                if self.global_vars.contains_key(&format!("{}::{}", ns, name)) {
+                    return Err(CompileError::new(
+                        format!("reference to '{}' is ambiguous", name),
+                        self.current_line,
+                        self.current_col,
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn analyze_identifier(&mut self, expr: &mut Expr) -> Result<Type, CompileError> {
         let Expr::Identifier(name) = expr else {
             return Err(crate::internal_error!(
@@ -119,6 +136,7 @@ impl Sema {
                 ));
             }
         }
+        self.check_ambiguous_name(name)?;
         if let Some(var) = self.lookup_var(name) {
             Ok(var.ty.clone())
         } else if let Some(&val) = self.enum_values.get(name) {

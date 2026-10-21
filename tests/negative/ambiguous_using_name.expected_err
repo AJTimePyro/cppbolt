@@ -1,0 +1,1 @@
+tests/negative/ambiguous_using_name.cpp:6:5: error: reference to 'x' is ambiguous

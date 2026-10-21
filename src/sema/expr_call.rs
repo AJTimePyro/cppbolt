@@ -53,6 +53,7 @@ impl Sema {
 
         if let Expr::Identifier(raw_name) = &**callee {
             let name = raw_name.strip_prefix("::").unwrap_or(raw_name).to_string();
+            self.check_ambiguous_name(&name)?;
             if let Some(var) = self.lookup_var(&name) {
                 let stripped = var.ty.strip_const();
                 if let Type::Pointer(inner) = stripped {

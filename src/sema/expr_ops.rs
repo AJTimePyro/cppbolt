@@ -107,6 +107,17 @@ impl Sema {
         let mut lty = self.analyze_expr(&mut base)?;
         for (op, right) in spine.iter_mut().rev() {
             let rty = self.analyze_expr(right)?;
+            // Adding two pointers is not a C++ expression.
+            if *op == BinaryOp::Add
+                && lty.decay_array().is_pointer()
+                && rty.decay_array().is_pointer()
+            {
+                return Err(CompileError::new(
+                    "invalid operands to binary expression: two pointers cannot be added",
+                    self.current_line,
+                    self.current_col,
+                ));
+            }
             lty = self.binary_result_type(op, &lty, &rty);
         }
 

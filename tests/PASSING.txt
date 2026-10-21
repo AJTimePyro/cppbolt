@@ -190,6 +190,7 @@ mini_stl_variant/stream_edge_cases
 mini_stl_variant/stream_operator_overload
 mini_stl_variant/string_basic
 mini_stl_variant/string_comprehensive
+negative/ambiguous_using_name
 negative/break_outside_loop
 negative/const_assign
 negative/const_overload_unsupported
@@ -208,6 +209,7 @@ negative/nesting_depth_limit
 negative/operator_arrow_unsupported
 negative/operator_call_unsupported
 negative/operator_deref_unsupported
+negative/pointer_plus_pointer
 negative/postfix_increment_unsupported
 negative/private_access
 negative/pure_virtual_instantiation
