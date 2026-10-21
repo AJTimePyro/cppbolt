@@ -184,7 +184,7 @@ impl<'a> IfExpr<'a> {
         while let Some(op) = state.operators.last().copied() {
             match op {
                 Op::LParen => break,
-                Op::Question | Op::Colon => {
+                Op::Question => {
                     return Err(self.error("expected ':' before ')' in #if expression"));
                 }
                 _ => {
@@ -527,6 +527,9 @@ mod tests {
         assert_eq!(eval("1 << 4")?, 16);
         assert_eq!(eval("5 > 3 ? 7 : 9")?, 7);
         assert_eq!(eval("0 ? 7 : 3 ? 8 : 9")?, 8);
+        assert_eq!(eval("(1 ? 0 : 1)")?, 0);
+        assert_eq!(eval("(0 ? 2 : 3) + 4")?, 7);
+        assert_eq!(eval("((1 ? 2 : 3) ? 4 : 5)")?, 4);
         assert_eq!(eval("!0 + -1")?, 0);
         Ok(())
     }
