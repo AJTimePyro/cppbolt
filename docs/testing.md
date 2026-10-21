@@ -7,11 +7,17 @@ groups assert a nonzero Wasm trap. Negative tests contain `.expected_err` diagno
 The command line is `cppwasm-testrunner [compiler|ref] [group]`. The first argument selects the compiler
 (``ref`` uses `g++`), and the second selects a single positive group; otherwise all positive groups and the
 negative suite run. A filtered invocation only checks `tests/PASSING.txt` entries, and passing tests, for the
-groups it actually ran. The process exits 0 only when every selected test passed, every selected passing test is
-listed in `tests/PASSING.txt`, the variant gate passes, and the independent manifest matches. It exits 1 for a
-test failure, an unlisted passing test, a missing manifest test, a variant-gate failure, or a manifest mismatch.
+groups it actually ran.
 
-The current baseline is 218 tests, 218 executed, 199 passed, and 19 expected failures: six template tests and
+`tests/PASSING.txt` is the expected-pass manifest. A failing test that is absent from the manifest is an
+expected failure: the runner reports it and counts it under `Expected failures`, but it does not make the run
+fail. The process exits 0 when every test listed in `tests/PASSING.txt` passed, every passing test is listed,
+every discovered test executed, the variant gate passed, and the independent manifest matched. In other words,
+the exit code reflects unexpected failures only. It exits 1 for a listed test failure, an unlisted passing test,
+a missing manifest test, a variant-gate failure, an independent-manifest mismatch, or a group that could not be
+executed.
+
+The current baseline is 226 tests, 226 executed, 207 passed, and 19 expected failures: six template tests and
 thirteen container/algorithm tests. Reproduce it with:
 
 ```sh

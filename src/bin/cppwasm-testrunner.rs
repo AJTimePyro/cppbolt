@@ -56,6 +56,7 @@ struct Report {
     on_disk: usize,
     failures: Vec<String>,
     passed_names: Vec<String>,
+    failed_names: Vec<String>,
 }
 
 struct Paths {
@@ -151,12 +152,35 @@ fn main() -> ExitCode {
         "\nOverall: on-disk {on_disk}, executed {executed}, passed {passed}, failed {failed}."
     );
 
+    let listed = listed_tests();
+    let mut expected_failures = 0;
+    for report in &reports {
+        for name in &report.failed_names {
+            if !listed.contains(&(report.feature.clone(), name.clone())) {
+                expected_failures += 1;
+            }
+        }
+    }
+    let unexpected_failures = failed.saturating_sub(expected_failures);
+    if expected_failures > 0 {
+        println!(
+            "Expected failures (not in tests/PASSING.txt): {expected_failures}."
+        );
+    }
+
     let manifest_failures = check_manifest(&reports, reference_mode);
     let duplicate_failures = checks::check_variant_tests();
     let _ = fs::remove_dir_all(&paths.work);
-    if manifest_failures == 0 && duplicate_failures == 0 && executed == on_disk && failed == 0 {
+    if manifest_failures == 0
+        && duplicate_failures == 0
+        && executed == on_disk
+        && unexpected_failures == 0
+    {
         ExitCode::SUCCESS
     } else {
+        if unexpected_failures > 0 {
+            eprintln!("{unexpected_failures} unexpected test failures");
+        }
         if manifest_failures > 0 {
             eprintln!("{manifest_failures} PASSING manifest violations");
         }
@@ -180,6 +204,7 @@ fn run_feature(paths: &Paths, feature: &str, negative: bool) -> Report {
                 on_disk: 0,
                 failures: vec![format!("cannot list {}: {error}", directory.display())],
                 passed_names: Vec::new(),
+                failed_names: Vec::new(),
             };
         }
     };
@@ -193,6 +218,7 @@ fn run_feature(paths: &Paths, feature: &str, negative: bool) -> Report {
         on_disk,
         failures: Vec::new(),
         passed_names: Vec::new(),
+        failed_names: Vec::new(),
     };
 
     for cpp in tests {
@@ -215,6 +241,7 @@ fn run_feature(paths: &Paths, feature: &str, negative: bool) -> Report {
             Err(message) => {
                 report.failed += 1;
                 report.failures.push(format!("{name} {message}"));
+                report.failed_names.push(name);
             }
         }
     }
@@ -378,6 +405,23 @@ fn compare_output(output: &std::process::Output, feature: &str, name: &str) -> R
     } else {
         Err("output mismatch".to_string())
     }
+}
+
+fn listed_tests() -> BTreeSet<(String, String)> {
+    let Ok(manifest) = fs::read_to_string("tests/PASSING.txt") else {
+        return BTreeSet::new();
+    };
+    manifest
+        .lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            if line.is_empty() {
+                return None;
+            }
+            let (feature, name) = line.split_once('/')?;
+            Some((feature.to_string(), name.to_string()))
+        })
+        .collect()
 }
 
 fn check_manifest(reports: &[Report], reference_mode: bool) -> usize {

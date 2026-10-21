@@ -203,3 +203,5 @@ c_basics/macro_rescan
 negative/unterminated_if
 negative/stray_endif
 negative/multiple_inheritance
+negative/include_cycle
+negative/nesting_depth_limit
