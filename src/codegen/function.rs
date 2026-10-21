@@ -80,13 +80,69 @@ impl<'a> Codegen<'a> {
             if let Some(&goffset) = self.global_offsets.get(&gname) {
                 if let Type::Struct(sname) = gty.strip_const() {
                     self.global_dtors.push((sname.clone(), goffset));
-                    let arg_types = Vec::new();
-                    if let Some(ctor_idx) = self.find_constructor(sname, &arg_types) {
-                        code.push(OP_I32_CONST);
-                        write_i32(code, goffset as i32);
-                        code.push(OP_CALL);
-                        write_u32(code, ctor_idx);
-                    } else if let Some(Expr::InitializerList(list)) = init_opt.as_ref()
+                    let mut constructed = false;
+                    if let Some(Expr::Call { callee, args }) = init_opt.as_ref()
+                        && matches!(&**callee, Expr::Identifier(cname) if cname == sname)
+                    {
+                        let arg_types: Vec<Type> = args
+                            .iter()
+                            .map(|arg| self.get_expr_type(arg, ctx))
+                            .collect();
+                        if let Some((ctor_idx, sig)) =
+                            self.find_constructor_sig(sname, &arg_types)
+                        {
+                            code.push(OP_I32_CONST);
+                            write_i32(code, goffset as i32);
+                            for (i, arg) in args.iter().enumerate() {
+                                self.compile_call_arg(
+                                    arg,
+                                    sig.param_types.get(i + 1),
+                                    ctx,
+                                    code,
+                                )?;
+                            }
+                            code.push(OP_CALL);
+                            write_u32(code, ctor_idx);
+                            constructed = true;
+                        }
+                    }
+                    if !constructed
+                        && let Some(Expr::InitializerList(list)) = init_opt.as_ref()
+                    {
+                        let arg_types: Vec<Type> = list
+                            .iter()
+                            .map(|arg| self.get_expr_type(arg, ctx))
+                            .collect();
+                        if let Some((ctor_idx, sig)) =
+                            self.find_constructor_sig(sname, &arg_types)
+                        {
+                            code.push(OP_I32_CONST);
+                            write_i32(code, goffset as i32);
+                            for (i, arg) in list.iter().enumerate() {
+                                self.compile_call_arg(
+                                    arg,
+                                    sig.param_types.get(i + 1),
+                                    ctx,
+                                    code,
+                                )?;
+                            }
+                            code.push(OP_CALL);
+                            write_u32(code, ctor_idx);
+                            constructed = true;
+                        }
+                    }
+                    if !constructed {
+                        let arg_types = Vec::new();
+                        if let Some(ctor_idx) = self.find_constructor(sname, &arg_types) {
+                            code.push(OP_I32_CONST);
+                            write_i32(code, goffset as i32);
+                            code.push(OP_CALL);
+                            write_u32(code, ctor_idx);
+                            constructed = true;
+                        }
+                    }
+                    if !constructed
+                        && let Some(Expr::InitializerList(list)) = init_opt.as_ref()
                         && let Some(layout) = self.sema.struct_layouts.get(sname)
                     {
                         for (i, item) in list.iter().enumerate() {

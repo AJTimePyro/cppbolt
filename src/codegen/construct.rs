@@ -18,10 +18,12 @@ impl<'a> Codegen<'a> {
             QualifiedName::new(class_name).alternate(),
             short_name
         );
+        let mut saw_declared_constructor = false;
         for qual_name in &[&q1, &q2] {
             let Some(sigs) = self.sema.functions.get(*qual_name) else {
                 continue;
             };
+            saw_declared_constructor = true;
             let Some(sig) = self.best_constructor_overload(sigs, arg_types) else {
                 continue;
             };
@@ -35,7 +37,7 @@ impl<'a> Codegen<'a> {
                 return Some((idx, sig));
             }
         }
-        if arg_types.is_empty() {
+        if !saw_declared_constructor && arg_types.is_empty() {
             self.default_constructor_sig(class_name, short_name)
         } else {
             None
