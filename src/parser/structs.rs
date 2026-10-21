@@ -78,8 +78,18 @@ impl Parser {
                         break;
                     }
                 }
+                let base_token = self.current().clone();
                 match self.advance().kind.clone() {
-                    TokenKind::Ident(base) => base_classes.push(base),
+                    TokenKind::Ident(base) => {
+                        if !base_classes.is_empty() {
+                            return Err(CompileError::new(
+                                "multiple inheritance is not supported",
+                                base_token.line,
+                                base_token.col,
+                            ));
+                        }
+                        base_classes.push(base);
+                    }
                     _ => {
                         return Err(CompileError::new(
                             "Expected base class name",

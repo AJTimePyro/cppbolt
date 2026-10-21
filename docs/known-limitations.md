@@ -3,8 +3,8 @@
 The compiler is a correctness-focused subset implementation and does not optimize generated code. Templates,
 standard containers and algorithms, exceptions, RTTI, lambdas, threads, SFINAE, concepts, rvalue references,
 friends, and virtual inheritance remain intentionally out of scope. Virtual base specifiers are rejected with
-`virtual inheritance is not supported`. Multiple inheritance is only partially supported: data layout and
-constructors work, but non-static method lookup follows the first base class.
+`virtual inheritance is not supported`. Multiple inheritance is rejected at the second base specifier with
+`multiple inheritance is not supported`; single inheritance and one base subobject remain supported.
 
 Source-map fidelity through nested macro expansion is incomplete. The code generator is still being decomposed
 and its frame/scratch allocation is conservative. The corpus and ABI gates are Rust binaries plus Node-hosted

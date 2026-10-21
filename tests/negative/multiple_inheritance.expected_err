@@ -1,1 +1,1 @@
-tests/negative/multiple_inheritance.cpp:5:1: error: multiple inheritance with a polymorphic secondary base is not supported
+tests/negative/multiple_inheritance.cpp:5:15: error: multiple inheritance is not supported

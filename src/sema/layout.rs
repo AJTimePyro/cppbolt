@@ -1,11 +1,10 @@
 use super::*;
 
 impl Sema {
-    /// Computes field offsets, base-subobject offsets, and vtable slot order.
+    /// Computes field offsets, base-subobject offset, and vtable slot order.
     ///
-    /// Only the primary base may be polymorphic; a polymorphic secondary base
-    /// is rejected because this backend does not adjust virtual dispatch
-    /// through secondary subobjects.
+    /// The parser permits at most one base class, so layout handles one base
+    /// subobject. A single polymorphic base contributes the vtable.
     pub(super) fn compute_struct_layout(
         &mut self,
         name: &str,
@@ -35,8 +34,8 @@ impl Sema {
             max_align = 4;
         }
 
-        self.layout_base_subobjects(
-            base_classes,
+        self.layout_base_subobject(
+            base_classes.first(),
             &mut offset,
             &mut max_align,
             &mut struct_fields,
@@ -114,13 +113,12 @@ impl Sema {
         }
     }
 
-    /// Lays out every base subobject in declaration order. Only the primary
-    /// base contributes the vtable; non-virtual multiple bases are laid out
-    /// consecutively so inherited fields keep distinct offsets.
+    /// Lays out the single supported base subobject. Only one base is allowed;
+    /// the parser rejects a second base specifier.
     #[allow(clippy::too_many_arguments)]
-    fn layout_base_subobjects(
+    fn layout_base_subobject(
         &mut self,
-        base_classes: &[String],
+        base_class: Option<&String>,
         offset: &mut usize,
         max_align: &mut usize,
         struct_fields: &mut Vec<StructField>,
@@ -129,45 +127,38 @@ impl Sema {
         line: usize,
         col: usize,
     ) -> Result<(), CompileError> {
-        for (index, base_name) in base_classes.iter().enumerate() {
-            let Some(base_layout) = self.struct_layouts.get(base_name).cloned() else {
-                continue;
-            };
-            if index > 0 && base_layout.has_vtable {
-                return Err(CompileError::new(
-                    "multiple inheritance with a polymorphic secondary base is not supported",
-                    line,
-                    col,
-                ));
+        let Some(base_name) = base_class else {
+            return Ok(());
+        };
+        let Some(base_layout) = self.struct_layouts.get(base_name).cloned() else {
+            return Ok(());
+        };
+        let base_offset = if *offset == 0
+            && base_layout.fields.is_empty()
+            && !base_layout.has_vtable
+        {
+            0
+        } else {
+            let align = base_layout.align.max(1);
+            if !(*offset).is_multiple_of(align) {
+                *offset += align - (*offset % align);
             }
-            let base_offset = if index == 0
-                && *offset == 0
-                && base_layout.fields.is_empty()
-                && !base_layout.has_vtable
-            {
-                0
-            } else {
-                let align = base_layout.align.max(1);
-                if !(*offset).is_multiple_of(align) {
-                    *offset += align - (*offset % align);
-                }
-                let base_offset = *offset;
-                *offset = offset
-                    .checked_add(base_layout.size)
-                    .ok_or_else(|| CompileError::new("object layout is too large", 1, 1))?;
-                base_offset
-            };
-            *max_align = (*max_align).max(base_layout.align);
-            base_offsets.push((base_name.clone(), base_offset));
-            if index == 0 && base_layout.has_vtable {
-                *vtable_slots = base_layout.vtable_slots.clone();
-            }
-            for mut bf in base_layout.fields {
-                bf.offset = base_offset
-                    .checked_add(bf.offset)
-                    .ok_or_else(|| CompileError::new("object layout is too large", 1, 1))?;
-                struct_fields.push(bf);
-            }
+            let base_offset = *offset;
+            *offset = offset
+                .checked_add(base_layout.size)
+                .ok_or_else(|| CompileError::new("object layout is too large", line, col))?;
+            base_offset
+        };
+        *max_align = (*max_align).max(base_layout.align);
+        base_offsets.push((base_name.clone(), base_offset));
+        if base_layout.has_vtable {
+            *vtable_slots = base_layout.vtable_slots.clone();
+        }
+        for mut bf in base_layout.fields {
+            bf.offset = base_offset
+                .checked_add(bf.offset)
+                .ok_or_else(|| CompileError::new("object layout is too large", line, col))?;
+            struct_fields.push(bf);
         }
         Ok(())
     }
@@ -207,7 +198,7 @@ impl Sema {
         methods: &[FunctionDecl],
     ) -> std::collections::HashSet<String> {
         let mut pure_virtuals = std::collections::HashSet::new();
-        for base_name in base_classes {
+        if let Some(base_name) = base_classes.first() {
             if let Some(base_layout) = self.struct_layouts.get(base_name) {
                 for pv in &base_layout.pure_virtuals {
                     pure_virtuals.insert(pv.clone());

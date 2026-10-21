@@ -183,13 +183,6 @@ impl<'a> Codegen<'a> {
         {
             return Some(result);
         }
-        for (base, _) in layout.base_offsets.iter().skip(1) {
-            if let Some(result) = self.find_method_filtered(base, method_name, arg_types, receiver)
-                && result.1.is_static
-            {
-                return Some(result);
-            }
-        }
         None
     }
 }

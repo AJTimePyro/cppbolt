@@ -7,9 +7,10 @@ preprocessor. The mini library covers `iostream`, `string`, `cstdio`, `cmath`, a
 
 Templates, `vector`, `map`, `set`, `algorithm`, lambdas, exceptions, RTTI, threads, SFINAE, variadic templates,
 concepts, rvalue references, friends, and virtual inheritance are not implemented; a virtual base specifier is
-rejected with `virtual inheritance is not supported`. Multiple inheritance is limited to data layout and
-constructors, with non-static method lookup following the first base class. The tests in
-`tests/templates_operators` and the container portion of `tests/mini_stl` document these boundaries.
+rejected with `virtual inheritance is not supported`. Multiple inheritance is rejected at the second base
+specifier with `multiple inheritance is not supported`; single inheritance and linear inheritance chains remain
+supported. The tests in `tests/templates_operators` and the container portion of `tests/mini_stl` document these
+boundaries.
 
 Every supported behavior must have a positive corpus test. Unsupported syntax must be rejected by parser or
 semantic diagnostics, not by searching source text.

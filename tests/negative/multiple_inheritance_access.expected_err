@@ -1,0 +1,1 @@
+tests/negative/multiple_inheritance_access.cpp:5:22: error: multiple inheritance is not supported
