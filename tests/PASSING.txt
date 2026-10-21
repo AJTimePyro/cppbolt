@@ -73,6 +73,7 @@ classes_oop/contextual_bool_comprehensive
 classes_oop/copy_semantics
 classes_oop/ctor_default_argument
 classes_oop/derived_member_hiding
+classes_oop/direct_initialization_elision
 classes_oop/explicit_dtor
 classes_oop/function_local_statics
 classes_oop/function_pointer_comparator
@@ -118,6 +119,7 @@ classes_oop_variant/contextual_bool_comprehensive
 classes_oop_variant/copy_semantics
 classes_oop_variant/ctor_default_argument
 classes_oop_variant/derived_member_hiding
+classes_oop_variant/direct_initialization_elision
 classes_oop_variant/explicit_dtor
 classes_oop_variant/function_local_statics
 classes_oop_variant/function_pointer_comparator

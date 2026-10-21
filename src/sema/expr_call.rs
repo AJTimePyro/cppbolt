@@ -30,6 +30,17 @@ impl Sema {
                 None
             };
             if let Some(sname) = sname_match {
+                // C++17 guarantees that a prvalue of the class initializes
+                // the temporary directly, so `T x(T(1))` and `T x = T(1)`
+                // construct the object instead of copying it.
+                if let [only] = args.as_slice()
+                    && matches!(arg_types[0].strip_const(), Type::Struct(other) if *other == sname)
+                    && matches!(only, Expr::Call { .. })
+                {
+                    let inner = std::mem::replace(&mut args[0], Expr::BoolLiteral(false));
+                    *expr = inner;
+                    return Ok(Type::Struct(sname));
+                }
                 // A constructor call may leave out arguments that have
                 // default values.
                 self.fill_constructor_defaults(&sname, &arg_types, args)?;

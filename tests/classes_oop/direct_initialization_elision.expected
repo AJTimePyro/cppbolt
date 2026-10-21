@@ -1,0 +1,22 @@
+-- direct initialization from a prvalue --
+Value ctor 1
+a.number = 1
+-- copy initialization from a prvalue --
+Value ctor 2
+b.number = 2
+-- direct initialization from an lvalue --
+Value ctor 3
+Value copy ctor 3
+d.number = 3
+-- direct initialization from a call --
+Value ctor 7
+e.number = 7
+-- copy initialization from a call --
+Value ctor 7
+f.number = 7
+-- direct initialization with two arguments --
+Pair ctor 8 9
+g.left = 8, g.right = 9
+-- copy initialization with two arguments --
+Pair ctor 10 11
+h.left = 10, h.right = 11

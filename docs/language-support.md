@@ -14,3 +14,10 @@ boundaries.
 
 Every supported behavior must have a positive corpus test. Unsupported syntax must be rejected by parser or
 semantic diagnostics, not by searching source text.
+
+## Copy elision
+
+A prvalue of a class initializes its destination directly, as C++17 guarantees, so the copy constructor does not
+run for `T x(T(1))`, `T x = T(1)`, `T x(f())`, or `T x = f()` when `f` returns a prvalue. An lvalue initializes
+its destination with the copy constructor, so `T x(y)` runs it. The copy of a named local in a `return` statement
+is not elided: the standard requires the copy constructor to run, and the compiler runs it.

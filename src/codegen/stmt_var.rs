@@ -249,6 +249,14 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let arg_types: Vec<Type> = args.iter().map(|a| self.get_expr_type(a, ctx)).collect();
+        // A single argument of the same class is a copy initialization: the
+        // copy constructor runs for an lvalue, and a prvalue initializes the
+        // object directly.
+        if let [only] = args
+            && matches!(arg_types[0].strip_const(), Type::Struct(other) if other == sname)
+        {
+            return self.compile_struct_value_init(sname, only, offset, ctx, code);
+        }
         if let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types) {
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.fp_local);
