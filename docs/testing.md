@@ -17,7 +17,7 @@ the exit code reflects unexpected failures only. It exits 1 for a listed test fa
 a missing manifest test, a variant-gate failure, an independent-manifest mismatch, or a group that could not be
 executed.
 
-The current baseline is 246 tests, 246 executed, 227 passed, and 19 expected failures: six template tests and
+The current baseline is 253 tests, 253 executed, 234 passed, and 19 expected failures: six template tests and
 thirteen container/algorithm tests. Reproduce it with:
 
 ```sh
@@ -54,14 +54,10 @@ large `lvalue_matrix` pair; see [Generated differential tests](#generated-differ
 
 ### Name/value variants (anti-hardcoding only)
 
-The runner warns for the following 28 pairs because their sources differ only in identifiers or literals. They
-are retained as anti-hardcoding checks and are not independent or specification evidence; no separate
-independent tests were added for them.
-
+The runner warns for the following 27 pairs because their sources differ only in identifiers or literals.
 - `c_basics_variant/large_local_frame`
 - `c_basics_variant/lvalue_matrix`
 - `c_basics_variant/rounding_ties`
-- `c_basics_variant/ternary_mixed_types`
 - `c_basics_variant/using_declaration_precedence`
 - `classes_oop_variant/chained_compound_assign`
 - `classes_oop_variant/const_method_overload`
@@ -69,7 +65,7 @@ independent tests were added for them.
 - `classes_oop_variant/explicit_dtor`
 - `classes_oop_variant/global_static_objects`
 - `classes_oop_variant/implicit_copy_member_objects`
-- `classes_oop_variant/member_reference_return`
+- `classes_oop_variant/operator_unary_overload`
 - `classes_oop_variant/placement_new`
 - `classes_oop_variant/prvalue_elision`
 - `classes_oop_variant/pure_virtual`
@@ -86,7 +82,6 @@ independent tests were added for them.
 - `mini_stl_variant/iostream_precision_after_fixed`
 - `mini_stl_variant/iostream_width_double`
 - `mini_stl_variant/stream_edge_cases`
-
 
 ### Independent tests
 
