@@ -185,6 +185,27 @@ impl<'a> Preprocessor<'a> {
                     self.handle_pragma(argument, current_file);
                     output_lines.push(SourceLine::empty(file, line_number));
                 }
+                "error" => {
+                    let col = directive_column(line);
+                    let message = if argument.is_empty() {
+                        "#error".to_string()
+                    } else {
+                        format!("#error {argument}")
+                    };
+                    return Err(
+                        CompileError::new(message, line_number, col).at(file, line_number, col)
+                    );
+                }
+                "warning" => {
+                    let col = directive_column(line);
+                    let message = if argument.is_empty() {
+                        "#warning".to_string()
+                    } else {
+                        format!("#warning {argument}")
+                    };
+                    eprintln!("{file}:{line_number}:{col}: warning: {message}");
+                    output_lines.push(SourceLine::empty(file, line_number));
+                }
                 _ => output_lines.push(SourceLine::empty(file, line_number)),
             }
         }
@@ -335,6 +356,11 @@ impl Default for Preprocessor<'static> {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Returns the 1-based column of the leading `#` on a directive line.
+fn directive_column(line: &str) -> usize {
+    line.chars().take_while(|c| c.is_whitespace()).count() + 1
 }
 
 fn split_directive(directive_line: &str) -> (&str, &str) {

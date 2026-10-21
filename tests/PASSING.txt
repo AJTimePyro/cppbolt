@@ -195,3 +195,5 @@ c_basics/preprocessor_macros
 negative/virtual_inheritance
 c_basics/printf_extended
 c_basics/malloc_failure
+c_basics/warning_directive
+negative/error_directive
