@@ -236,14 +236,14 @@ impl Sema {
             .get(&q1)
             .or_else(|| self.functions.get(&q2))
             .or_else(|| {
-                self.open_namespaces
-                    .iter()
-                    .find_map(|ns| self.functions.get(&format!("{}::{}", ns, name)))
-            })
-            .or_else(|| {
                 self.using_decls
                     .get(name)
                     .and_then(|full| self.functions.get(full))
+            })
+            .or_else(|| {
+                self.open_namespaces
+                    .iter()
+                    .find_map(|ns| self.functions.get(&format!("{}::{}", ns, name)))
             })
             .cloned();
         if candidates.is_none() {
