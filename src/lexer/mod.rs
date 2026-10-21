@@ -61,114 +61,120 @@ impl<'a> Lexer<'a> {
             let start_col = self.col;
             let start_offset = self.pos as u32;
 
-            if c.is_whitespace() {
-                self.advance();
-                continue;
-            }
-
-            if c == '/' && self.peek_next() == Some('/') {
-                self.advance();
-                self.advance();
-                while let Some(ch) = self.peek() {
-                    self.advance();
-                    if ch == '\n' {
-                        break;
-                    }
-                }
-                continue;
-            }
-
-            if c == '/' && self.peek_next() == Some('*') {
-                self.advance();
-                self.advance();
-                let mut closed = false;
-                while let Some(ch) = self.advance() {
-                    if ch == '*' && self.peek() == Some('/') {
-                        self.advance();
-                        closed = true;
-                        break;
-                    }
-                }
-                if !closed {
-                    return Err(CompileError::new(
-                        "Unterminated block comment",
-                        start_line,
-                        start_col,
-                    ));
-                }
+            if self.skip_trivia(c, start_line, start_col)? {
                 continue;
             }
 
             if c == '"' {
                 let value = self.read_string(start_line, start_col)?;
-                let mut token = Token::new(TokenKind::StringLiteral(value), start_line, start_col);
-                token.span = Span::new(
-                    self.file_id,
-                    start_line as u32,
-                    start_col as u32,
-                    self.pos as u32 - start_offset,
+                self.push_token(
+                    &mut tokens,
+                    TokenKind::StringLiteral(value),
+                    start_line,
+                    start_col,
+                    start_offset,
                 );
-                tokens.push(token);
                 continue;
             }
 
             if c == '\'' {
                 let value = self.read_char_literal(start_line, start_col)?;
-                let mut token = Token::new(TokenKind::CharLiteral(value), start_line, start_col);
-                token.span = Span::new(
-                    self.file_id,
-                    start_line as u32,
-                    start_col as u32,
-                    self.pos as u32 - start_offset,
+                self.push_token(
+                    &mut tokens,
+                    TokenKind::CharLiteral(value),
+                    start_line,
+                    start_col,
+                    start_offset,
                 );
-                tokens.push(token);
                 continue;
             }
 
             if c.is_ascii_digit()
                 || (c == '.' && self.peek_next().is_some_and(|next| next.is_ascii_digit()))
             {
-                let mut token = self.read_number(start_line, start_col)?;
-                token.span = Span::new(
-                    self.file_id,
-                    start_line as u32,
-                    start_col as u32,
-                    self.pos as u32 - start_offset,
-                );
-                tokens.push(token);
+                let kind = self.read_number(start_line, start_col)?.kind;
+                self.push_token(&mut tokens, kind, start_line, start_col, start_offset);
                 continue;
             }
 
             if c.is_alphabetic() || c == '_' {
                 let ident = self.read_ident();
                 let kind = classify_word(&ident);
-                let mut token = Token::new(kind, start_line, start_col);
-                token.span = Span::new(
-                    self.file_id,
-                    start_line as u32,
-                    start_col as u32,
-                    self.pos as u32 - start_offset,
-                );
-                tokens.push(token);
+                self.push_token(&mut tokens, kind, start_line, start_col, start_offset);
                 continue;
             }
 
             self.advance();
             let kind = self.scan_operator(c, start_line, start_col)?;
-            let mut token = Token::new(kind, start_line, start_col);
-            token.span = Span::new(
-                self.file_id,
-                start_line as u32,
-                start_col as u32,
-                self.pos as u32 - start_offset,
-            );
-            tokens.push(token);
+            self.push_token(&mut tokens, kind, start_line, start_col, start_offset);
         }
 
         let mut eof = Token::new(TokenKind::Eof, self.line, self.col);
         eof.span = Span::new(self.file_id, self.line as u32, self.col as u32, 0);
         tokens.push(eof);
         Ok(tokens)
+    }
+
+    fn skip_trivia(
+        &mut self,
+        c: char,
+        start_line: usize,
+        start_col: usize,
+    ) -> Result<bool, CompileError> {
+        if c.is_whitespace() {
+            self.advance();
+            return Ok(true);
+        }
+        if c == '/' && self.peek_next() == Some('/') {
+            self.advance();
+            self.advance();
+            while let Some(ch) = self.peek() {
+                self.advance();
+                if ch == '\n' {
+                    break;
+                }
+            }
+            return Ok(true);
+        }
+        if c == '/' && self.peek_next() == Some('*') {
+            self.advance();
+            self.advance();
+            let mut closed = false;
+            while let Some(ch) = self.advance() {
+                if ch == '*' && self.peek() == Some('/') {
+                    self.advance();
+                    closed = true;
+                    break;
+                }
+            }
+            if !closed {
+                return Err(CompileError::new(
+                    "Unterminated block comment",
+                    start_line,
+                    start_col,
+                ));
+            }
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    fn push_token(
+        &self,
+        tokens: &mut Vec<Token>,
+        kind: TokenKind,
+        line: usize,
+        col: usize,
+        start_offset: u32,
+    ) {
+        let mut token = Token::new(kind, line, col);
+        token.span = Span::new(
+            self.file_id,
+            line as u32,
+            col as u32,
+            self.pos as u32 - start_offset,
+        );
+        tokens.push(token);
     }
 
     fn read_ident(&mut self) -> String {

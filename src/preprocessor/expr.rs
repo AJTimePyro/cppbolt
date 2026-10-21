@@ -107,6 +107,24 @@ struct IfExpr<'a> {
     line: usize,
 }
 
+struct EvalState {
+    values: Vec<i64>,
+    operators: Vec<Op>,
+    paren_guards: Vec<DepthGuard>,
+    expect_operand: bool,
+}
+
+impl EvalState {
+    fn new() -> Self {
+        Self {
+            values: Vec::new(),
+            operators: Vec::new(),
+            paren_guards: Vec::new(),
+            expect_operand: true,
+        }
+    }
+}
+
 impl<'a> IfExpr<'a> {
     fn new(text: &str, depth: &'a DepthCounter, line: usize) -> Self {
         Self {
@@ -119,114 +137,127 @@ impl<'a> IfExpr<'a> {
 
     fn evaluate(mut self) -> Result<i64, CompileError> {
         let tokens = self.tokenize()?;
-        let mut values: Vec<i64> = Vec::new();
-        let mut operators: Vec<Op> = Vec::new();
-        let mut paren_guards: Vec<DepthGuard> = Vec::new();
-        let mut expect_operand = true;
-
+        let mut state = EvalState::new();
         for token in tokens {
-            match token {
-                Token::Number(value) => {
-                    values.push(value);
-                    expect_operand = false;
-                }
-                Token::LParen => {
-                    paren_guards.push(self.depth.enter(self.line, 1)?);
-                    operators.push(Op::LParen);
-                    expect_operand = true;
-                }
-                Token::RParen => {
-                    while let Some(op) = operators.last().copied() {
-                        match op {
-                            Op::LParen => break,
-                            Op::Question | Op::Colon => {
-                                return Err(self.error("expected ':' before ')' in #if expression"));
-                            }
-                            _ => {
-                                operators.pop();
-                                reduce(&mut values, op).map_err(|message| self.error(message))?;
-                            }
-                        }
-                    }
-                    if operators.pop() != Some(Op::LParen) {
-                        return Err(self.error("unmatched ')' in #if expression"));
-                    }
-                    if paren_guards.pop().is_none() {
-                        return Err(self.error("unmatched ')' in #if expression"));
-                    }
-                    expect_operand = false;
-                }
-                Token::Question => {
-                    // The condition is complete; reduce operators that bind
-                    // more tightly than the conditional operator.
-                    while let Some(op) = operators.last().copied() {
-                        if matches!(op, Op::LParen | Op::Question | Op::Colon) {
-                            break;
-                        }
-                        operators.pop();
-                        reduce(&mut values, op).map_err(|message| self.error(message))?;
-                    }
-                    operators.push(Op::Question);
-                    expect_operand = true;
-                }
-                Token::Colon => {
-                    while let Some(op) = operators.last().copied() {
-                        match op {
-                            Op::Question | Op::LParen => break,
-                            _ => {
-                                operators.pop();
-                                reduce(&mut values, op).map_err(|message| self.error(message))?;
-                            }
-                        }
-                    }
-                    if operators.pop() != Some(Op::Question) {
-                        return Err(self.error("expected '?' before ':' in #if expression"));
-                    }
-                    operators.push(Op::Colon);
-                    expect_operand = true;
-                }
-                Token::Operator(text) => {
-                    let op = if matches!(text, "!" | "~")
-                        || (expect_operand && matches!(text, "+" | "-"))
-                    {
-                        Op::Unary(text)
-                    } else {
-                        Op::Binary(text)
-                    };
-                    if matches!(op, Op::Binary(_)) {
-                        while let Some(top) = operators.last().copied() {
-                            if matches!(top, Op::LParen | Op::Question | Op::Colon) {
-                                break;
-                            }
-                            if top.precedence() < op.precedence() {
-                                break;
-                            }
-                            operators.pop();
-                            reduce(&mut values, top).map_err(|message| self.error(message))?;
-                        }
-                    }
-                    operators.push(op);
-                    expect_operand = true;
-                }
-            }
+            self.apply_token(token, &mut state)?;
         }
 
-        while let Some(op) = operators.pop() {
+        while let Some(op) = state.operators.pop() {
             match op {
                 Op::LParen => return Err(self.error("unmatched '(' in #if expression")),
                 Op::Question => return Err(self.error("expected ':' in #if expression")),
-                _ => reduce(&mut values, op).map_err(|message| self.error(message))?,
+                _ => reduce(&mut state.values, op).map_err(|message| self.error(message))?,
             }
         }
-        if !paren_guards.is_empty() {
+        if !state.paren_guards.is_empty() {
             return Err(self.error("unmatched '(' in #if expression"));
         }
-        if values.len() != 1 {
+        if state.values.len() != 1 {
             return Err(self.error("invalid #if expression"));
         }
-        values
+        state
+            .values
             .pop()
             .ok_or_else(|| self.error("invalid #if expression"))
+    }
+
+    fn apply_token(&self, token: Token, state: &mut EvalState) -> Result<(), CompileError> {
+        match token {
+            Token::Number(value) => {
+                state.values.push(value);
+                state.expect_operand = false;
+            }
+            Token::LParen => {
+                state.paren_guards.push(self.depth.enter(self.line, 1)?);
+                state.operators.push(Op::LParen);
+                state.expect_operand = true;
+            }
+            Token::RParen => self.close_paren(state)?,
+            Token::Question => self.push_question(state)?,
+            Token::Colon => self.push_colon(state)?,
+            Token::Operator(text) => self.push_operator(text, state)?,
+        }
+        Ok(())
+    }
+
+    fn close_paren(&self, state: &mut EvalState) -> Result<(), CompileError> {
+        while let Some(op) = state.operators.last().copied() {
+            match op {
+                Op::LParen => break,
+                Op::Question | Op::Colon => {
+                    return Err(self.error("expected ':' before ')' in #if expression"));
+                }
+                _ => {
+                    state.operators.pop();
+                    reduce(&mut state.values, op).map_err(|message| self.error(message))?;
+                }
+            }
+        }
+        if state.operators.pop() != Some(Op::LParen) {
+            return Err(self.error("unmatched ')' in #if expression"));
+        }
+        if state.paren_guards.pop().is_none() {
+            return Err(self.error("unmatched ')' in #if expression"));
+        }
+        state.expect_operand = false;
+        Ok(())
+    }
+
+    fn push_question(&self, state: &mut EvalState) -> Result<(), CompileError> {
+        // The condition is complete; reduce operators that bind more tightly
+        // than the conditional operator.
+        while let Some(op) = state.operators.last().copied() {
+            if matches!(op, Op::LParen | Op::Question | Op::Colon) {
+                break;
+            }
+            state.operators.pop();
+            reduce(&mut state.values, op).map_err(|message| self.error(message))?;
+        }
+        state.operators.push(Op::Question);
+        state.expect_operand = true;
+        Ok(())
+    }
+
+    fn push_colon(&self, state: &mut EvalState) -> Result<(), CompileError> {
+        while let Some(op) = state.operators.last().copied() {
+            match op {
+                Op::Question | Op::LParen => break,
+                _ => {
+                    state.operators.pop();
+                    reduce(&mut state.values, op).map_err(|message| self.error(message))?;
+                }
+            }
+        }
+        if state.operators.pop() != Some(Op::Question) {
+            return Err(self.error("expected '?' before ':' in #if expression"));
+        }
+        state.operators.push(Op::Colon);
+        state.expect_operand = true;
+        Ok(())
+    }
+
+    fn push_operator(&self, text: &'static str, state: &mut EvalState) -> Result<(), CompileError> {
+        let op = if matches!(text, "!" | "~") || (state.expect_operand && matches!(text, "+" | "-"))
+        {
+            Op::Unary(text)
+        } else {
+            Op::Binary(text)
+        };
+        if matches!(op, Op::Binary(_)) {
+            while let Some(top) = state.operators.last().copied() {
+                if matches!(top, Op::LParen | Op::Question | Op::Colon) {
+                    break;
+                }
+                if top.precedence() < op.precedence() {
+                    break;
+                }
+                state.operators.pop();
+                reduce(&mut state.values, top).map_err(|message| self.error(message))?;
+            }
+        }
+        state.operators.push(op);
+        state.expect_operand = true;
+        Ok(())
     }
 
     fn tokenize(&mut self) -> Result<Vec<Token>, CompileError> {
@@ -277,33 +308,7 @@ impl<'a> IfExpr<'a> {
                 }));
                 continue;
             }
-            let rest: String = self.chars[self.pos..].iter().collect();
-            let operator = ["||", "&&", "==", "!=", "<=", ">=", "<<", ">>"]
-                .into_iter()
-                .find(|op| rest.starts_with(op))
-                .or_else(|| {
-                    let single = rest.chars().next()?;
-                    matches!(
-                        single,
-                        '|' | '&' | '^' | '<' | '>' | '+' | '-' | '*' | '/' | '%' | '!' | '~'
-                    )
-                    .then_some(match single {
-                        '|' => "|",
-                        '&' => "&",
-                        '^' => "^",
-                        '<' => "<",
-                        '>' => ">",
-                        '+' => "+",
-                        '-' => "-",
-                        '*' => "*",
-                        '/' => "/",
-                        '%' => "%",
-                        '!' => "!",
-                        '~' => "~",
-                        _ => unreachable!(),
-                    })
-                });
-            let Some(operator) = operator else {
+            let Some(operator) = self.scan_operator() else {
                 return Err(self.error("unexpected character in #if expression"));
             };
             self.pos += operator.chars().count();
@@ -371,6 +376,36 @@ impl<'a> IfExpr<'a> {
         }
         self.pos += 1;
         Ok(value as i64)
+    }
+
+    /// Reads the next operator of a `#if` expression.
+    fn scan_operator(&self) -> Option<&'static str> {
+        let rest: String = self.chars[self.pos..].iter().collect();
+        ["||", "&&", "==", "!=", "<=", ">=", "<<", ">>"]
+            .into_iter()
+            .find(|op| rest.starts_with(op))
+            .or_else(|| {
+                let single = rest.chars().next()?;
+                matches!(
+                    single,
+                    '|' | '&' | '^' | '<' | '>' | '+' | '-' | '*' | '/' | '%' | '!' | '~'
+                )
+                .then_some(match single {
+                    '|' => "|",
+                    '&' => "&",
+                    '^' => "^",
+                    '<' => "<",
+                    '>' => ">",
+                    '+' => "+",
+                    '-' => "-",
+                    '*' => "*",
+                    '/' => "/",
+                    '%' => "%",
+                    '!' => "!",
+                    '~' => "~",
+                    _ => unreachable!(),
+                })
+            })
     }
 
     fn error(&self, message: &str) -> CompileError {
