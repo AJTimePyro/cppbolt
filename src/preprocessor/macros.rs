@@ -105,8 +105,15 @@ impl Preprocessor<'_> {
             match definition {
                 MacroDef::Object(body) => {
                     disabled.insert(ident.clone());
-                    result.push_str(&self.expand_with_hide_set(body, disabled));
+                    let expanded = self.expand_with_hide_set(body, disabled);
                     disabled.remove(&ident);
+                    if let Some(joined) =
+                        self.expand_joined(&expanded, &chars[index..], &ident, disabled)
+                    {
+                        result.push_str(&joined);
+                        return result;
+                    }
+                    result.push_str(&expanded);
                 }
                 MacroDef::Function { params, body } => {
                     let mut call_start = index;
@@ -128,8 +135,15 @@ impl Preprocessor<'_> {
                             let substituted =
                                 substitute_body(body, params, &raw_args, &expanded_args);
                             disabled.insert(ident.clone());
-                            result.push_str(&self.expand_with_hide_set(&substituted, disabled));
+                            let expanded = self.expand_with_hide_set(&substituted, disabled);
                             disabled.remove(&ident);
+                            if let Some(joined) =
+                                self.expand_joined(&expanded, &chars[end_index..], &ident, disabled)
+                            {
+                                result.push_str(&joined);
+                                return result;
+                            }
+                            result.push_str(&expanded);
                             index = end_index;
                         }
                         None => result.push_str(&ident),
@@ -139,6 +153,40 @@ impl Preprocessor<'_> {
         }
 
         result
+    }
+
+    /// Rescans an expansion together with the following source tokens when the
+    /// expansion ends in a function-like macro name and the next non-space
+    /// source character is `(`. This makes `ID(INC)(4)` expand `INC`, whose
+    /// invocation continues in the original token stream.
+    fn expand_joined(
+        &self,
+        expanded: &str,
+        tail: &[char],
+        exclude: &str,
+        disabled: &mut HashSet<String>,
+    ) -> Option<String> {
+        let trimmed = expanded.trim_end();
+        let start = trimmed
+            .rfind(|c: char| !is_ident_continue(c))
+            .map(|index| index + 1)
+            .unwrap_or(0);
+        let name = &trimmed[start..];
+        if name.is_empty() || name == exclude || !is_valid_ident(name) {
+            return None;
+        }
+        if !matches!(self.macros.get(name), Some(MacroDef::Function { .. })) {
+            return None;
+        }
+        let mut next = 0;
+        while next < tail.len() && tail[next].is_whitespace() {
+            next += 1;
+        }
+        if tail.get(next) != Some(&'(') {
+            return None;
+        }
+        let tail: String = tail.iter().collect();
+        Some(self.expand_with_hide_set(&format!("{expanded}{tail}"), disabled))
     }
 }
 
@@ -349,6 +397,19 @@ mod tests {
     #[test]
     fn expands_function_arguments_and_rescans_body() -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(expand(&["ID(x) x", "A 7"], "ID(A)")?, "7");
+        Ok(())
+    }
+
+    #[test]
+    fn rescans_expansion_with_following_invocation() -> Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(
+            expand(&["ID(x) x", "INC(x) ((x)+1)"], "ID(INC)(4)")?,
+            "((4)+1)"
+        );
+        assert_eq!(
+            expand(&["G F", "F(x) ((x)+1)"], "G(4)")?,
+            "((4)+1)"
+        );
         Ok(())
     }
 
