@@ -34,9 +34,31 @@ impl<'a> Codegen<'a> {
                 self.compile_reference_local(init_expr, offset, ctx, code)?;
             }
         } else if let Type::Struct(sname) = ty.strip_const() {
-            self.compile_struct_local(sname, ty, init, offset, name, stmt, ctx, code)?;
+            self.compile_struct_local(
+                LocalDecl {
+                    struct_name: sname.as_str(),
+                    ty,
+                    init,
+                    offset,
+                    name,
+                    stmt,
+                },
+                ctx,
+                code,
+            )?;
         } else if let Type::Array(elem_ty, count) = ty.strip_const() {
-            self.compile_array_local(elem_ty, *count, offset, name, init, stmt, ctx, code)?;
+            self.compile_array_local(
+                ArrayLocal {
+                    elem_ty,
+                    count: *count,
+                    offset,
+                    name,
+                    init,
+                    stmt,
+                },
+                ctx,
+                code,
+            )?;
         } else if let Some(init_expr) = init {
             self.compile_scalar_local(init_expr, ty, offset, ctx, code)?;
         }
@@ -83,18 +105,21 @@ impl<'a> Codegen<'a> {
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn compile_struct_local(
         &mut self,
-        sname: &String,
-        ty: &Type,
-        init: &Option<Expr>,
-        offset: u32,
-        name: &str,
-        stmt: &Stmt,
+        decl: LocalDecl<'_>,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let LocalDecl {
+            struct_name,
+            ty,
+            init,
+            offset,
+            name,
+            stmt,
+        } = decl;
+        let sname = &struct_name.to_string();
         let Some(scope) = ctx.scope_objects.last_mut() else {
             return Err(CompileError::new(
                 "internal compiler error: missing object scope",
@@ -120,20 +145,33 @@ impl<'a> Codegen<'a> {
             write_u32(code, 0);
         }
 
-        self.compile_struct_init(sname, ty, init, offset, ctx, code)?;
+        self.compile_struct_init(
+            StructInit {
+                struct_name: sname,
+                ty,
+                offset,
+            },
+            init,
+            ctx,
+            code,
+        )?;
 
         Ok(())
     }
 
     fn compile_struct_init(
         &mut self,
-        sname: &String,
-        ty: &Type,
+        decl: StructInit<'_>,
         init: &Option<Expr>,
-        offset: u32,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let StructInit {
+            struct_name,
+            ty,
+            offset,
+        } = decl;
+        let sname = &struct_name.to_string();
         let Some(init_expr) = init else {
             self.compile_struct_default_constructor(sname, offset, ctx, code);
             return Ok(());
@@ -141,7 +179,15 @@ impl<'a> Codegen<'a> {
         match init_expr {
             Expr::InitializerList(list) => {
                 self.compile_struct_initializer_list(
-                    sname, ty, list, init_expr, offset, ctx, code,
+                    list,
+                    init_expr,
+                    StructInit {
+                        struct_name,
+                        ty,
+                        offset,
+                    },
+                    ctx,
+                    code,
                 )?;
             }
             Expr::Call { callee, args } if matches!(&**callee, Expr::Identifier(cname) if cname == sname) =>
@@ -153,17 +199,20 @@ impl<'a> Codegen<'a> {
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn compile_struct_initializer_list(
         &mut self,
-        sname: &String,
-        ty: &Type,
         list: &[Expr],
         init_expr: &Expr,
-        offset: u32,
+        decl: StructInit<'_>,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let StructInit {
+            struct_name,
+            ty,
+            offset,
+        } = decl;
+        let sname = &struct_name.to_string();
         let arg_types: Vec<Type> = list
             .iter()
             .map(|item| self.get_expr_type(item, ctx))
@@ -309,18 +358,20 @@ impl<'a> Codegen<'a> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn compile_array_local(
         &mut self,
-        elem_ty: &Type,
-        count: usize,
-        offset: u32,
-        name: &str,
-        init: &Option<Expr>,
-        stmt: &Stmt,
+        decl: ArrayLocal<'_>,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let ArrayLocal {
+            elem_ty,
+            count,
+            offset,
+            name,
+            init,
+            stmt,
+        } = decl;
         let elem_size = u32::try_from(elem_ty.size_of(&self.sema.struct_sizes))
             .map_err(|_| crate::internal_error!(stmt.line, stmt.col, "array is too large"))?;
         let init_list = match init {

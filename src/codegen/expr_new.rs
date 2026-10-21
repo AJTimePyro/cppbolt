@@ -123,7 +123,16 @@ impl<'a> Codegen<'a> {
         self.compile_array_new_size_check(elem_size, ctx, code);
         match has_struct {
             Some(sname) => {
-                self.compile_array_new_struct(&sname, elem_size, count_slot, base_slot, ctx, code);
+                self.compile_array_new_struct(
+                    &sname,
+                    ArraySlots {
+                        elem_size,
+                        count_slot,
+                    },
+                    base_slot,
+                    ctx,
+                    code,
+                );
             }
             None => self.compile_array_new_plain(ctx, code),
         }
@@ -200,19 +209,31 @@ impl<'a> Codegen<'a> {
     fn compile_array_new_struct(
         &mut self,
         sname: &str,
-        elem_size: i32,
-        count_slot: u32,
+        slots: ArraySlots,
         base_slot: u32,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) {
+        let ArraySlots {
+            elem_size,
+            count_slot,
+        } = slots;
         self.emit_array_struct_alloc(count_slot, base_slot, ctx, code);
 
         let ctor_idx = self.find_constructor(sname, &[]);
         let v_off = self.vtable_offsets.get(sname).copied();
 
         if ctor_idx.is_some() || v_off.is_some() {
-            self.emit_array_element_loop(ctor_idx, v_off, elem_size, count_slot, ctx, code);
+            self.emit_array_element_loop(
+                ctor_idx,
+                v_off,
+                ArraySlots {
+                    elem_size,
+                    count_slot,
+                },
+                ctx,
+                code,
+            );
             // Constructors may clobber scratch locals, so reload the
             // user pointer from its frame slot.
             self.emit_array_reload_user_ptr(base_slot, ctx, code);
@@ -276,11 +297,14 @@ impl<'a> Codegen<'a> {
         &mut self,
         ctor_idx: Option<u32>,
         v_off: Option<u32>,
-        elem_size: i32,
-        count_slot: u32,
+        slots: ArraySlots,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) {
+        let ArraySlots {
+            elem_size,
+            count_slot,
+        } = slots;
         code.push(OP_I32_CONST);
         write_i32(code, 0);
         code.push(OP_LOCAL_SET);

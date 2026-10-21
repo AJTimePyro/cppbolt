@@ -101,7 +101,16 @@ impl<'a> Codegen<'a> {
         let (target_slot, matched_slot, any_match_slot) =
             self.emit_switch_slots(switch_is_wide, ctx, code)?;
 
-        self.emit_switch_default_scan(body, target_slot, any_match_slot, switch_is_wide, ctx, code);
+        self.emit_switch_default_scan(
+            body,
+            SwitchSlots {
+                target_slot,
+                matched_slot: any_match_slot,
+                switch_is_wide,
+            },
+            ctx,
+            code,
+        );
 
         code.push(OP_BLOCK);
         code.push(0x40); // break block
@@ -120,9 +129,11 @@ impl<'a> Codegen<'a> {
                         self.emit_switch_case(
                             s,
                             *val,
-                            target_slot,
-                            matched_slot,
-                            switch_is_wide,
+                            SwitchSlots {
+                                target_slot,
+                                matched_slot,
+                                switch_is_wide,
+                            },
                             ctx,
                             code,
                         )?;
@@ -205,12 +216,15 @@ impl<'a> Codegen<'a> {
     fn emit_switch_default_scan(
         &mut self,
         body: &Stmt,
-        target_slot: u32,
-        any_match_slot: u32,
-        switch_is_wide: bool,
+        slots: SwitchSlots,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) {
+        let SwitchSlots {
+            target_slot,
+            matched_slot: any_match_slot,
+            switch_is_wide,
+        } = slots;
         // Compute that once because case bodies may clobber scratch locals.
         if let StmtKind::Compound(stmts) = &body.kind {
             for s in stmts {
@@ -232,17 +246,19 @@ impl<'a> Codegen<'a> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn emit_switch_case(
         &mut self,
         stmt: &Stmt,
         val: i64,
-        target_slot: u32,
-        matched_slot: u32,
-        switch_is_wide: bool,
+        slots: SwitchSlots,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let SwitchSlots {
+            target_slot,
+            matched_slot,
+            switch_is_wide,
+        } = slots;
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.fp_local);
         code.push(OP_I32_LOAD);

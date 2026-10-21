@@ -26,23 +26,43 @@ impl<'a> Codegen<'a> {
                 object,
                 member,
                 is_arrow,
-            } => self.compile_member_call(object, member, *is_arrow, args, ctx, code),
-            Expr::Identifier(name) => {
-                self.compile_named_call(callee, name, args, &arg_types, ctx, code)
-            }
+            } => self.compile_member_call(
+                MemberAccess {
+                    object,
+                    member,
+                    is_arrow: *is_arrow,
+                },
+                args,
+                ctx,
+                code,
+            ),
+            Expr::Identifier(name) => self.compile_named_call(
+                NamedCall {
+                    callee,
+                    name,
+                    class_name: None,
+                },
+                args,
+                &arg_types,
+                ctx,
+                code,
+            ),
             _ => self.compile_indirect_call(callee, args, ctx, code),
         }
     }
 
     fn compile_member_call(
         &mut self,
-        object: &Expr,
-        member: &str,
-        is_arrow: bool,
+        access: MemberAccess<'_>,
         args: &[Expr],
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let MemberAccess {
+            object,
+            member,
+            is_arrow,
+        } = access;
         let arg_types: Vec<Type> = args.iter().map(|a| self.get_expr_type(a, ctx)).collect();
         let obj_ty = self.get_expr_type_raw(object, ctx);
         let is_ref = obj_ty.is_reference();
@@ -87,25 +107,22 @@ impl<'a> Codegen<'a> {
 
         let layout = self.sema.struct_layouts.get(&sname);
         let is_virtual = layout.and_then(|l| l.vtable_slots.iter().position(|s| s == member));
+        let site = CallSite {
+            class_name: &sname,
+            member,
+            args,
+            slot_idx: 0,
+            this_slot,
+            fn_slot,
+            receiver_const,
+        };
 
         if let Some(slot_idx) = is_virtual {
-            self.compile_member_call_virtual(
-                &sname,
-                member,
-                args,
-                slot_idx,
-                this_slot,
-                fn_slot,
-                receiver_const,
-                ctx,
-                code,
-            )?;
+            self.compile_member_call_virtual(CallSite { slot_idx, ..site }, ctx, code)?;
         } else if let Some((m_idx, sig)) =
             self.find_method_for_receiver(&sname, member, &arg_types, receiver_const)
         {
-            self.compile_member_call_direct(
-                &sname, member, args, &sig, m_idx, this_slot, ctx, code,
-            )?;
+            self.compile_member_call_direct(site, &sig, m_idx, ctx, code)?;
         } else {
             return Err(CompileError::new(
                 format!("Method '{}' not found in class '{}'", member, sname),
@@ -117,19 +134,21 @@ impl<'a> Codegen<'a> {
     }
 
     /// Emits a virtual method call through the object's vtable.
-    #[allow(clippy::too_many_arguments)]
     fn compile_member_call_virtual(
         &mut self,
-        sname: &str,
-        member: &str,
-        args: &[Expr],
-        slot_idx: usize,
-        this_slot: u32,
-        fn_slot: u32,
-        receiver_const: bool,
+        site: CallSite<'_>,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let CallSite {
+            class_name: sname,
+            member,
+            args,
+            slot_idx,
+            this_slot,
+            fn_slot,
+            receiver_const,
+        } = site;
         // Virtual dispatch via vtable
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.fp_local);
@@ -202,18 +221,17 @@ impl<'a> Codegen<'a> {
     }
 
     /// Emits a direct (non-virtual) method call.
-    #[allow(clippy::too_many_arguments)]
     fn compile_member_call_direct(
         &mut self,
-        _sname: &str,
-        _member: &str,
-        args: &[Expr],
+        site: CallSite<'_>,
         sig: &FunctionSig,
         m_idx: u32,
-        this_slot: u32,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let CallSite {
+            args, this_slot, ..
+        } = site;
         if !sig.is_static {
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.fp_local);
@@ -243,13 +261,17 @@ impl<'a> Codegen<'a> {
 
     fn compile_named_call(
         &mut self,
-        callee: &Expr,
-        name: &str,
+        call: NamedCall<'_>,
         args: &[Expr],
         arg_types: &[Type],
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let NamedCall {
+            callee,
+            name,
+            class_name,
+        } = call;
         let math_opcode = match name {
             "sqrt_d" | "std::sqrt_d" | "sqrt" | "std::sqrt" => Some(OP_F64_SQRT),
             "floor_d" | "std::floor_d" | "floor" | "std::floor" => Some(OP_F64_FLOOR),
@@ -274,8 +296,20 @@ impl<'a> Codegen<'a> {
         if ctx.var_offsets.contains_key(name) || self.global_offsets.contains_key(name) {
             return self.compile_function_pointer_call(callee, args, ctx, code);
         }
-        if let Some(cls) = ctx.current_class.clone() {
-            return self.compile_in_class_call(&cls, name, args, arg_types, ctx, code);
+        if let Some(cls) = ctx.current_class.clone()
+            && class_name.is_none()
+        {
+            return self.compile_in_class_call(
+                NamedCall {
+                    callee,
+                    name,
+                    class_name: Some(&cls),
+                },
+                args,
+                arg_types,
+                ctx,
+                code,
+            );
         }
         if let Some((func_idx, sig)) = self.find_function(name, arg_types) {
             for (i, a) in args.iter().enumerate() {
@@ -361,13 +395,16 @@ impl<'a> Codegen<'a> {
 
     fn compile_in_class_call(
         &mut self,
-        cls: &str,
-        name: &str,
+        call: NamedCall<'_>,
         args: &[Expr],
         arg_types: &[Type],
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let NamedCall {
+            name, class_name, ..
+        } = call;
+        let cls = class_name.unwrap_or("");
         if let Some((m_idx, sig)) = self.find_method(cls, name, arg_types) {
             code.push(OP_LOCAL_GET);
             write_u32(code, 0); // this

@@ -5,6 +5,7 @@ mod call_args;
 mod call_types;
 mod cond;
 mod construct;
+mod emit_context;
 mod expr;
 mod expr_assign;
 mod expr_binary;
@@ -43,6 +44,10 @@ use crate::wasm::*;
 use analysis::{
     FuncCandidate, FuncDeclRef, check_stmt_has_new_delete, collect_address_taken_expr,
     collect_address_taken_stmt, collect_static_vars, collect_stmt_calls, collect_type_lifecycle,
+};
+use emit_context::{
+    ArrayLocal, ArraySlots, BinaryTypes, CallSite, CtorCall, LocalDecl, MemberAccess, NamedCall,
+    ScalarAssign, StructInit, SwitchSlots,
 };
 use program::Plan;
 use std::collections::{HashMap, HashSet};

@@ -69,7 +69,16 @@ impl<'a> Codegen<'a> {
             && let Type::Struct(psname) = clean_p
             && let Some(ctor_idx) = self.find_constructor(psname, std::slice::from_ref(clean_a))
         {
-            self.compile_call_arg_ref_temp(a, psname, ctor_idx, clean_p, ctx, code)?;
+            self.compile_call_arg_ref_temp(
+                a,
+                clean_p,
+                CtorCall {
+                    type_name: psname,
+                    ctor_idx,
+                },
+                ctx,
+                code,
+            )?;
             return Ok(());
         }
         self.compile_lvalue_addr(a, ctx, code)?;
@@ -81,12 +90,15 @@ impl<'a> Codegen<'a> {
     fn compile_call_arg_ref_temp(
         &mut self,
         a: &Expr,
-        psname: &str,
-        ctor_idx: u32,
         clean_p: &Type,
+        ctor: CtorCall<'_>,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let CtorCall {
+            type_name: psname,
+            ctor_idx,
+        } = ctor;
         let size = i32::try_from(clean_p.size_of(&self.sema.struct_sizes))
             .map_err(|_| crate::internal_error!(0, 0, "object is too large"))?;
         let temp_ptr_slot = ctx.alloc_frame(4, 4)?;

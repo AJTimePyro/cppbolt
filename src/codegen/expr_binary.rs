@@ -93,7 +93,17 @@ impl<'a> Codegen<'a> {
             } else {
                 None
             };
-            self.emit_binary_node(op, &lty, &rty, left, right, ctx, code)?;
+            self.emit_binary_node(
+                BinaryTypes {
+                    op,
+                    left_ty: &lty,
+                    right_ty: &rty,
+                },
+                left,
+                right,
+                ctx,
+                code,
+            )?;
             lty = self
                 .binary_result_type(op, &lty, &rty)
                 .strip_reference()
@@ -103,19 +113,21 @@ impl<'a> Codegen<'a> {
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn emit_binary_node(
         &mut self,
-        op: &BinaryOp,
-        lty: &Type,
-        rty: &Type,
+        types: BinaryTypes<'_>,
         left: Option<&Expr>,
         right: &Expr,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let BinaryTypes {
+            op,
+            left_ty: lty,
+            right_ty: rty,
+        } = types;
         let pointer_diff_elem = self.pointer_difference_element(op, lty, rty)?;
-        if self.emit_overloaded_binary_node(op, lty, rty, left, right, ctx, code)? {
+        if self.emit_overloaded_binary_node(types, left, right, ctx, code)? {
             return Ok(());
         }
         let lraw = lty.strip_const();
@@ -204,17 +216,19 @@ impl<'a> Codegen<'a> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn emit_overloaded_binary_node(
         &mut self,
-        op: &BinaryOp,
-        lty: &Type,
-        rty: &Type,
+        types: BinaryTypes<'_>,
         left: Option<&Expr>,
         right: &Expr,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<bool, CompileError> {
+        let BinaryTypes {
+            op,
+            left_ty: lty,
+            right_ty: rty,
+        } = types;
         if (matches!(lty.strip_const(), Type::Struct(_) | Type::Enum(_))
             || matches!(rty.strip_const(), Type::Struct(_) | Type::Enum(_)))
             && let Some(op_name) = op.op_name()

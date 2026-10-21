@@ -246,20 +246,32 @@ impl<'a> Codegen<'a> {
             write_u32(code, m_idx);
             return Ok(());
         }
-        self.compile_compound_assign_scalar(op, target, value, &ty, &val_ty, ctx, code)
+        self.compile_compound_assign_scalar(
+            target,
+            value,
+            ScalarAssign {
+                op,
+                ty: &ty,
+                value_ty: &val_ty,
+            },
+            ctx,
+            code,
+        )
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn compile_compound_assign_scalar(
         &mut self,
-        op: &BinaryOp,
         target: &Expr,
         value: &Expr,
-        ty: &Type,
-        val_ty: &Type,
+        assign: ScalarAssign<'_>,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let ScalarAssign {
+            op,
+            ty,
+            value_ty: val_ty,
+        } = assign;
         let is_pointer_arithmetic =
             ty.is_pointer() && (op == &BinaryOp::Add || op == &BinaryOp::Sub);
         let arithmetic_ty = if is_pointer_arithmetic {
