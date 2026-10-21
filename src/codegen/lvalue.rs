@@ -49,9 +49,10 @@ impl<'a> Codegen<'a> {
                 member,
                 is_arrow,
             } => self.compile_lvalue_member(object, member, is_arrow, ctx, code),
-            Expr::Call { .. } | Expr::Binary { .. } | Expr::Unary { .. } => {
-                self.compile_lvalue_value(expr, ctx, code)
-            }
+            Expr::Call { .. }
+            | Expr::Binary { .. }
+            | Expr::Unary { .. }
+            | Expr::CompoundAssign { .. } => self.compile_lvalue_value(expr, ctx, code),
             _ => self.compile_lvalue_temporary(expr, ctx, code),
         }
     }
