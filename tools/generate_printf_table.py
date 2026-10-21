@@ -73,8 +73,12 @@ def main() -> int:
                 spec += conv
                 add(f"float_{conv}_{ci}_{si}", spec, repr(value))
 
-    # Zero padding must fall back to spaces for infinities and NaN.
-    specials = [("inf", "inf"), ("-inf", "-inf"), ("nan", "nan")]
+    # Zero padding must fall back to spaces for infinities.
+    #
+    # NaN is deliberately absent: its sign is implementation defined, so g++
+    # prints "nan" where clang++ prints "-nan" for the same expression.  The
+    # sign-independent properties of a NaN are checked separately below.
+    specials = [("inf", "inf"), ("-inf", "-inf")]
     float_modes = ["f", "e", "g"]
     special_flags = ["0", "+0", " 0", "-0"]
     for value_name, value in specials:
@@ -86,6 +90,14 @@ def main() -> int:
                         "%" + flags + str(width) + conv,
                         value,
                     )
+
+    # Sign-independent properties of a NaN.  Every compiler agrees on these,
+    # unlike the printed form of the value itself.
+    nan_checks = [
+        ("nan_is_not_equal_to_itself", "nan != nan"),
+        ("nan_is_not_less_than_zero", "!(nan < 0.0)"),
+        ("nan_is_not_greater_than_zero", "!(nan > 0.0)"),
+    ]
 
     # %c honors width and ignores precision and the zero flag.
     for char in ("'A'", "'z'", "'0'"):
@@ -111,6 +123,8 @@ def main() -> int:
     ]
     for label, fmt, value in calls:
         lines.append(f'    std::printf("{label} [{fmt}]\\n", {value});')
+    for label, expr in nan_checks:
+        lines.append(f'    std::printf("{label} [%d]\\n", {expr} ? 1 : 0);')
     lines += ["    return 0;", "}", ""]
 
     CPP.write_text("\n".join(lines), encoding="utf-8")

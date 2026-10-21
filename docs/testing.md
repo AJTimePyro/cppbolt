@@ -51,6 +51,8 @@ parameter matrices mechanically and are explicitly not independent.
 Some variants are generated rather than hand-written. For example, `tools/generate_lvalue_matrix.py` emits the
 large `lvalue_matrix` pair; see [Generated differential tests](#generated-differential-tests).
 `tools/generate_printf_table.py` emits `tests/c_basics/printf_table.cpp` with its g++-generated expected output.
+The table covers infinities but not NaN: the sign of a NaN is implementation defined, so g++ prints `nan` where
+clang++ prints `-nan` for the same expression. Only sign-independent properties of a NaN are checked.
 
 ### Name/value variants (anti-hardcoding only)
 
