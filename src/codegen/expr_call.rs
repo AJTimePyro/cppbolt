@@ -323,15 +323,32 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let callee_ty = self.get_expr_type(callee, ctx);
+        let param_types = match callee_ty.strip_const() {
+            Type::Pointer(inner) => match inner.strip_const() {
+                Type::Function { param_types, .. } => Some(param_types.clone()),
+                _ => None,
+            },
+            Type::Function { param_types, .. } => Some(param_types.clone()),
+            _ => None,
+        };
+
         let mut params_wasm = Vec::new();
-        for a in args {
+        for (i, a) in args.iter().enumerate() {
             let aty = self.get_expr_type(a, ctx);
-            self.compile_expr(a, ctx, code)?;
-            params_wasm.push(wasm_value_type(&aty));
+            let param_ty = param_types.as_ref().and_then(|params| params.get(i));
+            if param_ty.map(|p| p.is_reference()).unwrap_or(false) {
+                self.compile_lvalue_addr(a, ctx, code)?;
+            } else {
+                self.compile_expr(a, ctx, code)?;
+                if let Some(pty) = param_ty {
+                    self.emit_conversion(&aty, pty, code);
+                }
+            }
+            params_wasm.push(wasm_value_type(param_ty.unwrap_or(&aty)));
         }
         self.compile_expr(callee, ctx, code)?;
 
-        let callee_ty = self.get_expr_type(callee, ctx);
         let ret_ty = callee_return_type(&callee_ty);
         let results_wasm = wasm_result_types(&ret_ty);
 
@@ -465,11 +482,29 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         // General indirect call through an arbitrary callee expression.
+        let callee_ty = self.get_expr_type(callee, ctx);
+        let param_types = match callee_ty.strip_const() {
+            Type::Pointer(inner) => match inner.strip_const() {
+                Type::Function { param_types, .. } => Some(param_types.clone()),
+                _ => None,
+            },
+            Type::Function { param_types, .. } => Some(param_types.clone()),
+            _ => None,
+        };
+
         let mut params_wasm = Vec::new();
-        for a in args {
+        for (i, a) in args.iter().enumerate() {
             let aty = self.get_expr_type(a, ctx);
-            self.compile_expr(a, ctx, code)?;
-            params_wasm.push(wasm_value_type(&aty));
+            let param_ty = param_types.as_ref().and_then(|params| params.get(i));
+            if param_ty.map(|p| p.is_reference()).unwrap_or(false) {
+                self.compile_lvalue_addr(a, ctx, code)?;
+            } else {
+                self.compile_expr(a, ctx, code)?;
+                if let Some(pty) = param_ty {
+                    self.emit_conversion(&aty, pty, code);
+                }
+            }
+            params_wasm.push(wasm_value_type(param_ty.unwrap_or(&aty)));
         }
         if let Expr::Unary {
             op: UnaryOp::Deref,
@@ -481,7 +516,6 @@ impl<'a> Codegen<'a> {
             self.compile_expr(callee, ctx, code)?;
         }
 
-        let callee_ty = self.get_expr_type(callee, ctx);
         let ret_ty = callee_return_type(&callee_ty);
         let results_wasm = wasm_result_types(&ret_ty);
 

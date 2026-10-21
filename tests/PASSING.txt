@@ -221,3 +221,5 @@ c_basics/ternary_mixed_types
 c_basics_variant/ternary_mixed_types
 classes_oop/static_local_constructor_args
 classes_oop_variant/static_local_constructor_args
+mini_stl/iostream_precision_after_fixed
+mini_stl_variant/iostream_precision_after_fixed
