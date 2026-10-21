@@ -107,19 +107,29 @@ impl Sema {
         }
     }
 
-    /// Reports a name that is visible through a using-declaration and through
-    /// a using-directive at the same time.
+    /// Reports a name that is visible through more than one using-directive
+    /// or through a using-declaration and a using-directive at the same time.
     pub(super) fn check_ambiguous_name(&self, name: &str) -> Result<(), CompileError> {
+        let mut providers: Vec<&str> = Vec::new();
         if self.using_decls.contains_key(name) {
-            for ns in &self.open_namespaces {
-                if self.global_vars.contains_key(&format!("{}::{}", ns, name)) {
-                    return Err(CompileError::new(
-                        format!("reference to '{}' is ambiguous", name),
-                        self.current_line,
-                        self.current_col,
-                    ));
-                }
+            providers.push("a using-declaration");
+        }
+        let mut seen: Vec<&str> = Vec::new();
+        for ns in &self.open_namespaces {
+            if seen.contains(&ns.as_str()) {
+                continue;
             }
+            if self.global_vars.contains_key(&format!("{}::{}", ns, name)) {
+                seen.push(ns);
+                providers.push(ns);
+            }
+        }
+        if providers.len() > 1 {
+            return Err(CompileError::new(
+                format!("reference to '{}' is ambiguous", name),
+                self.current_line,
+                self.current_col,
+            ));
         }
         Ok(())
     }

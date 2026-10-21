@@ -35,6 +35,42 @@ impl Sema {
         false
     }
 
+    /// Returns true when the conversion to the parameter type uses a
+    /// converting constructor of a class.
+    ///
+    /// A user-defined conversion is worse than a standard conversion, so the
+    /// two need different ranks in the overload resolution.
+    pub(crate) fn is_user_conversion(&self, param: &Type, arg: &Type) -> bool {
+        let param = param.strip_reference().strip_const();
+        let Type::Struct(sname) = param else {
+            return false;
+        };
+        let short_name = sname.split("::").last().unwrap_or(sname);
+        let q1 = format!("{sname}::{short_name}");
+        let q2 = format!("std::{short_name}::{short_name}");
+        let q3 = format!("{short_name}::{short_name}");
+        for q in &[&q1, &q2, &q3] {
+            let Some(sigs) = self.functions.get(*q) else {
+                continue;
+            };
+            for sig in sigs {
+                let params = if sig.param_types.is_empty() {
+                    &[][..]
+                } else {
+                    &sig.param_types[1..]
+                };
+                if params.len() != 1 {
+                    continue;
+                }
+                let converted = params[0].strip_reference().strip_const();
+                if converted != param && self.can_assign(&params[0], arg) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     fn struct_assignable(&self, target: &Type, value: &Type) -> bool {
         let s_target = if let Type::Struct(s) = target {
             Some(QualifiedName::new(s).plain())

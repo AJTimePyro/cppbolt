@@ -19,6 +19,7 @@ c_basics/lvalue_matrix
 c_basics/macro_rescan
 c_basics/malloc_failure
 c_basics/multidim_arrays
+c_basics/overload_resolution
 c_basics/pointers_arrays
 c_basics/preprocessor
 c_basics/preprocessor_macros
@@ -52,6 +53,7 @@ c_basics_variant/large_local_frame
 c_basics_variant/long_long
 c_basics_variant/lvalue_matrix
 c_basics_variant/multidim_arrays
+c_basics_variant/overload_resolution
 c_basics_variant/pointers_arrays
 c_basics_variant/preprocessor
 c_basics_variant/printf_conversions
@@ -192,6 +194,8 @@ mini_stl_variant/stream_edge_cases
 mini_stl_variant/stream_operator_overload
 mini_stl_variant/string_basic
 mini_stl_variant/string_comprehensive
+negative/ambiguous_overload_call
+negative/ambiguous_using_directives
 negative/ambiguous_using_name
 negative/arrow_on_non_pointer
 negative/assign_to_rvalue

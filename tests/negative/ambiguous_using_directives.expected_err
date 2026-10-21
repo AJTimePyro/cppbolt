@@ -1,0 +1,1 @@
+tests/negative/ambiguous_using_directives.cpp:13:5: error: reference to 'shared' is ambiguous

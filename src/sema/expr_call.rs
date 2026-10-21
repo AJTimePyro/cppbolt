@@ -244,6 +244,20 @@ impl Sema {
         CompileError::new(message, pos.line, pos.col)
     }
 
+    /// The diagnostic for a call that no overload matches better than another.
+    fn ambiguous_call(&self, name: &str, arg_types: &[Type], pos: ExprPos) -> CompileError {
+        let arguments: Vec<String> = arg_types.iter().map(|ty| ty.to_c_type()).collect();
+        CompileError::new(
+            format!(
+                "call of overloaded '{}({})' is ambiguous",
+                name,
+                arguments.join(", ")
+            ),
+            pos.line,
+            pos.col,
+        )
+    }
+
     /// The diagnostic for an argument that does not convert to its parameter.
     fn no_matching_conversion(
         &self,
@@ -359,6 +373,9 @@ impl Sema {
         }
         let mut conversion_failure: Option<ConversionFailure> = None;
         let mut expected: Option<usize> = None;
+        let mut best_score = usize::MAX;
+        let mut best: Option<&FunctionSig> = None;
+        let mut ambiguous = false;
         for sig in &overloads {
             let params = if sig.param_types.is_empty() {
                 &[][..]
@@ -376,13 +393,34 @@ impl Sema {
                 continue;
             }
             match self.score_arguments(params, arg_types) {
-                Ok(_) => return Ok(()),
+                Ok(score) => {
+                    // A non-const receiver prefers the non-const overload.
+                    let score = score
+                        + usize::from(!receiver_const && crate::sema::sig_receiver_is_const(sig));
+                    if score < best_score {
+                        best_score = score;
+                        best = Some(sig);
+                        ambiguous = false;
+                    } else if score == best_score
+                        && let Some(best) = best
+                        && !same_parameters(best, sig)
+                    {
+                        // Two overloads convert the arguments equally well.
+                        ambiguous = true;
+                    }
+                }
                 Err(failure) => {
                     if conversion_failure.is_none() {
                         conversion_failure = Some(failure);
                     }
                 }
             }
+        }
+        if ambiguous {
+            return Err(self.ambiguous_call(member, arg_types, pos));
+        }
+        if best.is_some() {
+            return Ok(());
         }
         if let Some(failure) = conversion_failure {
             return Err(self.no_matching_conversion(member, &failure, pos));
@@ -414,6 +452,7 @@ impl Sema {
             let mut best_candidate: Option<(&FunctionSig, Vec<Expr>)> = None;
             let mut best_score = usize::MAX;
             let mut conversion_failure: Option<ConversionFailure> = None;
+            let mut ambiguous = false;
 
             for cand in &candidates {
                 let min_args = cand.default_args.iter().take_while(|d| d.is_none()).count();
@@ -439,13 +478,23 @@ impl Sema {
                             }
                         }
                         best_candidate = Some((cand, full_args));
+                        ambiguous = false;
                         if score == 0 {
                             break; // No candidate can score lower.
                         }
+                    } else if score == best_score
+                        && let Some((best, _)) = best_candidate
+                        && best.param_types != cand.param_types
+                    {
+                        // Two overloads convert the arguments equally well.
+                        ambiguous = true;
                     }
                 }
             }
 
+            if ambiguous {
+                return Err(self.ambiguous_call(name, arg_types, pos));
+            }
             if let Some((cand, full_args)) = best_candidate {
                 let mangled = cand.mangled_name.clone();
                 let ret_type = cand.return_type.clone();
@@ -518,8 +567,16 @@ impl Sema {
                 && p.deref_type().map(|d| d.strip_const()) == Some(arg_ty.strip_const())
             {
                 score += 1;
-            } else if self.can_assign(p, arg_ty) {
+            } else if super::expr_ops::is_promotion(arg_ty, p) {
                 score += 2;
+            } else if self.can_assign(p, arg_ty) {
+                if self.is_user_conversion(p, arg_ty) {
+                    // A converting constructor is worse than a standard
+                    // conversion.
+                    score += 4;
+                } else {
+                    score += 3;
+                }
             } else {
                 return Err(ConversionFailure {
                     index: i,
@@ -571,4 +628,23 @@ impl Sema {
         }
         candidates
     }
+}
+
+/// Returns true when two overloads of a method take the same arguments.
+///
+/// The implicit `this` parameter is not part of the comparison, so a const
+/// overload and a non-const overload are different functions.
+fn same_parameters(first: &FunctionSig, second: &FunctionSig) -> bool {
+    let first_params = if first.param_types.is_empty() {
+        &[][..]
+    } else {
+        &first.param_types[1..]
+    };
+    let second_params = if second.param_types.is_empty() {
+        &[][..]
+    } else {
+        &second.param_types[1..]
+    };
+    first_params == second_params
+        && crate::sema::sig_receiver_is_const(first) == crate::sema::sig_receiver_is_const(second)
 }

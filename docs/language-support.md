@@ -32,3 +32,10 @@ of 'T'` or `no matching conversion for argument N of 'f'`.
 
 One simplification remains: an integer is accepted where a pointer is expected, because the compiler does not
 track the constant-expression rule of a null pointer constant.
+
+## Ambiguity
+
+A name that two using-directives provide is ambiguous, and a call whose arguments convert equally well to two
+overloads is ambiguous. The overload ranking is the one the subset supports: an exact match beats a reference
+binding, which beats a promotion, which beats a standard conversion, which beats a converting constructor. Two
+overloads with the same rank make the call ambiguous.

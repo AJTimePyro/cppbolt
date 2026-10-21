@@ -1,0 +1,1 @@
+tests/negative/ambiguous_overload_call.cpp:11:12: error: call of overloaded 'pick(double)' is ambiguous
