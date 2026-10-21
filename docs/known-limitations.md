@@ -23,7 +23,8 @@ rejected at the 2000 limit before the V8 call stack is exhausted (observed aroun
 wasm build). Include depth is separately limited to 128 (129 is rejected).
 
 The `printf` runtime implements `%d`, `%i`, `%u`, `%o`, `%x`, `%X`, `%c`, `%s`, `%e`, `%E`, `%f`, `%g`, and
-`%G`, including the `h`/`hh` length modifiers, with the `0`, `-`, `+`, space, and `#` flags. Field width and
-precision are honoured for the integer conversions, the floating conversions, and `%s`; `%c` ignores width and
-precision. A `*` precision argument is supported, but a `*` field width is not. `%p` and `%n` are not
-implemented.
+`%G`, including the `h`/`hh` length modifiers, with the `0`, `-`, `+`, space, and `#` flags. The `+` and space
+flags are ignored for unsigned integer conversions. Zero padding falls back to spaces for infinities and NaN, and
+`#` retains the decimal point and trailing zeros for floating conversions. Field width and precision are honoured
+for the integer conversions, the floating conversions, and `%s`; `%c` honours field width and ignores precision.
+A `*` precision argument is supported, but a `*` field width is not. `%p` and `%n` are not implemented.

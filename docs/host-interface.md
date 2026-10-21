@@ -9,7 +9,7 @@ same shim in Node and in browsers; the browser must keep compiler execution off 
 sign and field padding; the generated `printf` adds that count to its own return value. For `print_int`, flags
 are bit 0 zero-pad, bit 1 left-align, bit 2 show `+`, bit 3 space sign, bit 4 uppercase, bit 5 unsigned, and
 bit 6 alternate form. For `print_double`, modes are 0 general, 1 fixed, and 2 scientific; flags are bit 0
-zero-pad, bit 1 left-align, bit 2 show `+`, bit 3 space sign, and bit 4 uppercase.
+zero-pad, bit 1 left-align, bit 2 show `+`, bit 3 space sign, bit 4 uppercase, and bit 6 alternate form.
 
 ## Compiler WebAssembly ABI
 

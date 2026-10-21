@@ -11,14 +11,14 @@ pub(super) fn emit_char_string_conversion(code: &mut Vec<u8>, func_print_char: u
     code.push(OP_I32_EQ);
     code.push(OP_IF);
     code.push(0x40);
+    // Load the character argument.
     code.push(OP_LOCAL_GET);
     write_u32(code, 1);
     code.push(OP_I32_LOAD);
     write_u32(code, 2);
     write_u32(code, 0);
-    code.push(OP_CALL);
-    write_u32(code, func_print_char);
-    super::emit_increment_char_count(code, super::PRINTF_CHAR_COUNT_LOCAL);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 7);
     code.push(OP_LOCAL_GET);
     write_u32(code, 1);
     code.push(OP_I32_CONST);
@@ -26,6 +26,59 @@ pub(super) fn emit_char_string_conversion(code: &mut Vec<u8>, func_print_char: u
     code.push(OP_I32_ADD);
     code.push(OP_LOCAL_SET);
     write_u32(code, 1);
+
+    // Field width applies to %c; precision is ignored. The zero flag is also
+    // ignored, matching the native C library's space padding.
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 4);
+    code.push(OP_I32_CONST);
+    write_i32(code, 0);
+    code.push(OP_I32_GT_U);
+    code.push(OP_IF);
+    code.push(0x40);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 4);
+    code.push(OP_I32_CONST);
+    write_i32(code, 1);
+    code.push(OP_I32_SUB);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 11);
+    code.push(OP_ELSE);
+    code.push(OP_I32_CONST);
+    write_i32(code, 0);
+    code.push(OP_LOCAL_SET);
+    write_u32(code, 11);
+    code.push(OP_END);
+
+    // Right alignment pads before the character.
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 3);
+    code.push(OP_I32_CONST);
+    write_i32(code, 2);
+    code.push(OP_I32_AND);
+    code.push(OP_I32_EQZ);
+    code.push(OP_IF);
+    code.push(0x40);
+    emit_spaces(code, func_print_char, 11);
+    code.push(OP_END);
+
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 7);
+    code.push(OP_CALL);
+    write_u32(code, func_print_char);
+    super::emit_increment_char_count(code, super::PRINTF_CHAR_COUNT_LOCAL);
+
+    // Left alignment pads after the character.
+    code.push(OP_LOCAL_GET);
+    write_u32(code, 3);
+    code.push(OP_I32_CONST);
+    write_i32(code, 2);
+    code.push(OP_I32_AND);
+    code.push(OP_IF);
+    code.push(0x40);
+    emit_spaces(code, func_print_char, 11);
+    code.push(OP_END);
+
     code.push(OP_BR);
     write_u32(code, 1);
     code.push(OP_END);

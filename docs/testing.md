@@ -17,7 +17,7 @@ the exit code reflects unexpected failures only. It exits 1 for a listed test fa
 a missing manifest test, a variant-gate failure, an independent-manifest mismatch, or a group that could not be
 executed.
 
-The current baseline is 226 tests, 226 executed, 207 passed, and 19 expected failures: six template tests and
+The current baseline is 228 tests, 228 executed, 209 passed, and 19 expected failures: six template tests and
 thirteen container/algorithm tests. Reproduce it with:
 
 ```sh
@@ -50,6 +50,7 @@ parameter matrices mechanically and are explicitly not independent.
 
 Some variants are generated rather than hand-written. For example, `tools/generate_lvalue_matrix.py` emits the
 large `lvalue_matrix` pair; see [Generated differential tests](#generated-differential-tests).
+`tools/generate_printf_table.py` emits `tests/c_basics/printf_table.cpp` with its g++-generated expected output.
 
 ### Name/value variants (anti-hardcoding only)
 

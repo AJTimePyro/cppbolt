@@ -206,3 +206,4 @@ negative/multiple_inheritance
 negative/include_cycle
 negative/nesting_depth_limit
 negative/multiple_inheritance_access
+c_basics/printf_table

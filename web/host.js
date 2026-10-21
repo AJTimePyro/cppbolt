@@ -171,28 +171,40 @@
         return (isNeg ? "-" : "") + mStr + "e" + expSign + expVal;
     }
 
-    function formatGExact(vNum, prec) {
+    function formatGExact(vNum, prec, alternate = false) {
         if (isNaN(vNum)) return "nan";
         if (vNum === Infinity) return "inf";
         if (vNum === -Infinity) return "-inf";
-        if (Object.is(vNum, -0)) return "-0";
-        if (vNum === 0) return "0";
         if (!prec || prec <= 0) prec = 1;
+        if (Object.is(vNum, -0) || vNum === 0) {
+            if (!alternate) return Object.is(vNum, -0) ? "-0" : "0";
+            let res = roundToEvenExact(vNum, prec - 1);
+            return res.includes(".") ? res : res + ".";
+        }
         let v = Math.abs(vNum);
         let exp = Math.floor(Math.log10(v));
         let res;
         if (exp < -4 || exp >= prec) {
             res = formatExpExact(vNum, prec - 1);
-            let [m, e] = res.split("e");
-            if (m.includes(".")) {
-                m = m.replace(/0+$/, "").replace(/\.$/, "");
+            if (!alternate) {
+                let [m, e] = res.split("e");
+                if (m.includes(".")) {
+                    m = m.replace(/0+$/, "").replace(/\.$/, "");
+                }
+                res = m + "e" + e;
+            } else if (Number.isFinite(vNum) && !res.includes(".")) {
+                const e = res.indexOf("e");
+                res = e >= 0 ? res.slice(0, e) + "." + res.slice(e) : res + ".";
             }
-            res = m + "e" + e;
         } else {
             let pAfterDot = Math.max(0, prec - 1 - exp);
             res = roundToEvenExact(vNum, pAfterDot);
-            if (res.includes(".")) {
-                res = res.replace(/0+$/, "").replace(/\.$/, "");
+            if (!alternate) {
+                if (res.includes(".")) {
+                    res = res.replace(/0+$/, "").replace(/\.$/, "");
+                }
+            } else if (Number.isFinite(vNum) && !res.includes(".")) {
+                res += ".";
             }
         }
         return res;
@@ -252,9 +264,9 @@
                     let signStr = "";
                     if (isNeg) {
                         signStr = "-";
-                    } else if (isShowSign) {
+                    } else if (!isUnsigned && isShowSign) {
                         signStr = "+";
-                    } else if (isSpaceSign) {
+                    } else if (!isUnsigned && isSpaceSign) {
                         signStr = " ";
                     }
 
@@ -292,16 +304,24 @@
                     return fullStr.length;
                 },
                 print_double: (val, width, precision, mode, flags) => {
+                    const isAlternate = (flags & 64) !== 0;
                     let s = "";
                     if (mode === 0) {
                         const prec = precision >= 0 ? precision : 6;
-                        s = formatGExact(val, prec);
+                        s = formatGExact(val, prec, isAlternate);
                     } else if (mode === 1) {
                         const p = precision >= 0 ? precision : 6;
                         s = roundToEvenExact(val, p);
+                        if (isAlternate && Number.isFinite(val) && !s.includes(".")) {
+                            s += ".";
+                        }
                     } else if (mode === 2) {
                         const p = precision >= 0 ? precision : 6;
                         s = formatExpExact(val, p);
+                        if (isAlternate && Number.isFinite(val) && !s.includes(".")) {
+                            const e = s.indexOf("e");
+                            s = e >= 0 ? s.slice(0, e) + "." + s.slice(e) : s + ".";
+                        }
                     } else {
                         s = String(val);
                     }
@@ -323,7 +343,7 @@
                     }
                     if (width > 0 && sign.length + s.length < width) {
                         const padLen = width - sign.length - s.length;
-                        if (isZeroPad && !isLeftAlign) {
+                        if (isZeroPad && !isLeftAlign && Number.isFinite(val)) {
                             s = sign + "0".repeat(padLen) + s;
                         } else {
                             const pad = " ".repeat(padLen);
