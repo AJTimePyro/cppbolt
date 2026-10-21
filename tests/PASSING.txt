@@ -197,3 +197,4 @@ c_basics/printf_extended
 c_basics/malloc_failure
 c_basics/warning_directive
 negative/error_directive
+c_basics/line_continuation

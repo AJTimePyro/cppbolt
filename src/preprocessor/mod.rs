@@ -136,16 +136,16 @@ impl<'a> Preprocessor<'a> {
         let file = current_file.unwrap_or("<input>");
         let mut output_lines = Vec::new();
         let mut if_stack: Vec<Conditional> = Vec::new();
+        let (logical_lines, physical_lines) = splice_continuations(input);
 
-        for (line_index, line) in input.lines().enumerate() {
-            let line_number = line_index + 1;
+        for (line_number, line) in logical_lines {
             let trimmed = line.trim();
 
             if !trimmed.starts_with('#') {
                 let active = if_stack.last().map(|cond| cond.active).unwrap_or(true);
                 output_lines.push(SourceLine {
                     text: if active {
-                        self.expand_line(line)
+                        self.expand_line(&line)
                     } else {
                         String::new()
                     },
@@ -186,7 +186,7 @@ impl<'a> Preprocessor<'a> {
                     output_lines.push(SourceLine::empty(file, line_number));
                 }
                 "error" => {
-                    let col = directive_column(line);
+                    let col = directive_column(&line);
                     let message = if argument.is_empty() {
                         "#error".to_string()
                     } else {
@@ -197,7 +197,7 @@ impl<'a> Preprocessor<'a> {
                     );
                 }
                 "warning" => {
-                    let col = directive_column(line);
+                    let col = directive_column(&line);
                     let message = if argument.is_empty() {
                         "#warning".to_string()
                     } else {
@@ -213,7 +213,7 @@ impl<'a> Preprocessor<'a> {
         if !if_stack.is_empty() {
             return Err(CompileError::new(
                 "Unterminated #if/#ifdef/#ifndef block at EOF",
-                input.lines().count(),
+                physical_lines.max(1),
                 1,
             ));
         }
@@ -358,6 +358,31 @@ impl Default for Preprocessor<'static> {
     }
 }
 
+/// Joins physical lines ending in a backslash before any directive, macro, or
+/// literal processing. Returns each logical line with its first physical line
+/// number, plus the physical line count for EOF diagnostics.
+fn splice_continuations(input: &str) -> (Vec<(usize, String)>, usize) {
+    let physical: Vec<&str> = input.lines().collect();
+    let mut logical = Vec::new();
+    let mut index = 0;
+    while index < physical.len() {
+        let start_line = index + 1;
+        let mut text = String::new();
+        while index < physical.len() {
+            let line = physical[index];
+            index += 1;
+            if let Some(prefix) = line.strip_suffix('\\') {
+                text.push_str(prefix);
+            } else {
+                text.push_str(line);
+                break;
+            }
+        }
+        logical.push((start_line, text));
+    }
+    (logical, physical.len())
+}
+
 /// Returns the 1-based column of the leading `#` on a directive line.
 fn directive_column(line: &str) -> usize {
     line.chars().take_while(|c| c.is_whitespace()).count() + 1
@@ -376,6 +401,13 @@ mod tests {
     use super::Preprocessor;
     use crate::source::IncludeProvider;
     use std::cell::Cell;
+
+    #[test]
+    fn splices_backslash_newlines_before_processing() {
+        let (lines, physical) = super::splice_continuations("a\\\nb\nc\\\nd\\\ne\n");
+        assert_eq!(lines, vec![(1, "ab".to_string()), (3, "cde".to_string())]);
+        assert_eq!(physical, 5);
+    }
 
     #[test]
     fn origins_survive_include_expansion() -> Result<(), Box<dyn std::error::Error>> {
