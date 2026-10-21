@@ -45,6 +45,9 @@ impl<'a> Codegen<'a> {
     }
 
     /// Picks the lowest-cost constructor overload.
+    ///
+    /// A constructor may take fewer arguments than it has parameters when the
+    /// omitted ones have default values.
     fn best_constructor_overload(
         &self,
         sigs: &[FunctionSig],
@@ -58,15 +61,89 @@ impl<'a> Codegen<'a> {
             } else {
                 &[]
             };
-            let Some(score) = self.score_overload_params(params, arg_types) else {
+            let defaults = if !sig.default_args.is_empty() {
+                &sig.default_args[1..]
+            } else {
+                &[]
+            };
+            if arg_types.len() > params.len() {
+                continue;
+            }
+            // Every omitted argument needs a default value.
+            if defaults.len() < params.len()
+                || !defaults[arg_types.len()..].iter().all(|d| d.is_some())
+            {
+                continue;
+            }
+            // Only the given arguments are scored; the omitted ones have
+            // default values.
+            let Some(score) = self.score_overload_params(&params[..arg_types.len()], arg_types)
+            else {
                 continue;
             };
+            // Prefer the overload with the fewest defaulted arguments.
+            let score = score + (params.len() - arg_types.len()) * 100;
             if score < best_score {
                 best_score = score;
                 best_sig = Some(sig.clone());
             }
         }
         best_sig
+    }
+
+    /// Finds a free operator function whose first parameter binds `operand`.
+    pub fn find_free_operator(&self, name: &str, operand: &Type) -> Option<(u32, FunctionSig)> {
+        let sigs = self.sema.functions.get(name)?;
+        let mut best: Option<FunctionSig> = None;
+        let mut best_score = usize::MAX;
+        for sig in sigs {
+            let Some(param) = sig.param_types.first() else {
+                continue;
+            };
+            let score = if param.strip_all_const() == operand.strip_all_const() {
+                0
+            } else if param.is_reference()
+                && param.deref_type().map(|d| d.strip_all_const())
+                    == Some(operand.strip_all_const())
+            {
+                1
+            } else {
+                continue;
+            };
+            if score < best_score {
+                best_score = score;
+                best = Some(sig.clone());
+            }
+        }
+        let sig = best?;
+        let index = self
+            .func_indices
+            .get(&sig.mangled_name)
+            .copied()
+            .or_else(|| self.func_indices.get(name).copied())?;
+        Some((index, sig))
+    }
+
+    /// The arguments of a constructor call with the default arguments filled
+    /// in.
+    pub fn constructor_arguments(&self, sig: &FunctionSig, args: &[Expr]) -> Vec<Expr> {
+        let mut full: Vec<Expr> = args.to_vec();
+        let params = if !sig.param_types.is_empty() {
+            &sig.param_types[1..]
+        } else {
+            &[]
+        };
+        let defaults = if !sig.default_args.is_empty() {
+            &sig.default_args[1..]
+        } else {
+            &[]
+        };
+        for index in args.len()..params.len() {
+            if let Some(Some(default)) = defaults.get(index) {
+                full.push(default.clone());
+            }
+        }
+        full
     }
 
     /// The implicit default constructor of a class, if it has one.

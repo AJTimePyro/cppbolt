@@ -139,7 +139,8 @@ impl<'a> Codegen<'a> {
         };
         code.push(OP_I32_CONST);
         write_i32(code, global.offset as i32);
-        for (i, arg) in args.iter().enumerate() {
+        let full_args = self.constructor_arguments(&sig, args);
+        for (i, arg) in full_args.iter().enumerate() {
             self.compile_call_arg(arg, sig.param_types.get(i + 1), ctx, code)?;
         }
         code.push(OP_CALL);
@@ -167,7 +168,8 @@ impl<'a> Codegen<'a> {
         };
         code.push(OP_I32_CONST);
         write_i32(code, global.offset as i32);
-        for (i, arg) in list.iter().enumerate() {
+        let full_args = self.constructor_arguments(&sig, list);
+        for (i, arg) in full_args.iter().enumerate() {
             self.compile_call_arg(arg, sig.param_types.get(i + 1), ctx, code)?;
         }
         code.push(OP_CALL);

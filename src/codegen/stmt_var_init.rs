@@ -74,7 +74,8 @@ impl<'a> Codegen<'a> {
             ));
         };
         self.emit_local_address(offset, ctx, code);
-        for (i, arg) in args.iter().enumerate() {
+        let full_args = self.constructor_arguments(&sig, args);
+        for (i, arg) in full_args.iter().enumerate() {
             self.compile_call_arg(arg, sig.param_types.get(i + 1), ctx, code)?;
         }
         code.push(OP_CALL);
@@ -96,7 +97,8 @@ impl<'a> Codegen<'a> {
             .collect();
         if let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types) {
             self.emit_local_address(offset, ctx, code);
-            for (i, arg) in list.iter().enumerate() {
+            let full_args = self.constructor_arguments(&sig, list);
+            for (i, arg) in full_args.iter().enumerate() {
                 self.compile_call_arg(arg, sig.param_types.get(i + 1), ctx, code)?;
             }
             code.push(OP_CALL);

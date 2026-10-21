@@ -30,6 +30,9 @@ impl Sema {
                 None
             };
             if let Some(sname) = sname_match {
+                // A constructor call may leave out arguments that have
+                // default values.
+                self.fill_constructor_defaults(&sname, &arg_types, args)?;
                 return Ok(Type::Struct(sname));
             }
 
@@ -44,7 +47,7 @@ impl Sema {
             }
         }
 
-        if let Some(return_type) = self.analyze_member_callee(callee)? {
+        if let Some(return_type) = self.analyze_member_callee(callee, args)? {
             return Ok(return_type);
         }
 
@@ -74,7 +77,117 @@ impl Sema {
         }
         Ok(Type::Int)
     }
-    fn analyze_member_callee(&mut self, callee: &mut Expr) -> Result<Option<Type>, CompileError> {
+
+    /// Fills in the default arguments of a member call.
+    ///
+    /// The first parameter of a method is the implicit `this`, so the
+    /// arguments start at the second one.
+    fn fill_member_defaults(
+        &mut self,
+        sig: &FunctionSig,
+        args: &mut Vec<Expr>,
+    ) -> Result<(), CompileError> {
+        if sig.param_types.len() < 2 {
+            return Ok(());
+        }
+        let params = &sig.param_types[1..];
+        let defaults = &sig.default_args[1..];
+        if args.len() > params.len() || defaults.len() < params.len() {
+            return Ok(());
+        }
+        let given = args.len();
+        for index in given..params.len() {
+            if let Some(Some(default)) = defaults.get(index) {
+                args.push(default.clone());
+            }
+        }
+        for arg in args[given..].iter_mut() {
+            self.analyze_expr(arg)?;
+        }
+        Ok(())
+    }
+
+    /// Fills in the default arguments of a constructor call.
+    ///
+    /// The constructor overload with the fewest defaulted arguments wins, and
+    /// the default expressions are analyzed like ordinary arguments.
+    fn fill_constructor_defaults(
+        &mut self,
+        class_name: &str,
+        arg_types: &[Type],
+        args: &mut Vec<Expr>,
+    ) -> Result<(), CompileError> {
+        let short = class_name.split("::").last().unwrap_or(class_name);
+        let qualified = format!("{class_name}::{short}");
+        let Some(candidates) = self.functions.get(&qualified).cloned() else {
+            return Ok(());
+        };
+        let mut best: Option<FunctionSig> = None;
+        let mut best_score = usize::MAX;
+        for cand in &candidates {
+            if cand.param_types.len() < 2 {
+                continue;
+            }
+            let params = &cand.param_types[1..];
+            let defaults = &cand.default_args[1..];
+            if args.len() > params.len() || defaults.len() < params.len() {
+                continue;
+            }
+            // Every omitted argument needs a default value.
+            if !defaults[args.len()..].iter().all(|d| d.is_some()) {
+                continue;
+            }
+            let mut score = 0;
+            let mut fits = true;
+            for (index, arg_ty) in arg_types.iter().enumerate() {
+                let param = &params[index];
+                if param.strip_all_const() == arg_ty.strip_all_const() {
+                    continue;
+                }
+                if param.is_reference()
+                    && param.deref_type().map(|d| d.strip_all_const())
+                        == Some(arg_ty.strip_all_const())
+                {
+                    score += 1;
+                    continue;
+                }
+                if self.can_assign(param, arg_ty) {
+                    score += 2;
+                    continue;
+                }
+                fits = false;
+                break;
+            }
+            if !fits {
+                continue;
+            }
+            // Prefer the overload with the fewest defaulted arguments.
+            score += (params.len() - args.len()) * 100;
+            if score < best_score {
+                best_score = score;
+                best = Some(cand.clone());
+            }
+        }
+        let Some(sig) = best else {
+            return Ok(());
+        };
+        let given = args.len();
+        for index in given..sig.param_types.len() - 1 {
+            if let Some(Some(default)) = sig.default_args.get(index + 1) {
+                args.push(default.clone());
+            }
+        }
+        for arg in args[given..].iter_mut() {
+            self.analyze_expr(arg)?;
+        }
+        Ok(())
+    }
+
+    fn analyze_member_callee(
+        &mut self,
+        callee: &mut Expr,
+        args: &mut Vec<Expr>,
+    ) -> Result<Option<Type>, CompileError> {
         if let Expr::MemberAccess {
             object,
             member,
@@ -128,6 +241,9 @@ impl Sema {
             if let Some(sig) =
                 self.find_method_in_class_for_receiver(&struct_name, member, receiver_const)
             {
+                // A member call may leave out arguments that have default
+                // values.
+                self.fill_member_defaults(&sig, args)?;
                 return Ok(Some(sig.return_type.clone()));
             } else {
                 return Err(CompileError::new(

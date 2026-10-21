@@ -252,7 +252,8 @@ impl<'a> Codegen<'a> {
             write_i32(code, offset as i32);
             code.push(OP_I32_ADD); // this
 
-            for (i, a) in args.iter().enumerate() {
+            let full_args = self.constructor_arguments(&sig, args);
+            for (i, a) in full_args.iter().enumerate() {
                 let param_ty = sig.param_types.get(i + 1);
                 self.compile_call_arg(a, param_ty, ctx, code)?;
             }

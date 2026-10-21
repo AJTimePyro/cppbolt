@@ -276,6 +276,12 @@ fn collect_call_node<'a>(expr: &'a Expr, calls: &mut HashSet<String>, stack: &mu
                 calls.insert("operator bool".to_string());
             } else if matches!(op, UnaryOp::Neg) {
                 calls.insert("operator-".to_string());
+            } else if matches!(op, UnaryOp::BitNot) {
+                calls.insert("operator~".to_string());
+            } else if matches!(op, UnaryOp::Plus) {
+                calls.insert("operator+".to_string());
+            } else if matches!(op, UnaryOp::AddrOf) {
+                calls.insert("operator&".to_string());
             } else if matches!(op, UnaryOp::PreInc) {
                 calls.insert("operator++".to_string());
             } else if matches!(op, UnaryOp::PreDec) {

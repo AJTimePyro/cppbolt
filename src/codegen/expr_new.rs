@@ -67,13 +67,14 @@ impl<'a> Codegen<'a> {
                 write_u32(code, 0);
             }
             let arg_types: Vec<Type> = args.iter().map(|a| self.get_expr_type(a, ctx)).collect();
-            if let Some(ctor_idx) = self.find_constructor(sname, &arg_types) {
+            if let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types) {
                 code.push(OP_LOCAL_GET);
                 write_u32(code, ctx.fp_local);
                 code.push(OP_I32_LOAD);
                 write_u32(code, 2);
                 write_u32(code, place_slot); // this
-                for a in args {
+                let full_args = self.constructor_arguments(&sig, args);
+                for a in &full_args {
                     self.compile_expr(a, ctx, code)?;
                 }
                 code.push(OP_CALL);
@@ -447,13 +448,14 @@ impl<'a> Codegen<'a> {
                 write_u32(code, 0);
             }
             let arg_types: Vec<Type> = args.iter().map(|a| self.get_expr_type(a, ctx)).collect();
-            if let Some(ctor_idx) = self.find_constructor(sname, &arg_types) {
+            if let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types) {
                 code.push(OP_LOCAL_GET);
                 write_u32(code, ctx.fp_local);
                 code.push(OP_I32_LOAD);
                 write_u32(code, 2);
                 write_u32(code, obj_slot); // this
-                for a in args {
+                let full_args = self.constructor_arguments(&sig, args);
+                for a in &full_args {
                     self.compile_expr(a, ctx, code)?;
                 }
                 code.push(OP_CALL);

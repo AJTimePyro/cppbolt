@@ -151,11 +151,81 @@ impl Sema {
                 {
                     return Ok(ty);
                 }
+                // A class operand may name an overloaded `operator&`.
+                if let Some(sig) = self.find_unary_operator(UnaryOp::AddrOf, &ty) {
+                    return Ok(sig.return_type);
+                }
                 Ok(Type::Pointer(Box::new(ty)))
             }
-            UnaryOp::BitNot | UnaryOp::Neg | UnaryOp::Plus => Ok(ty.integer_promotion()),
+            UnaryOp::BitNot | UnaryOp::Neg | UnaryOp::Plus => {
+                // A class operand may name an overloaded operator.
+                if let Some(sig) = self.find_unary_operator(*op, &ty) {
+                    return Ok(sig.return_type);
+                }
+                Ok(ty.integer_promotion())
+            }
             UnaryOp::PreInc | UnaryOp::PreDec | UnaryOp::PostInc | UnaryOp::PostDec => Ok(ty),
         }
+    }
+
+    /// Finds the operator that a unary operator on `operand` resolves to.
+    ///
+    /// A member operator of the operand's class wins over a free operator
+    /// function.  Only a class operand can name an operator, so the built-in
+    /// operators are never shadowed by an overload.
+    pub(super) fn find_unary_operator(
+        &self,
+        op: UnaryOp,
+        operand: &Type,
+    ) -> Option<crate::sema::FunctionSig> {
+        let name = match op {
+            UnaryOp::Neg => "operator-",
+            UnaryOp::Not => "operator!",
+            UnaryOp::BitNot => "operator~",
+            UnaryOp::Plus => "operator+",
+            UnaryOp::AddrOf => "operator&",
+            _ => return None,
+        };
+        let Type::Struct(class_name) = operand.strip_const() else {
+            return None;
+        };
+        let receiver_const = crate::sema::receiver_is_const_type(operand);
+        if let Some(sig) = self.find_method_in_class_for_receiver(class_name, name, receiver_const)
+        {
+            return Some(sig);
+        }
+        self.find_free_operator(name, operand)
+    }
+
+    /// Finds a free operator function whose first parameter binds `operand`.
+    pub(super) fn find_free_operator(
+        &self,
+        name: &str,
+        operand: &Type,
+    ) -> Option<crate::sema::FunctionSig> {
+        let sigs = self.functions.get(name)?;
+        let mut best: Option<crate::sema::FunctionSig> = None;
+        let mut best_score = usize::MAX;
+        for sig in sigs {
+            let Some(param) = sig.param_types.first() else {
+                continue;
+            };
+            let score = if param.strip_all_const() == operand.strip_all_const() {
+                0
+            } else if param.is_reference()
+                && param.deref_type().map(|d| d.strip_all_const())
+                    == Some(operand.strip_all_const())
+            {
+                1
+            } else {
+                continue;
+            };
+            if score < best_score {
+                best_score = score;
+                best = Some(sig.clone());
+            }
+        }
+        best
     }
 
     pub(super) fn analyze_assign_expr(&mut self, expr: &mut Expr) -> Result<Type, CompileError> {

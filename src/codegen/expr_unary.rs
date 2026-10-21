@@ -51,6 +51,11 @@ impl<'a> Codegen<'a> {
                 write_u32(code, m_idx);
                 code.push(OP_I32_EQZ);
                 return Ok(());
+            } else if let Some((f_idx, sig)) = self.find_free_operator("operator!", &ty) {
+                self.compile_call_arg(expr, sig.param_types.first(), ctx, code)?;
+                code.push(OP_CALL);
+                write_u32(code, f_idx);
+                return Ok(());
             }
         }
         self.compile_cond(expr, ctx, code)?;
@@ -64,6 +69,23 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let ty = self.get_expr_type(expr, ctx);
+        if let Type::Struct(sname) = ty.strip_const() {
+            if let Some((m_idx, sig)) = self.find_method(sname, "operator~", &[]) {
+                self.compile_lvalue_addr(expr, ctx, code)?;
+                code.push(OP_CALL);
+                write_u32(code, m_idx);
+                self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
+                return Ok(());
+            }
+            if let Some((f_idx, sig)) = self.find_free_operator("operator~", &ty) {
+                self.compile_call_arg(expr, sig.param_types.first(), ctx, code)?;
+                code.push(OP_CALL);
+                write_u32(code, f_idx);
+                self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
+                return Ok(());
+            }
+        }
         self.compile_expr(expr, ctx, code)?;
         code.push(OP_I32_CONST);
         write_i32(code, -1);
@@ -78,14 +100,21 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        if let Type::Struct(sname) = ty.strip_const()
-            && let Some((m_idx, sig)) = self.find_method(sname, "operator-", &[])
-        {
-            self.compile_lvalue_addr(expr, ctx, code)?;
-            code.push(OP_CALL);
-            write_u32(code, m_idx);
-            self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
-            return Ok(());
+        if let Type::Struct(sname) = ty.strip_const() {
+            if let Some((m_idx, sig)) = self.find_method(sname, "operator-", &[]) {
+                self.compile_lvalue_addr(expr, ctx, code)?;
+                code.push(OP_CALL);
+                write_u32(code, m_idx);
+                self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
+                return Ok(());
+            }
+            if let Some((f_idx, sig)) = self.find_free_operator("operator-", ty) {
+                self.compile_call_arg(expr, sig.param_types.first(), ctx, code)?;
+                code.push(OP_CALL);
+                write_u32(code, f_idx);
+                self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
+                return Ok(());
+            }
         }
         if *ty == Type::Double {
             self.compile_expr(expr, ctx, code)?;
@@ -123,6 +152,23 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let ty = self.get_expr_type(expr, ctx);
+        if let Type::Struct(sname) = ty.strip_const() {
+            if let Some((m_idx, sig)) = self.find_method(sname, "operator&", &[]) {
+                self.compile_lvalue_addr(expr, ctx, code)?;
+                code.push(OP_CALL);
+                write_u32(code, m_idx);
+                self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
+                return Ok(());
+            }
+            if let Some((f_idx, sig)) = self.find_free_operator("operator&", &ty) {
+                self.compile_call_arg(expr, sig.param_types.first(), ctx, code)?;
+                code.push(OP_CALL);
+                write_u32(code, f_idx);
+                self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
+                return Ok(());
+            }
+        }
         if let Expr::Identifier(name) = expr
             && let Some(&table_idx) = self.func_table_indices.get(name.as_str())
         {

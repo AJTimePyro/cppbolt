@@ -170,7 +170,16 @@ impl Parser {
                 }
             }
             self.expect(TokenKind::RParen)?;
-            Some(Expr::InitializerList(args))
+            match final_ty.strip_const() {
+                // A parenthesized initializer of a class type is a
+                // constructor call, not an initializer list.
+                Type::Struct(name) => Some(Expr::Call {
+                    callee: Box::new(Expr::Identifier(name.clone())),
+                    args,
+                }),
+                // For every other type it stays a parenthesized list.
+                _ => Some(Expr::InitializerList(args)),
+            }
         } else {
             None
         };

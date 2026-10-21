@@ -93,6 +93,8 @@ impl Parser {
             TokenKind::PlusPlus => "operator++",
             TokenKind::MinusMinus => "operator--",
             TokenKind::Bang => "operator!",
+            TokenKind::Tilde => "operator~",
+            TokenKind::Amp => "operator&",
             TokenKind::Arrow => "operator->",
             TokenKind::KwBool => "operator bool",
             TokenKind::LParen => {
