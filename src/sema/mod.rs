@@ -2,6 +2,7 @@
 
 mod analyze;
 mod assign;
+mod constructor;
 mod expr;
 mod expr_call;
 mod expr_member;

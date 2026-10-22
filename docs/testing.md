@@ -176,11 +176,18 @@ instead of passing silently.
 
 ## Size census
 
-`tools/census.py` counts the functions that are longer than 60, 80, and 100 lines, the functions with more than
+`cppwasm-census` counts the functions that are longer than 60, 80, and 100 lines, the functions with more than
 five parameters, and the files with more than 500 lines:
 
 ```sh
-python3 tools/census.py
+cargo run --release --bin cppwasm-census
 ```
 
-The file budget keeps the modules readable: no file of `src/` is longer than 500 lines.
+The scanner blanks the comments, the string literals, the raw strings, the char literals, and the lifetimes before
+it looks for a function, so a brace inside one of them never ends a function.  The `--tsv` option writes one
+record per function, so the census can be compared with another scanner record by record.
+
+`tests/census_fixture.rs` pins the counts of a fixture that holds every construct the scanner has to survive: an
+impl block, a nested closure, match arms, a macro, a string with braces, a char literal with a quote, and a block
+comment.  The same test requires that no function of the repository is longer than 80 lines, that no function
+takes more than five parameters besides its receiver, and that no file of `src/` is longer than 500 lines.

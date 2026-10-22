@@ -272,35 +272,14 @@ fn collect_call_node<'a>(expr: &'a Expr, calls: &mut HashSet<String>, stack: &mu
         }
         Expr::Unary { op, expr, .. } => {
             stack.push(expr);
-            if matches!(op, UnaryOp::Not) {
-                calls.insert("operator!".to_string());
-                calls.insert("operator bool".to_string());
-            } else if matches!(op, UnaryOp::Neg) {
-                calls.insert("operator-".to_string());
-            } else if matches!(op, UnaryOp::BitNot) {
-                calls.insert("operator~".to_string());
-            } else if matches!(op, UnaryOp::Plus) {
-                calls.insert("operator+".to_string());
-            } else if matches!(op, UnaryOp::AddrOf) {
-                calls.insert("operator&".to_string());
-            } else if matches!(op, UnaryOp::PreInc) {
-                calls.insert("operator++".to_string());
-            } else if matches!(op, UnaryOp::PreDec) {
-                calls.insert("operator--".to_string());
-            }
+            collect_unary_operator(*op, calls);
         }
         Expr::Binary {
             op, left, right, ..
         } => {
             stack.push(left);
             stack.push(right);
-            if matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
-                calls.insert("operator bool".to_string());
-            }
-            if let Some(op_name) = op.op_name() {
-                calls.insert(op_name.to_string());
-                calls.insert(format!("std::{}", op_name));
-            }
+            collect_binary_operator(*op, calls);
         }
         Expr::Assign { target, value, .. } => {
             stack.push(target);
@@ -345,6 +324,36 @@ fn collect_call_node<'a>(expr: &'a Expr, calls: &mut HashSet<String>, stack: &mu
         }
         Expr::Delete { expr, .. } => stack.push(expr),
         _ => {}
+    }
+}
+
+/// Records the operator functions a unary operator may name.
+fn collect_unary_operator(op: UnaryOp, calls: &mut HashSet<String>) {
+    let name = match op {
+        UnaryOp::Not => {
+            calls.insert("operator!".to_string());
+            calls.insert("operator bool".to_string());
+            return;
+        }
+        UnaryOp::Neg => "operator-",
+        UnaryOp::BitNot => "operator~",
+        UnaryOp::Plus => "operator+",
+        UnaryOp::AddrOf => "operator&",
+        UnaryOp::PreInc => "operator++",
+        UnaryOp::PreDec => "operator--",
+        _ => return,
+    };
+    calls.insert(name.to_string());
+}
+
+/// Records the operator functions a binary operator may name.
+fn collect_binary_operator(op: BinaryOp, calls: &mut HashSet<String>) {
+    if matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
+        calls.insert("operator bool".to_string());
+    }
+    if let Some(op_name) = op.op_name() {
+        calls.insert(op_name.to_string());
+        calls.insert(format!("std::{}", op_name));
     }
 }
 

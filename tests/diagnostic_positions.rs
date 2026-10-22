@@ -2,24 +2,42 @@
 //!
 //! A diagnostic that reports line 1, column 1 is only correct when the
 //! failing construct really is the first token of the file, so the corpus
-//! keeps an explicit list of the files where that is the case.  Every other
-//! diagnostic must point at a line that exists in the file it names, which
-//! rules out a fabricated location.
+//! keeps an explicit list of the diagnostics where that is the case.  Every
+//! other diagnostic must point at a line that exists in the file it names,
+//! which rules out a fabricated location.
 
 use cppwasm::{CompileError, IncludeProvider, ResolvedInclude, compile_with_provider};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// The corpus files whose diagnostic really is at line 1, column 1.
+/// The corpus diagnostics that really are at line 1, column 1.
 ///
-/// Each entry names a file whose first token is the construct that failed:
-/// a `#error` directive, a stray `#endif`, or the `#include` line of a header
-/// that takes part in an include cycle.
-const FIRST_POSITION_FILES: &[&str] = &[
-    "tests/negative/error_directive.cpp",
-    "tests/negative/include_cycle_b.h",
-    "tests/negative/stray_endif.cpp",
+/// Every entry names the file and the exact text of the diagnostic, so an
+/// exemption cannot hide another error of the same file:
+///
+/// - `tests/negative/error_directive.cpp`: the `#error` directive is the
+///   first token of the file.
+/// - `tests/negative/include_cycle_b.h`: the `#include` line of the header
+///   that closes the cycle is the first line of the file.
+/// - `tests/negative/stray_endif.cpp`: the stray `#endif` is the first token
+///   of the file.
+const FIRST_POSITION_DIAGNOSTICS: &[(&str, &str)] = &[
+    ("tests/negative/error_directive.cpp", "#error stop here"),
+    (
+        "tests/negative/include_cycle_b.h",
+        "include cycle detected: 'tests/negative/include_cycle_a.h'",
+    ),
+    ("tests/negative/stray_endif.cpp", "#endif without #if"),
 ];
+
+/// Returns true when a diagnostic is one of the exempted ones.
+fn is_exempted(file: &str, message: &str) -> bool {
+    FIRST_POSITION_DIAGNOSTICS
+        .iter()
+        .any(|(exempted_file, exempted_message)| {
+            *exempted_file == file && *exempted_message == message
+        })
+}
 
 /// Reads includes from the filesystem, like the command-line compiler does.
 #[derive(Clone)]
@@ -130,11 +148,11 @@ fn every_corpus_diagnostic_names_a_real_position() -> Result<(), Box<dyn std::er
             continue;
         }
         if error.line == 1 && error.col == 1 {
-            if !FIRST_POSITION_FILES.contains(&error.file.as_str()) {
+            if !is_exempted(&error.file, &error.message) {
                 failures.push(format!(
-                    "{name}: the diagnostic of {} reports 1:1, but the file is not one of \
-                     the files whose error really is at the first position",
-                    error.file
+                    "{name}: the diagnostic of {} reports 1:1, but it is not one of the \
+                     exempted diagnostics: {:?}",
+                    error.file, error.message
                 ));
             }
             continue;

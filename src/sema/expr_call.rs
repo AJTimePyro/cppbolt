@@ -1,5 +1,21 @@
+use super::constructor::ConstructorCall;
 use super::overload::same_parameters;
 use super::*;
+
+/// The return type of a function pointer or of a function type.
+fn function_return_type(ty: &Type) -> Option<Type> {
+    let stripped = ty.strip_const();
+    if let Type::Pointer(inner) = stripped {
+        if let Type::Function { return_type, .. } = &**inner {
+            return Some((**return_type).clone());
+        }
+        return None;
+    }
+    if let Type::Function { return_type, .. } = stripped {
+        return Some((**return_type).clone());
+    }
+    None
+}
 
 impl Sema {
     pub(super) fn analyze_call(&mut self, expr: &mut Expr) -> Result<Type, CompileError> {
@@ -17,57 +33,20 @@ impl Sema {
         }
 
         if let Expr::Identifier(raw_name) = &**callee {
-            let name = raw_name.strip_prefix("::").unwrap_or(raw_name);
+            let name = raw_name.strip_prefix("::").unwrap_or(raw_name).to_string();
             if name == "printf" || name == "std::printf" || name.ends_with("::printf") {
                 return Ok(Type::Int);
             }
-
-            let alias = QualifiedName::new(name).alternate();
-            let sname_match = if self.struct_layouts.contains_key(name) {
-                Some(name.to_string())
-            } else if self.struct_layouts.contains_key(alias.as_ref()) {
-                Some(alias.into_owned())
-            } else {
-                None
-            };
-            if let Some(sname) = sname_match {
-                // C++17 guarantees that a prvalue of the class initializes
-                // the temporary directly, so `T x(T(1))` and `T x = T(1)`
-                // construct the object instead of copying it.
-                if let [only] = args.as_slice()
-                    && matches!(arg_types[0].strip_const(), Type::Struct(other) if *other == sname)
-                    && matches!(only, Expr::Call { .. })
-                {
-                    let inner = std::mem::replace(&mut args[0], Expr::BoolLiteral(false));
-                    *expr = inner;
-                    return Ok(Type::Struct(sname));
-                }
-                // The arguments must match a constructor of the class.
-                match self.find_constructor_for(&sname, &arg_types) {
-                    Some(sig) => {
-                        // A constructor call may leave out arguments that have
-                        // default values.
-                        self.fill_constructor_defaults(&sig, args)?;
+            if let Some(sname) = self.class_named(&name) {
+                match self.analyze_constructor_call(&sname, args, &arg_types, *pos)? {
+                    ConstructorCall::Elided(inner) => {
+                        *expr = inner;
+                        return Ok(Type::Struct(sname));
                     }
-                    None => {
-                        if !self.is_copy_initialization(&sname, &arg_types) {
-                            return Err(self.no_matching_constructor(&sname, *pos));
-                        }
-                    }
+                    ConstructorCall::Selected => return Ok(Type::Struct(sname)),
                 }
-                return Ok(Type::Struct(sname));
             }
-
-            if let Some(cls) = &self.current_class
-                && self.find_method_in_class(cls, name).is_some()
-            {
-                **callee = Expr::MemberAccess {
-                    object: Box::new(Expr::This),
-                    member: name.to_string(),
-                    is_arrow: true,
-                    pos: *pos,
-                };
-            }
+            self.redirect_to_method(callee, &name, *pos);
         }
 
         if let Some(return_type) = self.analyze_member_callee(callee, args, &arg_types)? {
@@ -77,29 +56,36 @@ impl Sema {
         if let Expr::Identifier(raw_name) = &**callee {
             let name = raw_name.strip_prefix("::").unwrap_or(raw_name).to_string();
             self.check_ambiguous_name(&name)?;
-            if let Some(var) = self.lookup_var(&name) {
-                let stripped = var.ty.strip_const();
-                if let Type::Pointer(inner) = stripped {
-                    if let Type::Function { return_type, .. } = &**inner {
-                        return Ok((**return_type).clone());
-                    }
-                } else if let Type::Function { return_type, .. } = stripped {
-                    return Ok((**return_type).clone());
-                }
+            if let Some(var) = self.lookup_var(&name)
+                && let Some(return_type) = function_return_type(&var.ty)
+            {
+                return Ok(return_type);
             }
             return self.resolve_named_call(&name, args, &arg_types, callee, *pos);
         }
 
         // No named function matched: treat the callee as a function pointer.
-        let callee_ty = self.analyze_expr(callee)?;
-        if let Type::Pointer(inner) = callee_ty.strip_const() {
-            if let Type::Function { return_type, .. } = &**inner {
-                return Ok((**return_type).clone());
-            }
-        } else if let Type::Function { return_type, .. } = callee_ty.strip_const() {
-            return Ok((**return_type).clone());
+        self.analyze_function_pointer_call(callee)
+    }
+
+    /// Rewrites a call to a method of the current class into a member access.
+    fn redirect_to_method(&self, callee: &mut Expr, name: &str, pos: ExprPos) {
+        if let Some(cls) = &self.current_class
+            && self.find_method_in_class(cls, name).is_some()
+        {
+            *callee = Expr::MemberAccess {
+                object: Box::new(Expr::This),
+                member: name.to_string(),
+                is_arrow: true,
+                pos,
+            };
         }
-        Ok(Type::Int)
+    }
+
+    /// Analyzes a call whose callee is a value instead of a name.
+    fn analyze_function_pointer_call(&mut self, callee: &mut Expr) -> Result<Type, CompileError> {
+        let callee_ty = self.analyze_expr(callee)?;
+        Ok(function_return_type(&callee_ty).unwrap_or(Type::Int))
     }
 
     /// Fills in the default arguments of a member call.
@@ -122,110 +108,6 @@ impl Sema {
         let given = args.len();
         for index in given..params.len() {
             if let Some(Some(default)) = defaults.get(index) {
-                args.push(default.clone());
-            }
-        }
-        for arg in args[given..].iter_mut() {
-            self.analyze_expr(arg)?;
-        }
-        Ok(())
-    }
-
-    /// Finds the constructor of a class that accepts the given arguments.
-    ///
-    /// The constructor overload with the fewest defaulted arguments wins, and
-    /// an exact match beats a reference binding, which beats an arithmetic
-    /// conversion.
-    fn find_constructor_for(&self, class_name: &str, arg_types: &[Type]) -> Option<FunctionSig> {
-        let short = class_name.split("::").last().unwrap_or(class_name);
-        let alternate = QualifiedName::new(class_name).alternate();
-        let mut candidates: Vec<FunctionSig> = Vec::new();
-        for name in [
-            format!("{class_name}::{short}"),
-            format!("{alternate}::{short}"),
-        ] {
-            if let Some(sigs) = self.functions.get(&name) {
-                candidates.extend(sigs.iter().cloned());
-            }
-        }
-        if candidates.is_empty() {
-            return None;
-        }
-        let mut best: Option<FunctionSig> = None;
-        let mut best_score = usize::MAX;
-        for cand in &candidates {
-            let params = if cand.param_types.is_empty() {
-                &[][..]
-            } else {
-                &cand.param_types[1..]
-            };
-            let defaults = if cand.default_args.is_empty() {
-                &[][..]
-            } else {
-                &cand.default_args[1..]
-            };
-            if arg_types.len() > params.len() || defaults.len() < params.len() {
-                continue;
-            }
-            // Every omitted argument needs a default value.
-            if !defaults[arg_types.len()..].iter().all(|d| d.is_some()) {
-                continue;
-            }
-            let mut score = 0;
-            let mut fits = true;
-            for (index, arg_ty) in arg_types.iter().enumerate() {
-                let param = &params[index];
-                if param.strip_all_const() == arg_ty.strip_all_const() {
-                    continue;
-                }
-                if param.is_reference()
-                    && param.deref_type().map(|d| d.strip_all_const())
-                        == Some(arg_ty.strip_all_const())
-                {
-                    score += 1;
-                    continue;
-                }
-                if self.can_assign(param, arg_ty) {
-                    score += 2;
-                    continue;
-                }
-                fits = false;
-                break;
-            }
-            if !fits {
-                continue;
-            }
-            // Prefer the overload with the fewest defaulted arguments.
-            score += (params.len() - arg_types.len()) * 100;
-            if score < best_score {
-                best_score = score;
-                best = Some(cand.clone());
-            }
-        }
-        best
-    }
-
-    /// Returns true when the arguments describe a copy initialization.
-    ///
-    /// A single argument of the class itself is initialized with the copy
-    /// constructor, whether or not the class declares one.
-    fn is_copy_initialization(&self, class_name: &str, arg_types: &[Type]) -> bool {
-        arg_types.len() == 1
-            && matches!(arg_types[0].strip_const(), Type::Struct(other) if *other == class_name)
-    }
-
-    /// Fills in the default arguments of a constructor call.
-    ///
-    /// The default expressions are analyzed like ordinary arguments.
-    fn fill_constructor_defaults(
-        &mut self,
-        sig: &FunctionSig,
-        args: &mut Vec<Expr>,
-    ) -> Result<(), CompileError> {
-        let given = args.len();
-        let last = sig.param_types.len().saturating_sub(1);
-        for index in given..last {
-            if let Some(Some(default)) = sig.default_args.get(index + 1) {
                 args.push(default.clone());
             }
         }
@@ -404,82 +286,114 @@ impl Sema {
     ) -> Result<Type, CompileError> {
         // Overload resolution: exact matches score best, followed by
         // reference binding, arithmetic conversions, and user conversions.
-        let candidates = self.find_call_candidates(name, arg_types);
-        if let Some(candidates) = candidates {
-            let mut best_candidate: Option<(&FunctionSig, Vec<Expr>)> = None;
-            let mut best_score = usize::MAX;
-            let mut conversion_failure: Option<ConversionFailure> = None;
-            let mut ambiguous = false;
-
-            for cand in &candidates {
-                let min_args = cand.default_args.iter().take_while(|d| d.is_none()).count();
-                let max_args = cand.param_types.len();
-
-                if args.len() >= min_args && args.len() <= max_args {
-                    let score = match self.score_call_candidate(cand, arg_types) {
-                        Ok(score) => score,
-                        Err(failure) => {
-                            if conversion_failure.is_none() {
-                                conversion_failure = Some(failure);
-                            }
-                            continue;
-                        }
-                    };
-
-                    if score < best_score {
-                        best_score = score;
-                        let mut full_args = args.clone();
-                        for i in args.len()..max_args {
-                            if let Some(def_expr) = &cand.default_args[i] {
-                                full_args.push(def_expr.clone());
-                            }
-                        }
-                        best_candidate = Some((cand, full_args));
-                        ambiguous = false;
-                        if score == 0 {
-                            break; // No candidate can score lower.
-                        }
-                    } else if score == best_score
-                        && let Some((best, _)) = best_candidate
-                        && best.param_types != cand.param_types
-                    {
-                        // Two overloads convert the arguments equally well.
-                        ambiguous = true;
-                    }
-                }
-            }
-
-            if ambiguous {
-                return Err(self.ambiguous_call(name, arg_types, pos));
-            }
-            if let Some((cand, full_args)) = best_candidate {
-                let mangled = cand.mangled_name.clone();
-                let ret_type = cand.return_type.clone();
-                *callee = Expr::Identifier(mangled);
-                *args = full_args;
-                return Ok(ret_type);
-            }
-            // The arguments fit an overload, but one of them does not
-            // convert to its parameter.
-            if let Some(failure) = conversion_failure {
-                return Err(self.no_matching_conversion(name, &failure, pos));
-            }
-            let cand = &candidates[0];
+        let Some(candidates) = self.find_call_candidates(name, arg_types) else {
             return Err(CompileError::new(
-                format!(
-                    "No matching function call for '{}': expected {} arguments, found {}",
-                    name,
-                    cand.param_types.len(),
-                    args.len()
-                ),
+                format!("Undefined function '{}'", name),
                 pos.line,
                 pos.col,
             ));
+        };
+        let selection = self.select_candidate(&candidates, args, arg_types);
+        if selection.ambiguous {
+            return Err(self.ambiguous_call(name, arg_types, pos));
         }
+        if let Some((cand, full_args)) = selection.best {
+            let mangled = cand.mangled_name.clone();
+            let ret_type = cand.return_type.clone();
+            *callee = Expr::Identifier(mangled);
+            *args = full_args;
+            return Ok(ret_type);
+        }
+        // The arguments fit an overload, but one of them does not convert to
+        // its parameter.
+        if let Some(failure) = selection.conversion_failure {
+            return Err(self.no_matching_conversion(name, &failure, pos));
+        }
+        let cand = &candidates[0];
         Err(CompileError::new(
-            format!("Undefined function '{}'", name),
+            format!(
+                "No matching function call for '{}': expected {} arguments, found {}",
+                name,
+                cand.param_types.len(),
+                args.len()
+            ),
             pos.line,
             pos.col,
         ))
+    }
+
+    /// The outcome of the overload resolution of a call.
+    fn select_candidate<'a>(
+        &self,
+        candidates: &'a [FunctionSig],
+        args: &[Expr],
+        arg_types: &[Type],
+    ) -> CandidateSelection<'a> {
+        let mut selection = CandidateSelection::default();
+        for cand in candidates {
+            let min_args = cand.default_args.iter().take_while(|d| d.is_none()).count();
+            let max_args = cand.param_types.len();
+            if args.len() < min_args || args.len() > max_args {
+                continue;
+            }
+            let score = match self.score_call_candidate(cand, arg_types) {
+                Ok(score) => score,
+                Err(failure) => {
+                    if selection.conversion_failure.is_none() {
+                        selection.conversion_failure = Some(failure);
+                    }
+                    continue;
+                }
+            };
+            if score < selection.best_score {
+                selection.best_score = score;
+                selection.best = Some((cand, self.full_arguments(cand, args)));
+                selection.ambiguous = false;
+                if score == 0 {
+                    break; // No candidate can score lower.
+                }
+            } else if score == selection.best_score
+                && let Some((best, _)) = selection.best
+                && best.param_types != cand.param_types
+            {
+                // Two overloads convert the arguments equally well.
+                selection.ambiguous = true;
+            }
+        }
+        selection
+    }
+
+    /// The arguments of a call, with the default arguments filled in.
+    fn full_arguments(&self, cand: &FunctionSig, args: &[Expr]) -> Vec<Expr> {
+        let mut full = args.to_vec();
+        for index in args.len()..cand.param_types.len() {
+            if let Some(Some(default)) = cand.default_args.get(index) {
+                full.push(default.clone());
+            }
+        }
+        full
+    }
+}
+
+/// The outcome of the overload resolution of a call.
+struct CandidateSelection<'a> {
+    /// The best candidate and its arguments.
+    best: Option<(&'a FunctionSig, Vec<Expr>)>,
+    /// The conversion cost of the best candidate.
+    best_score: usize,
+    /// The first argument that does not convert to its parameter.
+    conversion_failure: Option<ConversionFailure>,
+    /// Whether two candidates convert the arguments equally well.
+    ambiguous: bool,
+}
+
+impl Default for CandidateSelection<'_> {
+    fn default() -> Self {
+        Self {
+            best: None,
+            best_score: usize::MAX,
+            conversion_failure: None,
+            ambiguous: false,
+        }
     }
 }

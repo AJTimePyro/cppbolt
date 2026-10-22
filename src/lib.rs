@@ -6,6 +6,7 @@
 #![allow(clippy::enum_variant_names)]
 
 pub(crate) mod ast;
+pub mod census;
 pub(crate) mod codegen;
 pub mod corpus;
 pub(crate) mod depth;
