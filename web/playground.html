@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C++ to WebAssembly playground</title>
+<style>
+    :root {
+        color-scheme: light dark;
+        --border: #8884;
+        --accent: #2f6feb;
+    }
+    body {
+        margin: 0;
+        font: 14px/1.45 ui-sans-serif, system-ui, sans-serif;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+    }
+    header {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+    }
+    header h1 {
+        font-size: 15px;
+        margin: 0;
+    }
+    header .note {
+        opacity: 0.7;
+        font-size: 12px;
+    }
+    main {
+        display: flex;
+        flex: 1;
+        min-height: 0;
+    }
+    section {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-width: 0;
+        padding: 10px;
+        gap: 8px;
+    }
+    section + section {
+        border-left: 1px solid var(--border);
+    }
+    textarea, pre {
+        flex: 1;
+        margin: 0;
+        padding: 10px;
+        font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: transparent;
+        color: inherit;
+        resize: none;
+        overflow: auto;
+        white-space: pre-wrap;
+    }
+    .bar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+    button {
+        font: inherit;
+        padding: 6px 12px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--accent);
+        color: #fff;
+        cursor: pointer;
+    }
+    button.secondary {
+        background: transparent;
+        color: inherit;
+    }
+    button:disabled {
+        opacity: 0.6;
+        cursor: progress;
+    }
+    .status {
+        font-size: 12px;
+        opacity: 0.75;
+    }
+    .error {
+        color: #c0392b;
+    }
+    code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+</style>
+</head>
+<body>
+<header>
+    <h1>C++ to WebAssembly playground</h1>
+    <span class="note">a subset of C++17, compiled in your browser</span>
+</header>
+<main>
+    <section>
+        <div class="bar">
+            <button id="run">Compile and run</button>
+            <button id="example" class="secondary">Load an example</button>
+            <span class="status" id="status">ready</span>
+        </div>
+        <textarea id="source" spellcheck="false" aria-label="C++ source"></textarea>
+    </section>
+    <section>
+        <div class="bar"><span class="status">output</span></div>
+        <pre id="output" aria-label="Program output"></pre>
+    </section>
+</main>
+<script src="host.js"></script>
+<script>
+"use strict";
+
+// The compiler runs in a worker, so a deep program never blocks the page.
+const worker = new Worker("playground-worker.js");
+const source = document.getElementById("source");
+const output = document.getElementById("output");
+const status = document.getElementById("status");
+const runButton = document.getElementById("run");
+const exampleButton = document.getElementById("example");
+
+// The compiler is built by `cargo build --release --target wasm32-unknown-unknown --lib`.
+const parameters = new URLSearchParams(location.search);
+const compilerUrl = parameters.get("compiler")
+    || "../target/wasm32-unknown-unknown/release/cppwasm.wasm";
+
+const EXAMPLES = [
+    `#include <cstdio>
+
+int main() {
+    int total = 0;
+    for (int i = 1; i <= 10; i = i + 1) {
+        total = total + i;
+    }
+    std::printf("total=%d\\n", total);
+    return 0;
+}
+`,
+    `#include <cstdio>
+#include <string>
+
+struct Point {
+    int x;
+    int y;
+    Point(int a, int b) : x(a), y(b) {
+        std::printf("Point(%d, %d)\\n", x, y);
+    }
+};
+
+int main() {
+    Point p(3, 4);
+    std::string text = "hello";
+    std::printf("%s %d\\n", text.c_str(), p.x + p.y);
+    return 0;
+}
+`,
+];
+
+let requestId = 0;
+const pending = new Map();
+
+worker.onmessage = (event) => {
+    const entry = pending.get(event.data.id);
+    if (!entry) {
+        return;
+    }
+    pending.delete(event.data.id);
+    entry(event.data);
+};
+
+function compileInWorker(text) {
+    const id = ++requestId;
+    return new Promise((resolve) => {
+        pending.set(id, resolve);
+        worker.postMessage({ id, source: text, url: compilerUrl });
+    });
+}
+
+function show(text, isError) {
+    output.textContent = text;
+    output.className = isError ? "error" : "";
+}
+
+function runProgram(bytes) {
+    const host = createWasmImports(null, "", (code) => {
+        // The program called exit: show what it printed and stop here.
+        show(host.getStdout() + `\n[exit ${code}]`, false);
+        status.textContent = "exited";
+        runButton.disabled = false;
+    });
+    return WebAssembly.instantiate(bytes, host.imports).then(({ instance }) => {
+        let code = 0;
+        try {
+            if (instance.exports.main) {
+                code = instance.exports.main();
+            } else if (instance.exports._start) {
+                code = instance.exports._start();
+            }
+        } catch (error) {
+            show(host.getStdout() + `\n[trap: ${error.message}]`, true);
+            status.textContent = "trap";
+            runButton.disabled = false;
+            return;
+        }
+        show(host.getStdout(), false);
+        status.textContent = code ? `exit ${code}` : "done";
+        runButton.disabled = false;
+    });
+}
+
+runButton.addEventListener("click", async () => {
+    runButton.disabled = true;
+    status.textContent = "compiling...";
+    show("", false);
+    const result = await compileInWorker(source.value);
+    if (!result.ok) {
+        show(result.diagnostic, true);
+        status.textContent = "diagnostic";
+        runButton.disabled = false;
+        return;
+    }
+    status.textContent = "running...";
+    await runProgram(result.bytes);
+});
+
+/// Runs the program without a click, for a link or a headless check.
+async function runNow() {
+    runButton.click();
+}
+
+exampleButton.addEventListener("click", () => {
+    source.value = EXAMPLES[requestId % EXAMPLES.length];
+    status.textContent = "example loaded";
+});
+
+source.value = EXAMPLES[0];
+
+// A link can carry the program, so a failing case can be shared.
+const code = parameters.get("code");
+if (code !== null) {
+    source.value = code;
+}
+
+if (parameters.get("run") === "1") {
+    runNow();
+}
+</script>
+</body>
+</html>

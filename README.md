@@ -12,5 +12,16 @@ cargo build --release
 cargo run --bin cppwasm-testrunner -- target/release/cppwasm-cli
 ```
 
+Try it in a browser:
+
+```sh
+cargo build --release --target wasm32-unknown-unknown --lib
+python3 -m http.server 8000
+# open http://localhost:8000/web/playground.html
+```
+
+The playground compiles a program in the page and runs the result; the compiler runs in a worker, so a deep
+program never blocks the page.  `web/host.js` is the shim that both the playground and the Node tools use.
+
 The architecture and ABI contracts are documented in [`docs/`](docs/README.md). The embedded headers are in
 [`stdlib/`](stdlib/), and the JavaScript host shim is [`web/host.js`](web/host.js).
