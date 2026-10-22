@@ -1,0 +1,64 @@
+name: Deploy the playground to GitHub Pages
+
+# The playground is a static site: the web directory of the repository plus
+# the WebAssembly build of the compiler.  The workflow builds the compiler for
+# the browser, assembles the site, and deploys it to GitHub Pages.
+#
+# The repository needs "Settings -> Pages -> Build and deployment -> Source:
+# GitHub Actions" once, so that the environment of the deployment exists.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Install the Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache the build
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: pages-wasm
+
+      - name: Build the compiler for the browser
+        run: cargo build --release --target wasm32-unknown-unknown --lib
+
+      - name: Assemble the site
+        run: tools/build_site.sh
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -16,12 +16,17 @@ Try it in a browser:
 
 ```sh
 cargo build --release --target wasm32-unknown-unknown --lib
-python3 -m http.server 8000
-# open http://localhost:8000/web/playground.html
+tools/build_site.sh
+python3 -m http.server --directory site 8000
+# open http://localhost:8000/
 ```
 
 The playground compiles a program in the page and runs the result; the compiler runs in a worker, so a deep
-program never blocks the page.  `web/host.js` is the shim that both the playground and the Node tools use.
+program never blocks the page.  `web/host.js` is the shim that both the playground and the Node tools use, and
+`web/pkg/` holds the JavaScript glue and the WebAssembly build of the compiler that the site serves.
+
+The site is deployed to GitHub Pages by `.github/workflows/pages.yml` on every push to `main`.  The repository
+needs "Settings -> Pages -> Build and deployment -> Source: GitHub Actions" once.
 
 The architecture and ABI contracts are documented in [`docs/`](docs/README.md). The embedded headers are in
 [`stdlib/`](stdlib/), and the JavaScript host shim is [`web/host.js`](web/host.js).

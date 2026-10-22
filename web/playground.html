@@ -135,10 +135,12 @@ const timing = document.getElementById("timing");
 const runButton = document.getElementById("run");
 const exampleButton = document.getElementById("example");
 
-// The compiler is built by `cargo build --release --target wasm32-unknown-unknown --lib`.
+// The compiler is the WebAssembly build of the compiler, next to the page in
+// the `pkg` directory of the site.  The URLs are relative to the page, so the
+// page works at the root of a site and in a subdirectory of one.
 const parameters = new URLSearchParams(location.search);
-const compilerUrl = parameters.get("compiler")
-    || "../target/wasm32-unknown-unknown/release/cppwasm.wasm";
+const compilerUrl = parameters.get("compiler") || "pkg/cppwasm_bg.wasm";
+const loaderUrl = parameters.get("loader") || "pkg/cppwasm.js";
 
 const EXAMPLES = [
     `#include <cstdio>
@@ -188,7 +190,14 @@ function compileInWorker(text) {
     const id = ++requestId;
     return new Promise((resolve) => {
         pending.set(id, resolve);
-        worker.postMessage({ id, source: text, url: compilerUrl });
+        worker.postMessage({
+            id,
+            source: text,
+            // The worker resolves the URLs against the page, so the site
+            // works at the root of a domain and in a subdirectory of one.
+            loaderUrl: new URL(loaderUrl, document.baseURI).href,
+            wasmUrl: new URL(compilerUrl, document.baseURI).href,
+        });
     });
 }
 
