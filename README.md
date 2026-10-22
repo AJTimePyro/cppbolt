@@ -22,8 +22,8 @@ python3 -m http.server --directory site 8000
 ```
 
 The playground compiles a program in the page and runs the result; the compiler runs in a worker, so a deep
-program never blocks the page.  `web/host.js` is the shim that both the playground and the Node tools use, and
-`web/pkg/` holds the JavaScript glue and the WebAssembly build of the compiler that the site serves.
+program never blocks the page.  `web/host.js` is the shim that both the playground and the Node tools use, and the
+site serves the WebAssembly build of the compiler in a `pkg` directory next to the page.
 
 The site is deployed to GitHub Pages by `.github/workflows/pages.yml` on every push to `main`.  The repository
 needs "Settings -> Pages -> Build and deployment -> Source: GitHub Actions" once.
