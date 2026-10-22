@@ -51,4 +51,8 @@ therefore shareable:
 http://localhost:8000/web/playground.html?run=1&code=int%20main()%20%7B%20return%200%3B%20%7D
 ```
 
+The page shows how long every step took next to the output: the time to load the compiler, the time to compile
+the program, the time to run it, and the total. The compiler measures nothing itself: the worker times the call to
+`compile_wasm`, and the page times the instantiation and the call to `main`.
+
 `tests/browser_flow.rs` runs the same sequence in Node, so the flow of a browser host stays working.

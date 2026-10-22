@@ -87,6 +87,11 @@
         font-size: 12px;
         opacity: 0.75;
     }
+    .timing {
+        font-size: 12px;
+        opacity: 0.75;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
     .error {
         color: #c0392b;
     }
@@ -110,7 +115,10 @@
         <textarea id="source" spellcheck="false" aria-label="C++ source"></textarea>
     </section>
     <section>
-        <div class="bar"><span class="status">output</span></div>
+        <div class="bar">
+            <span class="status">output</span>
+            <span class="timing" id="timing"></span>
+        </div>
         <pre id="output" aria-label="Program output"></pre>
     </section>
 </main>
@@ -123,6 +131,7 @@ const worker = new Worker("playground-worker.js");
 const source = document.getElementById("source");
 const output = document.getElementById("output");
 const status = document.getElementById("status");
+const timing = document.getElementById("timing");
 const runButton = document.getElementById("run");
 const exampleButton = document.getElementById("example");
 
@@ -188,46 +197,99 @@ function show(text, isError) {
     output.className = isError ? "error" : "";
 }
 
-function runProgram(bytes) {
+/// Formats a duration in milliseconds.
+function formatMs(value) {
+    if (!isFinite(value)) {
+        return "?";
+    }
+    if (value < 1) {
+        return `${value.toFixed(2)} ms`;
+    }
+    if (value < 1000) {
+        return `${value.toFixed(1)} ms`;
+    }
+    return `${(value / 1000).toFixed(2)} s`;
+}
+
+/// Shows the time of every step of the last run.
+function showTiming(steps) {
+    const parts = Object.entries(steps)
+        .filter(([, value]) => typeof value === "number" && isFinite(value))
+        .map(([name, value]) => `${name} ${formatMs(value)}`);
+    timing.textContent = parts.join(" · ");
+}
+
+/// Thrown by the exit import of a program, so the program stops where it
+/// asked to stop, exactly like a native program does.
+class ProgramExit {
+    constructor(code) {
+        this.code = code;
+    }
+}
+
+async function runProgram(bytes) {
+    let exitCode = null;
     const host = createWasmImports(null, "", (code) => {
-        // The program called exit: show what it printed and stop here.
-        show(host.getStdout() + `\n[exit ${code}]`, false);
-        status.textContent = "exited";
-        runButton.disabled = false;
+        exitCode = code;
+        throw new ProgramExit(code);
     });
-    return WebAssembly.instantiate(bytes, host.imports).then(({ instance }) => {
-        let code = 0;
-        try {
-            if (instance.exports.main) {
-                code = instance.exports.main();
-            } else if (instance.exports._start) {
-                code = instance.exports._start();
-            }
-        } catch (error) {
-            show(host.getStdout() + `\n[trap: ${error.message}]`, true);
-            status.textContent = "trap";
-            runButton.disabled = false;
-            return;
+    const started = performance.now();
+    let trap = null;
+    let returned = 0;
+    try {
+        const program = await WebAssembly.instantiate(bytes, host.imports);
+        if (program.instance.exports.main) {
+            returned = program.instance.exports.main();
+        } else if (program.instance.exports._start) {
+            returned = program.instance.exports._start();
         }
-        show(host.getStdout(), false);
+    } catch (error) {
+        if (!(error instanceof ProgramExit)) {
+            trap = error;
+        }
+    }
+    const elapsed = performance.now() - started;
+    const text = host.getStdout();
+    if (trap) {
+        show(`${text}\n[trap: ${trap.message}]`, true);
+        status.textContent = "trap";
+    } else {
+        // The exit import stops the program, and the value that main returns
+        // is the exit code of the program, exactly like a native program.
+        const code = exitCode === null ? (returned || 0) : exitCode;
+        show(code ? `${text}\n[exit ${code}]` : text, false);
         status.textContent = code ? `exit ${code}` : "done";
-        runButton.disabled = false;
-    });
+    }
+    runButton.disabled = false;
+    return elapsed;
 }
 
 runButton.addEventListener("click", async () => {
     runButton.disabled = true;
     status.textContent = "compiling...";
     show("", false);
+    showTiming({});
+    const started = performance.now();
     const result = await compileInWorker(source.value);
     if (!result.ok) {
         show(result.diagnostic, true);
         status.textContent = "diagnostic";
+        showTiming({
+            compile: result.compileMs || 0,
+            load: result.loadMs,
+            total: performance.now() - started,
+        });
         runButton.disabled = false;
         return;
     }
     status.textContent = "running...";
-    await runProgram(result.bytes);
+    const runMs = await runProgram(result.bytes);
+    showTiming({
+        load: result.loadMs,
+        compile: result.compileMs || 0,
+        run: runMs,
+        total: performance.now() - started,
+    });
 });
 
 /// Runs the program without a click, for a link or a headless check.
