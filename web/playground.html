@@ -135,12 +135,12 @@ const timing = document.getElementById("timing");
 const runButton = document.getElementById("run");
 const exampleButton = document.getElementById("example");
 
-// The compiler is the WebAssembly build of the compiler, next to the page in
-// the `pkg` directory of the site.  The URLs are relative to the page, so the
-// page works at the root of a site and in a subdirectory of one.
+// The compiler is the WebAssembly build of the compiler, which the site
+// serves next to the page in the `pkg` directory.  The URL is relative to
+// the page, so the page works at the root of a site and in a subdirectory
+// of one, which is how GitHub Pages serves a project site.
 const parameters = new URLSearchParams(location.search);
 const compilerUrl = parameters.get("compiler") || "pkg/cppwasm_bg.wasm";
-const loaderUrl = parameters.get("loader") || "pkg/cppwasm.js";
 
 const EXAMPLES = [
     `#include <cstdio>
@@ -193,10 +193,9 @@ function compileInWorker(text) {
         worker.postMessage({
             id,
             source: text,
-            // The worker resolves the URLs against the page, so the site
-            // works at the root of a domain and in a subdirectory of one.
-            loaderUrl: new URL(loaderUrl, document.baseURI).href,
-            wasmUrl: new URL(compilerUrl, document.baseURI).href,
+            // The worker resolves the URL against the page, so the site works
+            // at the root of a domain and in a subdirectory of one.
+            url: new URL(compilerUrl, document.baseURI).href,
         });
     });
 }

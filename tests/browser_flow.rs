@@ -67,47 +67,6 @@ main().catch((error) => {
 });
 "#;
 
-/// The script that loads the `pkg` directory of the web frontend and runs
-/// the program it compiles.
-const PACKAGE_FLOW: &str = r#"
-const fs = require("fs");
-const path = require("path");
-
-async function main() {
-    const root = process.argv[2];
-    const wasmPath = process.argv[3];
-
-    const { init } = require(path.join(root, "web/pkg/cppwasm.js"));
-    const bytes = fs.readFileSync(wasmPath);
-    const compiler = await init(
-        bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
-    );
-    const result = compiler.compile(
-        '#include <cstdio>\nint main() { std::printf("from the package\\n"); return 0; }\n'
-    );
-    if (!result.ok) {
-        console.error(result.diagnostic);
-        process.exit(2);
-    }
-    const { createWasmImports } = require(path.join(root, "web/host.js"));
-    const host = createWasmImports(null, "", (code) => {
-        process.stdout.write(host.getStdout());
-        process.exit(code);
-    });
-    const program = await WebAssembly.instantiate(result.bytes, host.imports);
-    const code = program.instance.exports.main ? program.instance.exports.main() : 0;
-    process.stdout.write(host.getStdout());
-    if (code) {
-        process.exit(code);
-    }
-}
-
-main().catch((error) => {
-    console.error(error);
-    process.exit(1);
-});
-"#;
-
 /// The program the flow compiles and runs.
 const PROGRAM: &str = r#"#include <cstdio>
 #include <string>
@@ -181,30 +140,5 @@ fn a_browser_host_compiles_and_runs_a_program() -> Result<(), Box<dyn std::error
         "the browser flow failed\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
     assert_eq!(stdout, "Point(3, 4)\nhello 7\n");
-    Ok(())
-}
-
-#[test]
-fn the_package_of_the_web_frontend_compiles_a_program() -> Result<(), Box<dyn std::error::Error>> {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let wasm = wasm_compiler(&root)?;
-    let node = std::env::var("NODE").unwrap_or_else(|_| "node".to_string());
-    let work = root.join("target/browser-flow");
-    std::fs::create_dir_all(&work)?;
-    let script = work.join("package.js");
-    std::fs::write(&script, PACKAGE_FLOW)?;
-
-    let output = Command::new(node)
-        .arg(&script)
-        .arg(&root)
-        .arg(&wasm)
-        .output()?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        output.status.success(),
-        "the package flow failed\nstdout:\n{stdout}\nstderr:\n{stderr}"
-    );
-    assert_eq!(stdout, "from the package\n");
     Ok(())
 }

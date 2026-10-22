@@ -9,36 +9,43 @@
 // the compilation was without the compiler having to measure anything.
 
 let compiler = null;
-let loader = null;
+let compilerUrl = null;
 
 self.onmessage = async (event) => {
-    const { source, loaderUrl, wasmUrl, id } = event.data;
+    const { source, url, id } = event.data;
     try {
-        if (!loader) {
-            // The glue of the `pkg` directory, next to the module.
-            importScripts(loaderUrl);
-            loader = self.CppWasmCompiler;
-        }
         let loadMs = null;
-        if (!compiler) {
+        if (!compiler || compilerUrl !== url) {
             const started = performance.now();
-            compiler = await loader.init(wasmUrl);
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`cannot fetch the compiler (${response.status})`);
+            }
+            const bytes = await response.arrayBuffer();
+            const module = await WebAssembly.instantiate(bytes, {});
+            compiler = module.instance.exports;
+            compilerUrl = url;
             loadMs = performance.now() - started;
         }
+        const sourceBytes = new TextEncoder().encode(source);
+        const input = compiler.alloc_buffer(sourceBytes.length);
+        new Uint8Array(compiler.memory.buffer).set(sourceBytes, input);
         const compiling = performance.now();
-        const result = compiler.compile(source);
+        const result = compiler.compile_wasm(input, sourceBytes.length);
         const compileMs = performance.now() - compiling;
-        if (!result.ok) {
-            self.postMessage({
-                id,
-                ok: false,
-                diagnostic: result.diagnostic,
-                compileMs,
-                loadMs,
-            });
+        compiler.dealloc_buffer(input, sourceBytes.length);
+        if (!result) {
+            const length = compiler.get_error_len();
+            const pointer = compiler.get_error_ptr();
+            const diagnostic = new TextDecoder().decode(
+                new Uint8Array(compiler.memory.buffer).slice(pointer, pointer + length)
+            );
+            self.postMessage({ id, ok: false, diagnostic, compileMs, loadMs });
             return;
         }
-        const bytes = result.bytes;
+        const length = compiler.get_result_len();
+        const bytes = new Uint8Array(compiler.memory.buffer).slice(result, result + length);
+        compiler.free_result(result, length);
         self.postMessage({ id, ok: true, bytes: bytes.buffer, compileMs, loadMs }, [bytes.buffer]);
     } catch (error) {
         self.postMessage({

@@ -33,13 +33,8 @@ and `free_result` is the only supported release path. `tests/test_wasm_compiler.
 ## The playground
 
 `web/playground.html` is a complete host: it compiles a program in the page and runs the result with the shim.
-The WebAssembly build of the compiler and the JavaScript glue that loads it live in `web/pkg/`, which has the
-layout of a `pkg` directory: `cppwasm.js` is the glue, `cppwasm_bg.wasm` is the module, and `cppwasm.d.ts`
-describes the API.
-
-The compiler has no dependencies, so there is no wasm-bindgen glue: the eight exported functions of the C ABI of
-`src/ffi.rs` are the whole interface, and `cppwasm.js` wraps them in one call that returns either the compiled
-module or the diagnostic.
+The site holds the web directory of the repository plus the WebAssembly build of the compiler in a `pkg`
+directory, so the page loads the module from `pkg/cppwasm_bg.wasm`.
 
 Build the compiler, assemble the site, and serve it:
 
@@ -55,9 +50,9 @@ page, and it runs the compiled program with the shim of this directory.
 Every URL of the page is relative to the page, so the site works at the root of a domain and in a subdirectory of
 one, which is how GitHub Pages serves a project site.
 
-The page takes three parameters: `compiler` is the URL of the WebAssembly build of the compiler, `loader` is the
-URL of the glue, and `code` is the program to compile. The `run` parameter compiles and runs the program without
-a click, so a link that carries a program is shareable:
+The page takes two parameters: `compiler` is the URL of the WebAssembly build of the compiler, and `code` is the
+program to compile. The `run` parameter compiles and runs the program without a click, so a link that carries a
+program is shareable:
 
 ```text
 http://localhost:8000/?run=1&code=int%20main()%20%7B%20return%200%3B%20%7D
@@ -67,5 +62,4 @@ The page shows how long every step took next to the output: the time to load the
 the program, the time to run it, and the total. The compiler measures nothing itself: the worker times the call to
 `compile_wasm`, and the page times the instantiation and the call to `main`.
 
-`tests/browser_flow.rs` runs the same sequence in Node, through the C ABI and through the package, so the flow of
-a browser host stays working.
+`tests/browser_flow.rs` runs the same sequence in Node, so the flow of a browser host stays working.
