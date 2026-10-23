@@ -95,6 +95,43 @@ namespace std {
                 return y;
             }
 
+            void rebalance(Node* node) {
+                while (node) {
+                    update_height(node);
+                    int bf = balance_factor(node);
+                    Node* p = node->parent;
+                    Node* new_subtree_root = node;
+
+                    if (bf > 1) {
+                        if (balance_factor(node->left) < 0) {
+                            node->left = rotate_left(node->left);
+                        }
+                        new_subtree_root = rotate_right(node);
+                    } else if (bf < -1) {
+                        if (balance_factor(node->right) > 0) {
+                            node->right = rotate_right(node->right);
+                        }
+                        new_subtree_root = rotate_left(node);
+                    }
+
+                    if (new_subtree_root != node) {
+                        if (!p) {
+                            root_ = new_subtree_root;
+                            new_subtree_root->parent = nullptr;
+                        } else if (p->left == node) {
+                            p->left = new_subtree_root;
+                            new_subtree_root->parent = p;
+                        } else {
+                            p->right = new_subtree_root;
+                            new_subtree_root->parent = p;
+                        }
+                        node = new_subtree_root;
+                    }
+
+                    node = node->parent;
+                }
+            }
+
             void destroy(Node* n) {
                 if (!n) return;
                 destroy(n->left);
@@ -234,41 +271,7 @@ namespace std {
                 }
                 size_--;
 
-                Node* node = node_to_rebalance;
-                while (node) {
-                    update_height(node);
-                    int bf = balance_factor(node);
-                    Node* p = node->parent;
-                    Node* new_subtree_root = node;
-
-                    if (bf > 1) {
-                        if (balance_factor(node->left) < 0) {
-                            node->left = rotate_left(node->left);
-                        }
-                        new_subtree_root = rotate_right(node);
-                    } else if (bf < -1) {
-                        if (balance_factor(node->right) > 0) {
-                            node->right = rotate_right(node->right);
-                        }
-                        new_subtree_root = rotate_left(node);
-                    }
-
-                    if (new_subtree_root != node) {
-                        if (!p) {
-                            root_ = new_subtree_root;
-                            new_subtree_root->parent = nullptr;
-                        } else if (p->left == node) {
-                            p->left = new_subtree_root;
-                            new_subtree_root->parent = p;
-                        } else {
-                            p->right = new_subtree_root;
-                            new_subtree_root->parent = p;
-                        }
-                        node = new_subtree_root;
-                    }
-
-                    node = node->parent;
-                }
+                rebalance(node_to_rebalance);
 
                 return 1;
             }
@@ -307,41 +310,7 @@ namespace std {
                 size_++;
                 inserted = true;
 
-                Node* node = parent;
-                while (node) {
-                    update_height(node);
-                    int bf = balance_factor(node);
-                    Node* p = node->parent;
-                    Node* new_subtree_root = node;
-
-                    if (bf > 1) {
-                        if (balance_factor(node->left) < 0) {
-                            node->left = rotate_left(node->left);
-                        }
-                        new_subtree_root = rotate_right(node);
-                    } else if (bf < -1) {
-                        if (balance_factor(node->right) > 0) {
-                            node->right = rotate_right(node->right);
-                        }
-                        new_subtree_root = rotate_left(node);
-                    }
-
-                    if (new_subtree_root != node) {
-                        if (!p) {
-                            root_ = new_subtree_root;
-                            new_subtree_root->parent = nullptr;
-                        } else if (p->left == node) {
-                            p->left = new_subtree_root;
-                            new_subtree_root->parent = p;
-                        } else {
-                            p->right = new_subtree_root;
-                            new_subtree_root->parent = p;
-                        }
-                        node = new_subtree_root;
-                    }
-
-                    node = node->parent;
-                }
+                rebalance(parent);
 
                 return new_node;
             }

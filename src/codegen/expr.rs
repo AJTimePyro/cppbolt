@@ -140,7 +140,7 @@ impl<'a> Codegen<'a> {
             else_expr,
         } = expr
         else {
-            return Ok(());
+            return Err(self.internal_error("unexpected expression kind"));
         };
         let result_ty = self.get_expr_type(expr, ctx);
         let then_ty = self.get_expr_type(then_expr, ctx);

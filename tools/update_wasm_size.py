@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Updates the compiler wasm size in docs/architecture.md.
 
-The size is measured, never written by hand: the script builds the release
-compiler for `wasm32-unknown-unknown`, measures the module and rewrites the
-paragraph in `docs/architecture.md`.
+The script builds the release compiler for `wasm32-unknown-unknown`, measures
+the module and rewrites the paragraph in `docs/architecture.md`. The current
+size is measured; the growth is computed against the pinned baseline below.
 
 Usage: python3 tools/update_wasm_size.py [--check]
 
@@ -27,16 +27,14 @@ BASELINE_COMMIT = "45153ff"
 
 # The paragraph that carries the measured size.
 PARAGRAPH = """The release compiler module built for `wasm32-unknown-unknown` is currently
-{raw:,} bytes raw and {gzip:,} bytes with `gzip -9 -n`.  The module grew from
-{baseline:,} bytes at commit `{baseline_commit}` to the size above, {growth:+.1f} %: the macro rescan
-of `c669bd5`, the printf conversions of `7c3c69c` and `fe5b897`, and the wide-expression handling
-of `ab897cc` and `3145abe` account for most of it.  The growth was +8.8 % at commit `8255888`.
+{raw:,} bytes raw and {gzip:,} bytes with `gzip -9 -n`.  The module has grown {growth:+.1f} %
+from {baseline:,} bytes at commit `{baseline_commit}`.
 """
 
 # The paragraph that the script replaces.
 PATTERN = re.compile(
     r"The release compiler module built for `wasm32-unknown-unknown` is currently\s.*?"
-    r"(?= The core does not spawn processes)",
+    r"(?=The core does not spawn processes)",
     re.S,
 )
 

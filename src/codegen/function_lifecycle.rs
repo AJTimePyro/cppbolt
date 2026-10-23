@@ -93,6 +93,15 @@ impl<'a> Codegen<'a> {
         Ok(())
     }
 
+    fn base_field_count(&self, layout: &StructLayout) -> usize {
+        layout
+            .base_classes
+            .iter()
+            .filter_map(|b| self.sema.struct_layouts.get(b))
+            .map(|bl| bl.fields.len())
+            .sum()
+    }
+
     /// Emits the member initializers in declaration order. Base subobjects
     /// are initialized by their own constructors.
     pub(super) fn compile_member_initializers(
@@ -102,12 +111,7 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let base_field_count: usize = layout
-            .base_classes
-            .iter()
-            .filter_map(|b| self.sema.struct_layouts.get(b))
-            .map(|bl| bl.fields.len())
-            .sum();
+        let base_field_count = self.base_field_count(layout);
         for fld in layout.fields.iter().skip(base_field_count) {
             let init_args = f
                 .ctor_initializers
@@ -182,12 +186,7 @@ impl<'a> Codegen<'a> {
         let Some(layout) = self.sema.struct_layouts.get(cls) else {
             return Ok(());
         };
-        let base_field_count: usize = layout
-            .base_classes
-            .iter()
-            .filter_map(|b| self.sema.struct_layouts.get(b))
-            .map(|bl| bl.fields.len())
-            .sum();
+        let base_field_count = self.base_field_count(layout);
         for fld in layout.fields.iter().skip(base_field_count).rev() {
             if let Type::Struct(sname) = fld.ty.strip_const() {
                 let member_dtor = format!("{}_~{}", sname, sname);
@@ -230,10 +229,13 @@ impl<'a> Codegen<'a> {
         Ok(())
     }
 
-    pub(super) fn emit_base_destructors(&self, f: &FunctionDecl, cls: &str, code: &mut Vec<u8>) {
-        if f.name != format!("~{}", cls) {
+    pub(super) fn emit_base_destructors(&self, ctx: &FunctionContext, code: &mut Vec<u8>) {
+        if !ctx.is_dtor {
             return;
         }
+        let Some(cls) = ctx.current_class.as_deref() else {
+            return;
+        };
         let Some(layout) = self.sema.struct_layouts.get(cls) else {
             return;
         };

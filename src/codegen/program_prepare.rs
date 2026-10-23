@@ -28,6 +28,8 @@ impl<'a> Codegen<'a> {
             || !self.sema.struct_layouts.is_empty();
         let has_indirect_calls = self.has_indirect_calls(&candidates, &reachable);
         let has_vtables = self.has_vtables();
+        // Vtables, function pointers, and indirect calls all need a funcref
+        // table. Slot 0 is reserved for the pure-virtual trap.
         let need_table = has_vtables || !address_taken.is_empty() || has_indirect_calls;
 
         let trap_func_idx = self.register_runtime_functions(need_printf, need_alloc, need_table);
@@ -67,18 +69,23 @@ impl<'a> Codegen<'a> {
         address_taken
     }
 
+    fn layout_global(&mut self, name: &str, ty: &Type) -> u32 {
+        let offset = self.next_data_offset;
+        let size = ty.size_of(&self.sema.struct_sizes) as u32;
+        self.next_data_offset += (size + 3) & !3;
+        let align = ty.align_of(&self.sema.struct_aligns) as u32;
+        self.next_data_offset = (self.next_data_offset + align - 1) & !(align - 1);
+        self.global_offsets.insert(name.to_string(), offset);
+        if let Some(alias) = QualifiedName::new(name).implicit_alias() {
+            self.global_offsets.insert(alias.into_owned(), offset);
+        }
+        offset
+    }
+
     fn lay_out_globals(&mut self, program: &Program) {
         for decl in &program.declarations {
             if let Decl::GlobalVar { name, ty, init, .. } = decl {
-                let offset = self.next_data_offset;
-                let size = ty.size_of(&self.sema.struct_sizes) as u32;
-                self.next_data_offset += (size + 3) & !3;
-                let align = ty.align_of(&self.sema.struct_aligns) as u32;
-                self.next_data_offset = (self.next_data_offset + align - 1) & !(align - 1);
-                self.global_offsets.insert(name.clone(), offset);
-                if let Some(alias) = QualifiedName::new(name).implicit_alias() {
-                    self.global_offsets.insert(alias.into_owned(), offset);
-                }
+                self.layout_global(name, ty);
                 self.global_inits
                     .push((name.clone(), ty.clone(), init.clone()));
             } else if let Decl::StructDecl {
@@ -89,15 +96,7 @@ impl<'a> Codegen<'a> {
             {
                 for (fname, fty, finit) in static_fields {
                     let qual_name = format!("{}::{}", name, fname);
-                    let offset = self.next_data_offset;
-                    let size = fty.size_of(&self.sema.struct_sizes) as u32;
-                    self.next_data_offset += (size + 3) & !3;
-                    let align = fty.align_of(&self.sema.struct_aligns) as u32;
-                    self.next_data_offset = (self.next_data_offset + align - 1) & !(align - 1);
-                    self.global_offsets.insert(qual_name.clone(), offset);
-                    if let Some(alias) = QualifiedName::new(&qual_name).implicit_alias() {
-                        self.global_offsets.insert(alias.into_owned(), offset);
-                    }
+                    self.layout_global(&qual_name, fty);
                     self.global_inits
                         .push((qual_name, fty.clone(), finit.clone()));
                 }
@@ -108,12 +107,7 @@ impl<'a> Codegen<'a> {
                 collect_static_vars(body, &f.name, &mut statics);
                 for (gname, gty, ginit) in statics {
                     if !self.global_offsets.contains_key(&gname) {
-                        let offset = self.next_data_offset;
-                        let size = gty.size_of(&self.sema.struct_sizes) as u32;
-                        self.next_data_offset += (size + 3) & !3;
-                        let align = gty.align_of(&self.sema.struct_aligns) as u32;
-                        self.next_data_offset = (self.next_data_offset + align - 1) & !(align - 1);
-                        self.global_offsets.insert(gname.clone(), offset);
+                        self.layout_global(&gname, &gty);
                         self.global_inits.push((gname, gty, ginit));
                     }
                 }
@@ -182,11 +176,12 @@ impl<'a> Codegen<'a> {
         name: &'p String,
         m: &'p FunctionDecl,
     ) -> Option<FuncCandidate<'p>> {
-        let mut aliases = Vec::new();
-        aliases.push(m.name.clone());
         let qual_name = format!("{}::{}", name, m.name);
-        aliases.push(qual_name.clone());
-        aliases.push(format!("{}_{}", name, m.name));
+        let mut aliases = vec![
+            m.name.clone(),
+            qual_name.clone(),
+            format!("{}_{}", name, m.name),
+        ];
         let mut calls = HashSet::new();
         if m.name == *name {
             aliases.push(format!("{}_{}", name, name));
@@ -345,16 +340,13 @@ impl<'a> Codegen<'a> {
     }
 
     fn has_vtables(&self) -> bool {
-        let has_vtables = self.sema.struct_order.iter().any(|name| {
+        self.sema.struct_order.iter().any(|name| {
             self.sema
                 .struct_layouts
                 .get(name)
                 .map(|l| l.has_vtable)
                 .unwrap_or(false)
-        });
-        // Vtables, function pointers, and indirect calls all need a funcref
-        // table. Slot 0 is reserved for the pure-virtual trap.
-        has_vtables
+        })
     }
 
     fn register_runtime_functions(

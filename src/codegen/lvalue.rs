@@ -50,7 +50,7 @@ impl<'a> Codegen<'a> {
                 member,
                 is_arrow,
                 ..
-            } => self.compile_lvalue_member(object, member, is_arrow, ctx, code),
+            } => self.compile_lvalue_member(object, member, *is_arrow, ctx, code),
             Expr::Call { .. }
             | Expr::Binary { .. }
             | Expr::Unary { .. }
@@ -92,7 +92,7 @@ impl<'a> Codegen<'a> {
         }
         if let Some(sym) = self
             .sema
-            .lookup_var_in_context(name, Some(&ctx.current_func_name))
+            .lookup_var_in_context(name, &ctx.current_func_name)
         {
             if sym.is_global {
                 let offset = self
@@ -216,36 +216,20 @@ impl<'a> Codegen<'a> {
         &mut self,
         object: &Expr,
         member: &str,
-        is_arrow: &bool,
+        is_arrow: bool,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let obj_ty = self.get_expr_type_raw(object, ctx);
         let is_ref = obj_ty.is_reference();
-        let sname = if *is_arrow || is_ref {
-            if let Type::Pointer(inner) | Type::Reference(inner) = obj_ty.strip_const() {
-                if let Type::Struct(s) = inner.strip_const() {
-                    s.clone()
-                } else {
-                    String::new()
-                }
-            } else {
-                String::new()
-            }
-        } else {
-            if let Type::Struct(s) = obj_ty.strip_const() {
-                s.clone()
-            } else {
-                String::new()
-            }
-        };
+        let sname = self.member_class_name(&obj_ty, is_arrow || is_ref);
         let offset = self
             .sema
             .find_field_in_class(&sname, member)
             .map(|field| field.offset as i32)
-            .unwrap_or(0);
+            .ok_or_else(|| self.internal_error("missing field layout"))?;
 
-        if *is_arrow {
+        if is_arrow {
             self.compile_expr(object, ctx, code)?;
         } else {
             self.compile_lvalue_addr(object, ctx, code)?;

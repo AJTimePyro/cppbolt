@@ -48,22 +48,13 @@ impl Parser {
                 );
             }
         }
-        let has_postfix_overload = self.tokens.windows(5).any(|window| {
+        if let Some(window) = self.tokens.windows(5).find(|window| {
             matches!(window[0].kind, TokenKind::KwOperator)
                 && matches!(window[1].kind, TokenKind::PlusPlus | TokenKind::MinusMinus)
                 && matches!(window[2].kind, TokenKind::LParen)
                 && matches!(window[3].kind, TokenKind::KwInt)
                 && matches!(window[4].kind, TokenKind::RParen)
-        });
-        if has_postfix_overload
-            && let Some(window) = self.tokens.windows(5).find(|window| {
-                matches!(window[0].kind, TokenKind::KwOperator)
-                    && matches!(window[1].kind, TokenKind::PlusPlus | TokenKind::MinusMinus)
-                    && matches!(window[2].kind, TokenKind::LParen)
-                    && matches!(window[3].kind, TokenKind::KwInt)
-                    && matches!(window[4].kind, TokenKind::RParen)
-            })
-        {
+        }) {
             return Some(
                 CompileError::new(
                     "postfix ++/-- is not supported",

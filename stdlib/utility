@@ -10,11 +10,6 @@ namespace std {
     }
 
     template<typename T>
-    const T& move(const T& t) noexcept {
-        return t;
-    }
-
-    template<typename T>
     void swap(T& a, T& b) {
         T tmp = a;
         a = b;

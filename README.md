@@ -2,8 +2,8 @@
 
 This repository contains a dependency-free Rust compiler for a defined subset of C++17. It preprocesses,
 lexes, parses, semantically checks, and emits WebAssembly directly, with a native CLI and a browser/Node C ABI.
-The project is correctness-focused and intentionally does not implement templates, standard containers,
-exceptions, RTTI, or other Phase 3/4 features.
+The project is correctness-focused and intentionally does not implement templates, standard containers and
+algorithms, exceptions, RTTI, lambdas, threads, or multiple and virtual inheritance.
 
 Build and run the current corpus:
 

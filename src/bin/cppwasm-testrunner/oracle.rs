@@ -2,16 +2,11 @@
 //! `clang++` and checks that their native output matches the recorded
 //! `.expected` file. Compilers that are not installed are skipped.
 
-use cppwasm::corpus::FEATURES;
 use cppwasm::oracle;
 use std::process::ExitCode;
 
 pub(super) fn run_oracle(filter: Option<&str>) -> ExitCode {
-    let groups: Vec<&str> = match filter {
-        Some("all") | None => FEATURES.to_vec(),
-        Some("negative") => Vec::new(),
-        Some(feature) => vec![feature],
-    };
+    let groups = super::selected_groups(filter);
 
     let report = oracle::run_oracle(&groups);
     if report.compilers.is_empty() {

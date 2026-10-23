@@ -16,19 +16,23 @@ bool evaluate(Guard g, bool outcome) {
     return outcome;
 }
 
-int main() {
+void check_and() {
     std::printf("--- check AND shortcut ---\n");
     if (evaluate(Guard(11), false) && evaluate(Guard(22), true)) {
         std::printf("AND taken\n");
     }
     std::printf("--- after AND ---\n");
+}
 
+void check_or() {
     std::printf("--- check OR shortcut ---\n");
     if (evaluate(Guard(33), true) || evaluate(Guard(44), false)) {
         std::printf("OR taken\n");
     }
     std::printf("--- after OR ---\n");
+}
 
+void check_ternaries() {
     std::printf("--- check Ternary cond true ---\n");
     int a = 1 ? evaluate(Guard(55), true) : evaluate(Guard(66), false);
     std::printf("a = %d\n", a);
@@ -36,6 +40,11 @@ int main() {
     std::printf("--- check Ternary cond false ---\n");
     int b = 0 ? evaluate(Guard(77), true) : evaluate(Guard(88), false);
     std::printf("b = %d\n", b);
+}
 
+int main() {
+    check_and();
+    check_or();
+    check_ternaries();
     return 0;
 }

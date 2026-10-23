@@ -13,10 +13,12 @@ struct Session {
 
 char mem[128];
 
+void destroy(Session* s) { s->~Session(); }
+
 int main() {
     Session* s = new (mem) Session(999);
     printf("Active session %d\n", s->token);
-    s->~Session();
+    destroy(s);
     printf("Session terminated\n");
     return 0;
 }

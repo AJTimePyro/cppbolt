@@ -14,9 +14,11 @@ int operator&(const Amount& a) { return a.raw() & 0x0f; }
 int operator*(const Amount& a, int k) { return a.raw() * k; }
 int operator+(const Amount& a, int k) { return a.raw() + k; }
 
+int negate(const Amount& a) { return -a; }
+
 int main() {
     Amount a(9);
-    std::printf("neg=%d\n", -a);
+    std::printf("neg=%d\n", negate(a));
     std::printf("not=%d\n", !a);
     std::printf("inv=%d\n", ~a);
     std::printf("and=%d\n", &a);

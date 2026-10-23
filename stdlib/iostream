@@ -283,14 +283,43 @@ namespace std {
             }
         }
 
+        bool _read_int(long long& res) {
+            _last_gcount = 0;
+            _skip_ws();
+            int ch = peek();
+            if (ch == -1) {
+                _fail_flag = true;
+                return false;
+            }
+            bool neg = false;
+            if (ch == '-') {
+                neg = true;
+                get();
+                ch = peek();
+            } else if (ch == '+') {
+                get();
+                ch = peek();
+            }
+            if (ch < '0' || ch > '9') {
+                _fail_flag = true;
+                return false;
+            }
+            long long r = 0;
+            while (ch >= '0' && ch <= '9') {
+                r = r * 10 + (ch - '0');
+                get();
+                ch = peek();
+            }
+            res = neg ? -r : r;
+            return true;
+        }
+
     public:
         constexpr istream() : _eof_flag(false), _fail_flag(false), _last_gcount(0) {}
 
         ostream* tie(ostream* = nullptr) { return nullptr; }
 
         streamsize gcount() const { return _last_gcount; }
-        void _set_gcount(int n) { _last_gcount = n; }
-
         bool good() const { return !_eof_flag && !_fail_flag; }
         bool eof() const { return _eof_flag; }
         bool fail() const { return _fail_flag; }
@@ -333,10 +362,6 @@ namespace std {
             return *this;
         }
 
-        istream& unget() {
-            return *this;
-        }
-
         istream& ignore() {
             get();
             return *this;
@@ -359,65 +384,21 @@ namespace std {
         }
 
         istream& operator>>(int& val) {
-            _last_gcount = 0;
-            _skip_ws();
-            int ch = peek();
-            if (ch == -1) {
-                _fail_flag = true;
-                return *this;
-            }
-            bool neg = false;
-            if (ch == '-') {
-                neg = true;
-                get();
-                ch = peek();
-            } else if (ch == '+') {
-                get();
-                ch = peek();
-            }
-            if (ch < '0' || ch > '9') {
-                _fail_flag = true;
-                return *this;
-            }
             long long res = 0;
-            while (ch >= '0' && ch <= '9') {
-                res = res * 10 + (ch - '0');
-                get();
-                ch = peek();
+            if (!_read_int(res)) {
+                return *this;
             }
-            val = (int)(neg ? -res : res);
+            val = (int)res;
             _last_gcount = 0;
             return *this;
         }
 
         istream& operator>>(long long& val) {
-            _last_gcount = 0;
-            _skip_ws();
-            int ch = peek();
-            if (ch == -1) {
-                _fail_flag = true;
-                return *this;
-            }
-            bool neg = false;
-            if (ch == '-') {
-                neg = true;
-                get();
-                ch = peek();
-            } else if (ch == '+') {
-                get();
-                ch = peek();
-            }
-            if (ch < '0' || ch > '9') {
-                _fail_flag = true;
-                return *this;
-            }
             long long res = 0;
-            while (ch >= '0' && ch <= '9') {
-                res = res * 10 + (ch - '0');
-                get();
-                ch = peek();
+            if (!_read_int(res)) {
+                return *this;
             }
-            val = neg ? -res : res;
+            val = res;
             _last_gcount = 0;
             return *this;
         }
@@ -477,7 +458,7 @@ namespace std {
             if (ch == delim) {
                 return is;
             }
-                        s.push_back((char)ch);
+                s.push_back((char)ch);
             count++;
         }
     }

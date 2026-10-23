@@ -4,31 +4,51 @@ use super::*;
 use cppwasm::corpus::{compare_output, input_path, run_with_input};
 use std::process::Command;
 
+fn ensure_feature_dir(paths: &Paths, feature: &str) -> Result<(), String> {
+    fs::create_dir_all(paths.work.join(feature)).map_err(|error| error.to_string())
+}
+
+fn run_command(
+    label: &str,
+    program: &Path,
+    extra: &[&str],
+    cpp: &Path,
+    out: &Path,
+) -> Result<std::process::Output, String> {
+    let mut command = Command::new("timeout");
+    command.arg("5s").arg(program);
+    for arg in extra {
+        command.arg(arg);
+    }
+    command
+        .arg(cpp)
+        .arg("-o")
+        .arg(out)
+        .output()
+        .map_err(|error| format!("cannot run {label}: {error}"))
+}
+
 pub(super) fn check_positive(
     paths: &Paths,
     feature: &str,
     name: &str,
     cpp: &Path,
 ) -> Result<(), String> {
-    let feature_dir = paths.work.join(feature);
-    fs::create_dir_all(&feature_dir).map_err(|error| error.to_string())?;
+    ensure_feature_dir(paths, feature)?;
 
     if paths.compiler == Path::new("ref") {
         let native = paths.output(feature, name, "native");
-        let compiled = Command::new("timeout")
-            .arg("5s")
-            .arg("g++")
-            .arg("-std=c++17")
-            .arg("-O0")
-            .arg(cpp)
-            .arg("-o")
-            .arg(&native)
-            .output()
-            .map_err(|error| format!("cannot run g++: {error}"))?;
+        let compiled = run_command(
+            "g++",
+            Path::new("g++"),
+            &["-std=c++17", "-O0"],
+            cpp,
+            &native,
+        )?;
         if !compiled.status.success() {
             return Err("compilation error or timeout".to_string());
         }
-        let output = run_with_input(&native, &input_path(feature, name))
+        let output = run_with_input(&native, input_path(feature, name).as_deref())
             .map_err(|error| format!("cannot run native binary: {error}"))?;
         if feature == "runtime_trap" {
             return if output.status.success() {
@@ -41,18 +61,11 @@ pub(super) fn check_positive(
     }
 
     let wasm = paths.output(feature, name, "wasm");
-    let compiled = Command::new("timeout")
-        .arg("5s")
-        .arg(&paths.compiler)
-        .arg(cpp)
-        .arg("-o")
-        .arg(&wasm)
-        .output()
-        .map_err(|error| format!("cannot run compiler: {error}"))?;
+    let compiled = run_command("compiler", &paths.compiler, &[], cpp, &wasm)?;
     if !compiled.status.success() {
         return Err("compilation error or timeout".to_string());
     }
-    let output = run_wasm(&wasm, &input_path(feature, name))
+    let output = run_wasm(&wasm, input_path(feature, name).as_deref())
         .map_err(|error| format!("cannot run node: {error}"))?;
 
     if feature == "runtime_trap" {
@@ -73,17 +86,9 @@ pub(super) fn check_negative(
     name: &str,
     cpp: &Path,
 ) -> Result<(), String> {
-    let feature_dir = paths.work.join(feature);
-    fs::create_dir_all(&feature_dir).map_err(|error| error.to_string())?;
+    ensure_feature_dir(paths, feature)?;
     let wasm = paths.output(feature, name, "wasm");
-    let compiled = Command::new("timeout")
-        .arg("5s")
-        .arg(&paths.compiler)
-        .arg(cpp)
-        .arg("-o")
-        .arg(&wasm)
-        .output()
-        .map_err(|error| format!("cannot run compiler: {error}"))?;
+    let compiled = run_command("compiler", &paths.compiler, &[], cpp, &wasm)?;
 
     if compiled.status.success() {
         return Err("diagnostic mismatch or accepted".to_string());
@@ -103,10 +108,7 @@ pub(super) fn check_negative(
     }
 }
 
-pub(super) fn run_wasm(
-    wasm: &Path,
-    input: &Option<PathBuf>,
-) -> std::io::Result<std::process::Output> {
+pub(super) fn run_wasm(wasm: &Path, input: Option<&Path>) -> std::io::Result<std::process::Output> {
     let mut command = Command::new("timeout");
     command
         .arg("5s")

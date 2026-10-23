@@ -49,7 +49,7 @@ pub fn input_path(feature: &str, name: &str) -> Option<PathBuf> {
 /// Runs a native program with the recorded input.
 pub fn run_with_input(
     binary: &Path,
-    input: &Option<PathBuf>,
+    input: Option<&Path>,
 ) -> std::io::Result<std::process::Output> {
     let mut command = Command::new("timeout");
     command.arg("5s").arg(binary);

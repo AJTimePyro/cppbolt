@@ -192,7 +192,6 @@ impl StructBody {
 
 impl Parser {
     fn parse_struct_access(&mut self, body: &mut StructBody) -> Result<bool, CompileError> {
-        // Public/private/protected labels
         if self.peek() == &TokenKind::KwPublic {
             self.advance();
             self.expect(TokenKind::Colon)?;
@@ -302,14 +301,13 @@ impl Parser {
             return Ok(true);
         }
 
-        // Destructor: ~ClassName()
         if self.peek() == &TokenKind::Tilde {
             self.advance();
             let dname = match self.advance().kind.clone() {
                 TokenKind::Ident(id) => format!("~{}", id),
                 _ => {
                     return Err(CompileError::new(
-                        "Expected destructor body.name after ~",
+                        "Expected destructor name after ~",
                         start_tok.line,
                         start_tok.col,
                     ));
@@ -322,7 +320,6 @@ impl Parser {
             return Ok(true);
         }
 
-        // Constructor: ClassName(...)
         let short_name = body.name.split("::").last().unwrap_or(&body.name);
         if let TokenKind::Ident(id) = self.peek().clone()
             && (id == body.name || id == short_name)
@@ -368,7 +365,7 @@ impl Parser {
                 }
             };
 
-            // A parameter list after the body.name marks a member function;
+            // A parameter list after the name marks a member function;
             // otherwise this is a field declaration.
             if self.peek() == &TokenKind::LParen {
                 let mut func =

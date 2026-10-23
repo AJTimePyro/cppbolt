@@ -87,7 +87,7 @@ fn hash_one(
         return Ok(None);
     }
 
-    let output = run_wasm(&wasm, &input_path(feature, name))
+    let output = run_wasm(&wasm, input_path(feature, name).as_deref())
         .map_err(|error| format!("cannot run node: {error}"))?;
     let bytes =
         fs::read(&wasm).map_err(|error| format!("cannot read {}: {error}", wasm.display()))?;
@@ -137,7 +137,7 @@ fn check_manifest(manifest: &Path, entries: &BTreeMap<String, (String, String)>)
         }
     };
     let mut expected = BTreeMap::new();
-    for line in text.lines().filter(|line| !line.trim().is_empty()) {
+    for line in text.lines() {
         let mut parts = line.split_whitespace();
         let Some(name) = parts.next() else {
             continue;

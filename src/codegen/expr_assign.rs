@@ -109,25 +109,26 @@ impl<'a> Codegen<'a> {
             .struct_layouts
             .get(sname)
             .map(|l| l.size)
-            .unwrap_or(4);
-        for i in 0..size {
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.fp_local);
-            code.push(OP_I32_LOAD);
-            write_u32(code, 2);
-            write_u32(code, dest_slot);
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.fp_local);
-            code.push(OP_I32_LOAD);
-            write_u32(code, 2);
-            write_u32(code, src_slot);
-            code.push(OP_I32_LOAD8_U);
-            write_u32(code, 0);
-            write_u32(code, i as u32);
-            code.push(OP_I32_STORE8);
-            write_u32(code, 0);
-            write_u32(code, i as u32);
-        }
+            .ok_or_else(|| self.internal_error("missing struct layout"))?;
+        super::raii::emit_struct_byte_copy(
+            size,
+            0,
+            |code| {
+                code.push(OP_LOCAL_GET);
+                write_u32(code, ctx.fp_local);
+                code.push(OP_I32_LOAD);
+                write_u32(code, 2);
+                write_u32(code, dest_slot);
+            },
+            |code| {
+                code.push(OP_LOCAL_GET);
+                write_u32(code, ctx.fp_local);
+                code.push(OP_I32_LOAD);
+                write_u32(code, 2);
+                write_u32(code, src_slot);
+            },
+            code,
+        );
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.fp_local);
         code.push(OP_I32_LOAD);
@@ -228,7 +229,7 @@ impl<'a> Codegen<'a> {
 
         let ty = self.get_expr_type(target, ctx);
         let val_ty = self.get_expr_type(value, ctx);
-        let op_name = compound_assign_operator_name(op);
+        let op_name = super::analysis::compound_assign_operator_name(op);
         if let Type::Struct(sname) = ty.strip_const()
             && let Some((m_idx, sig)) =
                 self.find_method(sname, &op_name, std::slice::from_ref(&val_ty))
@@ -338,25 +339,6 @@ impl<'a> Codegen<'a> {
 
         Ok(())
     }
-}
-
-fn compound_assign_operator_name(op: &BinaryOp) -> String {
-    format!(
-        "operator{}=",
-        match op {
-            BinaryOp::Add => "+",
-            BinaryOp::Sub => "-",
-            BinaryOp::Mul => "*",
-            BinaryOp::Div => "/",
-            BinaryOp::Rem => "%",
-            BinaryOp::BitAnd => "&",
-            BinaryOp::BitOr => "|",
-            BinaryOp::BitXor => "^",
-            BinaryOp::Shl => "<<",
-            BinaryOp::Shr => ">>",
-            _ => "",
-        }
-    )
 }
 
 fn emit_compound_operator(op: &BinaryOp, arithmetic_ty: &Type, code: &mut Vec<u8>) {

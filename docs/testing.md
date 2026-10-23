@@ -54,37 +54,6 @@ large `lvalue_matrix` pair; see [Generated differential tests](#generated-differ
 The table covers infinities but not NaN: the sign of a NaN is implementation defined, so g++ prints `nan` where
 clang++ prints `-nan` for the same expression. Only sign-independent properties of a NaN are checked.
 
-### Name/value variants (anti-hardcoding only)
-
-The runner warns for the following 27 pairs because their sources differ only in identifiers or literals.
-- `c_basics_variant/large_local_frame`
-- `c_basics_variant/lvalue_matrix`
-- `c_basics_variant/rounding_ties`
-- `c_basics_variant/using_declaration_precedence`
-- `classes_oop_variant/chained_compound_assign`
-- `classes_oop_variant/const_method_overload`
-- `classes_oop_variant/derived_member_hiding`
-- `classes_oop_variant/explicit_dtor`
-- `classes_oop_variant/global_static_objects`
-- `classes_oop_variant/implicit_copy_member_objects`
-- `classes_oop_variant/operator_unary_overload`
-- `classes_oop_variant/placement_new`
-- `classes_oop_variant/prvalue_elision`
-- `classes_oop_variant/pure_virtual`
-- `classes_oop_variant/raii_loop_break`
-- `classes_oop_variant/return_val_dtor_order`
-- `classes_oop_variant/self_assignment`
-- `classes_oop_variant/short_circuit_temporaries`
-- `classes_oop_variant/single_inheritance`
-- `classes_oop_variant/static_local_constructor_args`
-- `classes_oop_variant/vcall_base_ctor_dtor`
-- `classes_oop_variant/virtual_destructor`
-- `classes_oop_variant/virtual_dispatch_hierarchy`
-- `memory_model_variant/free_list_reuse`
-- `mini_stl_variant/iostream_precision_after_fixed`
-- `mini_stl_variant/iostream_width_double`
-- `mini_stl_variant/stream_edge_cases`
-
 ### Independent tests
 
 `tests/independent` is authored without access to the compiler source. Authors work from the C++17

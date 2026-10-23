@@ -11,15 +11,22 @@ public:
     }
 };
 
+bool visit(int k) {
+    IterGuard g(k);
+    if (k == 11) {
+        std::printf("skip step %d\n", k);
+        return true;
+    }
+    if (k == 13) {
+        std::printf("abort at step %d\n", k);
+        return false;
+    }
+    return true;
+}
+
 int main() {
     for (int k = 10; k < 15; ++k) {
-        IterGuard g(k);
-        if (k == 11) {
-            std::printf("skip step %d\n", k);
-            continue;
-        }
-        if (k == 13) {
-            std::printf("abort at step %d\n", k);
+        if (!visit(k)) {
             break;
         }
     }

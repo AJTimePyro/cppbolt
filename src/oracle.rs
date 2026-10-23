@@ -116,7 +116,7 @@ fn run_one(compiler: &str, work: &Path, feature: &str, name: &str, cpp: &Path) -
         return OracleResult::Failed("compilation error or timeout".to_string());
     }
 
-    let output = match run_with_input(&binary, &input_path(feature, name)) {
+    let output = match run_with_input(&binary, input_path(feature, name).as_deref()) {
         Ok(output) => output,
         Err(error) => return OracleResult::Failed(format!("cannot run binary: {error}")),
     };

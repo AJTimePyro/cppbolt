@@ -30,7 +30,7 @@ impl<'a> Codegen<'a> {
 
         if let Some(ref cls) = class_name {
             self.emit_member_destructors(f, cls, &mut code)?;
-            self.emit_base_destructors(f, cls, &mut code);
+            self.emit_base_destructors(&ctx, &mut code);
         }
 
         if ctx.is_main {
@@ -89,14 +89,9 @@ impl<'a> Codegen<'a> {
                 write_u32(code, i as u32);
                 code.push(OP_LOCAL_SET);
                 write_u32(code, ctx.scratch1);
-                self.emit_copy_struct(sname, offset, ctx, code);
+                self.emit_copy_struct(sname, offset, ctx, code)?;
                 let Some(scope) = ctx.scope_objects.last_mut() else {
-                    return Err(CompileError::new(
-                        "internal compiler error: missing object scope",
-                        self.current_line,
-                        self.current_col,
-                    )
-                    .with_kind(crate::diagnostics::ErrorKind::Internal));
+                    return Err(self.internal_error("missing object scope"));
                 };
                 scope.push((p.name.clone(), p.ty.clone(), offset));
             } else {
@@ -133,21 +128,9 @@ impl<'a> Codegen<'a> {
         code.push(OP_GLOBAL_SET);
         write_u32(code, 0);
 
-        if f.return_type != Type::Void {
-            let ty = &f.return_type;
-            if *ty == Type::LongLong || *ty == Type::UnsignedLongLong {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.ret_temp_i64);
-            } else if *ty == Type::Double {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.ret_temp_f64);
-            } else if *ty == Type::Float {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.scratch_f32);
-            } else {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.ret_temp_i32);
-            }
+        if let Some(local) = super::stmt_return::return_local(&f.return_type, ctx) {
+            code.push(OP_LOCAL_GET);
+            write_u32(code, local);
         }
 
         code.push(OP_END);

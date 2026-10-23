@@ -6,12 +6,14 @@ int main() {
     free(initial);
 
     int count = 0;
-    for (int i = 0; i < 500000; ++i) {
+    int i = 0;
+    while (i < 500000) {
         void* p = malloc(128);
         if (p == initial) {
             count++;
         }
         free(p);
+        i += 1;
     }
 
     printf("Reuses: %d / 500000\n", count);

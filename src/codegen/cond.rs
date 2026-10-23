@@ -21,7 +21,6 @@ impl<'a> Codegen<'a> {
             return Ok(());
         }
         self.compile_expr(expr, ctx, code)?;
-        let ty = self.get_expr_type(expr, ctx);
         match ty.strip_const() {
             Type::LongLong | Type::UnsignedLongLong => {
                 code.push(OP_I64_EQZ);

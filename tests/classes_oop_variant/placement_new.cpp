@@ -14,8 +14,10 @@ struct Vec2 {
 
 char memory_pool[256];
 
+Vec2* place_vec(char* where, int u, int v) { return new (where) Vec2(u, v); }
+
 int main() {
-    Vec2* item = new (memory_pool) Vec2(100, 250);
+    Vec2* item = place_vec(memory_pool, 100, 250);
     printf("item->u = %d, item->v = %d\n", item->u, item->v);
     return 0;
 }

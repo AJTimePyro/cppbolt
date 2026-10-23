@@ -71,7 +71,7 @@ impl<'a> Codegen<'a> {
             Type::Int
         } else if let Some(sym) = self
             .sema
-            .lookup_var_in_context(name, Some(&ctx.current_func_name))
+            .lookup_var_in_context(name, &ctx.current_func_name)
         {
             sym.ty.clone()
         } else if let Some(cls) = &ctx.current_class {

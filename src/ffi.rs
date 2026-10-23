@@ -118,7 +118,6 @@ pub extern "C" fn get_result_len() -> usize {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn get_error_ptr() -> *const u8 {
-    // SAFETY: the pointer refers to the private static diagnostic buffer.
     std::ptr::addr_of!(ERROR_BYTES).cast()
 }
 

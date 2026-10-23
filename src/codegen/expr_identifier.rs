@@ -42,7 +42,7 @@ impl<'a> Codegen<'a> {
         }
         if let Some(sym) = self
             .sema
-            .lookup_var_in_context(name, Some(&ctx.current_func_name))
+            .lookup_var_in_context(name, &ctx.current_func_name)
         {
             self.emit_context_identifier(sym, name, code);
             return Ok(());
@@ -67,12 +67,9 @@ impl<'a> Codegen<'a> {
 
     /// Emits the address of an aggregate, or the loaded value of a scalar.
     fn emit_identifier_address(&mut self, offset: i32, ty: &Type, code: &mut Vec<u8>) {
-        if matches!(ty.strip_const(), Type::Struct(_) | Type::Array(_, _)) {
-            code.push(OP_I32_CONST);
-            write_i32(code, offset);
-        } else {
-            code.push(OP_I32_CONST);
-            write_i32(code, offset);
+        code.push(OP_I32_CONST);
+        write_i32(code, offset);
+        if !matches!(ty.strip_const(), Type::Struct(_) | Type::Array(_, _)) {
             self.emit_load(ty, 0, code);
         }
     }
@@ -140,7 +137,7 @@ impl<'a> Codegen<'a> {
                 .lookup_var(&format!("{}::{}", cls, name))
                 .or_else(|| {
                     self.sema
-                        .lookup_var_in_context(name, Some(&ctx.current_func_name))
+                        .lookup_var_in_context(name, &ctx.current_func_name)
                 })
                 .map(|s| s.ty.clone())
                 .unwrap_or(Type::Int);

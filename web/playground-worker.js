@@ -1,12 +1,5 @@
-// The compiler worker of the playground.
-//
-// The compiler runs in a worker so that a deep program never blocks the
-// page.  The worker owns the WebAssembly build of the compiler and answers
-// one request at a time: the source goes in, the compiled module or the
-// diagnostic comes out.
-//
-// Every answer carries the time the step took, so the page can show how long
-// the compilation was without the compiler having to measure anything.
+// The playground's compiler worker. See docs/host-interface.md for the
+// message protocol.
 
 let compiler = null;
 let compilerUrl = null;

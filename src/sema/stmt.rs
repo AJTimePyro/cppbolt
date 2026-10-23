@@ -7,7 +7,6 @@ impl Sema {
         self.current_frame_size = 0;
         self.enter_scope();
 
-        // Register parameters in function scope
         let mut param_offset = 0;
         for param in &func.params {
             param_offset += 4;
@@ -18,12 +17,11 @@ impl Sema {
                 stack_offset: param_offset,
             };
             let Some(scope) = self.scopes.last_mut() else {
-                return Err(CompileError::new(
-                    "internal compiler error: missing function scope",
+                return Err(crate::internal_error!(
                     func.line,
                     func.col,
-                )
-                .with_kind(crate::diagnostics::ErrorKind::Internal));
+                    "missing function scope"
+                ));
             };
             scope.vars.insert(param.name.clone(), sym);
         }

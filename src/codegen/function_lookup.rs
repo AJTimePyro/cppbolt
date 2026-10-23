@@ -11,7 +11,7 @@ impl<'a> Codegen<'a> {
             let mut best_sig = None;
             let mut best_score = usize::MAX;
             for sig in sigs {
-                let Some(score) = self.score_signature(sig, arg_types) else {
+                let Some(score) = self.score_overload_params(&sig.param_types, arg_types) else {
                     continue;
                 };
                 if score < best_score {
@@ -33,39 +33,6 @@ impl<'a> Codegen<'a> {
             })
             .or_else(|| self.func_indices.get(QualifiedName::new(name).plain()))
             .map(|&idx| (idx, default_signature(name)))
-    }
-
-    fn score_signature(&self, sig: &FunctionSig, arg_types: &[Type]) -> Option<usize> {
-        if sig.param_types.len() != arg_types.len() {
-            return None;
-        }
-        let mut score = 0;
-        for (p, a) in sig.param_types.iter().zip(arg_types) {
-            let p_decay = p.decay_array();
-            let a_decay = a.decay_array();
-            if p_decay.strip_all_const() == a_decay.strip_all_const() {
-                if p_decay != a_decay {
-                    score += 1;
-                }
-            } else if p.is_reference()
-                && p.deref_type().map(|d| d.strip_all_const()) == Some(a_decay.strip_all_const())
-            {
-                score += 2;
-            } else if (p.is_integer() && a.is_integer()) || (p.is_floating() && a.is_floating()) {
-                score += 10;
-            } else if self.sema.can_assign(p, a) {
-                let is_user_conv = matches!(p.strip_const().strip_reference(), Type::Struct(_))
-                    && !matches!(a.strip_const().strip_reference(), Type::Struct(_));
-                if is_user_conv {
-                    score += 1000;
-                } else {
-                    score += 20;
-                }
-            } else {
-                return None;
-            }
-        }
-        Some(score)
     }
 
     fn resolve_signature_index(&self, name: &str, sig: &FunctionSig) -> Option<u32> {

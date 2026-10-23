@@ -1,9 +1,9 @@
 //! Literal scanning for strings, characters, and numbers.
 
-use super::{Lexer, Token, TokenKind};
+use super::{Lexer, Token, TokenKind, decode_escape};
 use crate::diagnostics::CompileError;
 
-impl Lexer<'_> {
+impl Lexer {
     pub(super) fn read_string(
         &mut self,
         start_line: usize,
@@ -21,16 +21,7 @@ impl Lexer<'_> {
                 continue;
             }
             if let Some(escape) = self.advance() {
-                text.push(match escape {
-                    'n' => '\n',
-                    't' => '\t',
-                    'r' => '\r',
-                    '0' => '\0',
-                    '\\' => '\\',
-                    '\'' => '\'',
-                    '"' => '"',
-                    other => other,
-                });
+                text.push(decode_escape(escape));
             }
         }
 
@@ -49,14 +40,7 @@ impl Lexer<'_> {
         self.advance();
         let value = match self.advance() {
             Some('\\') => match self.advance() {
-                Some('n') => '\n',
-                Some('t') => '\t',
-                Some('r') => '\r',
-                Some('0') => '\0',
-                Some('\\') => '\\',
-                Some('\'') => '\'',
-                Some('"') => '"',
-                Some(other) => other,
+                Some(escaped) => decode_escape(escaped),
                 None => {
                     return Err(CompileError::new(
                         "Unterminated char literal",
@@ -121,10 +105,8 @@ impl Lexer<'_> {
         }
 
         if is_float {
-            if matches!(self.peek(), Some('f') | Some('F'))
-                && let Some(suffix) = self.advance()
-            {
-                text.push(suffix);
+            if matches!(self.peek(), Some('f' | 'F')) {
+                text.extend(self.advance());
             }
             let digits = text.trim_end_matches(['f', 'F']);
             let value: f64 = digits.parse().map_err(|_| {
@@ -170,16 +152,9 @@ impl Lexer<'_> {
         start_col: usize,
     ) -> Result<Token, CompileError> {
         let mut text = String::new();
-        for _ in 0..2 {
-            let Some(prefix) = self.advance() else {
-                return Err(CompileError::new(
-                    "Invalid hexadecimal literal",
-                    start_line,
-                    start_col,
-                ));
-            };
-            text.push(prefix);
-        }
+        // The caller has already verified the `0x`/`0X` prefix.
+        text.extend(self.advance());
+        text.extend(self.advance());
         while let Some(c) = self.peek() {
             if c.is_ascii_hexdigit() {
                 text.push(c);

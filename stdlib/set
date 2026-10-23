@@ -28,8 +28,6 @@ namespace std {
         typedef typename TreeType::iterator iterator;
         typedef typename TreeType::const_iterator const_iterator;
 
-        set() {}
-
         size_t size() const { return tree_.size(); }
         bool empty() const { return tree_.empty(); }
 

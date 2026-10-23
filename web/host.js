@@ -323,7 +323,7 @@
                             s = e >= 0 ? s.slice(0, e) + "." + s.slice(e) : s + ".";
                         }
                     } else {
-                        s = String(val);
+                        throw new Error("unknown float format mode: " + mode);
                     }
                     if ((flags & 16) !== 0) {
                         s = s.toUpperCase();
@@ -379,11 +379,6 @@
         return {
             imports,
             getStdout: () => stdoutBuffer,
-            flushStdout: () => {
-                const s = stdoutBuffer;
-                stdoutBuffer = "";
-                return s;
-            }
         };
     }
 
@@ -400,11 +395,9 @@ if (typeof require !== "undefined" && typeof module !== "undefined" && require.m
     const wasmPath = process.argv[2];
     let inputStr = process.argv[3];
     if (inputStr === undefined) {
-        try {
-            if (!process.stdin.isTTY) {
-                inputStr = fs.readFileSync(0, "utf-8");
-            }
-        } catch (_) {}
+        if (!process.stdin.isTTY) {
+            inputStr = fs.readFileSync(0, "utf-8");
+        }
     }
     inputStr = inputStr || "";
     if (!wasmPath) {

@@ -24,12 +24,12 @@ impl<'a> Codegen<'a> {
 
         if ctx.is_main {
             // A return from main still destroys namespace-scope objects.
-            self.emit_global_dtors(code);
+            self.emit_global_destructors(code);
         }
 
         // If destructor of derived class, call base class destructors in
         // reverse construction order.
-        self.emit_base_class_dtors(ctx, code);
+        self.emit_base_destructors(ctx, code);
 
         // Epilogue: restore stack pointer
         code.push(OP_LOCAL_GET);
@@ -67,19 +67,9 @@ impl<'a> Codegen<'a> {
         }
         self.compile_expr(expr, ctx, code)?;
         self.emit_conversion(&ty, &ctx.return_type, code);
-        let return_ty = ctx.return_type.strip_const();
-        if matches!(return_ty, Type::LongLong | Type::UnsignedLongLong) {
+        if let Some(local) = return_local(&ctx.return_type, ctx) {
             code.push(OP_LOCAL_SET);
-            write_u32(code, ctx.ret_temp_i64);
-        } else if return_ty == &Type::Double {
-            code.push(OP_LOCAL_SET);
-            write_u32(code, ctx.ret_temp_f64);
-        } else if return_ty == &Type::Float {
-            code.push(OP_LOCAL_SET);
-            write_u32(code, ctx.scratch_f32);
-        } else if return_ty != &Type::Void {
-            code.push(OP_LOCAL_SET);
-            write_u32(code, ctx.ret_temp_i32);
+            write_u32(code, local);
         }
         self.emit_clean_temporaries(ctx, code);
         Ok(())
@@ -94,7 +84,12 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let size = self.sema.struct_sizes.get(sname).copied().unwrap_or(4);
+        let size = self
+            .sema
+            .struct_sizes
+            .get(sname)
+            .copied()
+            .ok_or_else(|| self.internal_error("missing struct layout"))?;
         if self.is_struct_lvalue(expr, ctx) {
             code.push(OP_I32_CONST);
             write_i32(code, size as i32);
@@ -118,18 +113,19 @@ impl<'a> Codegen<'a> {
                 code.push(OP_CALL);
                 write_u32(code, ctor_idx);
             } else {
-                for i in 0..size {
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.ret_temp_i32);
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.scratch1);
-                    code.push(OP_I32_LOAD8_U);
-                    write_u32(code, 0);
-                    write_u32(code, i as u32);
-                    code.push(OP_I32_STORE8);
-                    write_u32(code, 0);
-                    write_u32(code, i as u32);
-                }
+                super::raii::emit_struct_byte_copy(
+                    size,
+                    0,
+                    |code| {
+                        code.push(OP_LOCAL_GET);
+                        write_u32(code, ctx.ret_temp_i32);
+                    },
+                    |code| {
+                        code.push(OP_LOCAL_GET);
+                        write_u32(code, ctx.scratch1);
+                    },
+                    code,
+                );
             }
             self.emit_clean_temporaries(ctx, code);
             return Ok(());
@@ -144,57 +140,26 @@ impl<'a> Codegen<'a> {
         Ok(())
     }
 
-    fn emit_global_dtors(&mut self, code: &mut Vec<u8>) {
-        for (sname, goffset) in self.global_dtors.iter().rev() {
-            let dtor_name = format!("{}_~{}", sname, sname);
-            if let Some(&dtor_idx) = self.func_indices.get(&dtor_name) {
-                code.push(OP_I32_CONST);
-                write_i32(code, *goffset as i32);
-                code.push(OP_CALL);
-                write_u32(code, dtor_idx);
-            }
-        }
-    }
-
-    fn emit_base_class_dtors(&mut self, ctx: &mut FunctionContext, code: &mut Vec<u8>) {
-        if ctx.is_dtor
-            && let Some(ref cls) = ctx.current_class
-            && let Some(layout) = self.sema.struct_layouts.get(cls)
-        {
-            for (base_name, base_offset) in layout.base_offsets.iter().rev() {
-                let base_dtor = format!("{}_~{}", base_name, base_name);
-                if let Some(&b_idx) = self.func_indices.get(&base_dtor) {
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, 0); // this
-                    if *base_offset != 0 {
-                        code.push(OP_I32_CONST);
-                        write_i32(code, *base_offset as i32);
-                        code.push(OP_I32_ADD);
-                    }
-                    code.push(OP_CALL);
-                    write_u32(code, b_idx);
-                }
-            }
-        }
-    }
-
     fn emit_return_value_load(&mut self, ctx: &mut FunctionContext, code: &mut Vec<u8>) {
-        let ty = ctx.return_type.strip_const();
         if ctx.is_reference_return {
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.ret_temp_i32);
-        } else if matches!(ty, Type::LongLong | Type::UnsignedLongLong) {
+        } else if let Some(local) = return_local(&ctx.return_type, ctx) {
             code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.ret_temp_i64);
-        } else if ty == &Type::Double {
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.ret_temp_f64);
-        } else if ty == &Type::Float {
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.scratch_f32);
-        } else if ty != &Type::Void {
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.ret_temp_i32);
+            write_u32(code, local);
         }
+    }
+}
+
+/// The frame local that holds a return value of `ty`.
+///
+/// Reference returns use `ret_temp_i32` directly and are handled by the caller.
+pub(super) fn return_local(ty: &Type, ctx: &FunctionContext) -> Option<u32> {
+    match ty.strip_const() {
+        Type::Void => None,
+        Type::LongLong | Type::UnsignedLongLong => Some(ctx.ret_temp_i64),
+        Type::Double => Some(ctx.ret_temp_f64),
+        Type::Float => Some(ctx.scratch_f32),
+        _ => Some(ctx.ret_temp_i32),
     }
 }

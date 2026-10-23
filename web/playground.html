@@ -175,6 +175,7 @@ int main() {
 ];
 
 let requestId = 0;
+let exampleIndex = 0;
 const pending = new Map();
 
 worker.onmessage = (event) => {
@@ -205,7 +206,7 @@ function show(text, isError) {
     output.className = isError ? "error" : "";
 }
 
-/// Formats a duration in milliseconds.
+// Formats a duration in milliseconds.
 function formatMs(value) {
     if (!isFinite(value)) {
         return "?";
@@ -219,7 +220,7 @@ function formatMs(value) {
     return `${(value / 1000).toFixed(2)} s`;
 }
 
-/// Shows the time of every step of the last run.
+// Shows the time of every step of the last run.
 function showTiming(steps) {
     const parts = Object.entries(steps)
         .filter(([, value]) => typeof value === "number" && isFinite(value))
@@ -227,8 +228,8 @@ function showTiming(steps) {
     timing.textContent = parts.join(" · ");
 }
 
-/// Thrown by the exit import of a program, so the program stops where it
-/// asked to stop, exactly like a native program does.
+// Thrown by the exit import of a program, so the program stops where it
+// asked to stop, exactly like a native program does.
 class ProgramExit {
     constructor(code) {
         this.code = code;
@@ -300,13 +301,9 @@ runButton.addEventListener("click", async () => {
     });
 });
 
-/// Runs the program without a click, for a link or a headless check.
-async function runNow() {
-    runButton.click();
-}
-
 exampleButton.addEventListener("click", () => {
-    source.value = EXAMPLES[requestId % EXAMPLES.length];
+    source.value = EXAMPLES[exampleIndex % EXAMPLES.length];
+    exampleIndex += 1;
     status.textContent = "example loaded";
 });
 
@@ -319,7 +316,7 @@ if (code !== null) {
 }
 
 if (parameters.get("run") === "1") {
-    runNow();
+    runButton.click();
 }
 </script>
 </body>

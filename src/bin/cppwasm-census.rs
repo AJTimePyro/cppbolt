@@ -10,6 +10,9 @@ use cppwasm::census::{Census, FunctionRecord, census};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+const PARAMETER_LIMIT: usize = 5;
+const FILE_LINE_LIMIT: usize = 500;
+
 fn main() -> ExitCode {
     let mut root = PathBuf::from(".");
     let mut tsv: Option<PathBuf> = None;
@@ -64,8 +67,7 @@ fn print_counts(result: &Census) {
 fn print_longest(result: &Census) {
     println!("15 LONGEST FUNCTIONS");
     println!("length | file:line | fn | params");
-    let mut longest: Vec<&FunctionRecord> = result.functions.iter().collect();
-    longest.sort_by_key(|function| std::cmp::Reverse(function.length));
+    let longest: Vec<&FunctionRecord> = result.longest(0);
     for function in longest.iter().take(15) {
         println!(
             "{:6} | {}:{} | {} | {}",
@@ -78,17 +80,17 @@ fn print_longest(result: &Census) {
 /// Prints the functions with more than five parameters.
 fn print_parameters(result: &Census) {
     println!(
-        "functions with more than 5 parameters: {}",
-        result.over_parameters(5)
+        "functions with more than {PARAMETER_LIMIT} parameters: {}",
+        result.over_parameters(PARAMETER_LIMIT)
     );
     println!(
-        "functions with more than 5 parameters (excluding self): {}",
-        result.over_parameters_without_receiver(5)
+        "functions with more than {PARAMETER_LIMIT} parameters (excluding self): {}",
+        result.over_parameters_without_receiver(PARAMETER_LIMIT)
     );
     for function in result
         .functions
         .iter()
-        .filter(|function| function.parameters > 5)
+        .filter(|function| function.parameters > PARAMETER_LIMIT)
     {
         println!(
             "  {:2} params | {}:{} | {}",
@@ -104,13 +106,13 @@ fn print_files(result: &Census) {
     let mut files: Vec<(&String, &usize)> = result.file_lines.iter().collect();
     files.sort_by(|left, right| right.1.cmp(left.1));
     for (file, lines) in &files {
-        if **lines > 500 {
+        if **lines > FILE_LINE_LIMIT {
             println!("  {lines:5}  {file}");
         }
     }
     println!(
-        "files over 500 lines: {} of {}",
-        result.files_over(500),
+        "files over {FILE_LINE_LIMIT} lines: {} of {}",
+        result.files_over(FILE_LINE_LIMIT),
         result.file_lines.len()
     );
 }

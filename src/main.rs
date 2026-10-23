@@ -27,7 +27,6 @@ impl IncludeProvider for FilesystemIncludes {
         let mut candidates = Vec::new();
         if quoted
             && let Some(including) = including_file
-            && including != "<input>"
             && !including.starts_with('<')
             && let Some(parent) = Path::new(including).parent()
             && !parent.as_os_str().is_empty()

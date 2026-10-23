@@ -20,18 +20,22 @@ public:
     }
 };
 
+void report(const char* label, const Transceiver& t) {
+    std::printf("%s freq=%d, pwr=%d\n", label, t.ch.freq, t.power);
+}
+
 int main() {
     std::printf("create t1\n");
     {
         Transceiver t1(915, 25);
         std::printf("copy t2 = t1\n");
         Transceiver t2 = t1;
-        std::printf("t2 freq=%d, pwr=%d\n", t2.ch.freq, t2.power);
+        report("t2", t2);
 
         std::printf("assign t3 = t2\n");
         Transceiver t3(433, 10);
         t3 = t2;
-        std::printf("t3 freq=%d, pwr=%d\n", t3.ch.freq, t3.power);
+        report("t3", t3);
         std::printf("end of scope\n");
     }
     std::printf("finished\n");

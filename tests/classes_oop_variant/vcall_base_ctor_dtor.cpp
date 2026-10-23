@@ -1,16 +1,18 @@
 #include <cstdio>
 
+void log(const char* message) { std::printf("%s\n", message); }
+
 class BaseService {
 public:
     virtual void service_hook() {
         std::printf("Base service_hook\n");
     }
     BaseService() {
-        std::printf("BaseService ctor -> invoke hook\n");
+        log("BaseService ctor -> invoke hook");
         service_hook();
     }
     virtual ~BaseService() {
-        std::printf("BaseService dtor -> invoke hook\n");
+        log("BaseService dtor -> invoke hook");
         service_hook();
     }
 };
@@ -21,11 +23,11 @@ public:
         std::printf("DatabaseService hook\n");
     }
     DatabaseService() {
-        std::printf("DatabaseService ctor -> invoke hook\n");
+        log("DatabaseService ctor -> invoke hook");
         service_hook();
     }
     ~DatabaseService() override {
-        std::printf("DatabaseService dtor -> invoke hook\n");
+        log("DatabaseService dtor -> invoke hook");
         service_hook();
     }
 };

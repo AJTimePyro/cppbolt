@@ -13,33 +13,23 @@ use std::path::{Path, PathBuf};
 /// One function of the census.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionRecord {
-    /// The file of the function, relative to the root of the census.
     pub file: String,
-    /// The name of the function.
     pub name: String,
-    /// The line of the `fn` keyword.
     pub start_line: usize,
-    /// The line of the closing brace of the body.
     pub end_line: usize,
-    /// The number of lines the function spans.
     pub length: usize,
-    /// The number of parameters, the receiver included.
     pub parameters: usize,
-    /// The number of parameters, the receiver excluded.
     pub parameters_without_receiver: usize,
 }
 
 /// The census of a source tree.
 #[derive(Debug, Default)]
 pub struct Census {
-    /// Every function of the tree.
     pub functions: Vec<FunctionRecord>,
-    /// The number of lines of every file of the tree.
     pub file_lines: BTreeMap<String, usize>,
 }
 
 impl Census {
-    /// The number of functions that are longer than `limit` lines.
     pub fn over_length(&self, limit: usize) -> usize {
         self.functions
             .iter()
@@ -47,7 +37,6 @@ impl Census {
             .count()
     }
 
-    /// The number of functions with more than `limit` parameters.
     pub fn over_parameters(&self, limit: usize) -> usize {
         self.functions
             .iter()
@@ -55,8 +44,6 @@ impl Census {
             .count()
     }
 
-    /// The number of functions with more than `limit` parameters, the
-    /// receiver excluded.
     pub fn over_parameters_without_receiver(&self, limit: usize) -> usize {
         self.functions
             .iter()
@@ -64,7 +51,6 @@ impl Census {
             .count()
     }
 
-    /// The number of files with more than `limit` lines.
     pub fn files_over(&self, limit: usize) -> usize {
         self.file_lines
             .values()
@@ -72,7 +58,6 @@ impl Census {
             .count()
     }
 
-    /// The functions that are longer than `limit` lines, longest first.
     pub fn longest(&self, limit: usize) -> Vec<&FunctionRecord> {
         let mut longest: Vec<&FunctionRecord> = self
             .functions

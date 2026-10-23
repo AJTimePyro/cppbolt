@@ -3,8 +3,7 @@
 //!
 //! Unreachable files are dead weight: they are never compiled, never linted
 //! and never exercised, so they can drift away from the code they were
-//! extracted from.  The four files added by the "phase 4" commit were exactly
-//! that at that commit: never declared with `mod`, therefore never built.
+//! extracted from and stop building without anyone noticing.
 //!
 //! The check walks the module tree from the crate roots, resolving every
 //! `mod name;` declaration the way rustc does (including `#[path = "..."]`),

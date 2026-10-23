@@ -293,10 +293,6 @@ impl<'a> Preprocessor<'a> {
         result
     }
 
-    fn handle_define(&mut self, rest: &str, line_number: usize) -> Result<(), CompileError> {
-        self.parse_define(rest, line_number)
-    }
-
     fn handle_pragma(&mut self, argument: &str, current_file: Option<&str>) {
         let is_once = argument.split_whitespace().next() == Some("once");
         if !is_once {

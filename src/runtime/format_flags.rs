@@ -54,7 +54,6 @@ pub(super) fn emit_format_loop_start(code: &mut Vec<u8>, func_print_char: u32) {
 
 /// Consumes `%` and handles the `%%` escape before parsing flags.
 fn emit_format_percent_escape(code: &mut Vec<u8>, func_print_char: u32) {
-    // Consume '%' and handle the "%%" escape before parsing flags.
     code.push(OP_LOCAL_GET);
     write_u32(code, 0);
     code.push(OP_I32_CONST);
@@ -123,7 +122,7 @@ pub(super) fn emit_flag_parse(code: &mut Vec<u8>) {
     emit_flag(code, 45, 2); // '-': left_align
     emit_flag(code, 43, 4); // '+': show_sign
     emit_flag(code, 32, 8); // ' ': space_sign
-    emit_hash_flag(code);
+    emit_flag(code, 35, 64); // '#': alternate
 
     code.push(OP_BR);
     write_u32(code, 1); // break flags loop
@@ -143,33 +142,6 @@ fn emit_flag(code: &mut Vec<u8>, character: i32, bit: i32) {
     write_u32(code, 3);
     code.push(OP_I32_CONST);
     write_i32(code, bit);
-    code.push(OP_I32_OR);
-    code.push(OP_LOCAL_SET);
-    write_u32(code, 3);
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 0);
-    code.push(OP_I32_CONST);
-    write_i32(code, 1);
-    code.push(OP_I32_ADD);
-    code.push(OP_LOCAL_SET);
-    write_u32(code, 0);
-    code.push(OP_BR);
-    write_u32(code, 1);
-    code.push(OP_END);
-}
-
-fn emit_hash_flag(code: &mut Vec<u8>) {
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 2);
-    code.push(OP_I32_CONST);
-    write_i32(code, 35);
-    code.push(OP_I32_EQ);
-    code.push(OP_IF);
-    code.push(0x40);
-    code.push(OP_LOCAL_GET);
-    write_u32(code, 3);
-    code.push(OP_I32_CONST);
-    write_i32(code, 64);
     code.push(OP_I32_OR);
     code.push(OP_LOCAL_SET);
     write_u32(code, 3);

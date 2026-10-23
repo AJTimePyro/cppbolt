@@ -62,6 +62,14 @@ def main():
             [compiler_bin, "--dump-record-layouts", f],
             capture_output=True, text=True
         )
+        if p_clang.returncode != 0 or p_our.returncode != 0:
+            failures += 1
+            print(f"  [LAYOUT FAIL] {os.path.basename(f)}: compiler exited nonzero")
+            if p_clang.returncode != 0:
+                print(f"    clang++ exit {p_clang.returncode}: {p_clang.stderr.strip()}")
+            if p_our.returncode != 0:
+                print(f"    {compiler_bin} exit {p_our.returncode}: {p_our.stderr.strip()}")
+            continue
         clang_recs = parse_records(p_clang.stdout)
         our_recs = parse_records(p_our.stdout)
         

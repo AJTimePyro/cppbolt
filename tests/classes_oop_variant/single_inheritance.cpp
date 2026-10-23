@@ -30,8 +30,10 @@ public:
     }
 };
 
+void describe(Truck& t) { t.show_specs(); }
+
 int main() {
     Truck t(6, 15);
-    t.show_specs();
+    describe(t);
     return 0;
 }

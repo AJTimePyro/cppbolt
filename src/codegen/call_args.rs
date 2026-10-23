@@ -184,8 +184,14 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let size = i32::try_from(self.sema.struct_sizes.get(sname).copied().unwrap_or(4))
-            .map_err(|_| self.internal_error("object is too large"))?;
+        let raw_size = self
+            .sema
+            .struct_sizes
+            .get(sname)
+            .copied()
+            .ok_or_else(|| self.internal_error("missing struct layout"))?;
+        let size =
+            i32::try_from(raw_size).map_err(|_| self.internal_error("object is too large"))?;
         let temp_ptr_slot = ctx.alloc_frame(4, 4)?;
         code.push(OP_I32_CONST);
         write_i32(code, size);

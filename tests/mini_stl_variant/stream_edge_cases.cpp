@@ -1,13 +1,15 @@
 #include <iostream>
 #include <string>
 
+char to_char(int code) { return (char)code; }
+
 int main() {
     int val = 0;
     std::cin >> val;
     std::cout << "val_extracted: " << val << " state_eof: " << std::cin.eof() << " state_fail: " << std::cin.fail() << std::endl;
 
     int next_ch = std::cin.peek();
-    std::cout << "next_ch: " << (char)next_ch << " state_eof: " << std::cin.eof() << " state_fail: " << std::cin.fail() << std::endl;
+    std::cout << "next_ch: " << to_char(next_ch) << " state_eof: " << std::cin.eof() << " state_fail: " << std::cin.fail() << std::endl;
 
     char target = '#';
     std::cin.get(target);

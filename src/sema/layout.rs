@@ -106,7 +106,6 @@ impl Sema {
 
     /// Lays out this record's own fields after all base subobjects.
     fn layout_own_fields(&mut self, fields: &[(String, Type)], acc: &mut LayoutAccumulator) {
-        // 3. Lay out this record's own fields after all base subobjects.
         for (fname, ftype) in fields {
             let fsize = ftype.size_of(&self.struct_sizes);
             let falign = ftype.align_of(&self.struct_aligns);

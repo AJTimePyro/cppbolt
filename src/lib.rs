@@ -25,7 +25,7 @@ pub(crate) mod wasm;
 
 pub use diagnostics::CompileError;
 pub use name::QualifiedName;
-pub use source::{FileId, IncludeProvider, NoIncludes, ResolvedInclude, SourceMap, Span};
+pub use source::{FileId, IncludeProvider, NoIncludes, ResolvedInclude, Span};
 
 /// The nesting limits of the compiler, one per nesting construct.
 ///
@@ -90,16 +90,12 @@ pub fn compile_with_options_named(
     compile_with_provider(source, filename, max_memory_mb, &NoIncludes)
 }
 
-/// Compiles with a caller-supplied include provider.
-///
-/// The native CLI passes a filesystem provider; the browser ABI passes none.
-/// The returned bytes are a complete WebAssembly module.
-pub fn compile_with_provider(
+/// Preprocesses, parses, validates, and analyzes `source`.
+fn parse_and_analyze(
     source: &str,
     filename: &str,
-    max_memory_mb: u32,
     includes: &dyn IncludeProvider,
-) -> Result<Vec<u8>, CompileError> {
+) -> Result<(preprocessor::PreprocessedSource, ast::Program, sema::Sema), CompileError> {
     let mut preprocessor = preprocessor::Preprocessor::new_with_includes(includes);
     let preprocessed = preprocessor.process_named(source, filename)?;
 
@@ -119,6 +115,20 @@ pub fn compile_with_provider(
     let mut sema = sema::Sema::new();
     sema.analyze_program(&mut program)
         .map_err(|error| preprocessed.map_error(error))?;
+    Ok((preprocessed, program, sema))
+}
+
+/// Compiles with a caller-supplied include provider.
+///
+/// The native CLI passes a filesystem provider; the browser ABI passes none.
+/// The returned bytes are a complete WebAssembly module.
+pub fn compile_with_provider(
+    source: &str,
+    filename: &str,
+    max_memory_mb: u32,
+    includes: &dyn IncludeProvider,
+) -> Result<Vec<u8>, CompileError> {
+    let (preprocessed, program, sema) = parse_and_analyze(source, filename, includes)?;
 
     let mut codegen = codegen::Codegen::new(&sema);
     codegen.max_memory_mb = max_memory_mb;
@@ -138,22 +148,6 @@ pub fn dump_record_layouts_with_provider(
     filename: &str,
     includes: &dyn IncludeProvider,
 ) -> Result<String, CompileError> {
-    let mut preprocessor = preprocessor::Preprocessor::new_with_includes(includes);
-    let preprocessed = preprocessor.process_named(source, filename)?;
-
-    let mut lexer = lexer::Lexer::new(&preprocessed.text);
-    let tokens = lexer
-        .tokenize()
-        .map_err(|error| preprocessed.map_error(error))?;
-
-    let mut parser = parser::Parser::new(tokens);
-    let mut program = parser
-        .parse_program()
-        .map_err(|error| preprocessed.map_error(error))?;
-
-    let mut sema = sema::Sema::new();
-    sema.analyze_program(&mut program)
-        .map_err(|error| preprocessed.map_error(error))?;
-
+    let (_preprocessed, _program, sema) = parse_and_analyze(source, filename, includes)?;
     Ok(sema.dump_record_layouts())
 }

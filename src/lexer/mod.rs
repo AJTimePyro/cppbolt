@@ -5,19 +5,32 @@ pub mod token;
 
 pub use token::{Token, TokenKind};
 
+/// Decodes one backslash escape from a string or character literal.
+pub(crate) fn decode_escape(c: char) -> char {
+    match c {
+        'n' => '\n',
+        't' => '\t',
+        'r' => '\r',
+        '0' => '\0',
+        '\\' => '\\',
+        '\'' => '\'',
+        '"' => '"',
+        other => other,
+    }
+}
+
 use crate::diagnostics::CompileError;
 use crate::source::{FileId, Span};
 
-pub struct Lexer<'a> {
+pub struct Lexer {
     chars: Vec<char>,
     pos: usize,
     line: usize,
     col: usize,
     file_id: FileId,
-    _phantom: std::marker::PhantomData<&'a ()>,
 }
 
-impl<'a> Lexer<'a> {
+impl Lexer {
     pub fn new(input: &str) -> Self {
         Self::new_with_file(input, FileId(0))
     }
@@ -29,7 +42,6 @@ impl<'a> Lexer<'a> {
             line: 1,
             col: 1,
             file_id,
-            _phantom: std::marker::PhantomData,
         }
     }
 

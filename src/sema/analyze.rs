@@ -92,9 +92,10 @@ impl Sema {
     }
 
     fn synthesize_constructors(&mut self, program: &mut Program) {
-        // members require construction, and for polymorphic classes that need
-        // their vtable installed by a constructor. Iterate to a fixed point so
-        // a class becomes constructible once its dependencies do.
+        // A default constructor is synthesized when the members require
+        // construction, and for polymorphic classes that need their vtable
+        // installed by a constructor. Iterate to a fixed point so a class
+        // becomes constructible once its dependencies do.
         let polymorphic: std::collections::HashSet<String> = self
             .struct_layouts
             .iter()
@@ -129,12 +130,14 @@ impl Sema {
                 let base_blocks = base_classes
                     .iter()
                     .any(|base| any_ctor.contains(base) && !default_ctor.contains(base));
-                let field_needs = fields
-                    .iter()
-                    .any(|(_, ty)| type_ctor_status(ty, &any_ctor, &default_ctor).0);
-                let field_blocks = fields
-                    .iter()
-                    .any(|(_, ty)| type_ctor_status(ty, &any_ctor, &default_ctor).1);
+                let (field_needs, field_blocks) =
+                    fields
+                        .iter()
+                        .fold((false, false), |(needs, blocks), (_, ty)| {
+                            let (needs_status, blocks_status) =
+                                type_ctor_status(ty, &any_ctor, &default_ctor);
+                            (needs || needs_status, blocks || blocks_status)
+                        });
                 let needs_ctor = base_needs || field_needs || polymorphic.contains(name);
                 if needs_ctor && !base_blocks && !field_blocks {
                     methods.push(FunctionDecl {
@@ -225,7 +228,7 @@ impl Sema {
                     static_fields,
                     ..
                 } => {
-                    self.register_struct_declarations(name, methods, static_fields);
+                    self.register_struct_declarations(name.as_str(), methods, static_fields);
                 }
                 _ => {}
             }
@@ -236,7 +239,7 @@ impl Sema {
     /// Registers the static fields and methods of a class.
     fn register_struct_declarations(
         &mut self,
-        name: &String,
+        name: &str,
         methods: &[FunctionDecl],
         static_fields: &[(String, Type, Option<Expr>)],
     ) {
@@ -266,19 +269,7 @@ impl Sema {
         for m in methods {
             let mut params = m.params.clone();
             if !m.is_static {
-                let this_inner = if m.is_const {
-                    Type::Const(Box::new(Type::Struct(name.clone())))
-                } else {
-                    Type::Struct(name.clone())
-                };
-                params.insert(
-                    0,
-                    Param {
-                        name: "this".to_string(),
-                        ty: Type::Pointer(Box::new(this_inner)),
-                        default_val: None,
-                    },
-                );
+                params.insert(0, this_param(name, m.is_const));
             }
             let qual_name = format!("{}::{}", name, m.name);
             let mangled = self.mangle_name(&qual_name, &params);
@@ -295,17 +286,15 @@ impl Sema {
         }
     }
 
-    /// Checks and records a global variable and its initializer.
-    fn analyze_global_var(
-        &mut self,
-        name: &String,
+    /// Rejects abstract variable types and completes a zero-length array type
+    /// from an initializer list.
+    pub(super) fn check_and_complete_var_type(
+        &self,
         ty: &mut Type,
-        init: &mut Option<Expr>,
+        init: &Option<Expr>,
         line: usize,
         col: usize,
     ) -> Result<(), CompileError> {
-        self.current_line = line;
-        self.current_col = col;
         if let Type::Struct(sname) = ty.strip_const()
             && let Some(layout) = self.struct_layouts.get(sname)
             && layout.is_abstract
@@ -321,6 +310,21 @@ impl Sema {
         {
             *ty = Type::Array(elem, list.len());
         }
+        Ok(())
+    }
+
+    /// Checks and records a global variable and its initializer.
+    fn analyze_global_var(
+        &mut self,
+        name: &str,
+        ty: &mut Type,
+        init: &mut Option<Expr>,
+        line: usize,
+        col: usize,
+    ) -> Result<(), CompileError> {
+        self.current_line = line;
+        self.current_col = col;
+        self.check_and_complete_var_type(ty, init, line, col)?;
         if let Some(init_expr) = init {
             let init_ty = self.analyze_expr(init_expr)?;
             if !self.can_assign(ty, &init_ty) {
@@ -337,9 +341,9 @@ impl Sema {
             }
         }
         self.global_vars.insert(
-            name.clone(),
+            name.to_string(),
             VarSymbol {
-                name: name.clone(),
+                name: name.to_string(),
                 ty: ty.clone(),
                 is_global: true,
                 stack_offset: 0,
@@ -369,7 +373,7 @@ impl Sema {
                     line,
                     col,
                 } => {
-                    self.analyze_global_var(name, ty, init, *line, *col)?;
+                    self.analyze_global_var(name.as_str(), ty, init, *line, *col)?;
                 }
                 Decl::Function(func) => {
                     self.current_line = func.line;
@@ -381,14 +385,7 @@ impl Sema {
                     for m in methods {
                         let mut func_decl = m.clone();
                         if !m.is_static {
-                            func_decl.params.insert(
-                                0,
-                                Param {
-                                    name: "this".to_string(),
-                                    ty: Type::Pointer(Box::new(Type::Struct(name.clone()))),
-                                    default_val: None,
-                                },
-                            );
+                            func_decl.params.insert(0, this_param(name, m.is_const));
                         }
                         self.analyze_function(&mut func_decl)?;
                     }
@@ -398,6 +395,20 @@ impl Sema {
             }
         }
         Ok(())
+    }
+}
+
+/// Builds the implicit `this` parameter of a non-static method.
+fn this_param(class: &str, is_const: bool) -> Param {
+    let inner = if is_const {
+        Type::Const(Box::new(Type::Struct(class.to_string())))
+    } else {
+        Type::Struct(class.to_string())
+    };
+    Param {
+        name: "this".to_string(),
+        ty: Type::Pointer(Box::new(inner)),
+        default_val: None,
     }
 }
 

@@ -234,7 +234,7 @@ fn emit_bump_pointer(code: &mut Vec<u8>, global_heap_base: u32) {
     code.push(OP_LOCAL_SET);
     write_u32(code, 7);
 
-    // if (new_heap_base < cur_heap_base) -> unreachable trap (address space exhausted)
+    // if (new_heap_base < cur_heap_base) -> return null (address space exhausted)
     code.push(OP_LOCAL_GET);
     write_u32(code, 7);
     code.push(OP_LOCAL_GET);
@@ -287,7 +287,7 @@ fn emit_bump_grow_memory(code: &mut Vec<u8>) {
     write_u32(code, 9);
     code.push(OP_MEMORY_GROW);
     code.push(0x00);
-    // if res == -1 -> unreachable trap
+    // if res == -1 -> return null
     code.push(OP_I32_CONST);
     write_i32(code, -1);
     code.push(OP_I32_EQ);

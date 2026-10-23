@@ -10,11 +10,15 @@ public:
     }
 };
 
+int chain(RunningTotal& base, RunningTotal& first, RunningTotal& second) {
+    (base += first) += second;
+    return base.amount;
+}
+
 int main() {
     RunningTotal base(40);
     RunningTotal first(9);
     RunningTotal second(5);
-    (base += first) += second;
-    std::printf("%d\n", base.amount);
+    std::printf("%d\n", chain(base, first, second));
     return 0;
 }

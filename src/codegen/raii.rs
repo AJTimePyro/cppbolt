@@ -80,24 +80,47 @@ impl<'a> Codegen<'a> {
         target_offset: u32,
         ctx: &FunctionContext,
         code: &mut Vec<u8>,
-    ) {
+    ) -> Result<(), CompileError> {
         let size = self
             .sema
             .struct_layouts
             .get(sname)
             .map(|l| l.size)
-            .unwrap_or(4);
-        for i in 0..size {
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.fp_local);
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.scratch1);
-            code.push(OP_I32_LOAD8_U);
-            write_u32(code, 0);
-            write_u32(code, i as u32);
-            code.push(OP_I32_STORE8);
-            write_u32(code, 0);
-            write_u32(code, target_offset + i as u32);
-        }
+            .ok_or_else(|| self.internal_error("missing struct layout"))?;
+        emit_struct_byte_copy(
+            size,
+            target_offset,
+            |code| {
+                code.push(OP_LOCAL_GET);
+                write_u32(code, ctx.fp_local);
+            },
+            |code| {
+                code.push(OP_LOCAL_GET);
+                write_u32(code, ctx.scratch1);
+            },
+            code,
+        );
+        Ok(())
+    }
+}
+
+/// Copies `size` bytes from the address produced by `emit_src` to the address
+/// produced by `emit_dst`.
+pub(super) fn emit_struct_byte_copy(
+    size: usize,
+    dst_offset: u32,
+    mut emit_dst: impl FnMut(&mut Vec<u8>),
+    mut emit_src: impl FnMut(&mut Vec<u8>),
+    code: &mut Vec<u8>,
+) {
+    for i in 0..size {
+        emit_dst(code);
+        emit_src(code);
+        code.push(OP_I32_LOAD8_U);
+        write_u32(code, 0);
+        write_u32(code, i as u32);
+        code.push(OP_I32_STORE8);
+        write_u32(code, 0);
+        write_u32(code, dst_offset + i as u32);
     }
 }

@@ -50,9 +50,9 @@ page, and it runs the compiled program with the shim of this directory.
 Every URL of the page is relative to the page, so the site works at the root of a domain and in a subdirectory of
 one, which is how GitHub Pages serves a project site.
 
-The page takes two parameters: `compiler` is the URL of the WebAssembly build of the compiler, and `code` is the
-program to compile. The `run` parameter compiles and runs the program without a click, so a link that carries a
-program is shareable:
+The page takes three parameters: `compiler` is the URL of the WebAssembly build of the compiler, `code` is the
+program to compile, and `run` compiles and runs the program without a click, so a link that carries a program is
+shareable:
 
 ```text
 http://localhost:8000/?run=1&code=int%20main()%20%7B%20return%200%3B%20%7D

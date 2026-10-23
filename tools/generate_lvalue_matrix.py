@@ -97,6 +97,10 @@ def generate_cpp(is_heldout=False):
     lines.append("    }")
     lines.append("}")
     lines.append("")
+    if is_heldout:
+        lines.append("int heldout_flag(bool value) { return value ? 1 : 0; }")
+        lines.append("int heldout_value(int value) { return value; }")
+        lines.append("")
     lines.append("int main() {")
 
     count = 0
@@ -171,7 +175,18 @@ def generate_cpp(is_heldout=False):
                     lines.append(f"        {target} = return_{prefix_pfx}_{name}();")
                     lines.append(f"        check({target} == {v2}, \"{case_prefix}\");")
 
-                value_expr = f'({target} != nullptr)' if '*' in ty else f'(int)({target})'
+                if '*' in ty:
+                    value_expr = (
+                        f'heldout_flag({target} != nullptr)'
+                        if is_heldout
+                        else f'({target} != nullptr)'
+                    )
+                else:
+                    value_expr = (
+                        f'heldout_value((int)({target}))'
+                        if is_heldout
+                        else f'(int)({target})'
+                    )
                 lines.append(f'        std::printf("CASE {count}: {case_prefix} value=%d\\n", {value_expr});')
                 lines.append("    }")
                 lines.append("")

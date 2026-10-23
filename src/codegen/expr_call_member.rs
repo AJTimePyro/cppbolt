@@ -59,7 +59,7 @@ impl<'a> Codegen<'a> {
     }
 
     /// Returns the name of the class the receiver belongs to.
-    fn member_class_name(&self, obj_ty: &Type, through_pointer: bool) -> String {
+    pub(super) fn member_class_name(&self, obj_ty: &Type, through_pointer: bool) -> String {
         if through_pointer {
             if let Type::Pointer(inner) | Type::Reference(inner) = obj_ty.strip_const()
                 && let Type::Struct(s) = inner.strip_const()

@@ -26,11 +26,64 @@ impl<'a> Codegen<'a> {
             return self.compile_placement_new(ty, args, place_expr, ctx, code);
         }
         if *is_array {
-            let array_size = array_size.as_ref().map(|size| size.as_ref());
+            let array_size = array_size.as_deref();
             self.compile_array_new(ty, array_size, ctx, code)
         } else {
             self.compile_scalar_new(ty, args, ctx, code)
         }
+    }
+
+    /// Installs the vtable and runs the constructor (or scalar store) for an
+    /// object whose address is stored in `obj_slot`.
+    fn emit_construct_object_at(
+        &mut self,
+        ty: &Type,
+        args: &[Expr],
+        obj_slot: u32,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        if let Type::Struct(sname) = ty.strip_const() {
+            // Install the vtable before the constructor runs, matching the
+            // C++ object model.
+            if let Some(&v_off) = self.vtable_offsets.get(sname) {
+                code.push(OP_LOCAL_GET);
+                write_u32(code, ctx.fp_local);
+                code.push(OP_I32_LOAD);
+                write_u32(code, 2);
+                write_u32(code, obj_slot);
+                code.push(OP_I32_CONST);
+                write_i32(code, v_off as i32);
+                code.push(OP_I32_STORE);
+                write_u32(code, 2);
+                write_u32(code, 0);
+            }
+            let arg_types: Vec<Type> = args.iter().map(|a| self.get_expr_type(a, ctx)).collect();
+            if let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types) {
+                code.push(OP_LOCAL_GET);
+                write_u32(code, ctx.fp_local);
+                code.push(OP_I32_LOAD);
+                write_u32(code, 2);
+                write_u32(code, obj_slot); // this
+                let full_args = self.constructor_arguments(&sig, args);
+                for a in &full_args {
+                    self.compile_expr(a, ctx, code)?;
+                }
+                code.push(OP_CALL);
+                write_u32(code, ctor_idx);
+            }
+        } else if !args.is_empty() {
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.fp_local);
+            code.push(OP_I32_LOAD);
+            write_u32(code, 2);
+            write_u32(code, obj_slot);
+            let value_ty = self.get_expr_type(&args[0], ctx);
+            self.compile_expr(&args[0], ctx, code)?;
+            self.emit_conversion(&value_ty, ty, code);
+            self.emit_store(ty, 0, code);
+        }
+        Ok(())
     }
 
     fn compile_placement_new(
@@ -53,44 +106,7 @@ impl<'a> Codegen<'a> {
         write_u32(code, 2);
         write_u32(code, place_slot);
 
-        if let Type::Struct(sname) = ty.strip_const() {
-            if let Some(&v_off) = self.vtable_offsets.get(sname) {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.fp_local);
-                code.push(OP_I32_LOAD);
-                write_u32(code, 2);
-                write_u32(code, place_slot);
-                code.push(OP_I32_CONST);
-                write_i32(code, v_off as i32);
-                code.push(OP_I32_STORE);
-                write_u32(code, 2);
-                write_u32(code, 0);
-            }
-            let arg_types: Vec<Type> = args.iter().map(|a| self.get_expr_type(a, ctx)).collect();
-            if let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types) {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.fp_local);
-                code.push(OP_I32_LOAD);
-                write_u32(code, 2);
-                write_u32(code, place_slot); // this
-                let full_args = self.constructor_arguments(&sig, args);
-                for a in &full_args {
-                    self.compile_expr(a, ctx, code)?;
-                }
-                code.push(OP_CALL);
-                write_u32(code, ctor_idx);
-            }
-        } else if !args.is_empty() {
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.fp_local);
-            code.push(OP_I32_LOAD);
-            write_u32(code, 2);
-            write_u32(code, place_slot);
-            let value_ty = self.get_expr_type(&args[0], ctx);
-            self.compile_expr(&args[0], ctx, code)?;
-            self.emit_conversion(&value_ty, ty, code);
-            self.emit_store(ty, 0, code);
-        }
+        self.emit_construct_object_at(ty, args, place_slot, ctx, code)?;
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.fp_local);
         code.push(OP_I32_LOAD);
@@ -235,12 +251,10 @@ impl<'a> Codegen<'a> {
                 ctx,
                 code,
             );
-            // Constructors may clobber scratch locals, so reload the
-            // user pointer from its frame slot.
-            self.emit_array_reload_user_ptr(base_slot, ctx, code);
-        } else {
-            self.emit_array_reload_user_ptr(base_slot, ctx, code);
         }
+        // Constructors may clobber scratch locals, so reload the user pointer
+        // from its frame slot.
+        self.emit_array_reload_user_ptr(base_slot, ctx, code);
     }
 
     /// Allocates the array payload and stores the element-count cookie.
@@ -432,46 +446,7 @@ impl<'a> Codegen<'a> {
         write_u32(code, 2);
         write_u32(code, obj_slot);
 
-        if let Type::Struct(sname) = ty.strip_const() {
-            // Install the vtable before the constructor runs, matching the
-            // C++ object model.
-            if let Some(&v_off) = self.vtable_offsets.get(sname) {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.fp_local);
-                code.push(OP_I32_LOAD);
-                write_u32(code, 2);
-                write_u32(code, obj_slot);
-                code.push(OP_I32_CONST);
-                write_i32(code, v_off as i32);
-                code.push(OP_I32_STORE);
-                write_u32(code, 2);
-                write_u32(code, 0);
-            }
-            let arg_types: Vec<Type> = args.iter().map(|a| self.get_expr_type(a, ctx)).collect();
-            if let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types) {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.fp_local);
-                code.push(OP_I32_LOAD);
-                write_u32(code, 2);
-                write_u32(code, obj_slot); // this
-                let full_args = self.constructor_arguments(&sig, args);
-                for a in &full_args {
-                    self.compile_expr(a, ctx, code)?;
-                }
-                code.push(OP_CALL);
-                write_u32(code, ctor_idx);
-            }
-        } else if !args.is_empty() {
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.fp_local);
-            code.push(OP_I32_LOAD);
-            write_u32(code, 2);
-            write_u32(code, obj_slot);
-            let value_ty = self.get_expr_type(&args[0], ctx);
-            self.compile_expr(&args[0], ctx, code)?;
-            self.emit_conversion(&value_ty, ty, code);
-            self.emit_store(ty, 0, code);
-        }
+        self.emit_construct_object_at(ty, args, obj_slot, ctx, code)?;
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.fp_local);
         code.push(OP_I32_LOAD);

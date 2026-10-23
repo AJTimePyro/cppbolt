@@ -54,7 +54,7 @@ impl Sema {
     }
 
     /// Resolves the class of a member access target.
-    fn member_struct_name(
+    pub(super) fn member_struct_name(
         &self,
         obj_ty: &Type,
         is_arrow: bool,

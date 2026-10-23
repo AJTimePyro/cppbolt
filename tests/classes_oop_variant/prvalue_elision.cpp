@@ -22,9 +22,13 @@ void process_payload(Payload p) {
     std::printf("process_payload tag: %d\n", p.tag);
 }
 
+Payload forward_payload(int t) {
+    return make_payload(t);
+}
+
 int main() {
     std::printf("--- start prvalue elision ---\n");
-    Payload p = make_payload(500);
+    Payload p = forward_payload(500);
     std::printf("p.tag = %d\n", p.tag);
 
     std::printf("--- arg prvalue elision ---\n");

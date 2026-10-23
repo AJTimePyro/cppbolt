@@ -1,3 +1,4 @@
+use super::call_types::{wasm_result_types, wasm_value_type};
 use super::*;
 
 impl<'a> Codegen<'a> {
@@ -238,13 +239,9 @@ impl<'a> Codegen<'a> {
             }
             match &cand.decl {
                 FuncDeclRef::Function(f) => {
-                    if f.body.is_none() {
-                        continue;
-                    }
-                    if let Some(body) = &f.body {
-                        let code = self.compile_function(f, body, None)?;
-                        self.module.codes.push(code);
-                    }
+                    let Some(body) = &f.body else { continue };
+                    let code = self.compile_function(f, body, None)?;
+                    self.module.codes.push(code);
                 }
                 FuncDeclRef::Method(name, m) => {
                     if let Some(body) = &m.body {
@@ -305,28 +302,9 @@ impl<'a> Codegen<'a> {
 }
 
 pub(crate) fn wasm_params(params: &[Param]) -> Vec<u8> {
-    params
-        .iter()
-        .map(|p| {
-            p.ty.to_wasm_type()
-                .map(|w| match w {
-                    WasmType::I32 => TYPE_I32,
-                    WasmType::I64 => TYPE_I64,
-                    WasmType::F32 => TYPE_F32,
-                    WasmType::F64 => TYPE_F64,
-                })
-                .unwrap_or(TYPE_I32)
-        })
-        .collect()
+    params.iter().map(|p| wasm_value_type(&p.ty)).collect()
 }
 
 pub(crate) fn wasm_results(ty: &Type) -> Vec<u8> {
-    ty.to_wasm_type()
-        .map(|w| match w {
-            WasmType::I32 => vec![TYPE_I32],
-            WasmType::I64 => vec![TYPE_I64],
-            WasmType::F32 => vec![TYPE_F32],
-            WasmType::F64 => vec![TYPE_F64],
-        })
-        .unwrap_or_default()
+    wasm_result_types(ty)
 }

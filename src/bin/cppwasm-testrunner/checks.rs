@@ -22,18 +22,38 @@ pub(super) fn check_variant_tests() -> usize {
         let directory = Path::new("tests").join(variant);
         let files = match cpp_files(&directory) {
             Ok(files) => files,
-            Err(_) => continue,
+            Err(error) => {
+                eprintln!("[FAIL] cannot list {}: {error}", directory.display());
+                failures += 1;
+                continue;
+            }
         };
         for path in files {
             let Some(name) = path.file_stem().and_then(OsStr::to_str) else {
+                eprintln!("[FAIL] non-UTF-8 variant file name: {}", path.display());
+                failures += 1;
                 continue;
             };
             let main_path = Path::new("tests").join(main).join(format!("{name}.cpp"));
             if !main_path.exists() {
                 continue;
             }
-            let variant_source = fs::read_to_string(&path).unwrap_or_default();
-            let main_source = fs::read_to_string(&main_path).unwrap_or_default();
+            let variant_source = match fs::read_to_string(&path) {
+                Ok(text) => text,
+                Err(error) => {
+                    eprintln!("[FAIL] cannot read {}: {error}", path.display());
+                    failures += 1;
+                    continue;
+                }
+            };
+            let main_source = match fs::read_to_string(&main_path) {
+                Ok(text) => text,
+                Err(error) => {
+                    eprintln!("[FAIL] cannot read {}: {error}", main_path.display());
+                    failures += 1;
+                    continue;
+                }
+            };
             match classify_pair(&main_source, &variant_source) {
                 PairClass::Identical => {
                     eprintln!("[FAIL] duplicate variant test: {variant}/{name}");
@@ -125,7 +145,10 @@ fn parse_independent_manifest(text: &str) -> (BTreeMap<String, String>, usize) {
             failures += 1;
             continue;
         }
-        let path = normalize_manifest_path(fields[1]);
+        let path = fields[1]
+            .strip_prefix("./")
+            .unwrap_or(fields[1])
+            .replace('\\', "/");
         if path == "MANIFEST.sha256" {
             eprintln!("[FAIL] independent manifest: the manifest cannot list itself");
             failures += 1;
@@ -158,19 +181,19 @@ fn collect_independent_files(
         if path.is_dir() {
             collect_independent_files(root, &path, files)?;
         } else if path.file_name() != Some(OsStr::new("MANIFEST.sha256")) {
-            let relative = path
-                .strip_prefix(root)
-                .unwrap_or(&path)
-                .to_string_lossy()
-                .replace('\\', "/");
+            let relative = match path.strip_prefix(root) {
+                Ok(relative) => relative.to_string_lossy().replace('\\', "/"),
+                Err(error) => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!("{}: {error}", path.display()),
+                    ));
+                }
+            };
             files.insert(relative, sha256_hex(&fs::read(&path)?));
         }
     }
     Ok(())
-}
-
-fn normalize_manifest_path(path: &str) -> String {
-    path.strip_prefix("./").unwrap_or(path).replace('\\', "/")
 }
 
 #[derive(Debug, PartialEq, Eq)]

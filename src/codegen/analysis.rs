@@ -291,7 +291,7 @@ fn collect_call_node<'a>(expr: &'a Expr, calls: &mut HashSet<String>, stack: &mu
         } => {
             stack.push(target);
             stack.push(value);
-            calls.insert(compound_assign_call_name(op));
+            calls.insert(compound_assign_operator_name(op));
         }
         Expr::ArraySubscript { array, index, .. } => {
             calls.insert("operator[]".to_string());
@@ -357,7 +357,8 @@ fn collect_binary_operator(op: BinaryOp, calls: &mut HashSet<String>) {
     }
 }
 
-fn compound_assign_call_name(op: &BinaryOp) -> String {
+/// The mangled name of the operator called by a compound assignment.
+pub(super) fn compound_assign_operator_name(op: &BinaryOp) -> String {
     format!(
         "operator{}=",
         match op {

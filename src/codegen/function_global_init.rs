@@ -116,20 +116,15 @@ impl<'a> Codegen<'a> {
         self.compile_global_field_init(global, sname, ctx, code)
     }
 
-    /// Emits the constructor call of an explicitly initialized object.
-    fn compile_global_ctor_call(
+    /// Emits a constructor call for an explicitly initialized object.
+    fn emit_global_ctor(
         &mut self,
         global: &GlobalInit<'_>,
         sname: &str,
+        args: &[Expr],
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<bool, CompileError> {
-        let Some(Expr::Call { callee, args, .. }) = global.init.as_ref() else {
-            return Ok(false);
-        };
-        if !matches!(&**callee, Expr::Identifier(cname) if cname == sname) {
-            return Ok(false);
-        }
         let arg_types: Vec<Type> = args
             .iter()
             .map(|arg| self.get_expr_type(arg, ctx))
@@ -148,6 +143,23 @@ impl<'a> Codegen<'a> {
         Ok(true)
     }
 
+    /// Emits the constructor call of an explicitly initialized object.
+    fn compile_global_ctor_call(
+        &mut self,
+        global: &GlobalInit<'_>,
+        sname: &str,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<bool, CompileError> {
+        let Some(Expr::Call { callee, args, .. }) = global.init.as_ref() else {
+            return Ok(false);
+        };
+        if !matches!(&**callee, Expr::Identifier(cname) if cname == sname) {
+            return Ok(false);
+        }
+        self.emit_global_ctor(global, sname, args, ctx, code)
+    }
+
     /// Emits the constructor call for an initializer list.
     fn compile_global_list_ctor(
         &mut self,
@@ -159,22 +171,7 @@ impl<'a> Codegen<'a> {
         let Some(Expr::InitializerList(list)) = global.init.as_ref() else {
             return Ok(false);
         };
-        let arg_types: Vec<Type> = list
-            .iter()
-            .map(|arg| self.get_expr_type(arg, ctx))
-            .collect();
-        let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types) else {
-            return Ok(false);
-        };
-        code.push(OP_I32_CONST);
-        write_i32(code, global.offset as i32);
-        let full_args = self.constructor_arguments(&sig, list);
-        for (i, arg) in full_args.iter().enumerate() {
-            self.compile_call_arg(arg, sig.param_types.get(i + 1), ctx, code)?;
-        }
-        code.push(OP_CALL);
-        write_u32(code, ctor_idx);
-        Ok(true)
+        self.emit_global_ctor(global, sname, list, ctx, code)
     }
 
     /// Emits the default constructor call of an object.

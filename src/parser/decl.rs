@@ -196,52 +196,6 @@ impl Parser {
         if self.peek() == &TokenKind::LParen && self.peek_ahead(1) == &TokenKind::Star {
             return self.parse_function_pointer_global(ty, &start_tok);
         }
-        if self.peek() == &TokenKind::LParen && self.peek_ahead(1) == &TokenKind::Star {
-            // Function-pointer declarator: Base (*name)(args).
-            self.advance();
-            self.advance();
-            let name = match self.advance().kind.clone() {
-                TokenKind::Ident(id) => id,
-                _ => {
-                    return Err(CompileError::new(
-                        "Expected variable name",
-                        self.current().line,
-                        self.current().col,
-                    ));
-                }
-            };
-            self.expect(TokenKind::RParen)?;
-            self.expect(TokenKind::LParen)?;
-            let mut fn_params = Vec::new();
-            while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
-                let pt = self.parse_type()?;
-                fn_params.push(pt);
-                if self.peek() == &TokenKind::Comma {
-                    self.advance();
-                } else {
-                    break;
-                }
-            }
-            self.expect(TokenKind::RParen)?;
-            let final_ty = Type::Pointer(Box::new(Type::Function {
-                return_type: Box::new(ty),
-                param_types: fn_params,
-            }));
-            let init = if self.peek() == &TokenKind::Assign {
-                self.advance();
-                Some(self.parse_initializer()?)
-            } else {
-                None
-            };
-            self.expect(TokenKind::Semi)?;
-            return Ok(Decl::GlobalVar {
-                name,
-                ty: final_ty,
-                init,
-                line: start_tok.line,
-                col: start_tok.col,
-            });
-        }
         let mut name = if self.peek() == &TokenKind::KwOperator {
             self.advance();
             self.parse_operator_name()?

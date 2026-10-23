@@ -12,7 +12,8 @@ int main() {
     using first::choose;
     {
         using namespace second;
-        std::printf("%d\n", choose(2));
+        int selected = choose(2);
+        std::printf("%d\n", selected);
     }
     return 0;
 }

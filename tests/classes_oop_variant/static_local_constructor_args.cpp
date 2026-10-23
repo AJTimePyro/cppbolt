@@ -15,9 +15,13 @@ int cached_value() {
     return cached.payload;
 }
 
-int main() {
+void show_cached() {
     int one = cached_value();
     int two = cached_value();
     std::printf("%d %d\n", one, two);
+}
+
+int main() {
+    show_cached();
     return 0;
 }

@@ -47,10 +47,6 @@ inline int __mini_stl_peek_char() {
     return __mini_stl_shared_lookahead;
 }
 
-inline void __mini_stl_unget_char(int c) {
-    __mini_stl_shared_lookahead = c;
-}
-
 inline int getchar(void) {
     return __mini_stl_read_char();
 }
@@ -191,10 +187,6 @@ inline int __mini_stl_peek_char() {
         __mini_stl_shared_lookahead = ::getchar();
     }
     return __mini_stl_shared_lookahead;
-}
-
-inline void __mini_stl_unget_char(int c) {
-    __mini_stl_shared_lookahead = c;
 }
 
 namespace std {

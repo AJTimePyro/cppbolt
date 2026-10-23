@@ -20,10 +20,12 @@ struct Point2D {
     int py;
 };
 
+void reassign(Buffer& b) { b = b; }
+
 int main() {
     std::printf("custom self-assign test\n");
     Buffer b(512);
-    b = b;
+    reassign(b);
     std::printf("b.size = %d\n", b.size);
 
     std::printf("default self-assign test\n");

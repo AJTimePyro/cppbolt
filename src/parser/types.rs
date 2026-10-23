@@ -94,7 +94,6 @@ impl Parser {
             base_type = Type::Const(Box::new(base_type));
         }
 
-        // Pointer / Reference qualifiers
         loop {
             if self.peek() == &TokenKind::KwConst {
                 self.advance();

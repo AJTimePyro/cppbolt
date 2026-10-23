@@ -21,7 +21,6 @@ impl<'a> Codegen<'a> {
         }
         let _guard = self.depth.statements().enter(stmt.line, stmt.col)?;
         match &stmt.kind {
-            StmtKind::Compound(stmts) => self.compile_compound_stmt(stmts, ctx, code)?,
             StmtKind::VarDecl { .. } => self.compile_var_decl(stmt, ctx, code)?,
             StmtKind::Expr(expr) => self.compile_expr_stmt(expr, ctx, code)?,
             StmtKind::If {
@@ -81,9 +80,7 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        // Emit the chain as nested `if` blocks without recursing once
-        // per branch, matching the byte-for-byte output of the former
-        // nested `if / else / if` representation.
+        // Emit the chain as nested `if` blocks without recursing once per branch.
         for (index, (cond, then_stmt)) in branches.iter().enumerate() {
             self.compile_cond(cond, ctx, code)?;
             self.emit_clean_temporaries(ctx, code);

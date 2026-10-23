@@ -271,7 +271,7 @@ impl<'a> Codegen<'a> {
     fn emit_binary_op(op: &BinaryOp, common_ty: &Type, code: &mut Vec<u8>) {
         if *common_ty == Type::Double {
             Self::emit_f64_binary_op(op, code);
-        } else if matches!(common_ty, Type::Float | Type::Double) {
+        } else if matches!(common_ty, Type::Float) {
             Self::emit_f32_binary_op(op, code);
         } else if matches!(common_ty, Type::LongLong | Type::UnsignedLongLong) {
             Self::emit_i64_binary_op(op, code, !common_ty.is_signed());

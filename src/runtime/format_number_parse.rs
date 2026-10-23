@@ -112,12 +112,12 @@ pub(super) fn emit_precision_parse(code: &mut Vec<u8>) {
     code.push(OP_ELSE);
 
     emit_decimal_precision(code);
-    code.push(OP_END); // end else for '*'
+    code.push(OP_END); // end if/else for '*'
 
     code.push(OP_END); // end if '.'
 }
 
-/// Parses a `z`, `l`, or `ll` length modifier.
+/// Parses an `h`, `hh`, `l`, `ll`, or `z` length modifier.
 pub(super) fn emit_length_parse(code: &mut Vec<u8>) {
     code.push(OP_LOCAL_GET);
     write_u32(code, 0);

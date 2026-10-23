@@ -17,7 +17,6 @@ impl Parser {
                 self.advance();
                 Ok(Stmt::new(StmtKind::Empty, line, col))
             }
-            TokenKind::LBrace => self.parse_compound_stmt(),
             TokenKind::KwIf => self.parse_if_stmt(),
             TokenKind::KwWhile => self.parse_while_stmt(),
             TokenKind::KwDo => self.parse_do_while_stmt(),

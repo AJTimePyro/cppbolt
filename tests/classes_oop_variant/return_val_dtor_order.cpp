@@ -15,10 +15,14 @@ public:
     }
 };
 
+int evaluate(Worker& first, Worker& second) {
+    return first.compute_metric() + second.compute_metric();
+}
+
 int run_pipeline() {
     Worker w1(3);
     Worker w2(7);
-    return w1.compute_metric() + w2.compute_metric();
+    return evaluate(w1, w2);
 }
 
 int main() {

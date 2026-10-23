@@ -101,16 +101,10 @@ impl<'a> IfExpr<'a> {
                 _ => reduce(&mut state.values, op).map_err(|message| self.error(message))?,
             }
         }
-        if !state.paren_guards.is_empty() {
-            return Err(self.error("unmatched '(' in #if expression"));
+        match state.values.as_slice() {
+            [value] => Ok(*value),
+            _ => Err(self.error("invalid #if expression")),
         }
-        if state.values.len() != 1 {
-            return Err(self.error("invalid #if expression"));
-        }
-        state
-            .values
-            .pop()
-            .ok_or_else(|| self.error("invalid #if expression"))
     }
 
     fn apply_token(&self, token: Token, state: &mut EvalState) -> Result<(), CompileError> {
@@ -148,9 +142,8 @@ impl<'a> IfExpr<'a> {
         if state.operators.pop() != Some(Op::LParen) {
             return Err(self.error("unmatched ')' in #if expression"));
         }
-        if state.paren_guards.pop().is_none() {
-            return Err(self.error("unmatched ')' in #if expression"));
-        }
+        // `Op::LParen` and its guard are pushed and popped together.
+        state.paren_guards.pop();
         state.expect_operand = false;
         Ok(())
     }
@@ -312,13 +305,7 @@ impl<'a> IfExpr<'a> {
         let value = if self.chars[self.pos] == '\\' {
             self.pos += 1;
             let escaped = self.chars.get(self.pos).copied().unwrap_or('0');
-            match escaped {
-                'n' => '\n',
-                't' => '\t',
-                'r' => '\r',
-                '0' => '\0',
-                other => other,
-            }
+            crate::lexer::decode_escape(escaped)
         } else {
             self.chars[self.pos]
         };

@@ -6,7 +6,7 @@
 #include "detail_avl_tree.h"
 
 namespace std {
-    template<typename Key, typename Value, typename Compare = detail::AVLTree<pair<Key, Value>, Key, void*, void*>>
+    template<typename Key, typename Value>
     class map {
     private:
         struct KeyOfValue {
@@ -27,8 +27,6 @@ namespace std {
     public:
         typedef typename TreeType::iterator iterator;
         typedef typename TreeType::const_iterator const_iterator;
-
-        map() {}
 
         size_t size() const { return tree_.size(); }
         bool empty() const { return tree_.empty(); }

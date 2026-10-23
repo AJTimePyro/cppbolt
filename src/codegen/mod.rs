@@ -51,8 +51,8 @@ use analysis::{
     collect_address_taken_stmt, collect_static_vars, collect_stmt_calls, collect_type_lifecycle,
 };
 use emit_context::{
-    ArrayLocal, ArraySlots, BinaryTypes, CallSite, CtorCall, GlobalInit, LocalDecl, MemberAccess,
-    NamedCall, ScalarAssign, StructInit, SwitchSlots,
+    ArrayLocal, ArraySlots, BinaryTypes, CallSite, CtorCall, GlobalInit, MemberAccess, NamedCall,
+    ScalarAssign, SwitchSlots,
 };
 use program::Plan;
 use std::collections::{HashMap, HashSet};

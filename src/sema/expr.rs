@@ -182,10 +182,7 @@ impl Sema {
                 || self.functions.contains_key(name)
                 || self
                     .functions
-                    .contains_key(QualifiedName::new(name).std_name().as_ref())
-                || self
-                    .functions
-                    .contains_key(QualifiedName::new(name).plain())
+                    .contains_key(QualifiedName::new(name).alternate().as_ref())
             {
                 Ok(Type::Function {
                     return_type: Box::new(Type::Int),

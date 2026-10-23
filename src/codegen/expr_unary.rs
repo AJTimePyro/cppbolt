@@ -16,7 +16,7 @@ impl<'a> Codegen<'a> {
             UnaryOp::Not => self.compile_unary_not(expr, &ty, ctx, code)?,
             UnaryOp::BitNot => self.compile_unary_bitnot(expr, &ty, ctx, code)?,
             UnaryOp::Neg => self.compile_unary_neg(expr, &ty, ctx, code)?,
-            UnaryOp::Plus => self.compile_unary_plus(expr, ctx, code)?,
+            UnaryOp::Plus => self.compile_expr(expr, ctx, code)?,
             UnaryOp::AddrOf => self.compile_unary_addrof(expr, &ty, ctx, code)?,
             UnaryOp::Deref => self.compile_unary_deref(expr, &ty, ctx, code)?,
             UnaryOp::PreInc | UnaryOp::PreDec => {
@@ -133,16 +133,6 @@ impl<'a> Codegen<'a> {
             self.compile_expr(expr, ctx, code)?;
             code.push(OP_I32_SUB);
         }
-        Ok(())
-    }
-
-    fn compile_unary_plus(
-        &mut self,
-        expr: &Expr,
-        ctx: &mut FunctionContext,
-        code: &mut Vec<u8>,
-    ) -> Result<(), CompileError> {
-        self.compile_expr(expr, ctx, code)?;
         Ok(())
     }
 

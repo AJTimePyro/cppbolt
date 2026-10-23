@@ -24,10 +24,14 @@ void draw(ShapeRenderer* sr) {
     sr->render();
 }
 
+void draw_pair(ShapeRenderer* first, ShapeRenderer* second) {
+    draw(first);
+    draw(second);
+}
+
 int main() {
     Wireframe w;
     Shaded s;
-    draw(&w);
-    draw(&s);
+    draw_pair(&w, &s);
     return 0;
 }

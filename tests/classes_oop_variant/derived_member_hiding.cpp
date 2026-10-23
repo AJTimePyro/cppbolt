@@ -12,11 +12,13 @@ public:
     Child() : amount(80) {}
 };
 
+void set_amount(Child& child, int amount) { child.amount = amount; }
+
 int main() {
     Child child;
     Parent& parent = child;
     std::printf("%d %d\n", child.amount, parent.amount);
-    child.amount = 90;
+    set_amount(child, 90);
     std::printf("%d %d\n", child.amount, parent.amount);
     return 0;
 }

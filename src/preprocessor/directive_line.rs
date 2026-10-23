@@ -2,7 +2,6 @@
 
 use super::lines::{directive_column, split_directive};
 use super::*;
-use super::{LineState, SourceLine};
 use crate::diagnostics::CompileError;
 
 impl<'a> Preprocessor<'a> {
@@ -82,7 +81,7 @@ impl<'a> Preprocessor<'a> {
                 state.output_lines.extend(included);
             }
             "define" => {
-                self.handle_define(argument, line_number)?;
+                self.parse_define(argument, line_number)?;
                 state
                     .output_lines
                     .push(SourceLine::empty(file, line_number));

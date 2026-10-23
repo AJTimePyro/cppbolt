@@ -149,10 +149,9 @@ impl<'a> Codegen<'a> {
         }
 
         self.loop_depths.pop();
-        if let Some(scope) = ctx.scope_objects.last() {
-            self.emit_dtor_for_scope(scope, ctx, code);
+        if let Some(scope) = ctx.scope_objects.pop() {
+            self.emit_dtor_for_scope(&scope, ctx, code);
         }
-        ctx.scope_objects.pop();
         code.push(OP_END);
         self.current_block_depth -= 1;
         ctx.exit_scope();

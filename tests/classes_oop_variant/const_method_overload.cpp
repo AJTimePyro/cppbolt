@@ -8,9 +8,11 @@ public:
     int value() const { return reading + 2; }
 };
 
+int read_const(const Gauge& gauge) { return gauge.value(); }
+
 int main() {
     Gauge gauge(35);
     const Gauge fixed_gauge(35);
-    std::printf("%d %d\n", gauge.value(), fixed_gauge.value());
+    std::printf("%d %d\n", gauge.value(), read_const(fixed_gauge));
     return 0;
 }

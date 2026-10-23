@@ -173,14 +173,19 @@ impl Totals {
     }
 }
 
-/// Runs the selected feature groups.
-fn run_groups(paths: &Paths, filter: Option<&str>) -> Vec<Report> {
-    let mut reports = Vec::new();
-    let groups: Vec<&str> = match filter {
+/// The feature groups selected by a filter.
+fn selected_groups(filter: Option<&str>) -> Vec<&str> {
+    match filter {
         Some("all") | None => FEATURES.to_vec(),
         Some("negative") => Vec::new(),
         Some(feature) => vec![feature],
-    };
+    }
+}
+
+/// Runs the selected feature groups.
+fn run_groups(paths: &Paths, filter: Option<&str>) -> Vec<Report> {
+    let mut reports = Vec::new();
+    let groups = selected_groups(filter);
     for feature in groups {
         reports.push(run_feature(paths, feature, false));
     }
@@ -268,25 +273,38 @@ fn run_feature(paths: &Paths, feature: &str, negative: bool) -> Report {
     report
 }
 
+struct Manifest {
+    listed: BTreeSet<(String, String)>,
+    malformed: Vec<String>,
+}
+
+/// Reads and parses `tests/PASSING.txt` once.
+fn parse_manifest() -> Result<Manifest, String> {
+    let text = fs::read_to_string("tests/PASSING.txt").map_err(|error| error.to_string())?;
+    let mut listed = BTreeSet::new();
+    let mut malformed = Vec::new();
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let Some((feature, name)) = line.split_once('/') else {
+            malformed.push(line.to_string());
+            continue;
+        };
+        listed.insert((feature.to_string(), name.to_string()));
+    }
+    Ok(Manifest { listed, malformed })
+}
+
 fn listed_tests() -> BTreeSet<(String, String)> {
-    let Ok(manifest) = fs::read_to_string("tests/PASSING.txt") else {
-        return BTreeSet::new();
-    };
-    manifest
-        .lines()
-        .filter_map(|line| {
-            let line = line.trim();
-            if line.is_empty() {
-                return None;
-            }
-            let (feature, name) = line.split_once('/')?;
-            Some((feature.to_string(), name.to_string()))
-        })
-        .collect()
+    parse_manifest()
+        .map(|manifest| manifest.listed)
+        .unwrap_or_default()
 }
 
 fn check_manifest(reports: &[Report], reference_mode: bool) -> usize {
-    let manifest = match fs::read_to_string("tests/PASSING.txt") {
+    let manifest = match parse_manifest() {
         Ok(manifest) => manifest,
         Err(error) => {
             eprintln!("cannot read tests/PASSING.txt: {error}");
@@ -308,34 +326,30 @@ fn check_manifest(reports: &[Report], reference_mode: bool) -> usize {
         .collect();
 
     let mut failures = 0;
-    let mut listed: BTreeSet<(&str, &str)> = BTreeSet::new();
-    for line in manifest.lines() {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        let Some((feature, name)) = line.split_once('/') else {
-            eprintln!("malformed PASSING entry: {line}");
-            failures += 1;
-            continue;
-        };
-        listed.insert((feature, name));
-        if !ran_features.contains(feature) {
+    for line in &manifest.malformed {
+        eprintln!("malformed PASSING entry: {line}");
+        failures += 1;
+    }
+
+    // A test that passes but is absent from the manifest is invisible to the
+    // baseline. Only inspect groups that this invocation actually ran.
+    for (feature, name) in &manifest.listed {
+        if !ran_features.contains(feature.as_str()) {
             continue;
         }
         if reference_mode && feature == "negative" {
             continue;
         }
-        if !passed.contains(&(feature, name)) {
-            eprintln!("PASSING entry did not pass: {line}");
+        if !passed.contains(&(feature.as_str(), name.as_str())) {
+            eprintln!("PASSING entry did not pass: {feature}/{name}");
             failures += 1;
         }
     }
-
-    // A test that passes but is absent from the manifest is invisible to the
-    // baseline. Only inspect groups that this invocation actually ran.
     for (feature, name) in &passed {
-        if !listed.contains(&(*feature, *name)) {
+        if !manifest
+            .listed
+            .contains(&(feature.to_string(), name.to_string()))
+        {
             eprintln!("passing test missing from tests/PASSING.txt: {feature}/{name}");
             failures += 1;
         }

@@ -62,7 +62,7 @@ def main() -> int:
         ("G", "#0", -2.5),
     ]
     shapes = [(0, None), (0, 0), (0, 3), (12, None), (12, 0), (12, 3)]
-    for size in (float_specs, float_specs):
+    for size in (float_specs,):
         for ci, (conv, flags, value) in enumerate(size):
             for si, (width, precision) in enumerate(shapes):
                 spec = "%" + flags

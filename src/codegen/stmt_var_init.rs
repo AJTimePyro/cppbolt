@@ -66,12 +66,16 @@ impl<'a> Codegen<'a> {
             .iter()
             .map(|arg| self.get_expr_type(arg, ctx))
             .collect();
+        // A single argument of the same class is copy initialization: the
+        // copy constructor runs for an lvalue, and a prvalue initializes the
+        // object directly.
+        if let [only] = args
+            && matches!(arg_types[0].strip_const(), Type::Struct(other) if other == sname)
+        {
+            return self.compile_aggregate_struct_value(sname, only, offset, ctx, code);
+        }
         let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types) else {
-            return Err(CompileError::new(
-                format!("No matching constructor for '{}'", sname),
-                self.current_line,
-                self.current_col,
-            ));
+            return Ok(());
         };
         self.emit_local_address(offset, ctx, code);
         let full_args = self.constructor_arguments(&sig, args);
@@ -97,9 +101,9 @@ impl<'a> Codegen<'a> {
             .collect();
         if let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types) {
             self.emit_local_address(offset, ctx, code);
-            let full_args = self.constructor_arguments(&sig, list);
-            for (i, arg) in full_args.iter().enumerate() {
-                self.compile_call_arg(arg, sig.param_types.get(i + 1), ctx, code)?;
+            for (i, item) in list.iter().enumerate() {
+                let param_ty = sig.param_types.get(i + 1);
+                self.compile_call_arg(item, param_ty, ctx, code)?;
             }
             code.push(OP_CALL);
             write_u32(code, ctor_idx);
@@ -144,21 +148,23 @@ impl<'a> Codegen<'a> {
                     self.compile_lvalue_addr(init, ctx, code)?;
                     code.push(OP_LOCAL_SET);
                     write_u32(code, ctx.scratch1);
-                    self.emit_copy_struct(sname, offset, ctx, code);
+                    self.emit_copy_struct(sname, offset, ctx, code)?;
                 }
             } else {
+                let temp_count_before = ctx.temp_objects.len();
                 self.compile_expr(init, ctx, code)?;
                 code.push(OP_LOCAL_SET);
                 write_u32(code, ctx.scratch1);
-                if let Some(ctor_idx) = self.find_constructor(sname, &copy_ctor_arg) {
-                    self.emit_local_address(offset, ctx, code);
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.scratch1);
-                    code.push(OP_CALL);
-                    write_u32(code, ctor_idx);
-                } else {
-                    self.emit_copy_struct(sname, offset, ctx, code);
-                }
+                self.emit_copy_struct(sname, offset, ctx, code)?;
+                // The prvalue's heap storage is copied into the local, so it
+                // can be freed immediately.
+                code.push(OP_LOCAL_GET);
+                write_u32(code, ctx.scratch1);
+                code.push(OP_CALL);
+                write_u32(code, self.func_indices["free"]);
+                // Drop the temporary from the cleanup list so statement-end
+                // RAII does not double-free it.
+                ctx.temp_objects.truncate(temp_count_before);
             }
             return Ok(());
         }

@@ -139,23 +139,7 @@ namespace std {
         string& operator+=(const string& o) {
             size_t add_len = o._size;
             if (add_len == 0) return *this;
-            if (_size + add_len > _cap) {
-                size_t new_cap = (_cap == 0 ? 8 : _cap * 2);
-                if (new_cap < _size + add_len) new_cap = _size + add_len;
-                char* new_data = (char*)malloc(new_cap + 1);
-                if (_data) {
-                    memcpy(new_data, _data, _size);
-                }
-                if (o._data) {
-                    memcpy(new_data + _size, o._data, add_len);
-                }
-                if (_data) free(_data);
-                _data = new_data;
-                _cap = new_cap;
-                _size += add_len;
-                _data[_size] = '\0';
-                return *this;
-            }
+            _ensure_cap(_size + add_len);
             if (o._data) {
                 memcpy(_data + _size, o._data, add_len);
             }
@@ -168,21 +152,7 @@ namespace std {
             if (!s) return *this;
             size_t len = strlen(s);
             if (len == 0) return *this;
-            if (_size + len > _cap) {
-                size_t new_cap = (_cap == 0 ? 8 : _cap * 2);
-                if (new_cap < _size + len) new_cap = _size + len;
-                char* new_data = (char*)malloc(new_cap + 1);
-                if (_data) {
-                    memcpy(new_data, _data, _size);
-                }
-                memcpy(new_data + _size, s, len);
-                if (_data) free(_data);
-                _data = new_data;
-                _cap = new_cap;
-                _size += len;
-                _data[_size] = '\0';
-                return *this;
-            }
+            _ensure_cap(_size + len);
             memcpy(_data + _size, s, len);
             _size += len;
             _data[_size] = '\0';
@@ -202,19 +172,7 @@ namespace std {
         }
         string& append(const char* s, size_t n) {
             if (!s || n == 0) return *this;
-            if (_size + n > _cap) {
-                size_t new_cap = (_cap == 0 ? 8 : _cap * 2);
-                if (new_cap < _size + n) new_cap = _size + n;
-                char* new_data = (char*)malloc(new_cap + 1);
-                if (_data) memcpy(new_data, _data, _size);
-                memcpy(new_data + _size, s, n);
-                if (_data) free(_data);
-                _data = new_data;
-                _cap = new_cap;
-                _size += n;
-                _data[_size] = '\0';
-                return *this;
-            }
+            _ensure_cap(_size + n);
             memcpy(_data + _size, s, n);
             _size += n;
             _data[_size] = '\0';

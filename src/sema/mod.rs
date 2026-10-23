@@ -238,10 +238,10 @@ impl Sema {
     }
 
     pub fn lookup_var(&self, name: &str) -> Option<&VarSymbol> {
-        self.lookup_var_in_context(name, self.current_func_name.as_deref())
+        self.lookup_var_in_context(name, self.current_func_name.as_deref().unwrap_or(""))
     }
 
-    pub fn lookup_var_in_context(&self, name: &str, func_name: Option<&str>) -> Option<&VarSymbol> {
+    pub fn lookup_var_in_context(&self, name: &str, func_name: &str) -> Option<&VarSymbol> {
         if let Some(stripped) = name.strip_prefix("::") {
             return self.global_vars.get(stripped);
         }
@@ -250,9 +250,9 @@ impl Sema {
                 return Some(var);
             }
         }
-        let effective_func = func_name.or(self.current_func_name.as_deref());
-        if let Some(fname) = effective_func {
-            let mut curr = fname;
+        let effective_func = func_name;
+        if !effective_func.is_empty() {
+            let mut curr = effective_func;
             while let Some((ns, _)) = curr.rsplit_once("::") {
                 if let Some(var) = self.global_vars.get(&format!("{}::{}", ns, name)) {
                     return Some(var);
