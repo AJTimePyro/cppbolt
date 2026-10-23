@@ -105,7 +105,8 @@ impl<'a> Codegen<'a> {
             body,
             SwitchSlots {
                 target_slot,
-                matched_slot: any_match_slot,
+                matched_slot,
+                any_match_slot,
                 switch_is_wide,
             },
             ctx,
@@ -132,6 +133,7 @@ impl<'a> Codegen<'a> {
                             SwitchSlots {
                                 target_slot,
                                 matched_slot,
+                                any_match_slot,
                                 switch_is_wide,
                             },
                             ctx,
@@ -221,8 +223,9 @@ impl<'a> Codegen<'a> {
     ) {
         let SwitchSlots {
             target_slot,
-            matched_slot: any_match_slot,
+            any_match_slot,
             switch_is_wide,
+            matched_slot: _,
         } = slots;
         // Compute that once because case bodies may clobber scratch locals.
         if let StmtKind::Compound(stmts) = &body.kind {
@@ -257,6 +260,7 @@ impl<'a> Codegen<'a> {
             target_slot,
             matched_slot,
             switch_is_wide,
+            any_match_slot: _,
         } = slots;
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.fp_local);

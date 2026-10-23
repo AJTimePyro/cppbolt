@@ -64,6 +64,7 @@ pub(super) struct ScalarAssign<'e> {
 pub(super) struct SwitchSlots {
     pub(super) target_slot: u32,
     pub(super) matched_slot: u32,
+    pub(super) any_match_slot: u32,
     pub(super) switch_is_wide: bool,
 }
 
