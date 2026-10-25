@@ -189,6 +189,75 @@ impl Parser {
         }
     }
 
+    /// Parses a comma-separated expression list followed by `)`, the argument list of a call, a `new` expression, a parenthesized initializer or a constructor initializer.
+    pub(super) fn parse_paren_expr_list(&mut self) -> Result<Vec<Expr>, CompileError> {
+        let mut args = Vec::new();
+        while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
+            args.push(self.parse_expr()?);
+            if self.peek() == &TokenKind::Comma {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        self.expect(TokenKind::RParen)?;
+        Ok(args)
+    }
+
+    /// Prefixes `name` with the enclosing namespace when it is not already qualified.
+    pub(super) fn qualify_name(&self, name: String) -> String {
+        if self.current_namespace.is_empty() || name.contains("::") {
+            name
+        } else {
+            format!("{}::{}", self.current_namespace.join("::"), name)
+        }
+    }
+
+    /// Records a type alias under `name` and marks the name as known.
+    pub(super) fn register_type_alias(&mut self, name: String, ty: Type) {
+        self.type_aliases.insert(name.clone(), ty);
+        self.known_types.insert(name);
+    }
+
+    /// Records a type alias declared inside a class under both the qualified `Class::alias` and the plain `alias` spelling.
+    pub(super) fn register_member_alias(&mut self, owner: &str, alias: String, ty: Type) {
+        let qualified = format!("{}::{}", owner, alias);
+        self.type_aliases.insert(qualified.clone(), ty.clone());
+        self.type_aliases.insert(alias.clone(), ty);
+        self.known_types.insert(qualified);
+        self.known_types.insert(alias);
+    }
+
+    /// Parses the `::`-separated tail of a qualified name, appending every
+    /// segment to `id`.
+    ///
+    /// `error_pos` is the position reported when a segment is missing;
+    /// `None` reports the position the parser stopped at.
+    pub(super) fn parse_qualified_tail(
+        &mut self,
+        mut id: String,
+        error_pos: Option<(usize, usize)>,
+    ) -> Result<String, CompileError> {
+        while self.peek() == &TokenKind::ColonColon {
+            self.advance();
+            match self.advance().kind.clone() {
+                TokenKind::Ident(sub) => {
+                    id = format!("{}::{}", id, sub);
+                }
+                _ => {
+                    let (line, col) =
+                        error_pos.unwrap_or_else(|| (self.current().line, self.current().col));
+                    return Err(CompileError::new(
+                        "Expected identifier after '::'",
+                        line,
+                        col,
+                    ));
+                }
+            }
+        }
+        Ok(id)
+    }
+
     pub fn parse_program(&mut self) -> Result<Program, CompileError> {
         let mut declarations = Vec::new();
         while self.peek() != &TokenKind::Eof {

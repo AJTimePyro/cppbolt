@@ -41,7 +41,7 @@ impl Parser {
                         ));
                     }
                 };
-                let id = self.parse_qualified_identifier(first, tok.line, tok.col)?;
+                let id = self.parse_qualified_tail(first, Some((tok.line, tok.col)))?;
                 if let Some(stripped) = id.strip_prefix("std::") {
                     Ok(Expr::Identifier(stripped.to_string()))
                 } else {
@@ -49,7 +49,7 @@ impl Parser {
                 }
             }
             TokenKind::Ident(id) => {
-                let mut id = self.parse_qualified_identifier(id, tok.line, tok.col)?;
+                let mut id = self.parse_qualified_tail(id, Some((tok.line, tok.col)))?;
                 if let Some(stripped) = id.strip_prefix("std::") {
                     id = stripped.to_string();
                 }
@@ -64,31 +64,6 @@ impl Parser {
                 tok.col,
             )),
         }
-    }
-
-    /// Parses the `::`-separated tail of a qualified name.
-    fn parse_qualified_identifier(
-        &mut self,
-        mut id: String,
-        line: usize,
-        col: usize,
-    ) -> Result<String, CompileError> {
-        while self.peek() == &TokenKind::ColonColon {
-            self.advance();
-            match self.advance().kind.clone() {
-                TokenKind::Ident(sub) => {
-                    id = format!("{}::{}", id, sub);
-                }
-                _ => {
-                    return Err(CompileError::new(
-                        "Expected identifier after '::'",
-                        line,
-                        col,
-                    ));
-                }
-            }
-        }
-        Ok(id)
     }
 
     pub(super) fn parse_postfix(
@@ -162,17 +137,7 @@ impl Parser {
     fn parse_call_args(&mut self) -> Result<Vec<Expr>, CompileError> {
         // One call costs one level of the call budget.
         let _guard = self.enter_call()?;
-        let mut args = Vec::new();
-        while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
-            args.push(self.parse_expr()?);
-            if self.peek() == &TokenKind::Comma {
-                self.advance();
-            } else {
-                break;
-            }
-        }
-        self.expect(TokenKind::RParen)?;
-        Ok(args)
+        self.parse_paren_expr_list()
     }
 
     fn parse_member_name(&mut self, operator: &str) -> Result<String, CompileError> {

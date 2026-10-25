@@ -134,7 +134,7 @@ impl Parser {
     }
 
     pub(super) fn parse_qualified_name(&mut self) -> Result<String, CompileError> {
-        let mut name = if self.peek() == &TokenKind::ColonColon {
+        let name = if self.peek() == &TokenKind::ColonColon {
             self.advance();
             match self.advance().kind.clone() {
                 TokenKind::Ident(id) => id,
@@ -159,24 +159,8 @@ impl Parser {
             }
         };
 
-        while self.peek() == &TokenKind::ColonColon {
-            self.advance();
-            match self.advance().kind.clone() {
-                TokenKind::Ident(id) => {
-                    name = format!("{}::{}", name, id);
-                }
-                _ => {
-                    return Err(CompileError::new(
-                        "Expected identifier after '::'",
-                        self.current().line,
-                        self.current().col,
-                    ));
-                }
-            }
-        }
+        let name = self.parse_qualified_tail(name, None)?;
 
-        name = QualifiedName::new(&name).plain().to_string();
-
-        Ok(name)
+        Ok(QualifiedName::new(&name).plain().to_string())
     }
 }

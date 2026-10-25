@@ -37,9 +37,7 @@ impl Parser {
                 ));
             }
         };
-        if !self.current_namespace.is_empty() && !name.contains("::") {
-            name = format!("{}::{}", self.current_namespace.join("::"), name);
-        }
+        name = self.qualify_name(name);
         self.known_types.insert(name.clone());
         if let Some(short) = name.split("::").last() {
             self.known_types.insert(short.to_string());
@@ -236,11 +234,7 @@ impl Parser {
                 }
             };
             self.expect(TokenKind::Semi)?;
-            self.type_aliases
-                .insert(format!("{}::{}", body.name, tname), ty.clone());
-            self.type_aliases.insert(tname.clone(), ty);
-            self.known_types.insert(format!("{}::{}", body.name, tname));
-            self.known_types.insert(tname);
+            self.register_member_alias(&body.name, tname, ty);
             return Ok(true);
         }
         Ok(false)
@@ -263,11 +257,7 @@ impl Parser {
                 self.advance();
                 let ty = self.parse_type()?;
                 self.expect(TokenKind::Semi)?;
-                self.type_aliases
-                    .insert(format!("{}::{}", body.name, alias), ty.clone());
-                self.type_aliases.insert(alias.clone(), ty);
-                self.known_types.insert(format!("{}::{}", body.name, alias));
-                self.known_types.insert(alias);
+                self.register_member_alias(&body.name, alias, ty);
                 return Ok(true);
             } else {
                 self.expect(TokenKind::Semi)?;

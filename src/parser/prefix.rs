@@ -65,16 +65,7 @@ impl Parser {
             })
         } else if self.peek() == &TokenKind::LParen {
             self.advance();
-            let mut args = Vec::new();
-            while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
-                args.push(self.parse_expr()?);
-                if self.peek() == &TokenKind::Comma {
-                    self.advance();
-                } else {
-                    break;
-                }
-            }
-            self.expect(TokenKind::RParen)?;
+            let args = self.parse_paren_expr_list()?;
             Ok(Expr::New {
                 ty,
                 args,

@@ -47,7 +47,7 @@ impl Parser {
             let base_type = self.parse_type()?;
             let (ptype, pname) =
                 if self.peek() == &TokenKind::LParen && self.peek_ahead(1) == &TokenKind::Star {
-                    self.parse_function_pointer_param(base_type)?
+                    self.parse_function_pointer_declarator(base_type, None)?
                 } else {
                     let name = if let TokenKind::Ident(id) = self.peek().clone() {
                         self.advance();
@@ -86,18 +86,37 @@ impl Parser {
         Ok(params)
     }
 
-    pub(super) fn parse_function_pointer_param(
+    /// Parses `(*name)(args)` after the base type of a function pointer and
+    /// returns the pointer-to-function type together with the name.
+    ///
+    /// `name_error` is the diagnostic for a missing name; `None` accepts an
+    /// unnamed declarator, as in a function-pointer parameter.
+    pub(super) fn parse_function_pointer_declarator(
         &mut self,
         base_type: Type,
+        name_error: Option<&str>,
     ) -> Result<(Type, String), CompileError> {
-        // Function-pointer parameter: Base (*name)(args).
         self.advance();
         self.advance();
-        let id = if let TokenKind::Ident(id) = self.peek().clone() {
-            self.advance();
-            id
-        } else {
-            String::new()
+        let name = match name_error {
+            Some(message) => match self.advance().kind.clone() {
+                TokenKind::Ident(id) => id,
+                _ => {
+                    return Err(CompileError::new(
+                        message,
+                        self.current().line,
+                        self.current().col,
+                    ));
+                }
+            },
+            None => {
+                if let TokenKind::Ident(id) = self.peek().clone() {
+                    self.advance();
+                    id
+                } else {
+                    String::new()
+                }
+            }
         };
         self.expect(TokenKind::RParen)?;
         self.expect(TokenKind::LParen)?;
@@ -117,7 +136,7 @@ impl Parser {
                 return_type: Box::new(base_type),
                 param_types: fn_params,
             })),
-            id,
+            name,
         ))
     }
 
@@ -166,16 +185,7 @@ impl Parser {
                     }
                 };
                 self.expect(TokenKind::LParen)?;
-                let mut args = Vec::new();
-                while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
-                    args.push(self.parse_expr()?);
-                    if self.peek() == &TokenKind::Comma {
-                        self.advance();
-                    } else {
-                        break;
-                    }
-                }
-                self.expect(TokenKind::RParen)?;
+                let args = self.parse_paren_expr_list()?;
                 ctor_initializers.push((iname, args));
                 if self.peek() == &TokenKind::Comma {
                     self.advance();

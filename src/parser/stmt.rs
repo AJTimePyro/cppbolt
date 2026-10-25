@@ -139,7 +139,7 @@ impl Parser {
         let base_type = self.parse_type()?;
         let (final_ty, name) =
             if self.peek() == &TokenKind::LParen && self.peek_ahead(1) == &TokenKind::Star {
-                self.parse_function_pointer_local(base_type)?
+                self.parse_function_pointer_declarator(base_type, Some("Expected variable name"))?
             } else {
                 let id = match self.advance().kind.clone() {
                     TokenKind::Ident(id) => id,
@@ -159,16 +159,7 @@ impl Parser {
             Some(self.parse_initializer()?)
         } else if self.peek() == &TokenKind::LParen {
             self.advance();
-            let mut args = Vec::new();
-            while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
-                args.push(self.parse_expr()?);
-                if self.peek() == &TokenKind::Comma {
-                    self.advance();
-                } else {
-                    break;
-                }
-            }
-            self.expect(TokenKind::RParen)?;
+            let args = self.parse_paren_expr_list()?;
             match final_ty.strip_const() {
                 // A parenthesized initializer of a class type is a
                 // constructor call, not an initializer list.
@@ -194,45 +185,6 @@ impl Parser {
             },
             tok.line,
             tok.col,
-        ))
-    }
-
-    /// Parses a function-pointer local: Base (*name)(args).
-    fn parse_function_pointer_local(
-        &mut self,
-        base_type: Type,
-    ) -> Result<(Type, String), CompileError> {
-        self.advance();
-        self.advance();
-        let id = match self.advance().kind.clone() {
-            TokenKind::Ident(id) => id,
-            _ => {
-                return Err(CompileError::new(
-                    "Expected variable name",
-                    self.current().line,
-                    self.current().col,
-                ));
-            }
-        };
-        self.expect(TokenKind::RParen)?;
-        self.expect(TokenKind::LParen)?;
-        let mut fn_params = Vec::new();
-        while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
-            let pt = self.parse_type()?;
-            fn_params.push(pt);
-            if self.peek() == &TokenKind::Comma {
-                self.advance();
-            } else {
-                break;
-            }
-        }
-        self.expect(TokenKind::RParen)?;
-        Ok((
-            Type::Pointer(Box::new(Type::Function {
-                return_type: Box::new(base_type),
-                param_types: fn_params,
-            })),
-            id,
         ))
     }
 

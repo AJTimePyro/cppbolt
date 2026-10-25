@@ -93,15 +93,12 @@ impl Parser {
             } else {
                 self.parse_qualified_name()?
             };
-            if !self.current_namespace.is_empty() && !name.contains("::") {
-                name = format!("{}::{}", self.current_namespace.join("::"), name);
-            }
+            name = self.qualify_name(name);
             if self.peek() == &TokenKind::Assign {
                 self.advance();
                 let ty = self.parse_type()?;
                 self.expect(TokenKind::Semi)?;
-                self.type_aliases.insert(name.clone(), ty);
-                self.known_types.insert(name);
+                self.register_type_alias(name, ty);
                 return Ok(());
             }
             self.expect(TokenKind::Semi)?;
@@ -115,38 +112,10 @@ impl Parser {
         let base_type = self.parse_type()?;
         if self.peek() == &TokenKind::LParen && self.peek_ahead(1) == &TokenKind::Star {
             // Function-pointer typedef: Base (*Name)(args).
-            self.advance();
-            self.advance();
-            let id = match self.advance().kind.clone() {
-                TokenKind::Ident(id) => id,
-                _ => {
-                    return Err(CompileError::new(
-                        "Expected typedef name",
-                        self.current().line,
-                        self.current().col,
-                    ));
-                }
-            };
-            self.expect(TokenKind::RParen)?;
-            self.expect(TokenKind::LParen)?;
-            let mut fn_params = Vec::new();
-            while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
-                let pt = self.parse_type()?;
-                fn_params.push(pt);
-                if self.peek() == &TokenKind::Comma {
-                    self.advance();
-                } else {
-                    break;
-                }
-            }
-            self.expect(TokenKind::RParen)?;
+            let (final_ty, id) =
+                self.parse_function_pointer_declarator(base_type, Some("Expected typedef name"))?;
             self.expect(TokenKind::Semi)?;
-            let final_ty = Type::Pointer(Box::new(Type::Function {
-                return_type: Box::new(base_type),
-                param_types: fn_params,
-            }));
-            self.type_aliases.insert(id.clone(), final_ty);
-            self.known_types.insert(id);
+            self.register_type_alias(id, final_ty);
             return Ok(());
         }
         {
@@ -161,8 +130,7 @@ impl Parser {
                 }
             };
             self.expect(TokenKind::Semi)?;
-            self.type_aliases.insert(name.clone(), base_type);
-            self.known_types.insert(name);
+            self.register_type_alias(name, base_type);
             Ok(())
         }
     }
@@ -202,9 +170,7 @@ impl Parser {
         } else {
             self.parse_qualified_name()?
         };
-        if !self.current_namespace.is_empty() && !name.contains("::") {
-            name = format!("{}::{}", self.current_namespace.join("::"), name);
-        }
+        name = self.qualify_name(name);
 
         if self.peek() == &TokenKind::LParen {
             let func = self.parse_function_tail(name, ty, start_tok.line, start_tok.col)?;
@@ -244,36 +210,8 @@ impl Parser {
         ty: Type,
         start_tok: &Token,
     ) -> Result<Decl, CompileError> {
-        // Function-pointer declarator: Base (*name)(args).
-        self.advance();
-        self.advance();
-        let name = match self.advance().kind.clone() {
-            TokenKind::Ident(id) => id,
-            _ => {
-                return Err(CompileError::new(
-                    "Expected variable name",
-                    self.current().line,
-                    self.current().col,
-                ));
-            }
-        };
-        self.expect(TokenKind::RParen)?;
-        self.expect(TokenKind::LParen)?;
-        let mut fn_params = Vec::new();
-        while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
-            let pt = self.parse_type()?;
-            fn_params.push(pt);
-            if self.peek() == &TokenKind::Comma {
-                self.advance();
-            } else {
-                break;
-            }
-        }
-        self.expect(TokenKind::RParen)?;
-        let final_ty = Type::Pointer(Box::new(Type::Function {
-            return_type: Box::new(ty),
-            param_types: fn_params,
-        }));
+        let (final_ty, name) =
+            self.parse_function_pointer_declarator(ty, Some("Expected variable name"))?;
         let init = if self.peek() == &TokenKind::Assign {
             self.advance();
             Some(self.parse_initializer()?)
