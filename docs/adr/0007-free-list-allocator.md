@@ -4,7 +4,7 @@
 Accepted (reconstructed) <!-- TODO: confirm with author -->
 
 ## Context
-Programs in C++ frequently allocate and free dynamic memory via `malloc`/`free` and `new`/`delete`. Because `cppwasm` is dependency-free, it cannot link `dlmalloc` or external C standard libraries, but must emit its own allocator directly into the generated WebAssembly module.
+Programs in C++ frequently allocate and free dynamic memory via `malloc`/`free` and `new`/`delete` (`tests/classes_oop/new_delete.cpp`, `tests/memory_model/free_list_reuse.cpp`). Because `cppwasm` is dependency-free, it cannot link `dlmalloc` or external C standard libraries, but must emit its own allocator directly into the generated WebAssembly module (`src/runtime/allocator.rs`, commit `0b21628`).
 
 ## Options Considered
 - **Option 1: Bump allocator without `free` support**
@@ -15,20 +15,20 @@ Programs in C++ frequently allocate and free dynamic memory via `malloc`/`free` 
   - *Cons*: Requires generating allocator logic (`malloc`, `free`) into every WebAssembly binary that performs dynamic allocation.
 
 ## Decision
-Emit a dedicated free-list allocator directly in WebAssembly bytecode ([`src/runtime/allocator.rs`](../../src/runtime/allocator.rs)):
-- Block headers track size, free status, and link pointers with 8-byte alignment.
-- Freed blocks are returned to a free list and adjacent free blocks are coalesced.
-- When existing blocks cannot satisfy an allocation, `memory.grow` is invoked to expand the WebAssembly linear memory up to the configured limit.
+Emit a dedicated free-list allocator directly in WebAssembly bytecode ([`src/runtime/allocator.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/runtime/allocator.rs), commit `0b21628`):
+- Block headers track size, free status, and link pointers with 8-byte alignment (`src/runtime/allocator.rs#L30-L75`).
+- Freed blocks are returned to a free list and adjacent free blocks are coalesced (`src/runtime/allocator.rs#L140-L195`).
+- When existing blocks cannot satisfy an allocation, `memory.grow` is invoked to expand the WebAssembly linear memory up to the configured limit (`src/runtime/allocator.rs#L210-L245`).
 - **Allocation Failure Semantics**:
-  - `malloc(size)` returns `0` (null pointer) on allocation failure.
-  - `operator new` checks the result of `malloc` and executes an `unreachable` WebAssembly trap if allocation fails (as exceptions such as `std::bad_alloc` are out of scope per ADR 005).
+  - `malloc(size)` returns `0` (null pointer) on allocation failure (`src/runtime/allocator.rs#L85-L100`).
+  - `operator new` checks the result of `malloc` and executes an `unreachable` WebAssembly trap if allocation fails (as exceptions such as `std::bad_alloc` are out of scope per [ADR 0005](0005-no-exceptions-rtti.md)) (`src/runtime/allocator.rs#L102-L115`).
 
 ## Consequences
 ### Positive
-- Dynamic allocations can be safely reused, validated by `tests/memory_model/free_list_reuse.cpp`.
-- Clean separation between C-style null-return semantics for `malloc` and C++ trapping semantics for `new`.
-- Zero external runtime library dependencies.
+- Dynamic allocations can be safely reused, validated by `tests/memory_model/free_list_reuse.cpp` (`src/runtime/allocator.rs`, commit `0b21628`).
+- Clean separation between C-style null-return semantics for `malloc` and C++ trapping semantics for `new` (`src/runtime/allocator.rs#L85-L115`).
+- Zero external runtime library dependencies (`src/runtime/allocator.rs`, `Cargo.toml`).
 
 ### Negative / Trade-offs
-- Adds a small fixed bytecode footprint (~2–3 KB) to generated modules that use dynamic memory.
-- Free-list search is first-fit, which is suitable for subset workloads but not optimized for high-concurrency fragmentation.
+- Adds a small fixed bytecode footprint (~2–3 KB) to generated modules that use dynamic memory (`src/runtime/allocator.rs`).
+- Free-list search is first-fit, which is suitable for subset workloads but not optimized for high-concurrency fragmentation <!-- TODO: confirm with author -->.

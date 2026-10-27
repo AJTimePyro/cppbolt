@@ -9,7 +9,7 @@
 
 ## 1. Compiler WebAssembly C ABI
 
-When built with `--target wasm32-unknown-unknown --lib`, `cppwasm` exports a low-level C ABI implemented in [`src/ffi.rs`](../../../src/ffi.rs). Memory management is explicit: each compilation result is an independent boxed slice that must be allocated and released through matching functions.
+When built with `--target wasm32-unknown-unknown --lib`, `cppwasm` exports a low-level C ABI implemented in [`src/ffi.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/ffi.rs). Memory management is explicit: each compilation result is an independent boxed slice that must be allocated and released through matching functions.
 
 ### Exported Functions
 
@@ -59,13 +59,13 @@ if (resultPtr === 0) {
 }
 ```
 
-The error buffer is private static storage owned by the compiler; failed compilations never leak linear memory. Bounded memory consumption across repeated compilations is verified by [`tests/ffi_lifecycle.js`](../../../tests/ffi_lifecycle.js).
+The error buffer is private static storage owned by the compiler; failed compilations never leak linear memory. Bounded memory consumption across repeated compilations is verified by [`tests/ffi_lifecycle.js`](https://github.com/cppwasm/cpp_web/blob/main/tests/ffi_lifecycle.js).
 
 ---
 
 ## 2. Program Execution Host Runtime (`web/host.js`)
 
-When a compiled C++ program runs, its WebAssembly module expects an imported `env` namespace providing standard character and numeric I/O. [`web/host.js`](../../../web/host.js) implements this environment for both browser and Node.js hosts:
+When a compiled C++ program runs, its WebAssembly module expects an imported `env` namespace providing standard character and numeric I/O. [`web/host.js`](https://github.com/cppwasm/cpp_web/blob/main/web/host.js) implements this environment for both browser and Node.js hosts:
 
 ```javascript
 import { createHostEnv } from "./web/host.js";
@@ -104,21 +104,21 @@ For `print_int` and `print_double`:
 
 ## 3. Web Worker Architecture in the Playground
 
-Compiling complex C++ programs with deep recursion can consume significant CPU cycles. To ensure smooth browser UI responsiveness, the browser playground ([`web/playground.html`](../../../web/playground.html)) offloads all compiler work to a Web Worker ([`web/playground-worker.js`](../../../web/playground-worker.js)):
+Compiling complex C++ programs with deep recursion can consume significant CPU cycles. To ensure smooth browser UI responsiveness, the browser playground ([`web/playground.html`](https://github.com/cppwasm/cpp_web/blob/main/web/playground.html)) offloads all compiler work to a Web Worker ([`web/playground-worker.js`](https://github.com/cppwasm/cpp_web/blob/main/web/playground-worker.js)):
 
-```mermaid
-sequenceDiagram
-    participant UI as Playground Page (UI)
-    participant Worker as Web Worker (Compiler)
-    participant Wasm as Compiled C++ Instance
-
-    UI->>Worker: postMessage({ type: "compile", code: sourceText })
-    Note over Worker: Runs compile_wasm(ptr, len)
-    Worker-->>UI: postMessage({ type: "success", wasmBytes, compileMs })
-    UI->>Wasm: WebAssembly.instantiate(wasmBytes, hostEnv)
-    UI->>Wasm: exports.main()
-    Wasm-->>UI: host.print_char / print_int
-    Note over UI: Renders stdout & execution timing
+```text
+ Playground Page (UI)              Web Worker (Compiler)           Compiled C++ Instance
+        │                                  │                                  │
+        │── postMessage({compile, code}) ─>│                                  │
+        │                                  │── compile_wasm(ptr, len)         │
+        │                                  │                                  │
+        │<─ postMessage({success, bytes}) ─│                                  │
+        │                                                                     │
+        │── WebAssembly.instantiate(wasmBytes, hostEnv) ─────────────────────>│
+        │── exports.main() ──────────────────────────────────────────────────>│
+        │                                                                     │
+        │<── host.print_char / print_int (stdout) ────────────────────────────│
+        │                                                                     │
 ```
 
 ### Shareable URLs
@@ -132,4 +132,4 @@ Example:
 http://localhost:8000/?run=1&code=int%20main()%20%7B%20return%200%3B%20%7D
 ```
 
-Execution flow in Node.js and headless browser flows is covered by [`tests/browser_flow.rs`](../../../tests/browser_flow.rs).
+Execution flow in Node.js and headless browser flows is covered by [`tests/browser_flow.rs`](https://github.com/cppwasm/cpp_web/blob/main/tests/browser_flow.rs).

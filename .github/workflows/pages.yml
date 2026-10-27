@@ -41,6 +41,17 @@ jobs:
         with:
           mdbook-version: '0.4.40'
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Verify feature matrix test paths
+        run: python3 tools/check_feature_matrix.py
+
+      - name: Run doctests
+        run: cargo test --doc
+
       - name: Build the compiler for the browser
         run: cargo build --release --target wasm32-unknown-unknown --lib
 
@@ -49,12 +60,14 @@ jobs:
 
       - name: Build mdBook documentation
         run: |
+          mdbook build docs/book
+          python3 tools/check_book_links.py
           cd docs/book
           mdbook build --dest-dir ../../site/book
 
-      - name: Build rustdoc API documentation
+      - name: Build rustdoc API documentation (strict warnings)
         run: |
-          cargo doc --no-deps
+          RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --lib --bins
           cp -r target/doc site/api
 
       - name: Configure GitHub Pages

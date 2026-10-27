@@ -1,0 +1,51 @@
+name: CI Documentation & Code Quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  doc-and-matrix-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Install mdBook (pinned version)
+        uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: '0.4.40'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy lints
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Build rustdoc with strict warnings
+        run: RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --lib --bins
+
+      - name: Run doctests
+        run: cargo test --doc
+
+      - name: Verify feature matrix test paths
+        run: python3 tools/check_feature_matrix.py
+
+      - name: Build mdBook and check links
+        run: |
+          mdbook build docs/book
+          python3 tools/check_book_links.py

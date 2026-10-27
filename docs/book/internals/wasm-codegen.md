@@ -1,35 +1,35 @@
 # WebAssembly Code Generation Internals
 
-The code generation stage lowers the typed AST and semantic symbol table directly into WebAssembly binary sections, implemented across [`src/codegen/`](../../../src/codegen/) and encoded by [`src/wasm/`](../../../src/wasm/).
+The code generation stage lowers the typed AST and semantic symbol table directly into WebAssembly binary sections, implemented across [`src/codegen/`](https://github.com/cppwasm/cpp_web/blob/main/src/codegen/) and encoded by [`src/wasm/`](https://github.com/cppwasm/cpp_web/blob/main/src/wasm/).
 
 ---
 
 ## 1. Role in the Pipeline
 
-1. **Direct AST-to-Wasm Lowering**: As established in [ADR 0002](../../adr/0002-direct-wasm.md) and [Architecture](architecture.md), `cppwasm` does not translate AST nodes into an intermediate representation (IR) or execute bytecode optimization passes. It walks the typed AST and writes WebAssembly opcodes directly into byte buffers.
-2. **Function Frame Management**: Allocates checked local stack slots, emits prologue stack overflow checks, and coordinates RAII destructor calls before every function return point ([`src/codegen/function_context.rs`](../../../src/codegen/function_context.rs)).
+1. **Direct AST-to-Wasm Lowering**: As established in [ADR 0002](../adr/0002-direct-wasm.md) and [Architecture](architecture.md), `cppwasm` does not translate AST nodes into an intermediate representation (IR) or execute bytecode optimization passes. It walks the typed AST and writes WebAssembly opcodes directly into byte buffers.
+2. **Function Frame Management**: Allocates checked local stack slots, emits prologue stack overflow checks, and coordinates RAII destructor calls before every function return point ([`src/codegen/function_context.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/codegen/function_context.rs)).
 3. **Fixed-Width LEB128 Patching**: Because the final stack frame size is only known after traversing the entire function body, prologues and epilogues emit 5-byte fixed-width LEB128 placeholders that are patched in place after body lowering.
-4. **Binary Section Assembly**: Packs types, imports, functions, tables, memory, globals, exports, elements, code bodies, and data segments into the standard WebAssembly binary module format ([`src/wasm/module.rs`](../../../src/wasm/module.rs)).
+4. **Binary Section Assembly**: Packs types, imports, functions, tables, memory, globals, exports, elements, code bodies, and data segments into the standard WebAssembly binary module format ([`src/wasm/module.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/wasm/module.rs)).
 
 ---
 
 ## 2. Key Data Structures
 
-- [`Codegen<'a>`](../../../src/codegen/mod.rs): The top-level code generator state:
+- [`Codegen<'a>`](https://github.com/cppwasm/cpp_web/blob/main/src/codegen/mod.rs): The top-level code generator state:
   - `sema: &'a Sema`: Reference to verified semantic layouts and symbols.
   - `module: WasmModule`: The in-memory WebAssembly module.
   - `string_table: HashMap<String, u32>`: Interned string literal offsets.
   - `next_data_offset: u32`: Allocation pointer for static data starting at `DATA_BASE`.
   - `func_indices: HashMap<String, u32>`: Function indices for direct calls.
   - `vtable_offsets: HashMap<String, u32>`: Vtable offsets in static linear memory.
-- [`FunctionContext`](../../../src/codegen/function_context.rs): Per-function lowering state:
+- [`FunctionContext`](https://github.com/cppwasm/cpp_web/blob/main/src/codegen/function_context.rs): Per-function lowering state:
   - `fp_local: u32`: Local variable holding the frame pointer.
   - `scratch1..2, scratch_i64, scratch_f64`: Reserved Wasm locals for temporary operand staging.
   - `var_offsets: HashMap<String, u32>`: Byte offsets from the frame pointer for each local variable.
   - `frame_size: i32`: Computed total frame size.
   - `frame_size_patches: Vec<usize>`: Byte offsets in the code buffer requiring 5-byte LEB128 frame size patching.
   - `scope_objects: Vec<Vec<(String, Type, u32)>>`: Active objects requiring RAII destruction at block/function exits.
-- [`WasmModule`](../../../src/wasm/module.rs): In-memory representation of WebAssembly sections before serialization.
+- [`WasmModule`](https://github.com/cppwasm/cpp_web/blob/main/src/wasm/module.rs): In-memory representation of WebAssembly sections before serialization.
 
 ---
 
@@ -70,13 +70,13 @@ self.frame_size_patches.push(code.len());
 code.extend_from_slice(&[0x80, 0x80, 0x80, 0x80, 0x00]);
 ```
 
-Once the body completes and `self.frame_size` is calculated, [`FunctionContext::patch_frame_sizes`](../../../src/codegen/function_context.rs) overwrites the 5 bytes with the true value padded with continuation bits. This guarantees that code offsets and branch destinations never shift during compilation.
+Once the body completes and `self.frame_size` is calculated, [`FunctionContext::patch_frame_sizes`](https://github.com/cppwasm/cpp_web/blob/main/src/codegen/function_context.rs) overwrites the 5 bytes with the true value padded with continuation bits. This guarantees that code offsets and branch destinations never shift during compilation.
 
 ---
 
 ## 4. Real Input & WebAssembly Opcode Output Example
 
-Taken from [`tests/c_basics/arithmetic.cpp`](../../../tests/c_basics/arithmetic.cpp):
+Taken from [`tests/c_basics/arithmetic.cpp`](https://github.com/cppwasm/cpp_web/blob/main/tests/c_basics/arithmetic.cpp):
 
 ### Input C++ Source
 ```cpp

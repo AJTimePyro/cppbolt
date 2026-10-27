@@ -1,6 +1,6 @@
 # Summary
 
-[Introduction](user/getting-started.md)
+[Introduction](index.md)
 
 # User Guide
 
