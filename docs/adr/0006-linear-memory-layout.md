@@ -1,0 +1,34 @@
+# ADR 0006: WebAssembly Linear Memory Layout and Stack Safety
+
+## Status
+Accepted (reconstructed) <!-- TODO: confirm with author -->
+
+## Context
+WebAssembly provides a single contiguous linear memory array per instance. The compiler must layout static data, the execution stack for locals whose addresses are taken, and dynamic heap allocations while preventing silent memory corruption between stack and heap.
+
+## Options Considered
+- **Option 1: Upward-growing stack, downward heap**
+  - *Pros*: Simple stack increment.
+  - *Cons*: Stack overflow grows into data/heap areas, causing silent memory corruption unless bounds checks are added to every allocation.
+- **Option 2: 64 KiB guard region, downward-growing stack, upward-growing heap**
+  - *Pros*: Follows standard ABI conventions; stack overflows hit a reserved zero-page guard region; clear separation between stack and heap.
+  - *Cons*: Stack pointer must be initialized to a high address and decremented per call frame.
+
+## Decision
+Establish the linear memory layout defined in [`src/runtime/memory_layout.rs`](../../src/runtime/memory_layout.rs):
+1. **Guard Page**: Address `0` to `65,535` (`64 KiB`). Reserved region. Address `0` serves as the null pointer representation.
+2. **Stack Region**: Address `65,536` (`64 KiB`) to `8,454,143` (`8 MiB + 64 KiB`). Grows downwards. The global stack pointer is initialized to `STACK_TOP` (`8,454,144`).
+3. **Static Data Region**: Begins at `DATA_BASE` (`STACK_TOP`). Holds string literals, static variables, and vtables.
+4. **Heap Region**: Begins immediately after static data and grows upwards toward the maximum configured memory limit (default 256 MiB).
+
+In function prologues, stack frame allocations check that the new stack pointer does not decrement below `GUARD_PAGE_END` (`65,536`). If it does, the program immediately triggers a WebAssembly `unreachable` trap.
+
+## Consequences
+### Positive
+- Stack overflow cannot silently corrupt static data or the heap; it traps deterministically before entering the guard page.
+- Address zero is never returned by valid allocations.
+- Fixed constants ensure reproducibility between native and browser environments.
+
+### Negative / Trade-offs
+- Maximum stack depth is fixed at 8 MiB per WebAssembly instance.
+- Prologue emissions require explicit stack bounds checks.
