@@ -14,6 +14,7 @@ mod lookup;
 mod overload;
 mod stmt;
 mod stmt_decl;
+mod stmt_range_for;
 
 pub(crate) use layout::RecordLayout;
 pub(crate) use stmt_decl::VarDecl;
@@ -133,6 +134,7 @@ pub struct Sema {
     /// diagnostic, while a constructor call in an expression reports a call
     /// diagnostic.
     pub in_initializer: bool,
+    pub range_for_counter: usize,
     depth: crate::depth::DepthCounters,
 }
 
@@ -153,6 +155,7 @@ impl Sema {
             current_col: 1,
             loop_depth: 0,
             switch_depth: 0,
+            range_for_counter: 0,
             current_class: None,
             current_func_name: None,
             open_namespaces: Vec::new(),

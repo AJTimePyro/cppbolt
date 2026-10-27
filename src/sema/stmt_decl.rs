@@ -85,13 +85,23 @@ impl Sema {
             result?
         };
         if *ty == Type::Auto {
-            *ty = init_ty.clone();
+            *ty = init_ty.strip_reference().clone();
         } else if let Type::Pointer(inner) = ty
             && **inner == Type::Auto
         {
             *ty = Type::Pointer(Box::new(
-                init_ty.deref_type().cloned().unwrap_or(init_ty.clone()),
+                init_ty.deref_type().cloned().unwrap_or_else(|| init_ty.strip_reference().clone()),
             ));
+        } else if let Type::Reference(inner) = ty {
+            if **inner == Type::Auto {
+                *ty = Type::Reference(Box::new(init_ty.strip_reference().clone()));
+            } else if let Type::Const(c_inner) = &**inner
+                && **c_inner == Type::Auto
+            {
+                *ty = Type::Reference(Box::new(Type::Const(Box::new(
+                    init_ty.strip_reference().clone(),
+                ))));
+            }
         }
         if !self.can_assign(ty, &init_ty) {
             return Err(CompileError::new(

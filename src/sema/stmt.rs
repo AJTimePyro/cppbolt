@@ -41,6 +41,9 @@ impl Sema {
     /// Every statement kind is handled by its own helper so that this
     /// function stays a dispatcher.
     pub(super) fn analyze_stmt(&mut self, stmt: &mut Stmt) -> Result<(), CompileError> {
+        if let StmtKind::RangeFor { .. } = stmt.kind {
+            *stmt = self.desugar_range_for(stmt.clone())?;
+        }
         // A compound block has its own budget, so a nested `if` with its
         // block costs one statement level and one block level.
         if let StmtKind::Compound(stmts) = &mut stmt.kind {
@@ -95,11 +98,11 @@ impl Sema {
             | StmtKind::Empty
             | StmtKind::UsingNamespace(_)
             | StmtKind::UsingDecl(_)
-            | StmtKind::RangeFor { .. }
             | StmtKind::Expr(_) => {}
             StmtKind::Return(expr_opt) => {
                 self.analyze_return(expr_opt, stmt.line, stmt.col)?;
             }
+            StmtKind::RangeFor { .. } => unreachable!("RangeFor is desugared before dispatch"),
         }
         Ok(())
     }
