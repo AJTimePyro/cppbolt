@@ -94,7 +94,10 @@ impl Sema {
             && **inner == Type::Auto
         {
             *ty = Type::Pointer(Box::new(
-                init_ty.deref_type().cloned().unwrap_or_else(|| init_ty.strip_reference().clone()),
+                init_ty
+                    .deref_type()
+                    .cloned()
+                    .unwrap_or_else(|| init_ty.strip_reference().clone()),
             ));
         } else if let Type::Reference(inner) = ty {
             if **inner == Type::Auto {

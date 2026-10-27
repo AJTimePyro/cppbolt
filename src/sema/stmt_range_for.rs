@@ -110,12 +110,8 @@ impl Sema {
         };
 
         match clean_range_ty {
-            Type::Array(elem_ty, size) => {
-                self.desugar_range_for_array(parts, *elem_ty, size)
-            }
-            Type::Struct(sname) => {
-                self.desugar_range_for_class(parts, &sname)
-            }
+            Type::Array(elem_ty, size) => self.desugar_range_for_array(parts, *elem_ty, size),
+            Type::Struct(sname) => self.desugar_range_for_class(parts, &sname),
             _ => Err(CompileError::new(
                 format!(
                     "range expression must be an array or class with begin() and end(), found '{}'",
@@ -140,7 +136,12 @@ impl Sema {
         let end_name = format!("__end_{}", idx);
         let ptr_ty = Type::Pointer(Box::new(elem_ty));
 
-        let begin_decl = make_var_decl(begin_name.clone(), ptr_ty.clone(), Some(parts.range), parts.pos);
+        let begin_decl = make_var_decl(
+            begin_name.clone(),
+            ptr_ty.clone(),
+            Some(parts.range),
+            parts.pos,
+        );
         let end_init = Expr::Binary {
             op: BinaryOp::Add,
             left: Box::new(Expr::Identifier(begin_name.clone())),
@@ -149,13 +150,8 @@ impl Sema {
         };
         let end_decl = make_var_decl(end_name.clone(), ptr_ty, Some(end_init), parts.pos);
 
-        let for_loop = build_for_loop_with_iterators(
-            begin_name,
-            end_name,
-            parts.decl,
-            parts.body,
-            parts.pos,
-        );
+        let for_loop =
+            build_for_loop_with_iterators(begin_name, end_name, parts.decl, parts.body, parts.pos);
 
         Ok(Stmt::new(
             StmtKind::Compound(vec![begin_decl, end_decl, for_loop]),
@@ -173,14 +169,17 @@ impl Sema {
             || matches!(&parts.range_ty, Type::Reference(inner) if inner.is_const());
         let begin_sig = self.find_method_in_class_for_receiver(sname, "begin", is_const);
         let end_sig = self.find_method_in_class_for_receiver(sname, "end", is_const);
-        if begin_sig.is_none() || end_sig.is_none() {
+        let (Some(begin_sig), Some(_)) = (begin_sig, end_sig) else {
             return Err(CompileError::new(
-                format!("class '{}' does not have matching begin() and end() methods", sname),
+                format!(
+                    "class '{}' does not have matching begin() and end() methods",
+                    sname
+                ),
                 parts.pos.line,
                 parts.pos.col,
             ));
-        }
-        let iter_ty = begin_sig.unwrap().return_type.strip_reference().clone();
+        };
+        let iter_ty = begin_sig.return_type.strip_reference().clone();
 
         let idx = self.range_for_counter;
         self.range_for_counter += 1;
@@ -194,19 +193,24 @@ impl Sema {
             parts.range_ty.clone()
         };
 
-        let range_decl = make_var_decl(range_name.clone(), range_var_ty, Some(parts.range), parts.pos);
+        let range_decl = make_var_decl(
+            range_name.clone(),
+            range_var_ty,
+            Some(parts.range),
+            parts.pos,
+        );
         let begin_call = make_member_call(&range_name, "begin", parts.pos);
-        let begin_decl = make_var_decl(begin_name.clone(), iter_ty.clone(), Some(begin_call), parts.pos);
+        let begin_decl = make_var_decl(
+            begin_name.clone(),
+            iter_ty.clone(),
+            Some(begin_call),
+            parts.pos,
+        );
         let end_call = make_member_call(&range_name, "end", parts.pos);
         let end_decl = make_var_decl(end_name.clone(), iter_ty, Some(end_call), parts.pos);
 
-        let for_loop = build_for_loop_with_iterators(
-            begin_name,
-            end_name,
-            parts.decl,
-            parts.body,
-            parts.pos,
-        );
+        let for_loop =
+            build_for_loop_with_iterators(begin_name, end_name, parts.decl, parts.body, parts.pos);
 
         Ok(Stmt::new(
             StmtKind::Compound(vec![range_decl, begin_decl, end_decl, for_loop]),

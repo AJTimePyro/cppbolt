@@ -330,7 +330,11 @@ impl Parser {
                     tok.col,
                 ));
             }
-            Some(Box::new(self.finish_var_decl(&decl_tok, &specifiers, first)?))
+            Some(Box::new(self.finish_var_decl(
+                &decl_tok,
+                &specifiers,
+                first,
+            )?))
         } else {
             let expr_tok = self.current().clone();
             let expr = self.parse_expr()?;

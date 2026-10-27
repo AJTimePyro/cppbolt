@@ -314,16 +314,22 @@ mod tests {
     pub(super) fn parses_range_based_for_loop() -> Result<(), Box<dyn std::error::Error>> {
         let tokens = Lexer::new("void f() { for (int x : arr) { x; } }").tokenize()?;
         let program = Parser::new(tokens).parse_program()?;
-        let Decl::Function(func) = &program.declarations[0] else {
-            panic!("expected function declaration");
+        let Some(Decl::Function(func)) = program.declarations.first() else {
+            return Err("expected function declaration".into());
         };
         let Some(body) = &func.body else {
-            panic!("expected function with body");
+            return Err("expected function with body".into());
         };
         let StmtKind::Compound(stmts) = &body.kind else {
-            panic!("expected compound body");
+            return Err("expected compound body".into());
         };
-        assert!(matches!(stmts[0].kind, StmtKind::RangeFor { .. }));
+        assert!(matches!(
+            stmts.first(),
+            Some(Stmt {
+                kind: StmtKind::RangeFor { .. },
+                ..
+            })
+        ));
         Ok(())
     }
 }
