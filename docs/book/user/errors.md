@@ -61,13 +61,16 @@ The following catalog lists diagnostics emitted by the compiler, paired with rea
   struct Derived : virtual public Base {}; // error: virtual inheritance is not supported
   ```
 
-#### `range-based for is not supported`
-- **Cause**: Using C++11 range-for syntax (`for (elem : collection)`).
-- **Trigger** (`tests/negative/range_for_unsupported.cpp`):
+#### `range expression must be an array or class with begin() and end()`
+- **Cause**: Attempting a range-based `for` loop on a scalar type or a class lacking `.begin()` and `.end()` methods.
+- **Trigger** (`tests/negative/range_for_non_iterable.cpp`):
   ```cpp
   int main() {
-      int arr[3] = {1, 2, 3};
-      for (int x : arr) {} // error: range-based for is not supported
+      int total = 0;
+      for (int x : 42) { // error: range expression must be an array or class with begin() and end(), found 'int'
+          total += x;
+      }
+      return total;
   }
   ```
 

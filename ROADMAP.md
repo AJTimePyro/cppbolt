@@ -19,7 +19,7 @@ For current baseline results, see [`tests/PASSING.txt`](tests/PASSING.txt) and r
 
 These features build naturally on existing language constructs without requiring a full template engine:
 
-- [ ] **Range-Based `for` Loops**: Lower `for (auto&& x : range)` into standard iterator loops using `begin()` / `end()` or pointer intervals (currently rejected in `src/parser/unsupported.rs`).
+- [x] **Range-Based `for` Loops**: Lower `for (decl : range)` into standard iterator loops using `begin()` / `end()` or pointer intervals across fixed-size 1D/multidimensional arrays and container classes (e.g. `std::string`).
 - [ ] **Additional Operator Overloads**:
   - Overloaded postfix `operator++(int)` and `operator--(int)` using temporary retention.
   - Overloaded pointer member access `operator->`.

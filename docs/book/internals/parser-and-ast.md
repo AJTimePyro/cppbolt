@@ -6,7 +6,7 @@ The parser transforms the flat token stream into a structured Abstract Syntax Tr
 
 ## 1. Role in the Pipeline
 
-1. **Unsupported Feature Fast-Reject**: Before executing the full grammar parser, `Parser::validate_supported_features` (`src/parser/unsupported.rs`) scans the token stream to detect explicitly unsupported C++ constructs (e.g. range-based `for`, `operator()`, `operator->`, `operator*()`, `postfix ++/--`, namespace aliases, `const` ref method overloads) and returns clean diagnostics.
+1. **Unsupported Feature Fast-Reject**: Before executing the full grammar parser, `Parser::validate_supported_features` (`src/parser/unsupported.rs`) scans the token stream to detect explicitly unsupported C++ constructs (e.g. `operator()`, `operator->`, `operator*()`, `postfix ++/--`, namespace aliases, `const` ref method overloads) and returns clean diagnostics.
 2. **Grammar Parsing (Recursive Descent)**: Parses top-level declarations (functions, structs, classes, globals, enums, type aliases) and statements (`if`, `while`, `for`, `switch`, `return`, compound blocks).
 3. **Expression Parsing (Pratt Parser)**: Parses expressions using precedence climbing / Pratt parsing (`src/parser/expr.rs`), handling complex operator hierarchies, ternary conditionals, array subscripts, member access, casts, and object constructions.
 4. **Per-Construct Recursion Budgeting**: To prevent thread stack exhaustion when compiling deep programs in WebAssembly engines, the parser tracks recursion limits via `DepthCounters` across expressions, parentheses, call arguments, statements, and blocks.
@@ -30,7 +30,7 @@ The parser transforms the flat token stream into a structured Abstract Syntax Tr
   - `TypeAlias { name, target_type }`: `typedef` and `using Alias = Type`.
   - `NamespaceDecl { name, decls }`: Namespace scopes.
 - `ast::Stmt`: Statement nodes:
-  - `Expr(Expr)`, `Block(Vec<Stmt>)`, `If { cond, then_branch, else_branch }`, `While`, `DoWhile`, `For`, `Switch`, `Return(Option<Expr>)`, `Break`, `Continue`, `VarDecl`.
+  - `Expr(Expr)`, `Block(Vec<Stmt>)`, `If { cond, then_branch, else_branch }`, `While`, `DoWhile`, `For`, `RangeFor { decl, range, body }`, `Switch`, `Return(Option<Expr>)`, `Break`, `Continue`, `VarDecl`.
 - `ast::Expr`: Expression tree nodes:
   - `IntLiteral`, `FloatLiteral`, `StringLiteral`, `BoolLiteral`, `Identifier`, `BinaryOp`, `UnaryOp`, `Call`, `MemberCall`, `MemberAccess`, `ArraySubscript`, `New`, `Delete`, `Ternary`, `Assign`, `Cast`.
   - Every `Expr` variant carries an `ExprPos` (`line`, `col`) recording the position of its leading token.

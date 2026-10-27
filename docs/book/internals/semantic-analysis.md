@@ -12,6 +12,7 @@ The semantic analysis stage validates the Abstract Syntax Tree, computes record 
 4. **Implicit Method Synthesis**: Synthesizes default constructors, copy constructors, and destructors for structs that do not define them explicitly (`src/sema/constructor.rs`).
 5. **Overload Resolution Ranking**: Implements standard overload ranking rules to pick the best function or constructor candidate and detect ambiguous calls (`src/sema/overload.rs`).
 6. **Type Inference & Checking**: Annotates expression nodes with resolved concrete types, validates assignments, usual arithmetic conversions, and C++17 copy elision rules.
+7. **AST Desugaring**: Lowers high-level syntax nodes (such as range-based `for` loops in `src/sema/stmt_range_for.rs`) into standard scoped primitives, synthesizing pointer and iterator bounds while preserving RAII and loop control flow.
 
 ---
 
