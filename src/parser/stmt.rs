@@ -132,9 +132,32 @@ impl Parser {
     pub(super) fn parse_var_decl(&mut self) -> Result<Stmt, CompileError> {
         let tok = self.current().clone();
         let specifiers = self.parse_specifier_type()?;
+        let first = self.parse_declarator(&specifiers, "Expected variable name")?;
+        self.finish_var_decl(&tok, &specifiers, first)
+    }
+
+    fn finish_var_decl(
+        &mut self,
+        tok: &Token,
+        specifiers: &Type,
+        first: (Type, String),
+    ) -> Result<Stmt, CompileError> {
         let mut declarators = Vec::new();
-        loop {
-            let (ty, name) = self.parse_declarator(&specifiers, "Expected variable name")?;
+        let (first_ty, first_name) = first;
+        let first_init = self.parse_var_init(&first_ty, tok.line, tok.col)?;
+        declarators.push(Stmt::new(
+            StmtKind::VarDecl {
+                name: first_name,
+                ty: first_ty,
+                init: first_init,
+                is_static: false,
+            },
+            tok.line,
+            tok.col,
+        ));
+        while self.peek() == &TokenKind::Comma {
+            self.advance();
+            let (ty, name) = self.parse_declarator(specifiers, "Expected variable name")?;
             let init = self.parse_var_init(&ty, tok.line, tok.col)?;
             declarators.push(Stmt::new(
                 StmtKind::VarDecl {
@@ -146,10 +169,6 @@ impl Parser {
                 tok.line,
                 tok.col,
             ));
-            if self.peek() != &TokenKind::Comma {
-                break;
-            }
-            self.advance();
         }
         self.expect(TokenKind::Semi)?;
         match declarators.len() {
@@ -287,7 +306,31 @@ impl Parser {
             self.advance();
             None
         } else if self.is_type_start() {
-            Some(Box::new(self.parse_var_decl()?))
+            let decl_tok = self.current().clone();
+            let specifiers = self.parse_specifier_type()?;
+            let first = self.parse_declarator(&specifiers, "Expected variable name")?;
+            if self.peek() == &TokenKind::Colon {
+                self.advance();
+                let range = self.parse_expr()?;
+                self.expect(TokenKind::RParen)?;
+                let body = Box::new(self.parse_stmt()?);
+                let decl = Box::new(Stmt::new(
+                    StmtKind::VarDecl {
+                        name: first.1,
+                        ty: first.0,
+                        init: None,
+                        is_static: false,
+                    },
+                    decl_tok.line,
+                    decl_tok.col,
+                ));
+                return Ok(Stmt::new(
+                    StmtKind::RangeFor { decl, range, body },
+                    tok.line,
+                    tok.col,
+                ));
+            }
+            Some(Box::new(self.finish_var_decl(&decl_tok, &specifiers, first)?))
         } else {
             let expr_tok = self.current().clone();
             let expr = self.parse_expr()?;

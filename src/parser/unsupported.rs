@@ -11,9 +11,6 @@ impl Parser {
         if let Some(error) = self.reject_const_overloading() {
             return Err(error);
         }
-        if let Some(error) = self.reject_range_for() {
-            return Err(error);
-        }
         Ok(())
     }
 
@@ -100,41 +97,6 @@ impl Parser {
                     )
                     .with_kind(ErrorKind::Unsupported),
                 );
-            }
-        }
-        None
-    }
-
-    fn reject_range_for(&self) -> Option<CompileError> {
-        for (index, window) in self.tokens.windows(2).enumerate() {
-            if matches!(window[0].kind, TokenKind::KwFor)
-                && matches!(window[1].kind, TokenKind::LParen)
-            {
-                let mut depth = 0usize;
-                let mut has_semicolon = false;
-                for token in self.tokens.iter().skip(index + 1) {
-                    match token.kind {
-                        TokenKind::LParen => depth += 1,
-                        TokenKind::RParen => {
-                            depth = depth.saturating_sub(1);
-                            if depth == 0 {
-                                break;
-                            }
-                        }
-                        TokenKind::Semi if depth == 1 => has_semicolon = true,
-                        TokenKind::Colon if depth == 1 && !has_semicolon => {
-                            return Some(
-                                CompileError::new(
-                                    "range-based for is not supported",
-                                    token.line,
-                                    token.col,
-                                )
-                                .with_kind(ErrorKind::Unsupported),
-                            );
-                        }
-                        _ => {}
-                    }
-                }
             }
         }
         None

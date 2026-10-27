@@ -309,4 +309,21 @@ mod tests {
         assert_eq!(ty, &expected);
         Ok(())
     }
+
+    #[test]
+    pub(super) fn parses_range_based_for_loop() -> Result<(), Box<dyn std::error::Error>> {
+        let tokens = Lexer::new("void f() { for (int x : arr) { x; } }").tokenize()?;
+        let program = Parser::new(tokens).parse_program()?;
+        let Decl::Function(func) = &program.declarations[0] else {
+            panic!("expected function declaration");
+        };
+        let Some(body) = &func.body else {
+            panic!("expected function with body");
+        };
+        let StmtKind::Compound(stmts) = &body.kind else {
+            panic!("expected compound body");
+        };
+        assert!(matches!(stmts[0].kind, StmtKind::RangeFor { .. }));
+        Ok(())
+    }
 }

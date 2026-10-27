@@ -95,6 +95,7 @@ impl Sema {
             | StmtKind::Empty
             | StmtKind::UsingNamespace(_)
             | StmtKind::UsingDecl(_)
+            | StmtKind::RangeFor { .. }
             | StmtKind::Expr(_) => {}
             StmtKind::Return(expr_opt) => {
                 self.analyze_return(expr_opt, stmt.line, stmt.col)?;

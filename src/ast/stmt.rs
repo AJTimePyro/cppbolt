@@ -50,6 +50,11 @@ pub enum StmtKind {
         step: Option<Expr>,
         body: Box<Stmt>,
     },
+    RangeFor {
+        decl: Box<Stmt>,
+        range: Expr,
+        body: Box<Stmt>,
+    },
     Switch {
         expr: Expr,
         body: Box<Stmt>,
