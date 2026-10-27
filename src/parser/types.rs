@@ -139,11 +139,7 @@ impl Parser {
         let name = match tok.kind {
             TokenKind::Ident(id) => id,
             _ => {
-                return Err(CompileError::new(
-                    name_error,
-                    tok.line,
-                    tok.col,
-                ));
+                return Err(CompileError::new(name_error, tok.line, tok.col));
             }
         };
         Ok((self.parse_array_suffix(ty)?, name))
