@@ -1,4 +1,4 @@
-//! Direct WebAssembly lowering of the typed AST.
+//! Direct WebAssembly lowering of the typed AST (see mdBook internals/wasm-codegen.md).
 
 mod analysis;
 mod call_args;

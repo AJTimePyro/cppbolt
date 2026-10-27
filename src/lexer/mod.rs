@@ -1,4 +1,6 @@
 //! Hand-written lexer for the supported C++ subset.
+//!
+//! See the mdBook guide at `docs/book/internals/lexer.md`.
 
 mod literals;
 pub mod token;

@@ -21,14 +21,17 @@ pub fn static_local_name(function: &str, line: usize, col: usize, name: &str) ->
 pub struct QualifiedName<'a>(&'a str);
 
 impl<'a> QualifiedName<'a> {
+    /// Creates a new qualified name reference from raw text.
     pub const fn new(raw: &'a str) -> Self {
         Self(raw)
     }
 
+    /// Returns the underlying raw name string slice.
     pub const fn as_str(self) -> &'a str {
         self.0
     }
 
+    /// Returns true if this name begins with `std::`.
     pub fn in_std(self) -> bool {
         self.0.starts_with(STD)
     }

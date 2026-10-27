@@ -1,4 +1,6 @@
 //! Semantic analysis: symbols, overloads, record layout, and type checks.
+//!
+//! See the mdBook guide at `docs/book/internals/semantic-analysis.md`.
 
 mod analyze;
 mod assign;

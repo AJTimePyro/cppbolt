@@ -2,18 +2,25 @@
 
 use std::fmt;
 
+/// Unique identifier for an open or included source file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FileId(pub u32);
 
+/// Represents a source code span with file, line, column, and length.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Span {
+    /// Originating file ID.
     pub file: FileId,
+    /// 1-based line number.
     pub line: u32,
+    /// 1-based column number.
     pub col: u32,
+    /// Length of the span in UTF-8 bytes.
     pub len: u32,
 }
 
 impl Span {
+    /// Constructs a span with the specified boundaries.
     pub const fn new(file: FileId, line: u32, col: u32, len: u32) -> Self {
         Self {
             file,
@@ -23,6 +30,7 @@ impl Span {
         }
     }
 
+    /// Constructs a 1-character point span.
     pub const fn point(file: FileId, line: u32, col: u32) -> Self {
         Self::new(file, line, col, 1)
     }
@@ -39,6 +47,7 @@ impl fmt::Display for FileId {
 /// The core never touches the filesystem; the native CLI installs a provider
 /// and browser/Node callers simply leave it unset.
 pub trait IncludeProvider {
+    /// Reads an include file by path, returning its contents if found.
     fn read_include(&self, name: &str) -> Option<String>;
 
     /// Resolves an include directive and returns its canonical name together
@@ -65,7 +74,9 @@ pub trait IncludeProvider {
 /// One include file resolved by an [`IncludeProvider`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedInclude {
+    /// Canonical name of the resolved include.
     pub name: String,
+    /// Source text contents of the include file.
     pub content: String,
 }
 

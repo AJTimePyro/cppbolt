@@ -1,4 +1,6 @@
 //! Emitted runtime helpers: printf formatting, the allocator, and traps.
+//!
+//! See the mdBook guide at `docs/book/internals/runtime.md`.
 
 use crate::wasm::*;
 

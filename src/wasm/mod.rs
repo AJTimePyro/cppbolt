@@ -1,4 +1,6 @@
 //! WebAssembly binary encoding primitives.
+//!
+//! See the mdBook guide at `docs/book/internals/wasm-codegen.md`.
 
 pub mod leb128;
 pub mod module;

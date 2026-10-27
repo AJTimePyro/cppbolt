@@ -13,23 +13,33 @@ use std::path::{Path, PathBuf};
 /// One function of the census.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionRecord {
+    /// Source file path.
     pub file: String,
+    /// Function name.
     pub name: String,
+    /// 1-based start line of `fn`.
     pub start_line: usize,
+    /// 1-based end line of body closing brace.
     pub end_line: usize,
+    /// Total line length.
     pub length: usize,
+    /// Total parameter count including self.
     pub parameters: usize,
+    /// Parameter count excluding receiver (`self`).
     pub parameters_without_receiver: usize,
 }
 
 /// The census of a source tree.
 #[derive(Debug, Default)]
 pub struct Census {
+    /// All discovered functions.
     pub functions: Vec<FunctionRecord>,
+    /// Line count for every scanned file.
     pub file_lines: BTreeMap<String, usize>,
 }
 
 impl Census {
+    /// Counts functions longer than `limit` lines.
     pub fn over_length(&self, limit: usize) -> usize {
         self.functions
             .iter()
@@ -37,6 +47,7 @@ impl Census {
             .count()
     }
 
+    /// Counts functions with more than `limit` parameters total.
     pub fn over_parameters(&self, limit: usize) -> usize {
         self.functions
             .iter()
@@ -44,6 +55,7 @@ impl Census {
             .count()
     }
 
+    /// Counts functions with more than `limit` non-receiver parameters.
     pub fn over_parameters_without_receiver(&self, limit: usize) -> usize {
         self.functions
             .iter()
@@ -51,6 +63,7 @@ impl Census {
             .count()
     }
 
+    /// Counts files longer than `limit` lines.
     pub fn files_over(&self, limit: usize) -> usize {
         self.file_lines
             .values()
@@ -58,6 +71,7 @@ impl Census {
             .count()
     }
 
+    /// Returns all functions longer than `limit` lines, sorted descending.
     pub fn longest(&self, limit: usize) -> Vec<&FunctionRecord> {
         let mut longest: Vec<&FunctionRecord> = self
             .functions

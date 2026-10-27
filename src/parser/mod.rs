@@ -1,4 +1,6 @@
 //! Recursive-descent parser for the supported C++ subset.
+//!
+//! See the mdBook guide at `docs/book/internals/parser-and-ast.md`.
 
 use crate::ast::types::Type;
 use crate::ast::*;

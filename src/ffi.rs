@@ -1,3 +1,7 @@
+//! WebAssembly C ABI entry points for embedding the compiler.
+//!
+//! See the mdBook guide at `docs/book/user/browser-integration.md`.
+
 // The exported C entry points take pointers with the validity and ownership
 // rules documented at each function; callers outside Rust cannot express
 // `unsafe`, so the checks stay inside these wrappers.
@@ -69,6 +73,10 @@ fn set_error(message: &str) {
     }
 }
 
+/// Compiles UTF-8 C++ source to a WebAssembly binary.
+///
+/// Returns a pointer to the compiled bytecode on success, or null on error.
+/// Call [`get_result_len`] and [`free_result`] to read and free the output.
 #[unsafe(no_mangle)]
 pub extern "C" fn compile_wasm(source_pointer: *const u8, source_length: usize) -> *mut u8 {
     let source = if source_length == 0 {
@@ -110,17 +118,20 @@ pub extern "C" fn compile_wasm(source_pointer: *const u8, source_length: usize) 
     }
 }
 
+/// Returns the byte length of the successful result from [`compile_wasm`].
 #[unsafe(no_mangle)]
 pub extern "C" fn get_result_len() -> usize {
     // SAFETY: see compile_wasm's single-threaded ABI contract.
     unsafe { RESULT_LEN }
 }
 
+/// Returns a pointer to the static error message buffer after a failed compilation.
 #[unsafe(no_mangle)]
 pub extern "C" fn get_error_ptr() -> *const u8 {
     std::ptr::addr_of!(ERROR_BYTES).cast()
 }
 
+/// Returns the byte length of the static error message buffer.
 #[unsafe(no_mangle)]
 pub extern "C" fn get_error_len() -> usize {
     // SAFETY: see compile_wasm's single-threaded ABI contract.

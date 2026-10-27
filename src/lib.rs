@@ -1,6 +1,9 @@
 //! Dependency-free C++ subset to WebAssembly compiler.
+//!
+//! See the [mdBook Documentation](https://github.com/cppwasm/cpp_web) for architecture details.
 
 #![deny(unsafe_code)]
+#![warn(missing_docs)]
 // AST variants are named after their C++ construct (`StructDecl`, `EnumDecl`);
 // the redundant suffix is the clearer spelling at every use site.
 #![allow(clippy::enum_variant_names)]

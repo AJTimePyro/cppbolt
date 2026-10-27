@@ -1,4 +1,6 @@
-//! Textual preprocessing: conditionals, object/function macros, includes.
+//! Textual preprocessing: conditionals, object/function macros, and include resolution.
+//!
+//! See the mdBook guide at `docs/book/internals/preprocessor.md`.
 
 mod directive_line;
 mod expr;

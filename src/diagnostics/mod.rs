@@ -2,25 +2,38 @@
 
 use std::fmt;
 
+/// Categorizes the origin of a compilation diagnostic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
+    /// Tokenization or preprocessor error.
     Lexical,
+    /// Grammar or parser error.
     Syntax,
+    /// Type checking, resolution, or layout error.
     Semantic,
+    /// Feature outside the supported C++ subset.
     Unsupported,
+    /// Internal invariant failure or resource limit reached.
     Internal,
 }
 
+/// A compilation diagnostic with source coordinates.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompileError {
+    /// The diagnostic category.
     pub kind: ErrorKind,
+    /// The human-readable diagnostic message.
     pub message: String,
+    /// The originating source file path.
     pub file: String,
+    /// 1-based source line.
     pub line: usize,
+    /// 1-based source column.
     pub col: usize,
 }
 
 impl CompileError {
+    /// Creates a new semantic error at the given line and column.
     pub fn new(message: impl Into<String>, line: usize, col: usize) -> Self {
         Self {
             kind: ErrorKind::Semantic,
@@ -31,11 +44,13 @@ impl CompileError {
         }
     }
 
+    /// Sets the diagnostic kind.
     pub fn with_kind(mut self, kind: ErrorKind) -> Self {
         self.kind = kind;
         self
     }
 
+    /// Attaches a source file path to the diagnostic.
     pub fn at(mut self, file: impl Into<String>, line: usize, col: usize) -> Self {
         self.file = file.into();
         self.line = line;
@@ -43,6 +58,7 @@ impl CompileError {
         self
     }
 
+    /// Creates an internal compiler error diagnostic.
     pub fn internal(message: impl Into<String>, line: usize, col: usize) -> Self {
         Self::new(
             format!("internal compiler error: {}", message.into()),
