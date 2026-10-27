@@ -24,7 +24,7 @@ impl<'a> Codegen<'a> {
 
     pub(super) fn collect_strings_stmt(&mut self, stmt: &Stmt) {
         match &stmt.kind {
-            StmtKind::Compound(stmts) => {
+            StmtKind::Compound(stmts) | StmtKind::VarDeclGroup(stmts) => {
                 for s in stmts {
                     self.collect_strings_stmt(s);
                 }

@@ -22,6 +22,13 @@ impl<'a> Codegen<'a> {
         let _guard = self.depth.statements().enter(stmt.line, stmt.col)?;
         match &stmt.kind {
             StmtKind::VarDecl { .. } => self.compile_var_decl(stmt, ctx, code)?,
+            StmtKind::VarDeclGroup(stmts) => {
+                // One declaration, one scope: the declarators are compiled in
+                // the scope that already surrounds this statement.
+                for stmt in stmts {
+                    self.compile_stmt(stmt, ctx, code)?;
+                }
+            }
             StmtKind::Expr(expr) => self.compile_expr_stmt(expr, ctx, code)?,
             StmtKind::If {
                 branches,

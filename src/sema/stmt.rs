@@ -72,6 +72,11 @@ impl Sema {
                     col: stmt.col,
                 })?;
             }
+            StmtKind::VarDeclGroup(stmts) => {
+                for stmt in stmts {
+                    self.analyze_stmt(stmt)?;
+                }
+            }
             StmtKind::If { .. }
             | StmtKind::While { .. }
             | StmtKind::DoWhile { .. }

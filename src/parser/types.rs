@@ -57,6 +57,22 @@ impl Parser {
 
     pub fn parse_type(&mut self) -> Result<Type, CompileError> {
         let _guard = self.enter_type()?;
+        let base_type = self.parse_specifier_type_inner()?;
+        self.parse_declarator_prefix(&base_type)
+    }
+
+    /// Parses the type specifiers of a declaration: the builtin or named type
+    /// with its `const` qualifiers.
+    ///
+    /// Pointer, reference and array suffixes bind to an individual declarator
+    /// name, so `parse_declarator` applies them separately. That is what makes
+    /// `int *a, b;` declare `a` as `int *` and `b` as `int`.
+    pub(super) fn parse_specifier_type(&mut self) -> Result<Type, CompileError> {
+        let _guard = self.enter_type()?;
+        self.parse_specifier_type_inner()
+    }
+
+    fn parse_specifier_type_inner(&mut self) -> Result<Type, CompileError> {
         let mut is_const = false;
         while self.peek() == &TokenKind::KwConst {
             self.advance();
@@ -98,19 +114,65 @@ impl Parser {
             if self.peek() == &TokenKind::KwConst {
                 self.advance();
                 base_type = Type::Const(Box::new(base_type));
-                continue;
-            }
-            if self.peek() == &TokenKind::Star {
-                self.advance();
-                base_type = Type::Pointer(Box::new(base_type));
-            } else if self.peek() == &TokenKind::Amp {
-                self.advance();
-                base_type = Type::Reference(Box::new(base_type));
             } else {
                 break;
             }
         }
         Ok(base_type)
+    }
+
+    /// Parses one declarator: the pointer, reference and `const` prefixes that
+    /// bind to the name, the name, and its array suffix.
+    ///
+    /// `specifiers` is the declaration's specifier type, so every declarator of
+    /// a declaration starts from the same base type.
+    pub(super) fn parse_declarator(
+        &mut self,
+        specifiers: &Type,
+        name_error: &str,
+    ) -> Result<(Type, String), CompileError> {
+        let ty = self.parse_declarator_prefix(specifiers)?;
+        if self.peek() == &TokenKind::LParen && self.peek_ahead(1) == &TokenKind::Star {
+            return self.parse_function_pointer_declarator(ty, Some(name_error));
+        }
+        let tok = self.advance().clone();
+        let name = match tok.kind {
+            TokenKind::Ident(id) => id,
+            _ => {
+                return Err(CompileError::new(
+                    name_error,
+                    tok.line,
+                    tok.col,
+                ));
+            }
+        };
+        Ok((self.parse_array_suffix(ty)?, name))
+    }
+
+    /// Parses the pointer, reference and `const` prefixes of one declarator.
+    pub(super) fn parse_declarator_prefix(
+        &mut self,
+        specifiers: &Type,
+    ) -> Result<Type, CompileError> {
+        let mut ty = specifiers.clone();
+        loop {
+            match self.peek() {
+                TokenKind::Star => {
+                    self.advance();
+                    ty = Type::Pointer(Box::new(ty));
+                }
+                TokenKind::Amp => {
+                    self.advance();
+                    ty = Type::Reference(Box::new(ty));
+                }
+                TokenKind::KwConst => {
+                    self.advance();
+                    ty = Type::Const(Box::new(ty));
+                }
+                _ => break,
+            }
+        }
+        Ok(ty)
     }
 
     fn parse_builtin_type(&mut self) -> Result<Type, CompileError> {

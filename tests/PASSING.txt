@@ -19,6 +19,7 @@ c_basics/lvalue_matrix
 c_basics/macro_rescan
 c_basics/malloc_failure
 c_basics/multidim_arrays
+c_basics/multi_declarator
 c_basics/overload_resolution
 c_basics/pointers_arrays
 c_basics/preprocessor

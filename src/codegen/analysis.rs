@@ -53,7 +53,9 @@ pub(super) fn check_stmt_has_new_delete(stmt: &Stmt) -> bool {
             .as_ref()
             .map(check_expr_has_new_delete)
             .unwrap_or(false),
-        StmtKind::Compound(stmts) => stmts.iter().any(check_stmt_has_new_delete),
+        StmtKind::Compound(stmts) | StmtKind::VarDeclGroup(stmts) => {
+            stmts.iter().any(check_stmt_has_new_delete)
+        }
         StmtKind::If {
             branches,
             else_stmt,
@@ -112,7 +114,7 @@ pub(super) fn collect_static_vars(
                 out.push((gname, ty.clone(), init.clone()));
             }
         }
-        StmtKind::Compound(stmts) => {
+        StmtKind::Compound(stmts) | StmtKind::VarDeclGroup(stmts) => {
             for s in stmts {
                 collect_static_vars(s, function, out);
             }
@@ -206,7 +208,7 @@ pub(super) fn collect_address_taken_stmt(stmt: &Stmt, address_taken: &mut HashSe
         StmtKind::VarDecl { init: Some(e), .. } => {
             collect_address_taken_expr(e, address_taken);
         }
-        StmtKind::Compound(stmts) => {
+        StmtKind::Compound(stmts) | StmtKind::VarDeclGroup(stmts) => {
             for s in stmts {
                 collect_address_taken_stmt(s, address_taken);
             }
@@ -401,7 +403,7 @@ pub(super) fn collect_stmt_calls(stmt: &Stmt, calls: &mut HashSet<String>) {
                 collect_expr_calls(e, calls);
             }
         }
-        StmtKind::Compound(stmts) => {
+        StmtKind::Compound(stmts) | StmtKind::VarDeclGroup(stmts) => {
             for s in stmts {
                 collect_stmt_calls(s, calls);
             }

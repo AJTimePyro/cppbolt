@@ -90,12 +90,7 @@ impl Parser {
     fn parse_static_stmt(&mut self) -> Result<Stmt, CompileError> {
         self.advance();
         let mut stmt = self.parse_var_decl()?;
-        if let StmtKind::VarDecl {
-            ref mut is_static, ..
-        } = stmt.kind
-        {
-            *is_static = true;
-        }
+        mark_static(&mut stmt.kind);
         Ok(stmt)
     }
 
@@ -136,56 +131,66 @@ impl Parser {
 
     pub(super) fn parse_var_decl(&mut self) -> Result<Stmt, CompileError> {
         let tok = self.current().clone();
-        let base_type = self.parse_type()?;
-        let (final_ty, name) =
-            if self.peek() == &TokenKind::LParen && self.peek_ahead(1) == &TokenKind::Star {
-                self.parse_function_pointer_declarator(base_type, Some("Expected variable name"))?
-            } else {
-                let id = match self.advance().kind.clone() {
-                    TokenKind::Ident(id) => id,
-                    _ => {
-                        return Err(CompileError::new(
-                            "Expected variable name",
-                            self.current().line,
-                            self.current().col,
-                        ));
-                    }
-                };
-                (self.parse_array_suffix(base_type)?, id)
-            };
-
-        let init = if self.peek() == &TokenKind::Assign {
+        let specifiers = self.parse_specifier_type()?;
+        let mut declarators = Vec::new();
+        loop {
+            let (ty, name) = self.parse_declarator(&specifiers, "Expected variable name")?;
+            let init = self.parse_var_init(&ty, tok.line, tok.col)?;
+            declarators.push(Stmt::new(
+                StmtKind::VarDecl {
+                    name,
+                    ty,
+                    init,
+                    is_static: false,
+                },
+                tok.line,
+                tok.col,
+            ));
+            if self.peek() != &TokenKind::Comma {
+                break;
+            }
             self.advance();
-            Some(self.parse_initializer()?)
+        }
+        self.expect(TokenKind::Semi)?;
+        match declarators.len() {
+            1 => declarators
+                .pop()
+                .ok_or_else(|| crate::internal_error!(tok.line, tok.col, "missing declarator")),
+            _ => Ok(Stmt::new(
+                StmtKind::VarDeclGroup(declarators),
+                tok.line,
+                tok.col,
+            )),
+        }
+    }
+
+    /// Parses the initializer of one declarator of type `ty`.
+    fn parse_var_init(
+        &mut self,
+        ty: &Type,
+        line: usize,
+        col: usize,
+    ) -> Result<Option<Expr>, CompileError> {
+        if self.peek() == &TokenKind::Assign {
+            self.advance();
+            Ok(Some(self.parse_initializer()?))
         } else if self.peek() == &TokenKind::LParen {
             self.advance();
             let args = self.parse_paren_expr_list()?;
-            match final_ty.strip_const() {
+            match ty.strip_const() {
                 // A parenthesized initializer of a class type is a
                 // constructor call, not an initializer list.
-                Type::Struct(name) => Some(Expr::Call {
+                Type::Struct(name) => Ok(Some(Expr::Call {
                     callee: Box::new(Expr::Identifier(name.clone())),
                     args,
-                    pos: ExprPos::new(tok.line, tok.col),
-                }),
+                    pos: ExprPos::new(line, col),
+                })),
                 // For every other type it stays a parenthesized list.
-                _ => Some(Expr::InitializerList(args)),
+                _ => Ok(Some(Expr::InitializerList(args))),
             }
         } else {
-            None
-        };
-
-        self.expect(TokenKind::Semi)?;
-        Ok(Stmt::new(
-            StmtKind::VarDecl {
-                name,
-                ty: final_ty,
-                init,
-                is_static: false,
-            },
-            tok.line,
-            tok.col,
-        ))
+            Ok(None)
+        }
     }
 
     pub(super) fn parse_initializer(&mut self) -> Result<Expr, CompileError> {
@@ -333,5 +338,18 @@ impl Parser {
             tok.line,
             tok.col,
         ))
+    }
+}
+
+/// Marks every declarator of one declaration as `static`.
+fn mark_static(kind: &mut StmtKind) {
+    match kind {
+        StmtKind::VarDecl { is_static, .. } => *is_static = true,
+        StmtKind::VarDeclGroup(stmts) => {
+            for stmt in stmts {
+                mark_static(&mut stmt.kind);
+            }
+        }
+        _ => {}
     }
 }

@@ -338,7 +338,8 @@ impl Parser {
         is_static: bool,
     ) -> Result<(), CompileError> {
         if self.is_type_start() {
-            let ty = self.parse_type()?;
+            let specifiers = self.parse_specifier_type()?;
+            let ty = self.parse_declarator_prefix(&specifiers)?;
             let fname = if self.peek() == &TokenKind::KwOperator {
                 self.advance();
                 self.parse_operator_name()?
@@ -367,7 +368,7 @@ impl Parser {
                 }
                 body.methods.push(func);
             } else {
-                self.parse_struct_field(body, fname, &ty, is_static, &start_tok)?;
+                self.parse_struct_field(body, fname, &ty, &specifiers, is_static)?;
             }
         } else {
             return Err(CompileError::new(
@@ -380,13 +381,17 @@ impl Parser {
     }
     /// Parses a field declaration of a class, including comma-separated
     /// declarators and static fields with initializers.
+    ///
+    /// `specifiers` is the declaration's specifier type. Each declarator
+    /// applies its own pointer, reference and array suffixes to it, so
+    /// `int *p, q;` declares `p` as `int *` and `q` as `int`.
     fn parse_struct_field(
         &mut self,
         body: &mut StructBody,
         fname: String,
         ty: &Type,
+        specifiers: &Type,
         is_static: bool,
-        start_tok: &Token,
     ) -> Result<(), CompileError> {
         let final_ty = self.parse_array_suffix(ty.clone())?;
         if is_static {
@@ -408,17 +413,8 @@ impl Parser {
             body.fields.push((fname, final_ty));
             while self.peek() == &TokenKind::Comma {
                 self.advance();
-                let next_fname = match self.advance().kind.clone() {
-                    TokenKind::Ident(id) => id,
-                    _ => {
-                        return Err(CompileError::new(
-                            "Expected member identifier after comma",
-                            start_tok.line,
-                            start_tok.col,
-                        ));
-                    }
-                };
-                let next_ty = self.parse_array_suffix(ty.clone())?;
+                let (next_ty, next_fname) =
+                    self.parse_declarator(specifiers, "Expected member identifier after comma")?;
                 if body.is_private {
                     body.private_members.push(next_fname.clone());
                 }

@@ -117,7 +117,9 @@ impl<'a> Codegen<'a> {
                 .as_ref()
                 .map(|e| self.check_expr_has_indirect_call(e))
                 .unwrap_or(false),
-            StmtKind::Compound(stmts) => stmts.iter().any(|s| self.check_stmt_has_indirect_call(s)),
+            StmtKind::Compound(stmts) | StmtKind::VarDeclGroup(stmts) => {
+                stmts.iter().any(|s| self.check_stmt_has_indirect_call(s))
+            }
             StmtKind::If {
                 branches,
                 else_stmt,

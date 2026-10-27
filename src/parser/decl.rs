@@ -42,7 +42,7 @@ impl Parser {
         }
 
         let decl = self.parse_global_or_func()?;
-        declarations.push(decl);
+        declarations.extend(decl);
         Ok(())
     }
 
@@ -151,7 +151,11 @@ impl Parser {
         Ok(())
     }
 
-    pub(super) fn parse_global_or_func(&mut self) -> Result<Decl, CompileError> {
+    /// Parses a declaration at namespace scope.
+    ///
+    /// A declaration with several declarators (`int a, b = 2;`) yields one
+    /// `Decl` per declarator.
+    pub(super) fn parse_global_or_func(&mut self) -> Result<Vec<Decl>, CompileError> {
         let start_tok = self.current().clone();
         while matches!(
             self.peek(),
@@ -160,41 +164,54 @@ impl Parser {
             self.advance();
         }
 
-        let ty = self.parse_type()?;
-        if self.peek() == &TokenKind::LParen && self.peek_ahead(1) == &TokenKind::Star {
-            return self.parse_function_pointer_global(ty, &start_tok);
-        }
-        let mut name = if self.peek() == &TokenKind::KwOperator {
-            self.advance();
-            self.parse_operator_name()?
-        } else {
-            self.parse_qualified_name()?
-        };
-        name = self.qualify_name(name);
+        let specifiers = self.parse_specifier_type()?;
+        let mut declarations = Vec::new();
+        loop {
+            let ty = self.parse_declarator_prefix(&specifiers)?;
+            if declarations.is_empty()
+                && self.peek() == &TokenKind::LParen
+                && self.peek_ahead(1) == &TokenKind::Star
+            {
+                return Ok(vec![self.parse_function_pointer_global(ty, &start_tok)?]);
+            }
+            let mut name = if self.peek() == &TokenKind::KwOperator {
+                self.advance();
+                self.parse_operator_name()?
+            } else {
+                self.parse_qualified_name()?
+            };
+            name = self.qualify_name(name);
 
-        if self.peek() == &TokenKind::LParen {
-            let func = self.parse_function_tail(name, ty, start_tok.line, start_tok.col)?;
-            Ok(Decl::Function(func))
-        } else {
-            self.parse_global_var(name, ty, &start_tok)
+            if declarations.is_empty() && self.peek() == &TokenKind::LParen {
+                let func = self.parse_function_tail(name, ty, start_tok.line, start_tok.col)?;
+                return Ok(vec![Decl::Function(func)]);
+            }
+
+            declarations.push(self.parse_global_var(name, ty, &start_tok)?);
+            if self.peek() != &TokenKind::Comma {
+                break;
+            }
+            self.advance();
         }
+        self.expect(TokenKind::Semi)?;
+        Ok(declarations)
     }
 
-    /// Parses a global variable declaration.
+    /// Parses one global variable declarator. The caller consumes the `,` that
+    /// separates declarators and the terminating `;`.
     fn parse_global_var(
         &mut self,
         name: String,
         ty: Type,
         start_tok: &Token,
     ) -> Result<Decl, CompileError> {
-        let final_ty = self.parse_array_suffix(ty.clone())?;
+        let final_ty = self.parse_array_suffix(ty)?;
         let init = if self.peek() == &TokenKind::Assign {
             self.advance();
             Some(self.parse_initializer()?)
         } else {
             None
         };
-        self.expect(TokenKind::Semi)?;
         Ok(Decl::GlobalVar {
             name,
             ty: final_ty,

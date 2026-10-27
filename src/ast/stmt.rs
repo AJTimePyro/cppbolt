@@ -25,6 +25,11 @@ pub enum StmtKind {
         init: Option<Expr>,
         is_static: bool,
     },
+    /// Several declarators of one declaration, such as `int a, b = 2;`.
+    ///
+    /// The declarators share one scope with their surroundings, so this is not
+    /// a `Compound`: `int a, b; a = 1;` must still see `a` afterwards.
+    VarDeclGroup(Vec<Stmt>),
     Expr(Expr),
     If {
         /// The `if` arm followed by every `else if` arm, in source order.
