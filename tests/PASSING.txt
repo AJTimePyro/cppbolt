@@ -179,6 +179,7 @@ mini_stl/iostream_basic
 mini_stl/iostream_cin
 mini_stl/iostream_precision_after_fixed
 mini_stl/iostream_width_double
+mini_stl/range_for_string
 mini_stl/rounding_evidence
 mini_stl/stream_edge_cases
 mini_stl/stream_operator_overload

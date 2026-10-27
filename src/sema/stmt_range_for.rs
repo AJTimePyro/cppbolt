@@ -3,8 +3,45 @@ use super::*;
 struct RangeForParts {
     decl: Stmt,
     range: Expr,
+    range_ty: Type,
     body: Stmt,
     pos: ExprPos,
+}
+
+fn is_lvalue_expr(expr: &Expr) -> bool {
+    match expr {
+        Expr::Identifier(_) | Expr::MemberAccess { .. } | Expr::ArraySubscript { .. } => true,
+        Expr::Unary {
+            op: UnaryOp::Deref, ..
+        } => true,
+        _ => false,
+    }
+}
+
+fn make_var_decl(name: String, ty: Type, init: Option<Expr>, pos: ExprPos) -> Stmt {
+    Stmt::new(
+        StmtKind::VarDecl {
+            name,
+            ty,
+            init,
+            is_static: false,
+        },
+        pos.line,
+        pos.col,
+    )
+}
+
+fn make_member_call(object_name: &str, method: &str, pos: ExprPos) -> Expr {
+    Expr::Call {
+        callee: Box::new(Expr::MemberAccess {
+            object: Box::new(Expr::Identifier(object_name.to_string())),
+            member: method.to_string(),
+            is_arrow: false,
+            pos,
+        }),
+        args: vec![],
+        pos,
+    }
 }
 
 impl Sema {
@@ -22,6 +59,7 @@ impl Sema {
         let parts = RangeForParts {
             decl,
             range,
+            range_ty,
             body,
             pos,
         };
@@ -36,7 +74,7 @@ impl Sema {
             _ => Err(CompileError::new(
                 format!(
                     "range expression must be an array or class with begin() and end(), found '{}'",
-                    range_ty.to_c_type()
+                    parts.range_ty.to_c_type()
                 ),
                 line,
                 col,
@@ -57,33 +95,14 @@ impl Sema {
         let end_name = format!("__end_{}", idx);
         let ptr_ty = Type::Pointer(Box::new(elem_ty));
 
-        let begin_decl = Stmt::new(
-            StmtKind::VarDecl {
-                name: begin_name.clone(),
-                ty: ptr_ty.clone(),
-                init: Some(parts.range),
-                is_static: false,
-            },
-            parts.pos.line,
-            parts.pos.col,
-        );
-
+        let begin_decl = make_var_decl(begin_name.clone(), ptr_ty.clone(), Some(parts.range), parts.pos);
         let end_init = Expr::Binary {
             op: BinaryOp::Add,
             left: Box::new(Expr::Identifier(begin_name.clone())),
             right: Box::new(Expr::IntLiteral(size as i64, Type::Int)),
             pos: parts.pos,
         };
-        let end_decl = Stmt::new(
-            StmtKind::VarDecl {
-                name: end_name.clone(),
-                ty: ptr_ty,
-                init: Some(end_init),
-                is_static: false,
-            },
-            parts.pos.line,
-            parts.pos.col,
-        );
+        let end_decl = make_var_decl(end_name.clone(), ptr_ty, Some(end_init), parts.pos);
 
         let for_loop = self.build_for_loop_with_iterators(
             begin_name,
@@ -148,8 +167,47 @@ impl Sema {
         parts: RangeForParts,
         sname: &str,
     ) -> Result<Stmt, CompileError> {
-        Err(CompileError::new(
-            format!("range-based for on class '{}' not yet implemented", sname),
+        let is_const = parts.range_ty.is_const()
+            || matches!(&parts.range_ty, Type::Reference(inner) if inner.is_const());
+        let begin_sig = self.find_method_in_class_for_receiver(sname, "begin", is_const);
+        let end_sig = self.find_method_in_class_for_receiver(sname, "end", is_const);
+        if begin_sig.is_none() || end_sig.is_none() {
+            return Err(CompileError::new(
+                format!("class '{}' does not have matching begin() and end() methods", sname),
+                parts.pos.line,
+                parts.pos.col,
+            ));
+        }
+        let iter_ty = begin_sig.unwrap().return_type.strip_reference().clone();
+
+        let idx = self.range_for_counter;
+        self.range_for_counter += 1;
+        let range_name = format!("__range_{}", idx);
+        let begin_name = format!("__begin_{}", idx);
+        let end_name = format!("__end_{}", idx);
+
+        let range_var_ty = if is_lvalue_expr(&parts.range) {
+            Type::Reference(Box::new(parts.range_ty.clone()))
+        } else {
+            parts.range_ty.clone()
+        };
+
+        let range_decl = make_var_decl(range_name.clone(), range_var_ty, Some(parts.range), parts.pos);
+        let begin_call = make_member_call(&range_name, "begin", parts.pos);
+        let begin_decl = make_var_decl(begin_name.clone(), iter_ty.clone(), Some(begin_call), parts.pos);
+        let end_call = make_member_call(&range_name, "end", parts.pos);
+        let end_decl = make_var_decl(end_name.clone(), iter_ty, Some(end_call), parts.pos);
+
+        let for_loop = self.build_for_loop_with_iterators(
+            begin_name,
+            end_name,
+            parts.decl,
+            parts.body,
+            parts.pos,
+        );
+
+        Ok(Stmt::new(
+            StmtKind::Compound(vec![range_decl, begin_decl, end_decl, for_loop]),
             parts.pos.line,
             parts.pos.col,
         ))
