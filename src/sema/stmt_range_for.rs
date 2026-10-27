@@ -10,7 +10,10 @@ struct RangeForParts {
 
 fn is_lvalue_expr(expr: &Expr) -> bool {
     match expr {
-        Expr::Identifier(_) | Expr::MemberAccess { .. } | Expr::ArraySubscript { .. } => true,
+        Expr::Identifier(_) | Expr::ArraySubscript { .. } => true,
+        Expr::MemberAccess {
+            object, is_arrow, ..
+        } => *is_arrow || is_lvalue_expr(object),
         Expr::Unary {
             op: UnaryOp::Deref, ..
         } => true,
@@ -42,6 +45,48 @@ fn make_member_call(object_name: &str, method: &str, pos: ExprPos) -> Expr {
         args: vec![],
         pos,
     }
+}
+
+fn build_for_loop_with_iterators(
+    begin_name: String,
+    end_name: String,
+    mut decl: Stmt,
+    body: Stmt,
+    pos: ExprPos,
+) -> Stmt {
+    let cond = Expr::Binary {
+        op: BinaryOp::Ne,
+        left: Box::new(Expr::Identifier(begin_name.clone())),
+        right: Box::new(Expr::Identifier(end_name)),
+        pos,
+    };
+
+    let step = Expr::Unary {
+        op: UnaryOp::PreInc,
+        expr: Box::new(Expr::Identifier(begin_name.clone())),
+        pos,
+    };
+
+    let deref_begin = Expr::Unary {
+        op: UnaryOp::Deref,
+        expr: Box::new(Expr::Identifier(begin_name)),
+        pos,
+    };
+    if let StmtKind::VarDecl { init, .. } = &mut decl.kind {
+        *init = Some(deref_begin);
+    }
+
+    let loop_body = Stmt::new(StmtKind::Compound(vec![decl, body]), pos.line, pos.col);
+    Stmt::new(
+        StmtKind::For {
+            init: None,
+            cond: Some(cond),
+            step: Some(step),
+            body: Box::new(loop_body),
+        },
+        pos.line,
+        pos.col,
+    )
 }
 
 impl Sema {
@@ -104,7 +149,7 @@ impl Sema {
         };
         let end_decl = make_var_decl(end_name.clone(), ptr_ty, Some(end_init), parts.pos);
 
-        let for_loop = self.build_for_loop_with_iterators(
+        let for_loop = build_for_loop_with_iterators(
             begin_name,
             end_name,
             parts.decl,
@@ -117,49 +162,6 @@ impl Sema {
             parts.pos.line,
             parts.pos.col,
         ))
-    }
-
-    fn build_for_loop_with_iterators(
-        &self,
-        begin_name: String,
-        end_name: String,
-        mut decl: Stmt,
-        body: Stmt,
-        pos: ExprPos,
-    ) -> Stmt {
-        let cond = Expr::Binary {
-            op: BinaryOp::Ne,
-            left: Box::new(Expr::Identifier(begin_name.clone())),
-            right: Box::new(Expr::Identifier(end_name)),
-            pos,
-        };
-
-        let step = Expr::Unary {
-            op: UnaryOp::PreInc,
-            expr: Box::new(Expr::Identifier(begin_name.clone())),
-            pos,
-        };
-
-        let deref_begin = Expr::Unary {
-            op: UnaryOp::Deref,
-            expr: Box::new(Expr::Identifier(begin_name)),
-            pos,
-        };
-        if let StmtKind::VarDecl { init, .. } = &mut decl.kind {
-            *init = Some(deref_begin);
-        }
-
-        let loop_body = Stmt::new(StmtKind::Compound(vec![decl, body]), pos.line, pos.col);
-        Stmt::new(
-            StmtKind::For {
-                init: None,
-                cond: Some(cond),
-                step: Some(step),
-                body: Box::new(loop_body),
-            },
-            pos.line,
-            pos.col,
-        )
     }
 
     fn desugar_range_for_class(
@@ -198,7 +200,7 @@ impl Sema {
         let end_call = make_member_call(&range_name, "end", parts.pos);
         let end_decl = make_var_decl(end_name.clone(), iter_ty, Some(end_call), parts.pos);
 
-        let for_loop = self.build_for_loop_with_iterators(
+        let for_loop = build_for_loop_with_iterators(
             begin_name,
             end_name,
             parts.decl,

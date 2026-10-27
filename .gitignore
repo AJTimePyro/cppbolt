@@ -4,4 +4,6 @@
 __pycache__/
 playground/
 /docs/book/book/
+.superpowers/
+docs/superpowers/
 

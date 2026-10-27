@@ -86,6 +86,10 @@ impl Sema {
         };
         if *ty == Type::Auto {
             *ty = init_ty.strip_reference().clone();
+        } else if let Type::Const(inner) = ty
+            && **inner == Type::Auto
+        {
+            *ty = Type::Const(Box::new(init_ty.strip_reference().clone()));
         } else if let Type::Pointer(inner) = ty
             && **inner == Type::Auto
         {

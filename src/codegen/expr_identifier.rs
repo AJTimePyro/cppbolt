@@ -89,7 +89,7 @@ impl<'a> Codegen<'a> {
             write_u32(code, 2);
             write_u32(code, offset);
             if let Some(inner) = ty.deref_type()
-                && !matches!(inner.strip_const(), Type::Struct(_))
+                && !matches!(inner.strip_const(), Type::Struct(_) | Type::Array(_, _))
             {
                 self.emit_load(inner, 0, code);
             }
