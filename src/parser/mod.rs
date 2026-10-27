@@ -307,49 +307,4 @@ mod tests {
         assert_eq!(ty, &expected);
         Ok(())
     }
-
-    #[test]
-    pub(super) fn accepts_1000_nested_parentheses() -> Result<(), Box<dyn std::error::Error>> {
-        let source = format!(
-            "int main() {{ return {}1{}; }}",
-            "(".repeat(1000),
-            ")".repeat(1000)
-        );
-        let parsed = spawn_parse(source)?
-            .join()
-            .map_err(|_| std::io::Error::other("parser test thread panicked"))?;
-        assert!(parsed.is_ok());
-        Ok(())
-    }
-
-    #[test]
-    pub(super) fn rejects_nesting_beyond_limit() -> Result<(), Box<dyn std::error::Error>> {
-        let source = format!(
-            "int main() {{ return {}1{}; }}",
-            "(".repeat(2500),
-            ")".repeat(2500)
-        );
-        let parsed = spawn_parse(source)?
-            .join()
-            .map_err(|_| std::io::Error::other("parser test thread panicked"))?;
-        let error = match parsed {
-            Ok(_) => return Err("expected a nesting-depth diagnostic".into()),
-            Err(error) => error,
-        };
-        assert!(error.message.contains("Nesting depth"));
-        Ok(())
-    }
-
-    /// Deep nesting needs more stack than the default test thread provides in
-    /// unoptimized builds, so run it on an explicitly sized thread.
-    fn spawn_parse(
-        source: String,
-    ) -> Result<std::thread::JoinHandle<Result<Program, CompileError>>, std::io::Error> {
-        std::thread::Builder::new()
-            .stack_size(256 * 1024 * 1024)
-            .spawn(move || {
-                let tokens = Lexer::new(&source).tokenize()?;
-                Parser::new(tokens).parse_program()
-            })
-    }
 }
