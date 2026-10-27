@@ -100,6 +100,7 @@ classes_oop/raii_early_return
 classes_oop/raii_loop_break
 classes_oop/raii_nested_loop_return
 classes_oop/raii_temporaries
+classes_oop/range_for_raii
 classes_oop/references
 classes_oop/regress_contextual_bool
 classes_oop/regress_struct_ref_assign
@@ -242,6 +243,7 @@ negative/operator_arrow_unsupported
 negative/operator_call_unsupported
 negative/operator_deref_unsupported
 negative/pointer_plus_pointer
+negative/range_for_non_iterable
 negative/postfix_increment_unsupported
 negative/private_access
 negative/pure_virtual_instantiation

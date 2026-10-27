@@ -1,0 +1,1 @@
+tests/negative/range_for_non_iterable.cpp:3:5: error: range expression must be an array or class with begin() and end(), found 'int'
