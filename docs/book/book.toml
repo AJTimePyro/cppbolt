@@ -1,5 +1,5 @@
 [book]
-authors = ["The cppwasm Authors"]
+authors = ["AJTimePyro", "The cppwasm Authors"]
 language = "en"
 multilingual = false
 src = "."
@@ -8,4 +8,4 @@ title = "cppwasm Documentation"
 [output.html]
 default-theme = "rust"
 preferred-dark-theme = "navy"
-git-repository-url = "https://github.com/cppwasm/cpp_web"
+git-repository-url = "https://github.com/AJTimePyro/cpp-web-compiler"

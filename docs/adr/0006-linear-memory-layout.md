@@ -15,7 +15,7 @@ WebAssembly provides a single contiguous linear memory array per instance (`src/
   - *Cons*: Stack pointer must be initialized to a high address and decremented per call frame.
 
 ## Decision
-Establish the linear memory layout defined in [`src/runtime/memory_layout.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/runtime/memory_layout.rs) (commit `0b21628`):
+Establish the linear memory layout defined in `src/runtime/memory_layout.rs` (commit `0b21628`):
 1. **Guard Page**: Address `0` to `65,535` (`64 KiB`). Reserved region. Address `0` serves as the null pointer representation.
 2. **Stack Region**: Address `65,536` (`64 KiB`) to `8,454,143` (`8 MiB + 64 KiB`). Grows downwards. The global stack pointer is initialized to `STACK_TOP` (`8,454,144`).
 3. **Static Data Region**: Begins at `DATA_BASE` (`STACK_TOP`). Holds string literals, static variables, and vtables.

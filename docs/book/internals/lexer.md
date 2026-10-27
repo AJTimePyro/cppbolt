@@ -1,21 +1,21 @@
 # Lexer Internals
 
-The lexer scans preprocessed C++ source text into a linear stream of strongly typed tokens, implemented in [`src/lexer/`](https://github.com/cppwasm/cpp_web/blob/main/src/lexer/).
+The lexer scans preprocessed C++ source text into a linear stream of strongly typed tokens, implemented in `src/lexer/`.
 
 ---
 
 ## 1. Role in the Pipeline
 
 1. **Tokenization**: Classifies source text into keywords, identifiers, numeric literals (decimal, hexadecimal, octal, floating-point), string literals, character literals, and punctuation/operators.
-2. **Escape Decoding**: Decodes standard C escape sequences in string and character literals (`\n`, `\t`, `\r`, `\\`, `\'`, `\"`, `\0`, and hexadecimal/octal escapes) via [`src/lexer/literals.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/lexer/literals.rs).
-3. **Span Attachment**: Measures the exact line, column, and character length of every token, producing a [`Span`](https://github.com/cppwasm/cpp_web/blob/main/src/source.rs) used throughout the parser and semantic analyzer for accurate error reporting.
+2. **Escape Decoding**: Decodes standard C escape sequences in string and character literals (`\n`, `\t`, `\r`, `\\`, `\'`, `\"`, `\0`, and hexadecimal/octal escapes) via `src/lexer/literals.rs`.
+3. **Span Attachment**: Measures the exact line, column, and character length of every token, producing a `Span` used throughout the parser and semantic analyzer for accurate error reporting.
 
 ---
 
 ## 2. Key Data Structures
 
-- [`Lexer`](https://github.com/cppwasm/cpp_web/blob/main/src/lexer/mod.rs): Scans the input text slice maintaining current byte offset, line number, and column.
-- [`Token`](https://github.com/cppwasm/cpp_web/blob/main/src/lexer/token.rs): The fundamental token unit emitted by the lexer:
+- `Lexer`: Scans the input text slice maintaining current byte offset, line number, and column.
+- `Token`: The fundamental token unit emitted by the lexer:
   ```rust
   pub struct Token {
       pub kind: TokenKind,
@@ -24,13 +24,13 @@ The lexer scans preprocessed C++ source text into a linear stream of strongly ty
       pub length: usize,
   }
   ```
-- [`TokenKind`](https://github.com/cppwasm/cpp_web/blob/main/src/lexer/token.rs): Enumeration of all accepted lexical symbols:
+- `TokenKind`: Enumeration of all accepted lexical symbols:
   - **Literals**: `IntLiteral(i64, String)`, `FloatLiteral(f64, String)`, `CharLiteral(char)`, `StringLiteral(String)`, `BoolLiteral(bool)`
   - **Identifiers**: `Ident(String)`
   - **Keywords**: `KwInt`, `KwReturn`, `KwClass`, `KwVirtual`, `KwIf`, `KwWhile`, `KwConst`, etc.
   - **Operators & Punctuators**: `Plus`, `Minus`, `Star`, `Slash`, `Percent`, `AmpAmp`, `PipePipe`, `Arrow`, `ColonColon`, `LBrace`, `RBrace`, etc.
   - **Control**: `Eof`
-- [`Span`](https://github.com/cppwasm/cpp_web/blob/main/src/source.rs): Represents source location ranges (`file: FileId`, `line: usize`, `col: usize`, `len: usize`).
+- `Span`: Represents source location ranges (`file: FileId`, `line: usize`, `col: usize`, `len: usize`).
 
 ---
 
@@ -45,7 +45,7 @@ The lexer produces `CompileError` with `ErrorKind::Lexical`:
 
 ## 4. Real Input & Token Output Example
 
-Taken from [`tests/c_basics/arithmetic.cpp`](https://github.com/cppwasm/cpp_web/blob/main/tests/c_basics/arithmetic.cpp):
+Taken from `tests/c_basics/arithmetic.cpp`:
 
 ### Input C++ Source
 ```cpp

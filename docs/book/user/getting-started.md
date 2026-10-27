@@ -77,7 +77,7 @@ The test runner will discover all test groups, verify the manifest in `tests/PAS
 
 ## 4. Running the Browser Playground Locally
 
-The compiler can compile itself into WebAssembly and run completely inside the browser without a backend server:
+You can try the compiler directly in the live [Online Playground](https://ajtimepyro.is-a.dev/cpp-web-compiler/) without local installation, or build and run it locally:
 
 ```sh
 # 1. Build the compiler as a WebAssembly cdylib

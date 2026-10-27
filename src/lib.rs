@@ -1,6 +1,6 @@
 //! Dependency-free C++ subset to WebAssembly compiler.
 //!
-//! See the [mdBook Documentation](https://github.com/cppwasm/cpp_web) for architecture details.
+//! See the [mdBook Documentation](https://ajtimepyro.is-a.dev/cpp-web-compiler/book/) for architecture details.
 
 #![deny(unsafe_code)]
 #![warn(missing_docs)]

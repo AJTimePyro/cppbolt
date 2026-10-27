@@ -1,8 +1,8 @@
 # Testing System & Verification Gates
 
-The compiler test suite is managed by [`cppwasm-testrunner`](https://github.com/cppwasm/cpp_web/blob/main/src/bin/cppwasm-testrunner.rs). Tests are discovered automatically by directory structure, categorized by feature area, and validated against multiple independent gates.
+The compiler test suite is managed by `cppwasm-testrunner`. Tests are discovered automatically by directory structure, categorized by feature area, and validated against multiple independent gates.
 
-The expected passing baseline is defined in [`tests/PASSING.txt`](https://github.com/cppwasm/cpp_web/blob/main/tests/PASSING.txt). To run the test suite and verify current counts:
+The expected passing baseline is defined in `tests/PASSING.txt`. To run the test suite and verify current counts:
 
 ```sh
 cargo build --release
@@ -15,8 +15,8 @@ cargo run --bin cppwasm-testrunner -- target/release/cppwasm-cli
 
 The test runner discovers tests by directory:
 - **Positive Tests**: Contain `<name>.cpp` and `<name>.expected` files (with optional `<name>.input` providing stdin).
-- **Runtime Trap Tests**: Assert that execution produces a non-zero WebAssembly `unreachable` trap ([`tests/runtime_trap/`](https://github.com/cppwasm/cpp_web/blob/main/tests/runtime_trap/)).
-- **Negative Tests**: Contain `<name>.cpp` and `<name>.expected_err` files, asserting exact diagnostic output ([`tests/negative/`](https://github.com/cppwasm/cpp_web/blob/main/tests/negative/)).
+- **Runtime Trap Tests**: Assert that execution produces a non-zero WebAssembly `unreachable` trap (`tests/runtime_trap/`).
+- **Negative Tests**: Contain `<name>.cpp` and `<name>.expected_err` files, asserting exact diagnostic output (`tests/negative/`).
 
 The command syntax is:
 ```sh
@@ -24,7 +24,7 @@ cppwasm-testrunner [compiler|ref] [group]
 ```
 The first argument selects the compiler binary (or `ref` to run host `g++`). The optional second argument filters execution to a single feature group.
 
-### The Passing Manifest ([`tests/PASSING.txt`](https://github.com/cppwasm/cpp_web/blob/main/tests/PASSING.txt))
+### The Passing Manifest (`tests/PASSING.txt`)
 A failing test that is absent from `tests/PASSING.txt` is treated as an **expected failure** (e.g. planned template and STL container tests): the runner executes it, reports the failure under `Expected failures`, but does not cause the process to exit with an error.
 
 The runner exits `0` if and only if:
@@ -50,7 +50,7 @@ Every main test has a counterpart in a matching `_variant` group. Variants guard
 - **Pass**: Sources that differ structurally (e.g. using helper functions, loops, or scoped blocks) pass cleanly.
 
 ### Cleanroom Independent Tests (`tests/independent/`)
-Tests in [`tests/independent/`](https://github.com/cppwasm/cpp_web/blob/main/tests/independent/) are authored without inspecting compiler implementation code, main tests, or variant tests. Authors work strictly from the C++17 ISO specification and public compiler documentation.
+Tests in `tests/independent/` are authored without inspecting compiler implementation code, main tests, or variant tests. Authors work strictly from the C++17 ISO specification and public compiler documentation.
 - Expected outputs are generated with `g++ -std=c++17 -O0` and verified with `clang++ -std=c++17 -O0`.
 - All files in the directory are cryptographically pinned in `tests/independent/MANIFEST.sha256`. The test runner fails if any file changes or disappears without owner approval.
 
@@ -68,7 +68,7 @@ Before any behavior-preserving refactor, verify the golden baseline:
 cargo run --release --bin cppwasm-testrunner -- --check-golden tests/golden.txt target/release/cppwasm-cli
 ```
 
-[`tests/golden.txt`](https://github.com/cppwasm/cpp_web/blob/main/tests/golden.txt) records the SHA-256 hashes of both the emitted `.wasm` binary and standard output for every compiling positive test. A pure refactor must leave every hash unchanged. Regenerate intentionally with `--golden` only when compiler behavior or binary encoding changes deliberately.
+`tests/golden.txt` records the SHA-256 hashes of both the emitted `.wasm` binary and standard output for every compiling positive test. A pure refactor must leave every hash unchanged. Regenerate intentionally with `--golden` only when compiler behavior or binary encoding changes deliberately.
 
 ### Native Oracle Gate (`--oracle`)
 The test runner can replay every positive test through native host compilers:
@@ -78,19 +78,19 @@ cargo run --release --bin cppwasm-testrunner -- --oracle
 python3 tools/verify_mini_stl_gxx.py
 ```
 
-The oracle compiles each test with `g++ -std=c++17 -O0` and `clang++ -std=c++17 -O0` and asserts that native stdout matches the checked-in `.expected` files. This gate also runs in CI via the integration test [`tests/oracle_gate.rs`](https://github.com/cppwasm/cpp_web/blob/main/tests/oracle_gate.rs).
+The oracle compiles each test with `g++ -std=c++17 -O0` and `clang++ -std=c++17 -O0` and asserts that native stdout matches the checked-in `.expected` files. This gate also runs in CI via the integration test `tests/oracle_gate.rs`.
 
 ---
 
 ## 4. Size & Complexity Census (`cppwasm-census`)
 
-To maintain long-term codebase health, [`src/bin/cppwasm-census.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/bin/cppwasm-census.rs) scans Rust source files and reports function lengths, parameter counts, and file sizes:
+To maintain long-term codebase health, `src/bin/cppwasm-census.rs` scans Rust source files and reports function lengths, parameter counts, and file sizes:
 
 ```sh
 cargo run --release --bin cppwasm-census
 ```
 
-Verified by [`tests/census_fixture.rs`](https://github.com/cppwasm/cpp_web/blob/main/tests/census_fixture.rs), the project strictly enforces:
+Verified by `tests/census_fixture.rs`, the project strictly enforces:
 - No function may exceed 80 lines.
 - No function may accept more than 5 parameters (excluding `self`).
 - No source file in `src/` may exceed 500 lines.

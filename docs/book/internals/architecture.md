@@ -2,7 +2,7 @@
 
 `cppwasm` is organized as a single Cargo package that provides a core compiler library (`cppwasm`), a native CLI (`cppwasm-cli`), a corpus test runner (`cppwasm-testrunner`), and a code metrics scanner (`cppwasm-census`).
 
-The core library is entirely OS-agnostic and dependency-free: it performs no direct filesystem I/O, spawns no child processes, and requires no multi-threading runtime. Host environments supply include files through the [`IncludeProvider`](https://github.com/cppwasm/cpp_web/blob/main/src/source.rs) trait.
+The core library is entirely OS-agnostic and dependency-free: it performs no direct filesystem I/O, spawns no child processes, and requires no multi-threading runtime. Host environments supply include files through the `IncludeProvider` trait.
 
 The release WebAssembly compiler module built for `wasm32-unknown-unknown` is currently 842,723 bytes raw and 244,401 bytes with `gzip -9 -n`.
 
@@ -89,22 +89,22 @@ A fundamental architectural decision in `cppwasm` is the **complete absence of a
 
 | Stage | Path | Purpose | Input Type | Output Type | Key Data Structures | Invariants |
 |---|---|---|---|---|---|---|
-| **Preprocessor** | [`src/preprocessor/`](https://github.com/cppwasm/cpp_web/blob/main/src/preprocessor/) | Macro expansion, include resolution, `#if` evaluation | `&str`, `&dyn IncludeProvider` | `PreprocessedSource` | `MacroDef`, `HideSet`, `LineOrigin` | Include recursion capped at 128; macro recursion terminates via hide sets; origins accurately track header lines |
-| **Lexer** | [`src/lexer/`](https://github.com/cppwasm/cpp_web/blob/main/src/lexer/) | Tokenizes preprocessed text into lexemes | `&str` | `Vec<Token>` | `Token`, `TokenKind`, `Span`, `FileId` | Every token carries an exact non-fabricated source span |
-| **Parser & AST** | [`src/parser/`](https://github.com/cppwasm/cpp_web/blob/main/src/parser/), [`src/ast/`](https://github.com/cppwasm/cpp_web/blob/main/src/ast/) | Parses grammar into typed AST | `Vec<Token>` | `ast::Program` | `Program`, `Decl`, `Stmt`, `Expr`, `Type` | Validates supported features first; nesting depth bounded per construct via `depth.rs` |
-| **Semantic Analysis** | [`src/sema/`](https://github.com/cppwasm/cpp_web/blob/main/src/sema/) | Scope analysis, type checking, vtables, layouts, overloads | `&mut ast::Program` | `sema::Sema` | `Sema`, `StructDef`, `FunctionSig`, `RecordLayout` | Mutates AST with resolved types; rejects multiple/virtual inheritance; catches ambiguous overloads |
-| **WASM Codegen** | [`src/codegen/`](https://github.com/cppwasm/cpp_web/blob/main/src/codegen/), [`src/wasm/`](https://github.com/cppwasm/cpp_web/blob/main/src/wasm/) | Lowers AST to WebAssembly binary sections | `&ast::Program`, `&sema::Sema` | `Vec<u8>` | `Codegen<'a>`, `FunctionContext`, `WasmModule` | Fixed-width LEB128 frame patches; stack allocation traps on guard page entry; RAII cleanups on all exits |
-| **Runtime** | [`src/runtime/`](https://github.com/cppwasm/cpp_web/blob/main/src/runtime/), [`stdlib/`](https://github.com/cppwasm/cpp_web/blob/main/stdlib/) | In-module allocator, printf runtime, embedded headers | N/A (Emitted or included) | Wasm opcodes | `memory_layout`, `allocator`, `format` | ILP32 32-bit addresses; stack top at `0x810000`; heap grows upward; slot 0 traps |
+| **Preprocessor** | `src/preprocessor/` | Macro expansion, include resolution, `#if` evaluation | `&str`, `&dyn IncludeProvider` | `PreprocessedSource` | `MacroDef`, `HideSet`, `LineOrigin` | Include recursion capped at 128; macro recursion terminates via hide sets; origins accurately track header lines |
+| **Lexer** | `src/lexer/` | Tokenizes preprocessed text into lexemes | `&str` | `Vec<Token>` | `Token`, `TokenKind`, `Span`, `FileId` | Every token carries an exact non-fabricated source span |
+| **Parser & AST** | `src/parser/`, `src/ast/` | Parses grammar into typed AST | `Vec<Token>` | `ast::Program` | `Program`, `Decl`, `Stmt`, `Expr`, `Type` | Validates supported features first; nesting depth bounded per construct via `depth.rs` |
+| **Semantic Analysis** | `src/sema/` | Scope analysis, type checking, vtables, layouts, overloads | `&mut ast::Program` | `sema::Sema` | `Sema`, `StructDef`, `FunctionSig`, `RecordLayout` | Mutates AST with resolved types; rejects multiple/virtual inheritance; catches ambiguous overloads |
+| **WASM Codegen** | `src/codegen/`, `src/wasm/` | Lowers AST to WebAssembly binary sections | `&ast::Program`, `&sema::Sema` | `Vec<u8>` | `Codegen<'a>`, `FunctionContext`, `WasmModule` | Fixed-width LEB128 frame patches; stack allocation traps on guard page entry; RAII cleanups on all exits |
+| **Runtime** | `src/runtime/`, `stdlib/` | In-module allocator, printf runtime, embedded headers | N/A (Emitted or included) | Wasm opcodes | `memory_layout`, `allocator`, `format` | ILP32 32-bit addresses; stack top at `0x810000`; heap grows upward; slot 0 traps |
 
 ---
 
 ## 4. Binary and Library Targets
 
-The repository contains a single unified Cargo package defined in [`Cargo.toml`](https://github.com/cppwasm/cpp_web/blob/main/Cargo.toml):
+The repository contains a single unified Cargo package defined in `Cargo.toml`:
 
 | Target | Entry File | Responsibility |
 |---|---|---|
-| `cppwasm` (lib) | [`src/lib.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/lib.rs) | Core compiler pipeline, public Rust API, and C ABI entry points ([`src/ffi.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/ffi.rs)) |
-| `cppwasm-cli` (bin) | [`src/main.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/main.rs) | Native command-line interface with filesystem include support and 64 MiB execution thread |
-| `cppwasm-testrunner` (bin) | [`src/bin/cppwasm-testrunner.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/bin/cppwasm-testrunner.rs) | Corpus test runner, variant verification, native oracle execution, and golden baseline check |
-| `cppwasm-census` (bin) | [`src/bin/cppwasm-census.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/bin/cppwasm-census.rs) | Code quality scanner enforcing function line count (<80 lines) and parameter limits (<5 params) |
+| `cppwasm` (lib) | `src/lib.rs` | Core compiler pipeline, public Rust API, and C ABI entry points (`src/ffi.rs`) |
+| `cppwasm-cli` (bin) | `src/main.rs` | Native command-line interface with filesystem include support and 64 MiB execution thread |
+| `cppwasm-testrunner` (bin) | `src/bin/cppwasm-testrunner.rs` | Corpus test runner, variant verification, native oracle execution, and golden baseline check |
+| `cppwasm-census` (bin) | `src/bin/cppwasm-census.rs` | Code quality scanner enforcing function line count (<80 lines) and parameter limits (<5 params) |

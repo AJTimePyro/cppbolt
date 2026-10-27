@@ -6,7 +6,7 @@
 
 ## 1. Linear Memory Model & ABI
 
-Programs compiled with `cppwasm` use 32-bit ILP32 addresses. Linear memory is partitioned into four distinct segments defined in [`src/runtime/memory_layout.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/runtime/memory_layout.rs):
+Programs compiled with `cppwasm` use 32-bit ILP32 addresses. Linear memory is partitioned into four distinct segments defined in `src/runtime/memory_layout.rs`:
 
 ```text
  +--------------------------+ 0x000000 (0)
@@ -31,15 +31,15 @@ Programs compiled with `cppwasm` use 32-bit ILP32 addresses. Linear memory is pa
 ```
 
 ### Safety & Invariants
-- **Stack Overflow Guard**: Frame allocation in function prologues verifies that the decremented stack pointer remains strictly greater than `65,536` (`GUARD_PAGE_END`). Entering the guard region causes an immediate WebAssembly `unreachable` trap ([`tests/runtime_trap/stack_overflow.cpp`](https://github.com/cppwasm/cpp_web/blob/main/tests/runtime_trap/stack_overflow.cpp)).
-- **Function Table Slot 0**: Index 0 of the WebAssembly indirect call table (`funcref`) is explicitly reserved for a trapping stub. Indirect function calls through a null function pointer trap deterministically ([`tests/runtime_trap/null_function_pointer.cpp`](https://github.com/cppwasm/cpp_web/blob/main/tests/runtime_trap/null_function_pointer.cpp)).
+- **Stack Overflow Guard**: Frame allocation in function prologues verifies that the decremented stack pointer remains strictly greater than `65,536` (`GUARD_PAGE_END`). Entering the guard region causes an immediate WebAssembly `unreachable` trap (`tests/runtime_trap/stack_overflow.cpp`).
+- **Function Table Slot 0**: Index 0 of the WebAssembly indirect call table (`funcref`) is explicitly reserved for a trapping stub. Indirect function calls through a null function pointer trap deterministically (`tests/runtime_trap/null_function_pointer.cpp`).
 - **Virtual Method Dispatch**: Objects of polymorphic classes place their vtable pointer (`vptr`) at byte offset 0. Table slots strictly follow base-prefix order.
 
 ---
 
 ## 2. In-Module Free-List Memory Allocator
 
-Dynamic memory allocation is managed by an in-module free-list allocator implemented directly in WebAssembly instructions ([`src/runtime/allocator.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/runtime/allocator.rs)):
+Dynamic memory allocation is managed by an in-module free-list allocator implemented directly in WebAssembly instructions (`src/runtime/allocator.rs`):
 
 - **Block Structure**: Free and allocated memory chunks are prefixed with an 8-byte aligned header storing the block size and allocation flag.
 - **Coalescing**: Adjacent free blocks are automatically merged on `free` to prevent heap fragmentation.
@@ -48,13 +48,13 @@ Dynamic memory allocation is managed by an in-module free-list allocator impleme
   - `malloc(size)` returns `0` (null pointer) on allocation failure.
   - `operator new` checks the result of `malloc` and triggers an `unreachable` WebAssembly trap if null is returned (since exceptions like `std::bad_alloc` are excluded in v1 per ADR 0005).
 
-Verified by [`tests/memory_model/allocator_correctness.cpp`](https://github.com/cppwasm/cpp_web/blob/main/tests/memory_model/allocator_correctness.cpp), [`tests/memory_model/free_list_reuse.cpp`](https://github.com/cppwasm/cpp_web/blob/main/tests/memory_model/free_list_reuse.cpp), and [`tests/runtime_trap/malloc_beyond_max.cpp`](https://github.com/cppwasm/cpp_web/blob/main/tests/runtime_trap/malloc_beyond_max.cpp).
+Verified by `tests/memory_model/allocator_correctness.cpp`, `tests/memory_model/free_list_reuse.cpp`, and `tests/runtime_trap/malloc_beyond_max.cpp`.
 
 ---
 
 ## 3. Embedded Standard Library (`stdlib/`)
 
-Headers under [`stdlib/`](https://github.com/cppwasm/cpp_web/blob/main/stdlib/) are embedded into the compiler binary at compile time using Rust's `include_str!` macro ([ADR 0004](../adr/0004-embedded-stdlib.md)).
+Headers under `stdlib/` are embedded into the compiler binary at compile time using Rust's `include_str!` macro ([ADR 0004](../adr/0004-embedded-stdlib.md)).
 
 ```text
 stdlib/
@@ -75,7 +75,7 @@ stdlib/
 - **Partial Headers**: `<vector>`, `<map>`, `<set>`, and `<algorithm>`. These files are present in `stdlib/` to compile specific mini-STL test fixtures, but full template container functionality is outside the v1 subset (tracked as Planned).
 
 ### Independent Native Header Verification
-All embedded headers are compiled and verified against host `g++` and `clang++` using `-nostdinc++` and AddressSanitizer/UndefinedBehaviorSanitizer via [`tools/verify_mini_stl_gxx.py`](https://github.com/cppwasm/cpp_web/blob/main/tools/verify_mini_stl_gxx.py).
+All embedded headers are compiled and verified against host `g++` and `clang++` using `-nostdinc++` and AddressSanitizer/UndefinedBehaviorSanitizer via `tools/verify_mini_stl_gxx.py`.
 
 ### Standard I/O Contract
 - **Shared Lookahead**: C stdio (`scanf`, `getchar`) and C++ streams (`cin >>`) share an internal character lookahead buffer to allow interleaved input.

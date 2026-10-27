@@ -66,24 +66,24 @@ python3 -m http.server --directory site 8000
 When adding a new C++ language feature or expression form to `cppwasm`, modifications typically flow through each stage of the compiler pipeline:
 
 1. **Tokens (`src/lexer/`)**:
-   - If the feature introduces new keywords or operators, add variants to [`src/lexer/token.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/lexer/token.rs) and update lexer scanning in [`src/lexer/mod.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/lexer/mod.rs).
+   - If the feature introduces new keywords or operators, add variants to `src/lexer/token.rs` and update lexer scanning in `src/lexer/mod.rs`.
 2. **Abstract Syntax Tree (`src/ast/`)**:
-   - Define corresponding AST nodes in [`src/ast/expr.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/ast/expr.rs), [`src/ast/stmt.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/ast/stmt.rs), [`src/ast/decl.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/ast/decl.rs), or [`src/ast/types.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/ast/types.rs). Ensure nodes record line and column positions for diagnostic accuracy.
+   - Define corresponding AST nodes in `src/ast/expr.rs`, `src/ast/stmt.rs`, `src/ast/decl.rs`, or `src/ast/types.rs`. Ensure nodes record line and column positions for diagnostic accuracy.
 3. **Parser (`src/parser/`)**:
-   - Add parsing logic in [`src/parser/expr.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/parser/expr.rs), [`src/parser/stmt.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/parser/stmt.rs), or [`src/parser/decl.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/parser/decl.rs).
-   - If lifting a restriction on a previously unsupported feature, update [`src/parser/unsupported.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/parser/unsupported.rs).
+   - Add parsing logic in `src/parser/expr.rs`, `src/parser/stmt.rs`, or `src/parser/decl.rs`.
+   - If lifting a restriction on a previously unsupported feature, update `src/parser/unsupported.rs`.
    - Track nesting limits using `self.depth` (`src/depth.rs`) to prevent stack overflow on pathological inputs.
 4. **Semantic Analysis (`src/sema/`)**:
-   - Implement type checking, name lookup, and conversions in [`src/sema/analyze.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/sema/analyze.rs), [`src/sema/expr.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/sema/expr.rs), or [`src/sema/lookup.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/sema/lookup.rs).
+   - Implement type checking, name lookup, and conversions in `src/sema/analyze.rs`, `src/sema/expr.rs`, or `src/sema/lookup.rs`.
    - Synthesize necessary implicit copy/default constructors or record layouts.
 5. **Code Generation (`src/codegen/`)**:
-   - Lower the typed AST node to WebAssembly bytecodes in [`src/codegen/expr.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/codegen/expr.rs), [`src/codegen/stmt.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/codegen/stmt.rs), or dedicated helpers.
-   - Respect stack frame conventions in [`src/codegen/function_context.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/codegen/function_context.rs) and memory layout rules in [`src/runtime/memory_layout.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/runtime/memory_layout.rs).
+   - Lower the typed AST node to WebAssembly bytecodes in `src/codegen/expr.rs`, `src/codegen/stmt.rs`, or dedicated helpers.
+   - Respect stack frame conventions in `src/codegen/function_context.rs` and memory layout rules in `src/runtime/memory_layout.rs`.
 6. **Corpus Tests (`tests/`)**:
    - Add positive test cases (`.cpp` and `.expected`) in `tests/<feature_group>/`.
    - Add corresponding anti-overfitting structural tests in `tests/<feature_group>_variant/`.
    - If rejecting invalid syntax, add a negative test (`.cpp` and `.expected_err`) in `tests/negative/`.
-   - Update [`tests/PASSING.txt`](https://github.com/cppwasm/cpp_web/blob/main/tests/PASSING.txt) and regenerate golden hashes if expected changes are approved:
+   - Update `tests/PASSING.txt` and regenerate golden hashes if expected changes are approved:
      ```sh
      cargo run --release --bin cppwasm-testrunner -- --golden tests/golden.txt target/release/cppwasm-cli
      ```
@@ -94,11 +94,11 @@ When adding a new C++ language feature or expression form to `cppwasm`, modifica
 
 - **No Compiler Logic Modifications Without Tests**: Every supported behavior must have a positive corpus test. Every unsupported construct must produce a clean diagnostic, not a crash or panic.
 - **Panic-Free Policy**: Never use `unwrap()`, `expect()`, or `panic!()` on code paths that can process user input. Use `Result<T, CompileError>`.
-- **Function and File Size Limits**: Enforced by [`src/bin/cppwasm-census.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/bin/cppwasm-census.rs) and verified by [`tests/census_fixture.rs`](https://github.com/cppwasm/cpp_web/blob/main/tests/census_fixture.rs):
+- **Function and File Size Limits**: Enforced by `src/bin/cppwasm-census.rs` and verified by `tests/census_fixture.rs`:
   - No function may exceed 80 lines.
   - No function may take more than 5 parameters (excluding `self`).
   - No file in `src/` may exceed 500 lines.
-- **Module Tree Reachability**: Every Rust source file under `src/` must be wired into the crate module tree; verified by [`tests/module_tree.rs`](https://github.com/cppwasm/cpp_web/blob/main/tests/module_tree.rs).
+- **Module Tree Reachability**: Every Rust source file under `src/` must be wired into the crate module tree; verified by `tests/module_tree.rs`.
 - **Preserve Documentation Integrity**: Comments should document invariants, ABI decisions, and memory models, rather than narrating line-by-line changes.
 
 ---

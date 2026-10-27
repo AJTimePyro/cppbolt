@@ -1,28 +1,28 @@
 # Semantic Analysis Internals
 
-The semantic analysis stage validates the Abstract Syntax Tree, computes record memory layouts, resolves symbols, checks type conversions, and scores function overloads, implemented in [`src/sema/`](https://github.com/cppwasm/cpp_web/blob/main/src/sema/).
+The semantic analysis stage validates the Abstract Syntax Tree, computes record memory layouts, resolves symbols, checks type conversions, and scores function overloads, implemented in `src/sema/`.
 
 ---
 
 ## 1. Role in the Pipeline
 
-1. **Symbol Registration & Scoping**: Registers struct definitions, function signatures, global variables, and type aliases across lexical and namespace scopes ([`src/sema/analyze.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/sema/analyze.rs)).
-2. **Record Layout & Alignment**: Computes struct field offsets, overall sizes, and alignment padding according to the 32-bit ILP32 target model ([`src/sema/layout.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/sema/layout.rs)).
+1. **Symbol Registration & Scoping**: Registers struct definitions, function signatures, global variables, and type aliases across lexical and namespace scopes (`src/sema/analyze.rs`).
+2. **Record Layout & Alignment**: Computes struct field offsets, overall sizes, and alignment padding according to the 32-bit ILP32 target model (`src/sema/layout.rs`).
 3. **Vtable Layout & Hierarchy Analysis**: Analyzes single and linear inheritance hierarchies, computes base subobject offsets, identifies pure virtual methods (`= 0`), and assigns vtable function pointer slots in base-prefix order.
-4. **Implicit Method Synthesis**: Synthesizes default constructors, copy constructors, and destructors for structs that do not define them explicitly ([`src/sema/constructor.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/sema/constructor.rs)).
-5. **Overload Resolution Ranking**: Implements standard overload ranking rules to pick the best function or constructor candidate and detect ambiguous calls ([`src/sema/overload.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/sema/overload.rs)).
+4. **Implicit Method Synthesis**: Synthesizes default constructors, copy constructors, and destructors for structs that do not define them explicitly (`src/sema/constructor.rs`).
+5. **Overload Resolution Ranking**: Implements standard overload ranking rules to pick the best function or constructor candidate and detect ambiguous calls (`src/sema/overload.rs`).
 6. **Type Inference & Checking**: Annotates expression nodes with resolved concrete types, validates assignments, usual arithmetic conversions, and C++17 copy elision rules.
 
 ---
 
 ## 2. Key Data Structures
 
-- [`Sema`](https://github.com/cppwasm/cpp_web/blob/main/src/sema/mod.rs): Central semantic state containing:
+- `Sema`: Central semantic state containing:
   - `structs: HashMap<String, StructLayout>`: Layouts, field offsets, vtable slots, and pure virtual tracking for all defined records.
   - `functions: HashMap<String, Vec<FunctionSig>>`: All registered functions and method overloads.
   - `globals: HashMap<String, Type>`: Global and namespace variable types.
   - `type_aliases: HashMap<String, Type>`: `typedef` and `using` type maps.
-- [`StructLayout`](https://github.com/cppwasm/cpp_web/blob/main/src/sema/mod.rs):
+- `StructLayout`:
   ```rust
   pub struct StructLayout {
       pub is_class: bool,
@@ -38,14 +38,14 @@ The semantic analysis stage validates the Abstract Syntax Tree, computes record 
       pub pure_virtuals: HashSet<String>,
   }
   ```
-- [`FunctionSig`](https://github.com/cppwasm/cpp_web/blob/main/src/sema/mod.rs): Signature metadata (parameters, return type, `is_const`, `is_virtual`, default arguments).
-- [`OverloadCandidate`](https://github.com/cppwasm/cpp_web/blob/main/src/sema/overload.rs): Candidate function paired with argument conversion ranks.
+- `FunctionSig`: Signature metadata (parameters, return type, `is_const`, `is_virtual`, default arguments).
+- `OverloadCandidate`: Candidate function paired with argument conversion ranks.
 
 ---
 
 ## 3. Overload Resolution Ranking
 
-When a call expression matches multiple candidates, [`src/sema/overload.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/sema/overload.rs) scores each parameter conversion against the provided arguments using five rank tiers:
+When a call expression matches multiple candidates, `src/sema/overload.rs` scores each parameter conversion against the provided arguments using five rank tiers:
 
 1. **Exact Match**: Argument type equals parameter type (or identical enum/primitive).
 2. **Reference Binding**: Binding an lvalue to `T&` or `const T&`.
@@ -58,7 +58,7 @@ If two candidates have identical rank scores across all arguments, overload reso
 ```text
 file.cpp:line:col: error: call of overloaded 'func(...)' is ambiguous
 ```
-Verified by [`tests/c_basics/overload_resolution.cpp`](https://github.com/cppwasm/cpp_web/blob/main/tests/c_basics/overload_resolution.cpp) and [`tests/negative/ambiguous_overload_call.cpp`](https://github.com/cppwasm/cpp_web/blob/main/tests/negative/ambiguous_overload_call.cpp).
+Verified by `tests/c_basics/overload_resolution.cpp` and `tests/negative/ambiguous_overload_call.cpp`.
 
 ---
 
@@ -79,7 +79,7 @@ struct Derived : public Base {
 };
 ```
 
-The semantic analyzer produces the following [`StructLayout`](https://github.com/cppwasm/cpp_web/blob/main/src/sema/mod.rs) for `Derived`:
+The semantic analyzer produces the following `StructLayout` for `Derived`:
 - `size`: 16 bytes (ILP32: 4 bytes `vptr` at offset 0, 4 bytes `id` at offset 4, 8 bytes `value` at offset 8).
 - `align`: 8 bytes (due to `double` alignment requirement).
 - `has_vtable`: `true`

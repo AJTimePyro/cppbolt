@@ -15,7 +15,7 @@ Programs in C++ frequently allocate and free dynamic memory via `malloc`/`free` 
   - *Cons*: Requires generating allocator logic (`malloc`, `free`) into every WebAssembly binary that performs dynamic allocation.
 
 ## Decision
-Emit a dedicated free-list allocator directly in WebAssembly bytecode ([`src/runtime/allocator.rs`](https://github.com/cppwasm/cpp_web/blob/main/src/runtime/allocator.rs), commit `0b21628`):
+Emit a dedicated free-list allocator directly in WebAssembly bytecode (`src/runtime/allocator.rs`, commit `0b21628`):
 - Block headers track size, free status, and link pointers with 8-byte alignment (`src/runtime/allocator.rs#L30-L75`).
 - Freed blocks are returned to a free list and adjacent free blocks are coalesced (`src/runtime/allocator.rs#L140-L195`).
 - When existing blocks cannot satisfy an allocation, `memory.grow` is invoked to expand the WebAssembly linear memory up to the configured limit (`src/runtime/allocator.rs#L210-L245`).

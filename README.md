@@ -39,7 +39,12 @@ target/release/cppwasm-cli hello.cpp -o hello.wasm
 
 ### 2. Try in the Browser (Playground)
 
-The compiler can compile itself into WebAssembly (`wasm32-unknown-unknown`) and run inside a web browser:
+You can try the compiler directly in your browser:
+- **Live Online Playground**: [https://ajtimepyro.is-a.dev/cpp-web-compiler/](https://ajtimepyro.is-a.dev/cpp-web-compiler/)
+- **Online Documentation**: [https://ajtimepyro.is-a.dev/cpp-web-compiler/book/](https://ajtimepyro.is-a.dev/cpp-web-compiler/book/)
+- **API Documentation**: [https://ajtimepyro.is-a.dev/cpp-web-compiler/api/](https://ajtimepyro.is-a.dev/cpp-web-compiler/api/)
+
+To build and run the playground locally:
 
 ```sh
 # Build the compiler library for WebAssembly
@@ -59,7 +64,7 @@ The browser playground runs the compiler in a dedicated Web Worker to ensure UI 
 
 ## Documentation
 
-Comprehensive project documentation is published via mdBook:
+Comprehensive project documentation is published via mdBook at [https://ajtimepyro.is-a.dev/cpp-web-compiler/book/](https://ajtimepyro.is-a.dev/cpp-web-compiler/book/):
 
 - **[Getting Started](docs/book/user/getting-started.md)** — Guide to installing, building, and using the compiler.
 - **[Supported C++ Subset](docs/book/user/supported-cpp.md)** — Full feature matrix with test links and known limitations.

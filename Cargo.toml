@@ -2,6 +2,9 @@
 name = "cppwasm"
 version = "0.1.0"
 edition = "2024"
+repository = "https://github.com/AJTimePyro/cpp-web-compiler"
+homepage = "https://ajtimepyro.is-a.dev/cpp-web-compiler/"
+documentation = "https://ajtimepyro.is-a.dev/cpp-web-compiler/book/"
 
 [lib]
 name = "cppwasm"
