@@ -1,11 +1,9 @@
-name: Deploy the playground to GitHub Pages
+name: Deploy playground and documentation to GitHub Pages
 
-# The playground is a static site: the web directory of the repository plus
-# the WebAssembly build of the compiler.  The workflow builds the compiler for
-# the browser, assembles the site, and deploys it to GitHub Pages.
-#
-# The repository needs "Settings -> Pages -> Build and deployment -> Source:
-# GitHub Actions" once, so that the environment of the deployment exists.
+# The site is a static bundle containing:
+# 1. The in-browser C++ playground at `/`
+# 2. The mdBook documentation at `/book/`
+# 3. The rustdoc API documentation at `/api/`
 
 on:
   push:
@@ -38,16 +36,31 @@ jobs:
         with:
           key: pages-wasm
 
+      - name: Install mdBook (pinned version)
+        uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: '0.4.40'
+
       - name: Build the compiler for the browser
         run: cargo build --release --target wasm32-unknown-unknown --lib
 
-      - name: Assemble the site
+      - name: Assemble the playground site
         run: tools/build_site.sh
+
+      - name: Build mdBook documentation
+        run: |
+          cd docs/book
+          mdbook build --dest-dir ../../site/book
+
+      - name: Build rustdoc API documentation
+        run: |
+          cargo doc --no-deps
+          cp -r target/doc site/api
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload the site
+      - name: Upload the site artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
