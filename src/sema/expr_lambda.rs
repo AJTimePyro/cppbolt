@@ -417,21 +417,29 @@ impl<'a> FreeVarCollector<'a> {
                 params,
                 body,
                 ..
-            } => {
-                let mut inner_explicit = self.explicit.clone();
-                for c in captures {
-                    inner_explicit.insert(c.name.clone());
-                }
-                let mut inner_collector = FreeVarCollector {
-                    params,
-                    explicit: &inner_explicit,
-                    discovered: self.discovered,
-                };
-                let mut inner_locals = locals.clone();
-                inner_collector.visit_stmt(body, &mut inner_locals);
-            }
+            } => self.visit_lambda_expr(captures, params, body, locals),
             _ => {}
         }
+    }
+
+    fn visit_lambda_expr(
+        &mut self,
+        captures: &[LambdaCapture],
+        params: &[Param],
+        body: &Stmt,
+        locals: &HashSet<String>,
+    ) {
+        let mut inner_explicit = self.explicit.clone();
+        for c in captures {
+            inner_explicit.insert(c.name.clone());
+        }
+        let mut inner_collector = FreeVarCollector {
+            params,
+            explicit: &inner_explicit,
+            discovered: self.discovered,
+        };
+        let mut inner_locals = locals.clone();
+        inner_collector.visit_stmt(body, &mut inner_locals);
     }
 }
 
