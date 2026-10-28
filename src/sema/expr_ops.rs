@@ -339,6 +339,7 @@ impl Sema {
         if target_ty.is_const() {
             let name = match &**target {
                 Expr::Identifier(n) => n.clone(),
+                Expr::MemberAccess { member, .. } => member.clone(),
                 _ => "variable".to_string(),
             };
             return Err(CompileError::new(

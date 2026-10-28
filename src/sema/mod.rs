@@ -143,6 +143,7 @@ pub struct Sema {
     pub range_for_counter: usize,
     pub lambda_counter: usize,
     pub synthesized_decls: Vec<Decl>,
+    pub current_func_is_const: bool,
     depth: crate::depth::DepthCounters,
 }
 
@@ -168,6 +169,7 @@ impl Sema {
             range_for_counter: 0,
             lambda_counter: 0,
             synthesized_decls: Vec::new(),
+            current_func_is_const: false,
             current_class: None,
             current_func_name: None,
             open_namespaces: Vec::new(),

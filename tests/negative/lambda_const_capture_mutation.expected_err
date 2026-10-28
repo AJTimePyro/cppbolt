@@ -1,0 +1,1 @@
+tests/negative/lambda_const_capture_mutation.cpp:4:9: error: Cannot assign to variable 'x' with const-qualified type

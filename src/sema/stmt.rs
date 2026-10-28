@@ -22,6 +22,8 @@ impl Sema {
             self.current_func_return_type = Some(func.return_type.clone());
         }
         self.current_func_name = Some(func.name.clone());
+        let prev_func_const = self.current_func_is_const;
+        self.current_func_is_const = func.is_const;
         self.current_frame_size = 0;
         self.enter_scope();
 
@@ -49,6 +51,7 @@ impl Sema {
         }
 
         self.exit_scope();
+        self.current_func_is_const = prev_func_const;
         if func.return_type == Type::Auto {
             func.return_type = self.current_func_return_type.take().unwrap_or(Type::Void);
         } else {
