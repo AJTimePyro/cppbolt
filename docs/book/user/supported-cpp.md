@@ -23,12 +23,16 @@ cargo run --bin cppwasm-testrunner -- target/release/cppwasm-cli
 | **`auto` Type Deduction** | **Done** | Local variable and reference type deduction | `tests/c_basics/auto_type.cpp` |
 | **Type Aliases (`typedef`, `using`)** | **Done** | Standard `typedef` and C++11 `using Alias = Type;` | `tests/c_basics/auto_type.cpp` |
 | **Multi-Declarator Declarations** | **Done** | Comma-separated declarators sharing base specifiers (`int *p, q = 2;`) | `tests/c_basics/multi_declarator.cpp` |
-| **Enums** | **Done** | Scoped (`enum class`) and unscoped `enum` | `tests/c_basics/enums.cpp` |
-| **Control Flow** (`if`, `switch`, loops) | **Done** | `if`/`else`, ternary `?:`, `while`, `for`, `do-while`, `switch`/`case`/`default` | `tests/c_basics/control_if_else.cpp`, `tests/c_basics/control_loops.cpp`, `tests/c_basics/control_switch.cpp` |
-| **Functions & Overloading** | **Done** | Exact match > reference binding > promotion > conversion; default arguments | `tests/c_basics/functions_call.cpp`, `tests/c_basics/functions_overload.cpp`, `tests/c_basics/overload_resolution.cpp` |
+| **Array Function Parameters** | **Done** | Parameter adjustment decaying `int arr[]` and `int arr[N]` to `int* arr` | `tests/c_basics/array_parameter_decay.cpp` |
+| **Enums** | **Done** | Scoped (`enum class`) with qualified lookup (`Scope::Val`) and unscoped `enum` | `tests/c_basics/enums.cpp`, `tests/c_basics/scoped_enums.cpp` |
+| **Control Flow** (`if`, `switch`, loops) | **Done** | `if`/`else`, ternary `?:`, `while`, `for`, `do-while`, `switch`/`case`/`default` (with enum & const-expr `case` labels) | `tests/c_basics/control_if_else.cpp`, `tests/c_basics/control_loops.cpp`, `tests/c_basics/switch_enum_case.cpp` |
+| **Functions & Overloading** | **Done** | Exact match > reference binding > promotion > conversion; default arguments; global init reachability | `tests/c_basics/functions_call.cpp`, `tests/c_basics/constexpr_global_init_call.cpp`, `tests/c_basics/overload_resolution.cpp` |
 | **Static Variables** | **Done** | Function-local statics with arguments; class static members | `tests/classes_oop/function_local_statics.cpp`, `tests/classes_oop/static_members.cpp` |
 | **Structs & Classes** | **Done** | Aggregate init, member variables/methods, access control | `tests/classes_oop/struct_basic.cpp`, `tests/classes_oop/initializer_lists.cpp` |
-| **Constructors & Destructors** | **Done** | Default, parameterized, copy constructors; initializer list ordering | `tests/classes_oop/copy_semantics.cpp`, `tests/classes_oop/member_objects_order.cpp` |
+| **Constructors & Destructors** | **Done** | Default, parameterized, copy, delegating (`C() : C(x) {}`); initializer list ordering | `tests/classes_oop/copy_semantics.cpp`, `tests/classes_oop/delegating_constructor.cpp`, `tests/classes_oop/member_objects_order.cpp` |
+| **Conversion Operators** | **Done** | User-defined conversion operators `operator T() const` with `explicit` qualification checks | `tests/classes_oop/conversion_operator.cpp` |
+| **Ref-Qualified Methods** | **Done** | Lvalue and rvalue ref-qualified member functions (`get() &`, `get() &&`) with receiver value-category dispatch | `tests/classes_oop/ref_qualified_methods.cpp` |
+| **Structured Bindings** | **Done** | Aggregate decomposition (`auto [a, b] = p;`, `auto&`, `const auto&`) | `tests/classes_oop/structured_bindings.cpp` |
 | **RAII Lifecycle & Scope Cleanups** | **Done** | Cleanups on scope exit, early `return`, `break`, `continue`, statement temporaries | `tests/classes_oop/class_raii.cpp`, `tests/classes_oop/raii_early_return.cpp`, `tests/classes_oop/raii_temporaries.cpp` |
 | **C++17 Copy Elision** | **Done** | Prvalue construction in place (direct init and function return) | `tests/classes_oop/prvalue_elision.cpp`, `tests/classes_oop/direct_initialization_elision.cpp` |
 | **Dynamic Memory (`new` / `delete`)** | **Done** | Single object and array `new[]`/`delete[]`; placement `new` | `tests/classes_oop/new_delete.cpp`, `tests/classes_oop/new_delete_object_arrays.cpp`, `tests/classes_oop/placement_new.cpp` |
@@ -50,7 +54,7 @@ cargo run --bin cppwasm-testrunner -- target/release/cppwasm-cli
 | **Const-Ref Method Overloading** (`T m() const &`) | **Planned** | `const` methods supported; `const &` method ref-qualifiers are rejected with `const overloading is not supported` | `tests/negative/const_overload_unsupported.cpp` |
 | **Namespace Aliases** (`namespace A = B;`) | **Planned** | Explicitly rejected by parser with `namespace aliases are not supported` | `tests/negative/namespace_alias.cpp` |
 | **Multiple & Virtual Inheritance** | **Out of Scope** | Single/linear inheritance supported; multiple and virtual base specifiers are rejected | `tests/negative/multiple_inheritance.cpp`, `tests/negative/virtual_inheritance.cpp` |
-| **Exceptions & RTTI** | **Out of Scope** | Excluded in favor of deterministic, unwinding-free direct Wasm lowering ([ADR 0005](../adr/0005-no-exceptions-rtti.md)) | N/A |
+| **Exceptions (`throw`)** | **Diagnosed** | `throw` keyword recognized and rejected with explicit target diagnostic (`C++ exception handling ('throw') is not supported on this WebAssembly target`) | `tests/negative/throw_unsupported.cpp` |
 
 ---
 

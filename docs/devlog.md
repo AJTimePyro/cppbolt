@@ -4,6 +4,38 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-10-28: C++17 Compatibility Fixes & Feature Completeness
+
+### Context & Motivation
+An audit of compiler compatibility against C++17 highlighted 9 critical areas across parser, semantic analysis, and WebAssembly code generation: array function parameter adjustment, constexpr global initializer reachability in dead-code elimination, delegating constructors, enum constants in switch case labels, scoped enums (`enum class`), user-defined conversion operators, ref-qualified member functions, structured bindings, and exception handling diagnostics.
+
+### Work Executed
+1. **Array Parameter Decay**:
+   - Updated `src/parser/decl_func.rs` to parse array declarator suffixes (`int arr[]`, `int arr[N]`) in function parameter lists and adjust them to pointer types (`int* arr`) according to standard C++ parameter adjustment rules.
+2. **Global Initializer Function Reachability**:
+   - Re-exported `collect_expr_calls` and incorporated global variable initializer expressions into root call collection in `src/codegen/program_prepare.rs`. Functions evaluated at global initialization time are now marked reachable and preserved through dead-code elimination.
+3. **Delegating Constructors**:
+   - Added target constructor invocation lowering in `src/codegen/function_lifecycle.rs` and enforced mutual exclusivity between constructor delegation (`Point() : Point(5) {}`) and member initializers in `src/sema/stmt.rs`.
+4. **Constant Expression Switch Cases**:
+   - Extended `StmtKind::Case` in AST, parser, and sema to accept arbitrary constant expressions and named enum variants, evaluating them at compile time via `eval_const_int_expr`.
+5. **Scoped Enums (`enum class`)**:
+   - Added scoped enum declarations with distinct type identities, prevented enumerators from polluting enclosing scopes, and enforced qualified resolution (`Status::OK`) without implicit arithmetic conversion.
+6. **User-Defined Conversion Operators**:
+   - Added parsing for conversion operator declarations (`operator T() const`) in `src/parser/structs.rs`. Wired implicit conversion checks across assignments, initializations, and binary operator operands while respecting `explicit` qualification.
+7. **Ref-Qualified Member Functions**:
+   - Extended AST and parser to support `&` and `&&` ref-qualifiers on member methods (`get() &`, `get() &&`). Implemented receiver value-category dispatch (`is_lvalue()`) in semantic analysis and codegen overload resolution, mangling distinct symbols with `_R` and `_O`.
+8. **Structured Bindings**:
+   - Implemented `auto [a, b] = p;`, `auto&`, and `const auto&` for aggregate structs. Desugared into a hidden object/reference variable and individual member references, preserving copy vs reference semantics.
+9. **Exception Handling Architectural Specification & Diagnostic**:
+   - Analyzed WebAssembly MVP vs Wasm Exception Handling proposal requirements (Tag Section 13, RAII unwinding landing pads, RTTI matching). Formally rejected fake trap implementations, recognized `throw` in lexer and parser, and emitted an explicit target diagnostic.
+
+### Verification
+- 9 dedicated test suites added across `tests/c_basics/`, `tests/classes_oop/`, and `tests/negative/`.
+- Full corpus expanded to 285 passing tests with zero manifest violations.
+- All linter, unit test, and formatting gates passing cleanly.
+
+---
+
 ## 2026-10-28: Implementation of Operator Overloading (`*`, `->`, `()`, postfix `++`/`--`)
 
 ### Context & Motivation
