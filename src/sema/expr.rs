@@ -82,6 +82,7 @@ impl Sema {
             }
             Expr::SizeofType(_) | Expr::SizeofExpr(_) => Ok(Type::UnsignedInt),
             Expr::InitializerList { .. } => self.analyze_initializer(expr),
+            Expr::Lambda { .. } => self.analyze_lambda(expr),
         }
     }
 

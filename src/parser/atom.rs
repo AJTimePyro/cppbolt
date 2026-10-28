@@ -30,6 +30,7 @@ impl Parser {
             TokenKind::BoolLiteral(val) => Ok(Expr::BoolLiteral(val)),
             TokenKind::CharLiteral(val) => Ok(Expr::CharLiteral(val)),
             TokenKind::StringLiteral(val) => Ok(Expr::StringLiteral(val)),
+            TokenKind::LBracket => self.parse_lambda(tok.line, tok.col),
             TokenKind::ColonColon => {
                 let first = match self.advance().kind.clone() {
                     TokenKind::Ident(sub) => sub,

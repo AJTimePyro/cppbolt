@@ -1,4 +1,20 @@
+use super::decl::Param;
+use super::stmt::Stmt;
 use super::types::Type;
+
+/// The default capture mode of a lambda expression.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DefaultCapture {
+    ByValue,
+    ByReference,
+}
+
+/// An explicitly captured variable in a lambda introducer.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LambdaCapture {
+    pub name: String,
+    pub is_reference: bool,
+}
 
 /// The source position of an expression node.
 ///
@@ -148,6 +164,15 @@ pub enum Expr {
         expr: Box<Expr>,
         is_array: bool,
     },
+    Lambda {
+        default_capture: Option<DefaultCapture>,
+        captures: Vec<LambdaCapture>,
+        params: Vec<Param>,
+        return_type: Option<Type>,
+        body: Box<Stmt>,
+        is_mutable: bool,
+        pos: ExprPos,
+    },
 }
 
 impl Drop for Expr {
@@ -219,6 +244,13 @@ fn take_expr_children(expr: &mut Expr, out: &mut Vec<Expr>) {
             }
         }
         Expr::Delete { expr, .. } => take_box(expr, out),
+        Expr::Lambda { params, .. } => {
+            for p in params {
+                if let Some(def) = p.default_val.take() {
+                    out.push(def);
+                }
+            }
+        }
         Expr::IntLiteral(..)
         | Expr::FloatLiteral(..)
         | Expr::BoolLiteral(_)

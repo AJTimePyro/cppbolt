@@ -7,6 +7,7 @@ mod assign;
 mod constructor;
 mod expr;
 mod expr_call;
+mod expr_lambda;
 mod expr_member;
 mod expr_ops;
 mod layout;
