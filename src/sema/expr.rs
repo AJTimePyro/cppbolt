@@ -57,7 +57,28 @@ impl Sema {
             Expr::MemberAccess { .. } => self.analyze_member(expr),
             Expr::Ternary { .. } => self.analyze_ternary(expr),
             Expr::Cast { target_type, expr } => {
-                self.analyze_expr(expr)?;
+                let expr_ty = self.analyze_expr(expr)?;
+                if let Type::Struct(sname) = expr_ty.strip_reference().strip_const() {
+                    let conv_name = format!("operator {}", target_type.to_c_type());
+                    let is_const = expr_ty.strip_reference().is_const();
+                    if self
+                        .find_method_in_class_for_receiver(sname, &conv_name, is_const)
+                        .is_some()
+                    {
+                        let old_expr = (**expr).clone();
+                        let pos = ExprPos::new(self.current_line, self.current_col);
+                        **expr = Expr::Call {
+                            callee: Box::new(Expr::MemberAccess {
+                                object: Box::new(old_expr),
+                                member: conv_name,
+                                is_arrow: false,
+                                pos,
+                            }),
+                            args: vec![],
+                            pos,
+                        };
+                    }
+                }
                 Ok(target_type.clone())
             }
             Expr::SizeofType(_) | Expr::SizeofExpr(_) => Ok(Type::UnsignedInt),

@@ -78,6 +78,7 @@ classes_oop/const_method_overload
 classes_oop/const_methods
 classes_oop/const_subscript
 classes_oop/contextual_bool_comprehensive
+classes_oop/conversion_operator
 classes_oop/copy_semantics
 classes_oop/ctor_default_argument
 classes_oop/delegating_constructor

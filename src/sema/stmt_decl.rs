@@ -75,7 +75,7 @@ impl Sema {
         line: usize,
         col: usize,
     ) -> Result<(), CompileError> {
-        let init_ty = {
+        let mut init_ty = {
             // A constructor call in an initializer reports an
             // initialization diagnostic.
             let previous = self.in_initializer;
@@ -84,6 +84,27 @@ impl Sema {
             self.in_initializer = previous;
             result?
         };
+        if let Type::Struct(sname) = init_ty.strip_reference().strip_const() {
+            let conv_name = format!("operator {}", ty.to_c_type());
+            let is_const = init_ty.strip_reference().is_const();
+            if self
+                .find_method_in_class_for_receiver(sname, &conv_name, is_const)
+                .is_some()
+            {
+                let old_init = init_expr.clone();
+                *init_expr = Expr::Call {
+                    callee: Box::new(Expr::MemberAccess {
+                        object: Box::new(old_init),
+                        member: conv_name,
+                        is_arrow: false,
+                        pos: ExprPos::new(line, col),
+                    }),
+                    args: vec![],
+                    pos: ExprPos::new(line, col),
+                };
+                init_ty = ty.clone();
+            }
+        }
         if *ty == Type::Auto {
             *ty = init_ty.strip_reference().clone();
         } else if let Type::Const(inner) = ty

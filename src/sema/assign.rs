@@ -20,6 +20,16 @@ impl Sema {
         if self.struct_assignable(target, value) {
             return true;
         }
+        if let Type::Struct(sname) = value.strip_reference().strip_const() {
+            let conv_name = format!("operator {}", target.to_c_type());
+            let is_const = value.strip_reference().is_const();
+            if self
+                .find_method_in_class_for_receiver(sname, &conv_name, is_const)
+                .is_some()
+            {
+                return true;
+            }
+        }
         if target.is_integer() && value.is_integer() {
             return true;
         }

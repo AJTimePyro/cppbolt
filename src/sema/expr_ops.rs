@@ -283,7 +283,28 @@ impl Sema {
                 pos.col,
             ));
         }
-        let value_ty = self.analyze_expr(value)?;
+        let mut value_ty = self.analyze_expr(value)?;
+        if let Type::Struct(sname) = value_ty.strip_reference().strip_const() {
+            let conv_name = format!("operator {}", target_ty.to_c_type());
+            let is_const = value_ty.strip_reference().is_const();
+            if self
+                .find_method_in_class_for_receiver(sname, &conv_name, is_const)
+                .is_some()
+            {
+                let old_val = (**value).clone();
+                **value = Expr::Call {
+                    callee: Box::new(Expr::MemberAccess {
+                        object: Box::new(old_val),
+                        member: conv_name,
+                        is_arrow: false,
+                        pos: *pos,
+                    }),
+                    args: vec![],
+                    pos: *pos,
+                };
+                value_ty = target_ty.clone();
+            }
+        }
         if !self.can_assign(&target_ty, &value_ty) {
             return Err(CompileError::new(
                 format!(
