@@ -15,17 +15,6 @@ impl Parser {
     }
 
     fn reject_operator_overloads(&self) -> Option<CompileError> {
-        for window in self.tokens.windows(4) {
-            if matches!(window[0].kind, TokenKind::KwOperator)
-                && matches!(window[1].kind, TokenKind::LParen)
-                && matches!(window[2].kind, TokenKind::RParen)
-            {
-                return Some(
-                    CompileError::new("operator() is not supported", window[0].line, window[0].col)
-                        .with_kind(ErrorKind::Unsupported),
-                );
-            }
-        }
         if let Some(window) = self.tokens.windows(5).find(|window| {
             matches!(window[0].kind, TokenKind::KwOperator)
                 && matches!(window[1].kind, TokenKind::PlusPlus | TokenKind::MinusMinus)

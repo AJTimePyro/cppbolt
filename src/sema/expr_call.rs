@@ -56,16 +56,48 @@ impl Sema {
         if let Expr::Identifier(raw_name) = &**callee {
             let name = raw_name.strip_prefix("::").unwrap_or(raw_name).to_string();
             self.check_ambiguous_name(&name)?;
-            if let Some(var) = self.lookup_var(&name)
-                && let Some(return_type) = function_return_type(&var.ty)
-            {
-                return Ok(return_type);
+            let var_ty = self.lookup_var(&name).map(|v| v.ty.clone());
+            if let Some(ty) = var_ty {
+                if let Some(return_type) = function_return_type(&ty) {
+                    return Ok(return_type);
+                }
+                if let Type::Struct(sname) = ty.strip_const().strip_reference()
+                    && let Some(ret) =
+                        self.try_functor_call(callee, sname, args, &arg_types, *pos)?
+                {
+                    return Ok(ret);
+                }
             }
             return self.resolve_named_call(&name, args, &arg_types, callee, *pos);
         }
 
-        // No named function matched: treat the callee as a function pointer.
-        self.analyze_function_pointer_call(callee)
+        let callee_ty = self.analyze_expr(callee)?;
+        if let Type::Struct(sname) = callee_ty.strip_const().strip_reference()
+            && let Some(ret) = self.try_functor_call(callee, sname, args, &arg_types, *pos)?
+        {
+            return Ok(ret);
+        }
+        Ok(function_return_type(&callee_ty).unwrap_or(Type::Int))
+    }
+
+    fn try_functor_call(
+        &mut self,
+        callee: &mut Expr,
+        sname: &str,
+        args: &mut Vec<Expr>,
+        arg_types: &[Type],
+        pos: ExprPos,
+    ) -> Result<Option<Type>, CompileError> {
+        if self.find_method_in_class(sname, "operator()").is_some() {
+            *callee = Expr::MemberAccess {
+                object: Box::new(callee.clone()),
+                member: "operator()".to_string(),
+                is_arrow: false,
+                pos,
+            };
+            return self.analyze_member_callee(callee, args, arg_types);
+        }
+        Ok(None)
     }
 
     /// Rewrites a call to a method of the current class into a member access.
@@ -80,12 +112,6 @@ impl Sema {
                 pos,
             };
         }
-    }
-
-    /// Analyzes a call whose callee is a value instead of a name.
-    fn analyze_function_pointer_call(&mut self, callee: &mut Expr) -> Result<Type, CompileError> {
-        let callee_ty = self.analyze_expr(callee)?;
-        Ok(function_return_type(&callee_ty).unwrap_or(Type::Int))
     }
 
     /// Fills in the default arguments of a member call.
