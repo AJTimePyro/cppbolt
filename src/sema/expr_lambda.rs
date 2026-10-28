@@ -113,17 +113,14 @@ impl Sema {
         let mut seen = HashSet::new();
 
         for cap in captures {
-            let Some(var) = self.lookup_var(&cap.name) else {
-                return Err(CompileError::new(
-                    format!(
-                        "variable '{}' cannot be implicitly captured in a lambda with no default capture",
-                        cap.name
-                    ),
-                    pos.line,
-                    pos.col,
-                ));
+            let Some((var_ty, _)) = self.lookup_capture_var(&cap.name) else {
+                let msg = format!(
+                    "variable '{}' cannot be implicitly captured in a lambda with no default capture",
+                    cap.name
+                );
+                return Err(CompileError::new(msg, pos.line, pos.col));
             };
-            self.add_capture(&mut info, &cap.name, &var.ty, cap.is_reference);
+            self.add_capture(&mut info, &cap.name, &var_ty, cap.is_reference);
             seen.insert(cap.name.clone());
         }
 
@@ -139,16 +136,28 @@ impl Sema {
             collector.visit_stmt(body, &mut locals);
 
             for var_name in free_vars {
-                if let Some(var) = self.lookup_var(&var_name)
-                    && !var.is_global
+                if let Some((var_ty, is_global)) = self.lookup_capture_var(&var_name)
+                    && !is_global
                     && seen.insert(var_name.clone())
                 {
-                    self.add_capture(&mut info, &var_name, &var.ty, is_ref);
+                    self.add_capture(&mut info, &var_name, &var_ty, is_ref);
                 }
             }
         }
 
         Ok(info)
+    }
+
+    fn lookup_capture_var(&self, name: &str) -> Option<(Type, bool)> {
+        if let Some(var) = self.lookup_var(name) {
+            Some((var.ty.clone(), var.is_global))
+        } else if let Some(cls) = &self.current_class
+            && let Some(fld) = self.find_field_in_class(cls, name)
+        {
+            Some((fld.ty.clone(), false))
+        } else {
+            None
+        }
     }
 
     fn add_capture(
@@ -221,21 +230,30 @@ impl Sema {
     }
 }
 
-fn build_lambda_ctor(name: &str, info: &LambdaCaptureInfo, pos: ExprPos) -> FunctionDecl {
+fn base_fn_decl(name: &str, pos: ExprPos) -> FunctionDecl {
     FunctionDecl {
         name: name.to_string(),
         return_type: Type::Void,
-        params: info.ctor_params.clone(),
-        body: Some(Stmt::new(StmtKind::Compound(vec![]), pos.line, pos.col)),
+        params: vec![],
+        body: None,
         is_virtual: false,
         is_pure_virtual: false,
         is_const: false,
         is_explicit: false,
         ref_qualifier: RefQualifier::None,
         is_static: false,
-        ctor_initializers: info.ctor_inits.clone(),
+        ctor_initializers: vec![],
         line: pos.line,
         col: pos.col,
+    }
+}
+
+fn build_lambda_ctor(name: &str, info: &LambdaCaptureInfo, pos: ExprPos) -> FunctionDecl {
+    FunctionDecl {
+        params: info.ctor_params.clone(),
+        body: Some(Stmt::new(StmtKind::Compound(vec![]), pos.line, pos.col)),
+        ctor_initializers: info.ctor_inits.clone(),
+        ..base_fn_decl(name, pos)
     }
 }
 
@@ -247,19 +265,11 @@ fn build_lambda_op(
     pos: ExprPos,
 ) -> FunctionDecl {
     FunctionDecl {
-        name: "operator()".to_string(),
         return_type: return_type.cloned().unwrap_or(Type::Auto),
         params: params.to_vec(),
         body: Some(body.clone()),
-        is_virtual: false,
-        is_pure_virtual: false,
         is_const: !is_mutable,
-        is_explicit: false,
-        ref_qualifier: RefQualifier::None,
-        is_static: false,
-        ctor_initializers: vec![],
-        line: pos.line,
-        col: pos.col,
+        ..base_fn_decl("operator()", pos)
     }
 }
 
@@ -429,6 +439,15 @@ impl<'a> FreeVarCollector<'a> {
         body: &Stmt,
         locals: &HashSet<String>,
     ) {
+        for c in captures {
+            if !locals.contains(&c.name)
+                && !self.params.iter().any(|p| p.name == c.name)
+                && !self.explicit.contains(&c.name)
+                && !self.discovered.contains(&c.name)
+            {
+                self.discovered.push(c.name.clone());
+            }
+        }
         let mut inner_explicit = self.explicit.clone();
         for c in captures {
             inner_explicit.insert(c.name.clone());
@@ -449,43 +468,27 @@ fn build_lambda_fn_ptr_methods(
     pos: ExprPos,
 ) -> (FunctionDecl, FunctionDecl) {
     let invoke_decl = FunctionDecl {
-        name: "__invoke".to_string(),
         return_type: op_decl.return_type.clone(),
         params: op_decl.params.clone(),
         body: op_decl.body.clone(),
-        is_virtual: false,
-        is_pure_virtual: false,
-        is_const: false,
-        is_explicit: false,
-        ref_qualifier: RefQualifier::None,
         is_static: true,
-        ctor_initializers: vec![],
-        line: pos.line,
-        col: pos.col,
+        ..base_fn_decl("__invoke", pos)
     };
 
     let fn_ptr_type = Type::Pointer(Box::new(Type::Function {
         return_type: Box::new(op_decl.return_type.clone()),
         param_types: op_decl.params.iter().map(|p| p.ty.clone()).collect(),
     }));
+    let ret_expr = Expr::Identifier(format!("{}::__invoke", lambda_name));
     let to_fn_ptr_decl = FunctionDecl {
-        name: "__to_fn_ptr".to_string(),
         return_type: fn_ptr_type,
-        params: vec![],
         body: Some(Stmt::new(
-            StmtKind::Return(Some(Expr::Identifier(format!("{}::__invoke", lambda_name)))),
+            StmtKind::Return(Some(ret_expr)),
             pos.line,
             pos.col,
         )),
-        is_virtual: false,
-        is_pure_virtual: false,
         is_const: true,
-        is_explicit: false,
-        ref_qualifier: RefQualifier::None,
-        is_static: false,
-        ctor_initializers: vec![],
-        line: pos.line,
-        col: pos.col,
+        ..base_fn_decl("__to_fn_ptr", pos)
     };
 
     (invoke_decl, to_fn_ptr_decl)

@@ -90,8 +90,10 @@ classes_oop/inheritance/virtual_destructor
 classes_oop/inheritance/virtual_dispatch_hierarchy
 classes_oop/inheritance/virtual_functions
 classes_oop/lambdas/lambda_basic
+classes_oop/lambdas/lambda_capture_struct_array
 classes_oop/lambdas/lambda_default_captures
 classes_oop/lambdas/lambda_function_pointer
+classes_oop/lambdas/lambda_nested_captures
 classes_oop/lambdas/lambda_range_for_capture
 classes_oop/lambdas/lambda_return_fn_ptr
 classes_oop/lambdas/lambda_unary_plus
@@ -253,6 +255,7 @@ negative/function_too_few_arguments
 negative/function_too_many_arguments
 negative/include_cycle
 negative/lambda_const_capture_mutation
+negative/lambda_duplicate_default_capture
 negative/lambda_out_of_order_default_capture
 negative/member_access_non_struct
 negative/method_string_argument
@@ -284,6 +287,7 @@ negative/switch_case_non_constant
 negative/syntax_error
 negative/throw_unsupported
 negative/type_mismatch
+negative/unary_plus_invalid_struct
 negative/undeclared_var
 negative/undefined_func
 negative/unterminated_if

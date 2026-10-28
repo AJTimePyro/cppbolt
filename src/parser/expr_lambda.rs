@@ -48,7 +48,7 @@ impl Parser {
         while self.peek() != &TokenKind::RBracket && self.peek() != &TokenKind::Eof {
             if self.peek() == &TokenKind::Assign {
                 let tok = self.advance().clone();
-                if !captures.is_empty() {
+                if default_capture.is_some() || !captures.is_empty() {
                     return Err(CompileError::new(
                         "default capture must appear first in capture list",
                         tok.line,
@@ -60,7 +60,7 @@ impl Parser {
                 && matches!(self.peek_ahead(1), TokenKind::Comma | TokenKind::RBracket)
             {
                 let tok = self.advance().clone();
-                if !captures.is_empty() {
+                if default_capture.is_some() || !captures.is_empty() {
                     return Err(CompileError::new(
                         "default capture must appear first in capture list",
                         tok.line,

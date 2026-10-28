@@ -236,6 +236,13 @@ impl Sema {
                     Self::wrap_conversion_call(expr, &conv_sig.name, *pos);
                     return Ok(conv_sig.return_type);
                 }
+                if matches!(ty.strip_const(), Type::Struct(_)) {
+                    return Err(CompileError::new(
+                        "invalid argument type to unary expression",
+                        pos.line,
+                        pos.col,
+                    ));
+                }
                 Ok(ty.integer_promotion())
             }
             UnaryOp::PreInc | UnaryOp::PreDec | UnaryOp::PostInc | UnaryOp::PostDec => {

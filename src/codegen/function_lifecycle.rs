@@ -169,6 +169,7 @@ impl<'a> Codegen<'a> {
                 }
             } else if let Type::Array(elem_ty, count) = fld.ty.strip_const()
                 && let Type::Struct(sname) = elem_ty.strip_const()
+                && init_args.is_none_or(|a| a.is_empty())
                 && let Some(ctor_idx) = self.find_constructor(sname, &[])
             {
                 let elem_size = u32::try_from(elem_ty.size_of(&self.sema.struct_sizes))

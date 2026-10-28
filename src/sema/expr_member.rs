@@ -17,7 +17,7 @@ impl Sema {
         };
 
         let obj_ty = self.analyze_expr(object)?;
-        let struct_name = self.member_struct_name(&obj_ty, *is_arrow, *pos)?;
+        let (struct_name, is_target_const) = self.member_struct_name(&obj_ty, *is_arrow, *pos)?;
 
         if let Some(layout) = self.struct_layouts.get(&struct_name)
             && layout.private_members.contains(member)
@@ -39,7 +39,7 @@ impl Sema {
 
         if let Some(fld) = self.find_field_in_class(&struct_name, member) {
             let mut ret_ty = fld.ty.clone();
-            if receiver_is_const_type(&obj_ty) && !ret_ty.is_reference() && !ret_ty.is_const() {
+            if is_target_const && !ret_ty.is_reference() && !ret_ty.is_const() {
                 ret_ty = Type::Const(Box::new(ret_ty));
             }
             Ok(ret_ty)
@@ -57,35 +57,33 @@ impl Sema {
         }
     }
 
-    /// Resolves the class of a member access target.
+    /// Resolves the class and pointee constness of a member access target.
     pub(super) fn member_struct_name(
         &self,
         obj_ty: &Type,
         is_arrow: bool,
         pos: ExprPos,
-    ) -> Result<String, CompileError> {
-        let struct_name = if is_arrow {
+    ) -> Result<(String, bool), CompileError> {
+        if is_arrow {
             let stripped = obj_ty.strip_const();
             if let Type::Pointer(inner) | Type::Reference(inner) = stripped {
-                match inner.strip_const() {
-                    Type::Struct(s) => s.clone(),
-                    _ => {
-                        return Err(CompileError::new(
-                            "Arrow member access on non-struct pointer",
-                            pos.line,
-                            pos.col,
-                        ));
-                    }
+                match inner.strip_reference().strip_const() {
+                    Type::Struct(s) => Ok((s.clone(), inner.strip_reference().is_const())),
+                    _ => Err(CompileError::new(
+                        "Arrow member access on non-struct pointer",
+                        pos.line,
+                        pos.col,
+                    )),
                 }
             } else if let Type::Struct(sname) = stripped {
                 let receiver_const = receiver_is_const_type(obj_ty);
-                self.resolve_arrow_struct_name(sname, receiver_const, pos)?
+                self.resolve_arrow_struct_name(sname, receiver_const, pos)
             } else {
-                return Err(CompileError::new(
+                Err(CompileError::new(
                     "Arrow member access on non-pointer",
                     pos.line,
                     pos.col,
-                ));
+                ))
             }
         } else {
             let stripped = obj_ty.strip_const();
@@ -95,17 +93,14 @@ impl Sema {
                 stripped
             };
             match target_ty {
-                Type::Struct(s) => s.clone(),
-                _ => {
-                    return Err(CompileError::new(
-                        "Dot member access on non-struct",
-                        pos.line,
-                        pos.col,
-                    ));
-                }
+                Type::Struct(s) => Ok((s.clone(), receiver_is_const_type(obj_ty))),
+                _ => Err(CompileError::new(
+                    "Dot member access on non-struct",
+                    pos.line,
+                    pos.col,
+                )),
             }
-        };
-        Ok(struct_name)
+        }
     }
 
     pub(crate) fn resolve_arrow_struct_name(
@@ -113,7 +108,7 @@ impl Sema {
         initial_class: &str,
         initial_const: bool,
         pos: ExprPos,
-    ) -> Result<String, CompileError> {
+    ) -> Result<(String, bool), CompileError> {
         let mut current_class = initial_class.to_string();
         let mut current_const = initial_const;
         let mut visited: Vec<String> = Vec::new();
@@ -144,13 +139,13 @@ impl Sema {
             let ret = sig.return_type.strip_const();
             if let Type::Pointer(inner) = ret {
                 if let Type::Struct(target) = inner.strip_reference().strip_const() {
-                    return Ok(target.clone());
+                    return Ok((target.clone(), inner.strip_reference().is_const()));
                 }
             } else if let Type::Reference(inner) = ret {
                 let clean = inner.strip_const();
                 if let Type::Pointer(ptr_inner) = clean {
                     if let Type::Struct(target) = ptr_inner.strip_reference().strip_const() {
-                        return Ok(target.clone());
+                        return Ok((target.clone(), ptr_inner.strip_reference().is_const()));
                     }
                 } else if let Type::Struct(next) = clean {
                     visited.push(current_class);

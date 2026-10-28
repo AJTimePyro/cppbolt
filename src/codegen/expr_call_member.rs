@@ -76,6 +76,7 @@ impl<'a> Codegen<'a> {
                 return self
                     .sema
                     .resolve_arrow_struct_name(s, current_is_const, crate::ast::ExprPos::new(0, 0))
+                    .map(|(name, _)| name)
                     .unwrap_or_default();
             }
             return String::new();
