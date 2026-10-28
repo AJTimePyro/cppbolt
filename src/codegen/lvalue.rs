@@ -41,7 +41,19 @@ impl<'a> Codegen<'a> {
                 op: UnaryOp::Deref,
                 expr,
                 ..
-            } => self.compile_expr(expr, ctx, code),
+            } => {
+                let ty = self.get_expr_type(expr, ctx);
+                if let Type::Struct(sname) = ty.strip_const().strip_reference()
+                    && let Some((m_idx, _sig)) = self.find_method(sname, "operator*", &[])
+                {
+                    self.compile_lvalue_addr(expr, ctx, code)?;
+                    code.push(OP_CALL);
+                    write_u32(code, m_idx);
+                    Ok(())
+                } else {
+                    self.compile_expr(expr, ctx, code)
+                }
+            }
             Expr::ArraySubscript { array, index, .. } => {
                 self.compile_lvalue_subscript(array, index, ctx, code)
             }
@@ -230,7 +242,15 @@ impl<'a> Codegen<'a> {
             .ok_or_else(|| self.internal_error("missing field layout"))?;
 
         if is_arrow {
-            self.compile_expr(object, ctx, code)?;
+            if let Type::Struct(s) = obj_ty.strip_const().strip_reference()
+                && let Some((m_idx, _)) = self.find_method(s, "operator->", &[])
+            {
+                self.compile_lvalue_addr(object, ctx, code)?;
+                code.push(OP_CALL);
+                write_u32(code, m_idx);
+            } else {
+                self.compile_expr(object, ctx, code)?;
+            }
         } else {
             self.compile_lvalue_addr(object, ctx, code)?;
         }

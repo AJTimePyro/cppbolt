@@ -66,6 +66,15 @@ impl<'a> Codegen<'a> {
             {
                 return s.clone();
             }
+            if let Type::Struct(s) = obj_ty.strip_const().strip_reference()
+                && let Some(sig) =
+                    self.sema
+                        .find_method_in_class_for_receiver(s, "operator->", false)
+                && let Type::Pointer(inner) | Type::Reference(inner) = sig.return_type.strip_const()
+                && let Type::Struct(target) = inner.strip_const()
+            {
+                return target.clone();
+            }
             return String::new();
         }
         if let Type::Struct(s) = obj_ty.strip_const() {
@@ -83,8 +92,17 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let obj_ty = self.get_expr_type_raw(object, ctx);
         if through_pointer {
-            self.compile_expr(object, ctx, code)?;
+            if let Type::Struct(s) = obj_ty.strip_const().strip_reference()
+                && let Some((m_idx, _)) = self.find_method(s, "operator->", &[])
+            {
+                self.compile_lvalue_addr(object, ctx, code)?;
+                code.push(OP_CALL);
+                write_u32(code, m_idx);
+            } else {
+                self.compile_expr(object, ctx, code)?;
+            }
         } else {
             self.compile_lvalue_addr(object, ctx, code)?;
         }

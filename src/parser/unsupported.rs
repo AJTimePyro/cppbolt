@@ -25,25 +25,6 @@ impl Parser {
                         .with_kind(ErrorKind::Unsupported),
                 );
             }
-            if matches!(window[0].kind, TokenKind::KwOperator)
-                && matches!(window[1].kind, TokenKind::Arrow)
-                && matches!(window[2].kind, TokenKind::LParen)
-            {
-                return Some(
-                    CompileError::new("operator-> is not supported", window[0].line, window[0].col)
-                        .with_kind(ErrorKind::Unsupported),
-                );
-            }
-            if matches!(window[0].kind, TokenKind::KwOperator)
-                && matches!(window[1].kind, TokenKind::Star)
-                && matches!(window[2].kind, TokenKind::LParen)
-                && matches!(window[3].kind, TokenKind::RParen)
-            {
-                return Some(
-                    CompileError::new("operator* is not supported", window[0].line, window[0].col)
-                        .with_kind(ErrorKind::Unsupported),
-                );
-            }
         }
         if let Some(window) = self.tokens.windows(5).find(|window| {
             matches!(window[0].kind, TokenKind::KwOperator)

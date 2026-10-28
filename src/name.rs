@@ -72,8 +72,15 @@ impl<'a> QualifiedName<'a> {
     /// The `std::` alias if this name can be spelled both ways. Class-scoped
     /// names other than `std::` have no implicit alias.
     pub fn implicit_alias(self) -> Option<Cow<'a, str>> {
+        if self.0.is_empty() {
+            return None;
+        }
         if self.in_std() {
-            Some(Cow::Borrowed(self.plain()))
+            let plain = self.plain();
+            if plain.is_empty() {
+                return None;
+            }
+            Some(Cow::Borrowed(plain))
         } else if self.is_global() {
             Some(self.std_name())
         } else {

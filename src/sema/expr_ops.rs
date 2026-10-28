@@ -134,6 +134,8 @@ impl Sema {
             UnaryOp::Deref => {
                 if let Some(inner) = ty.deref_type() {
                     Ok(inner.clone())
+                } else if let Some(sig) = self.find_unary_operator(UnaryOp::Deref, &ty) {
+                    Ok(sig.return_type)
                 } else {
                     Err(CompileError::new(
                         format!("Cannot dereference non-pointer type {}", ty.to_c_type()),
@@ -177,6 +179,7 @@ impl Sema {
             UnaryOp::BitNot => "operator~",
             UnaryOp::Plus => "operator+",
             UnaryOp::AddrOf => "operator&",
+            UnaryOp::Deref => "operator*",
             _ => return None,
         };
         let Type::Struct(class_name) = operand.strip_const() else {

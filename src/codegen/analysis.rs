@@ -8,10 +8,7 @@ fn check_expr_has_new_delete(expr: &Expr) -> bool {
     while let Some(expr) = stack.pop() {
         match expr {
             Expr::New { .. } | Expr::Delete { .. } => return true,
-            Expr::Binary { left, right, .. } => {
-                stack.push(left);
-                stack.push(right);
-            }
+            Expr::Binary { left, right, .. } => stack.extend([left.as_ref(), right.as_ref()]),
             Expr::Unary { expr, .. } | Expr::Cast { expr, .. } => stack.push(expr),
             Expr::Call { callee, args, .. } => {
                 stack.push(callee);
@@ -19,26 +16,18 @@ fn check_expr_has_new_delete(expr: &Expr) -> bool {
             }
             Expr::MemberAccess { object, .. } => stack.push(object),
             Expr::ArraySubscript { array, index, .. } => {
-                stack.push(array);
-                stack.push(index);
+                stack.extend([array.as_ref(), index.as_ref()]);
             }
             Expr::InitializerList(list) => stack.extend(list.iter()),
-            Expr::Assign { target, value, .. } => {
-                stack.push(target);
-                stack.push(value);
-            }
-            Expr::CompoundAssign { target, value, .. } => {
-                stack.push(target);
-                stack.push(value);
+            Expr::Assign { target, value, .. } | Expr::CompoundAssign { target, value, .. } => {
+                stack.extend([target.as_ref(), value.as_ref()]);
             }
             Expr::Ternary {
                 cond,
                 then_expr,
                 else_expr,
             } => {
-                stack.push(cond);
-                stack.push(then_expr);
-                stack.push(else_expr);
+                stack.extend([cond.as_ref(), then_expr.as_ref(), else_expr.as_ref()]);
             }
             _ => {}
         }
@@ -300,8 +289,16 @@ fn collect_call_node<'a>(expr: &'a Expr, calls: &mut HashSet<String>, stack: &mu
             stack.push(array);
             stack.push(index);
         }
-        Expr::MemberAccess { object, member, .. } => {
+        Expr::MemberAccess {
+            object,
+            member,
+            is_arrow,
+            ..
+        } => {
             calls.insert(member.clone());
+            if *is_arrow {
+                calls.insert("operator->".to_string());
+            }
             stack.push(object);
         }
         Expr::Ternary {
@@ -341,9 +338,9 @@ fn collect_unary_operator(op: UnaryOp, calls: &mut HashSet<String>) {
         UnaryOp::BitNot => "operator~",
         UnaryOp::Plus => "operator+",
         UnaryOp::AddrOf => "operator&",
-        UnaryOp::PreInc => "operator++",
-        UnaryOp::PreDec => "operator--",
-        _ => return,
+        UnaryOp::Deref => "operator*",
+        UnaryOp::PreInc | UnaryOp::PostInc => "operator++",
+        UnaryOp::PreDec | UnaryOp::PostDec => "operator--",
     };
     calls.insert(name.to_string());
 }
@@ -482,8 +479,16 @@ fn collect_call_expr<'a>(
             calls.insert(name.clone());
             calls.insert(QualifiedName::new(name).alternate().into_owned());
         }
-        Expr::MemberAccess { object, member, .. } => {
+        Expr::MemberAccess {
+            object,
+            member,
+            is_arrow,
+            ..
+        } => {
             calls.insert(member.clone());
+            if *is_arrow {
+                calls.insert("operator->".to_string());
+            }
             stack.push(object);
         }
         _ => stack.push(callee),

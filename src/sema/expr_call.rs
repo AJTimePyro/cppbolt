@@ -131,44 +131,7 @@ impl Sema {
         } = &mut *callee
         {
             let obj_ty = self.analyze_expr(object.as_mut())?;
-            let struct_name = if *is_arrow {
-                let stripped = obj_ty.strip_const();
-                if let Type::Pointer(inner) | Type::Reference(inner) = stripped {
-                    match inner.strip_const() {
-                        Type::Struct(s) => s.clone(),
-                        _ => {
-                            return Err(CompileError::new(
-                                "Arrow member access on non-struct pointer",
-                                pos.line,
-                                pos.col,
-                            ));
-                        }
-                    }
-                } else {
-                    return Err(CompileError::new(
-                        "Arrow member access on non-pointer",
-                        pos.line,
-                        pos.col,
-                    ));
-                }
-            } else {
-                let stripped = obj_ty.strip_const();
-                let target_ty = if let Type::Reference(inner) = stripped {
-                    inner.strip_const()
-                } else {
-                    stripped
-                };
-                match target_ty {
-                    Type::Struct(s) => s.clone(),
-                    _ => {
-                        return Err(CompileError::new(
-                            "Dot member access on non-struct",
-                            pos.line,
-                            pos.col,
-                        ));
-                    }
-                }
-            };
+            let struct_name = self.member_struct_name(&obj_ty, *is_arrow, *pos)?;
 
             if member.starts_with('~') {
                 return Ok(Some(Type::Void));
