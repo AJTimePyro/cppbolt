@@ -3,6 +3,7 @@ c_basics/array_parameter_decay
 c_basics/auto_type
 c_basics/booleans_chars
 c_basics/const_qualifiers
+c_basics/constexpr_global_init_call
 c_basics/control_if_else
 c_basics/control_loops
 c_basics/control_switch

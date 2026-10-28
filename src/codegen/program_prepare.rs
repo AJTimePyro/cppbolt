@@ -158,8 +158,11 @@ impl<'a> Codegen<'a> {
         let is_address_taken = aliases.iter().any(|a| address_taken.contains(a));
         let is_root = f.name == "main" || is_address_taken;
         if f.name == "main" {
-            for (_, gty, _) in &self.global_inits {
+            for (_, gty, ginit) in &self.global_inits {
                 collect_type_lifecycle(gty, &mut calls);
+                if let Some(init) = ginit {
+                    collect_expr_calls(init, &mut calls);
+                }
             }
         }
         FuncCandidate {
