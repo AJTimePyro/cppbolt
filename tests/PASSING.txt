@@ -253,7 +253,9 @@ negative/multiple_inheritance
 negative/multiple_inheritance_access
 negative/namespace_alias
 negative/nesting_depth_limit
+negative/operator_arrow_cycle
 negative/operator_arrow_invalid
+negative/operator_arrow_non_pointer
 negative/operator_deref_assign_rvalue
 negative/operator_incdec_invalid
 negative/pointer_plus_pointer

@@ -75,28 +75,7 @@ impl Sema {
                 }
             } else if let Type::Struct(sname) = stripped {
                 let receiver_const = receiver_is_const_type(obj_ty);
-                if let Some(sig) =
-                    self.find_method_in_class_for_receiver(sname, "operator->", receiver_const)
-                {
-                    if let Type::Pointer(inner) | Type::Reference(inner) =
-                        sig.return_type.strip_const()
-                        && let Type::Struct(target) = inner.strip_const()
-                    {
-                        target.clone()
-                    } else {
-                        return Err(CompileError::new(
-                            "operator-> must return a pointer to a struct or class",
-                            pos.line,
-                            pos.col,
-                        ));
-                    }
-                } else {
-                    return Err(CompileError::new(
-                        "Arrow member access on non-pointer",
-                        pos.line,
-                        pos.col,
-                    ));
-                }
+                self.resolve_arrow_struct_name(sname, receiver_const, pos)?
             } else {
                 return Err(CompileError::new(
                     "Arrow member access on non-pointer",
@@ -123,5 +102,69 @@ impl Sema {
             }
         };
         Ok(struct_name)
+    }
+
+    fn resolve_arrow_struct_name(
+        &self,
+        initial_class: &str,
+        initial_const: bool,
+        pos: ExprPos,
+    ) -> Result<String, CompileError> {
+        let mut current_class = initial_class.to_string();
+        let mut current_const = initial_const;
+        let mut visited: Vec<String> = Vec::new();
+        loop {
+            if visited.iter().any(|v| v == &current_class) {
+                return Err(CompileError::new(
+                    format!("circular operator-> delegation on '{}'", current_class),
+                    pos.line,
+                    pos.col,
+                ));
+            }
+            if visited.len() >= 128 {
+                return Err(CompileError::new(
+                    "operator-> delegation nesting exceeds limit",
+                    pos.line,
+                    pos.col,
+                ));
+            }
+            let Some(sig) =
+                self.find_method_in_class_for_receiver(&current_class, "operator->", current_const)
+            else {
+                return Err(CompileError::new(
+                    "Arrow member access on non-pointer",
+                    pos.line,
+                    pos.col,
+                ));
+            };
+            let ret = sig.return_type.strip_const();
+            if let Type::Pointer(inner) = ret {
+                if let Type::Struct(target) = inner.strip_reference().strip_const() {
+                    return Ok(target.clone());
+                }
+            } else if let Type::Reference(inner) = ret {
+                let clean = inner.strip_const();
+                if let Type::Pointer(ptr_inner) = clean {
+                    if let Type::Struct(target) = ptr_inner.strip_reference().strip_const() {
+                        return Ok(target.clone());
+                    }
+                } else if let Type::Struct(next) = clean {
+                    visited.push(current_class);
+                    current_class = next.clone();
+                    current_const = current_const || inner.is_const();
+                    continue;
+                }
+            } else if let Type::Struct(next) = ret {
+                visited.push(current_class);
+                current_class = next.clone();
+                current_const = current_const || sig.return_type.is_const();
+                continue;
+            }
+            return Err(CompileError::new(
+                "operator-> must return a pointer to a struct or class",
+                pos.line,
+                pos.col,
+            ));
+        }
     }
 }
