@@ -4,6 +4,32 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-10-28: Implementation of Operator Overloading (`*`, `->`, `()`, postfix `++`/`--`)
+
+### Context & Motivation
+Following range-based `for` loops, the next priority from Section 2 of `ROADMAP.md` was implementing the missing operator overload quartet: dereference `operator*()`, pointer member access `operator->`, function call `operator()` (functors), and postfix `operator++(int)`/`operator--(int)`. These operators complete the fundamental machinery for smart pointers, iterators, and callable object abstractions in C++.
+
+### Work Executed
+1. **Parser Support**:
+   - Removed legacy rejection windows in `src/parser/unsupported.rs` for `operator()`, `operator->`, `operator*`, and postfix `operator++(int)`/`operator--(int)`.
+   - The token streams were already supported in `enums_operators.rs:68-103` and struct method declaration parsing.
+2. **Semantic Analysis**:
+   - Added overload resolution in `src/sema/expr_ops.rs` for unary dereference `UnaryOp::Deref` when operand is a class type.
+   - Centralized struct class resolution for arrow member access `operator->` in `src/sema/expr_member.rs` and `src/sema/expr_call.rs`, delegating member fields and methods to the returned pointer type.
+   - Implemented functor call desugaring in `src/sema/expr_call.rs`: any callable class instance in a call site (`obj(...)`) is rewritten to `obj.operator(...)` and matched against member overloads.
+   - Added `find_method_with_param_count` in `src/sema/lookup.rs` to distinguish prefix `operator++()` (1 parameter including `this`) from postfix `operator++(int)` (2 parameters including `this`).
+   - Hardened `QualifiedName::implicit_alias` and class/field lookup against infinite recursion on empty class name strings.
+3. **WebAssembly Codegen**:
+   - In `src/codegen/expr_unary.rs`, lowered overloaded `operator*()` and postfix `operator++`/`operator--` (emitting `i32.const 0` for the dummy int argument and registering temporary struct return values).
+   - In `src/codegen/lvalue.rs` and `src/codegen/expr_call_member.rs`, routed arrow access through `operator->()` to evaluate the receiver address.
+   - Updated dead code elimination in `src/codegen/analysis.rs` to track usages of `operator->`, `operator*`, and postfix `operator++`/`operator--`.
+4. **Testing & Verification**:
+   - Added positive test cases in `tests/classes_oop/operator_smart_pointer.cpp`, `tests/classes_oop/operator_call_functor.cpp`, and `tests/classes_oop/operator_postfix_incdec.cpp`.
+   - Added negative test in `tests/negative/operator_arrow_invalid.cpp`.
+   - Updated `tests/PASSING.txt` and `tests/golden.txt` (268 passing corpus tests).
+
+---
+
 ## 2026-10-27: Implementation of C++11 Range-Based `for` Loops
 
 ### Context & Motivation

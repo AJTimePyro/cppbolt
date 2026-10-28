@@ -181,13 +181,17 @@ impl<'a> Codegen<'a> {
         let ty = self.get_expr_type(expr, ctx);
         if let Type::Struct(sname) = ty.strip_const() {
             let op_m = match op {
-                UnaryOp::Neg => Some("operator-"),
-                UnaryOp::PreInc => Some("operator++"),
-                UnaryOp::PreDec => Some("operator--"),
+                UnaryOp::Neg => Some(("operator-", 1)),
+                UnaryOp::PreInc => Some(("operator++", 1)),
+                UnaryOp::PreDec => Some(("operator--", 1)),
+                UnaryOp::PostInc => Some(("operator++", 2)),
+                UnaryOp::PostDec => Some(("operator--", 2)),
                 _ => None,
             };
-            if let Some(m) = op_m
-                && let Some((_, sig)) = self.find_method(sname, m, &[])
+            if let Some((m, count)) = op_m
+                && let Some(sig) = self
+                    .sema
+                    .find_method_with_param_count(sname, m, count, false)
             {
                 return sig.return_type.clone();
             }
@@ -196,7 +200,15 @@ impl<'a> Codegen<'a> {
             UnaryOp::Not => Type::Bool,
             UnaryOp::Deref => {
                 let ty = self.get_expr_type(expr, ctx);
-                ty.deref_type().cloned().unwrap_or(Type::Int)
+                if let Type::Struct(sname) = ty.strip_const().strip_reference()
+                    && let Some(sig) =
+                        self.sema
+                            .find_method_in_class_for_receiver(sname, "operator*", false)
+                {
+                    sig.return_type.clone()
+                } else {
+                    ty.deref_type().cloned().unwrap_or(Type::Int)
+                }
             }
             UnaryOp::AddrOf => Type::Pointer(Box::new(self.get_expr_type(expr, ctx))),
             UnaryOp::BitNot | UnaryOp::Neg | UnaryOp::Plus => {
@@ -325,25 +337,8 @@ impl<'a> Codegen<'a> {
         ctx: &FunctionContext,
     ) -> Type {
         let obj_ty = self.get_expr_type_raw(object, ctx);
-        let is_ref = obj_ty.is_reference();
         let receiver_const = crate::sema::receiver_is_const_type(&obj_ty);
-        let sname = if *is_arrow || is_ref {
-            if let Type::Pointer(inner) | Type::Reference(inner) = obj_ty.strip_const() {
-                if let Type::Struct(s) = inner.strip_const() {
-                    s.clone()
-                } else {
-                    String::new()
-                }
-            } else {
-                String::new()
-            }
-        } else {
-            if let Type::Struct(s) = obj_ty.strip_const() {
-                s.clone()
-            } else {
-                String::new()
-            }
-        };
+        let sname = self.member_class_name(&obj_ty, *is_arrow);
         if let Some(sig) =
             self.sema
                 .find_method_in_class_for_receiver(&sname, member, receiver_const)
@@ -362,24 +357,7 @@ impl<'a> Codegen<'a> {
         ctx: &FunctionContext,
     ) -> Type {
         let obj_ty = self.get_expr_type_raw(object, ctx);
-        let is_ref = obj_ty.is_reference();
-        let sname = if is_arrow || is_ref {
-            if let Type::Pointer(inner) | Type::Reference(inner) = obj_ty.strip_const() {
-                if let Type::Struct(s) = inner.strip_const() {
-                    s.clone()
-                } else {
-                    String::new()
-                }
-            } else {
-                String::new()
-            }
-        } else {
-            if let Type::Struct(s) = obj_ty.strip_const() {
-                s.clone()
-            } else {
-                String::new()
-            }
-        };
+        let sname = self.member_class_name(&obj_ty, is_arrow);
         if let Some(fld) = self.sema.find_field_in_class(&sname, member) {
             fld.ty
         } else {

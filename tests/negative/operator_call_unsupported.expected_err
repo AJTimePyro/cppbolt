@@ -1,1 +1,0 @@
-tests/negative/operator_call_unsupported.cpp:2:9: error: operator() is not supported

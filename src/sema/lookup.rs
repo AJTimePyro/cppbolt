@@ -16,6 +16,9 @@ impl Sema {
     }
 
     pub fn find_field_in_class(&self, class_name: &str, field_name: &str) -> Option<StructField> {
+        if class_name.is_empty() {
+            return None;
+        }
         if let Some(layout) = self.struct_layouts.get(class_name) {
             // Base fields are flattened before this class's own fields. Search
             // backwards so a derived field hides a same-named base field.
@@ -44,6 +47,9 @@ impl Sema {
         method_name: &str,
         receiver_const: bool,
     ) -> Option<FunctionSig> {
+        if class_name.is_empty() {
+            return None;
+        }
         let pick_sig = |sigs: &[FunctionSig]| -> Option<FunctionSig> {
             let receiver_matches =
                 |sig: &FunctionSig| !receiver_const || crate::sema::sig_receiver_is_const(sig);
@@ -107,6 +113,21 @@ impl Sema {
             &mut visited,
         );
         overloads
+    }
+
+    /// Finds a method with an exact parameter count (including the implicit receiver).
+    pub fn find_method_with_param_count(
+        &self,
+        class_name: &str,
+        method_name: &str,
+        param_count: usize,
+        receiver_const: bool,
+    ) -> Option<FunctionSig> {
+        let overloads =
+            self.find_method_overloads_in_class(class_name, method_name, receiver_const);
+        overloads
+            .into_iter()
+            .find(|s| s.param_types.len() == param_count)
     }
 
     fn collect_method_overloads(

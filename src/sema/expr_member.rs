@@ -73,6 +73,30 @@ impl Sema {
                         ));
                     }
                 }
+            } else if let Type::Struct(sname) = stripped {
+                let receiver_const = receiver_is_const_type(obj_ty);
+                if let Some(sig) =
+                    self.find_method_in_class_for_receiver(sname, "operator->", receiver_const)
+                {
+                    if let Type::Pointer(inner) | Type::Reference(inner) =
+                        sig.return_type.strip_const()
+                        && let Type::Struct(target) = inner.strip_const()
+                    {
+                        target.clone()
+                    } else {
+                        return Err(CompileError::new(
+                            "operator-> must return a pointer to a struct or class",
+                            pos.line,
+                            pos.col,
+                        ));
+                    }
+                } else {
+                    return Err(CompileError::new(
+                        "Arrow member access on non-pointer",
+                        pos.line,
+                        pos.col,
+                    ));
+                }
             } else {
                 return Err(CompileError::new(
                     "Arrow member access on non-pointer",

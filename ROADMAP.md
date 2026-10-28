@@ -20,11 +20,11 @@ For current baseline results, see [`tests/PASSING.txt`](tests/PASSING.txt) and r
 These features build naturally on existing language constructs without requiring a full template engine:
 
 - [x] **Range-Based `for` Loops**: Lower `for (decl : range)` into standard iterator loops using `begin()` / `end()` or pointer intervals across fixed-size 1D/multidimensional arrays and container classes (e.g. `std::string`).
-- [ ] **Additional Operator Overloads**:
-  - Overloaded postfix `operator++(int)` and `operator--(int)` using temporary retention.
+- [x] **Additional Operator Overloads**:
+  - Overloaded postfix `operator++(int)` and `operator--(int)` distinguishing from prefix via dummy `int` parameter.
   - Overloaded pointer member access `operator->`.
   - Overloaded dereference `operator*()`.
-  - Overloaded function call `operator()`.
+  - Overloaded function call `operator()` (functors).
 - [ ] **Namespace Aliases**: Parse and resolve `namespace NewName = OriginalName;` declarations (currently rejected in `src/parser/unsupported.rs`).
 - [ ] **Extended Casts**: Support `reinterpret_cast` across scalar and pointer types within the ILP32 model.
 

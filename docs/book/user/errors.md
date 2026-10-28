@@ -74,55 +74,16 @@ The following catalog lists diagnostics emitted by the compiler, paired with rea
   }
   ```
 
-#### `operator() is not supported`
-- **Cause**: Declaring a call operator overload on a class.
-- **Trigger** (`tests/negative/operator_call_unsupported.cpp`):
+#### `Arrow member access on non-pointer`
+- **Cause**: Using `->` on a struct or primitive variable that does not define an overloaded `operator->()`.
+- **Trigger** (`tests/negative/operator_arrow_invalid.cpp`):
   ```cpp
-  struct F {
-      int operator()(int x) { return x + 1; } // error: operator() is not supported
-  };
+  struct Dummy { int val; };
+  int main() {
+      Dummy d(1);
+      return d->val; // error: Arrow member access on non-pointer
+  }
   ```
-
-#### `operator-> is not supported`
-- **Cause**: Declaring an overloaded arrow member-access operator on a class.
-- **Trigger** (`tests/negative/operator_arrow_unsupported.cpp`):
-  ```cpp
-  struct P {
-      int value;
-      int* operator->() { return &value; } // error: operator-> is not supported
-  };
-  ```
-
-#### `operator* is not supported`
-- **Cause**: Declaring an overloaded unary dereference operator on a class.
-- **Trigger** (`tests/negative/operator_deref_unsupported.cpp`):
-  ```cpp
-  struct P {
-      int value;
-      int operator*() const { return value; } // error: operator* is not supported
-  };
-  ```
-
-#### `postfix ++/-- is not supported`
-- **Cause**: Declaring an overloaded postfix increment or decrement operator (`operator++(int)`).
-- **Trigger** (`tests/negative/postfix_increment_unsupported.cpp`):
-  ```cpp
-  struct Counter {
-      Counter operator++(int); // error: postfix ++/-- is not supported
-  };
-  ```
-
-#### `namespace aliases are not supported`
-- **Cause**: Attempting to alias a namespace via `namespace Alias = Original;`.
-- **Trigger** (`tests/negative/namespace_alias.cpp`):
-  ```cpp
-  namespace N { int x; }
-  namespace Alias = N; // error: namespace aliases are not supported
-  ```
-
----
-
-### Semantic Errors (`ErrorKind::Semantic`)
 
 #### `reference to '<name>' is ambiguous`
 - **Cause**: An unqualified identifier is provided by two active `using namespace` directives or using declarations with equal precedence.

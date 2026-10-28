@@ -134,6 +134,8 @@ impl Sema {
             UnaryOp::Deref => {
                 if let Some(inner) = ty.deref_type() {
                     Ok(inner.clone())
+                } else if let Some(sig) = self.find_unary_operator(UnaryOp::Deref, &ty) {
+                    Ok(sig.return_type)
                 } else {
                     Err(CompileError::new(
                         format!("Cannot dereference non-pointer type {}", ty.to_c_type()),
@@ -161,8 +163,39 @@ impl Sema {
                 }
                 Ok(ty.integer_promotion())
             }
-            UnaryOp::PreInc | UnaryOp::PreDec | UnaryOp::PostInc | UnaryOp::PostDec => Ok(ty),
+            UnaryOp::PreInc | UnaryOp::PreDec | UnaryOp::PostInc | UnaryOp::PostDec => {
+                self.analyze_unary_incdec(op, &ty, *pos)
+            }
         }
+    }
+
+    fn analyze_unary_incdec(
+        &self,
+        op: &UnaryOp,
+        ty: &Type,
+        pos: ExprPos,
+    ) -> Result<Type, CompileError> {
+        if let Type::Struct(sname) = ty.strip_const() {
+            let is_inc = matches!(op, UnaryOp::PreInc | UnaryOp::PostInc);
+            let m_name = if is_inc { "operator++" } else { "operator--" };
+            let count = if matches!(op, UnaryOp::PreInc | UnaryOp::PreDec) {
+                1
+            } else {
+                2
+            };
+            let receiver_const = receiver_is_const_type(ty);
+            if let Some(sig) =
+                self.find_method_with_param_count(sname, m_name, count, receiver_const)
+            {
+                return Ok(sig.return_type);
+            }
+            return Err(CompileError::new(
+                format!("no matching '{}' for type '{}'", m_name, ty.to_c_type()),
+                pos.line,
+                pos.col,
+            ));
+        }
+        Ok(ty.clone())
     }
 
     /// Finds the operator that a unary operator on `operand` resolves to.
@@ -177,6 +210,7 @@ impl Sema {
             UnaryOp::BitNot => "operator~",
             UnaryOp::Plus => "operator+",
             UnaryOp::AddrOf => "operator&",
+            UnaryOp::Deref => "operator*",
             _ => return None,
         };
         let Type::Struct(class_name) = operand.strip_const() else {
@@ -227,7 +261,7 @@ impl Sema {
         };
 
         let target_ty = self.analyze_expr_keeping_reference(target)?;
-        if !is_assignable_target(target, &target_ty) {
+        if !self.is_assignable_target(target, &target_ty) {
             return Err(CompileError::new(
                 "lvalue required as left operand of assignment",
                 pos.line,
@@ -280,7 +314,7 @@ impl Sema {
         };
 
         let target_ty = self.analyze_expr_keeping_reference(target)?;
-        if !is_assignable_target(target, &target_ty) {
+        if !self.is_assignable_target(target, &target_ty) {
             return Err(CompileError::new(
                 "lvalue required as left operand of assignment",
                 pos.line,
@@ -348,24 +382,30 @@ impl Sema {
 /// Returns true when an expression names a storage location that an
 /// assignment may modify.
 ///
-/// An expression that returns a reference names a storage location too, so a
-/// call such as `get_ref() = 1` is assignable.  Every other expression must
-/// name an object, a member, an element, or the object a pointer refers to.
-pub(super) fn is_assignable_target(expr: &Expr, ty: &Type) -> bool {
-    ty.is_reference() || is_modifiable_expression(expr)
-}
-
-/// Returns true when the expression itself names a modifiable object.
-///
-/// A compound assignment names the object it modifies, so `(a += b) += c`
-/// modifies the same object as `a += b`.
-fn is_modifiable_expression(expr: &Expr) -> bool {
-    match expr {
-        Expr::Identifier(_) | Expr::MemberAccess { .. } | Expr::ArraySubscript { .. } => true,
-        Expr::Unary {
-            op: UnaryOp::Deref, ..
-        } => true,
-        Expr::CompoundAssign { target, .. } => is_modifiable_expression(target),
-        _ => false,
+impl Sema {
+    /// Returns true when an expression names a storage location that an
+    /// assignment may modify.
+    pub(super) fn is_assignable_target(&mut self, expr: &Expr, ty: &Type) -> bool {
+        if ty.is_reference() {
+            return true;
+        }
+        match expr {
+            Expr::Identifier(_) | Expr::MemberAccess { .. } | Expr::ArraySubscript { .. } => true,
+            Expr::Unary {
+                op: UnaryOp::Deref,
+                expr,
+                ..
+            } => {
+                let mut inner = (**expr).clone();
+                if let Ok(inner_ty) = self.analyze_expr(&mut inner)
+                    && matches!(inner_ty.strip_reference().strip_const(), Type::Struct(_))
+                {
+                    return false;
+                }
+                true
+            }
+            Expr::CompoundAssign { target, .. } => self.is_assignable_target(target, ty),
+            _ => false,
+        }
     }
 }

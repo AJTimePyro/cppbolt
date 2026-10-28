@@ -1,0 +1,1 @@
+tests/negative/operator_arrow_invalid.cpp:9:12: error: Arrow member access on non-pointer
