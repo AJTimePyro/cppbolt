@@ -62,18 +62,8 @@ impl Parser {
     fn parse_case_label(&mut self, line: usize, col: usize) -> Result<Stmt, CompileError> {
         self.advance();
         let expr = self.parse_expr()?;
-        let val = match expr {
-            Expr::IntLiteral(n, _) => n,
-            _ => {
-                return Err(CompileError::new(
-                    "Case value must be integer constant",
-                    self.current().line,
-                    self.current().col,
-                ));
-            }
-        };
         self.expect(TokenKind::Colon)?;
-        Ok(Stmt::new(StmtKind::Case(val), line, col))
+        Ok(Stmt::new(StmtKind::Case(expr, 0), line, col))
     }
 
     fn parse_return_stmt(&mut self, line: usize, col: usize) -> Result<Stmt, CompileError> {

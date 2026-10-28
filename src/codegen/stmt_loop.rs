@@ -126,7 +126,7 @@ impl<'a> Codegen<'a> {
         if let StmtKind::Compound(stmts) = &body.kind {
             for s in stmts {
                 match &s.kind {
-                    StmtKind::Case(val) => {
+                    StmtKind::Case(_, val) => {
                         self.emit_switch_case(
                             s,
                             *val,
@@ -230,7 +230,7 @@ impl<'a> Codegen<'a> {
         // Compute that once because case bodies may clobber scratch locals.
         if let StmtKind::Compound(stmts) = &body.kind {
             for s in stmts {
-                if let StmtKind::Case(val) = &s.kind {
+                if let StmtKind::Case(_, val) = &s.kind {
                     code.push(OP_LOCAL_GET);
                     write_u32(code, ctx.fp_local);
                     code.push(OP_LOCAL_GET);

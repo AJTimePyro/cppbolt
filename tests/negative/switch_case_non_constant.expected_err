@@ -1,0 +1,1 @@
+tests/negative/switch_case_non_constant.cpp:5:9: error: Case value must be integer constant

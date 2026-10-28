@@ -107,8 +107,10 @@ impl Sema {
             StmtKind::Continue => {
                 self.analyze_continue(stmt.line, stmt.col)?;
             }
-            StmtKind::Case(_)
-            | StmtKind::Default
+            StmtKind::Case(expr, val) => {
+                *val = self.eval_const_int_expr(expr, stmt.line, stmt.col)?;
+            }
+            StmtKind::Default
             | StmtKind::Empty
             | StmtKind::UsingNamespace(_)
             | StmtKind::UsingDecl(_)
@@ -319,5 +321,103 @@ impl Sema {
             }
         }
         Ok(())
+    }
+
+    pub(super) fn eval_const_int_expr(
+        &mut self,
+        expr: &mut Expr,
+        line: usize,
+        col: usize,
+    ) -> Result<i64, CompileError> {
+        let _ = self.analyze_expr(expr)?;
+        self.eval_const_int_node(expr, line, col)
+    }
+
+    fn eval_const_int_node(
+        &self,
+        expr: &Expr,
+        line: usize,
+        col: usize,
+    ) -> Result<i64, CompileError> {
+        match expr {
+            Expr::IntLiteral(n, _) => Ok(*n),
+            Expr::CharLiteral(c) => Ok(*c as i64),
+            Expr::BoolLiteral(b) => Ok(if *b { 1 } else { 0 }),
+            Expr::Identifier(name) => {
+                if let Some(&val) = self.enum_values.get(name) {
+                    Ok(val)
+                } else if let Some(&val) = self.enum_values.get(QualifiedName::new(name).plain()) {
+                    Ok(val)
+                } else {
+                    Err(CompileError::new(
+                        "Case value must be integer constant",
+                        line,
+                        col,
+                    ))
+                }
+            }
+            Expr::Unary { op, expr, .. } => {
+                let v = self.eval_const_int_node(expr, line, col)?;
+                match op {
+                    UnaryOp::Neg => Ok(-v),
+                    UnaryOp::Plus => Ok(v),
+                    UnaryOp::Not => Ok(if v == 0 { 1 } else { 0 }),
+                    UnaryOp::BitNot => Ok(!v),
+                    _ => Err(CompileError::new(
+                        "Case value must be integer constant",
+                        line,
+                        col,
+                    )),
+                }
+            }
+            Expr::Binary {
+                op, left, right, ..
+            } => {
+                let l = self.eval_const_int_node(left, line, col)?;
+                let r = self.eval_const_int_node(right, line, col)?;
+                match op {
+                    BinaryOp::Add => Ok(l + r),
+                    BinaryOp::Sub => Ok(l - r),
+                    BinaryOp::Mul => Ok(l * r),
+                    BinaryOp::Div => {
+                        if r == 0 {
+                            Err(CompileError::new(
+                                "division by zero in constant expression",
+                                line,
+                                col,
+                            ))
+                        } else {
+                            Ok(l / r)
+                        }
+                    }
+                    BinaryOp::Rem => {
+                        if r == 0 {
+                            Err(CompileError::new(
+                                "remainder by zero in constant expression",
+                                line,
+                                col,
+                            ))
+                        } else {
+                            Ok(l % r)
+                        }
+                    }
+                    BinaryOp::BitAnd => Ok(l & r),
+                    BinaryOp::BitOr => Ok(l | r),
+                    BinaryOp::BitXor => Ok(l ^ r),
+                    BinaryOp::Shl => Ok(l << r),
+                    BinaryOp::Shr => Ok(l >> r),
+                    _ => Err(CompileError::new(
+                        "Case value must be integer constant",
+                        line,
+                        col,
+                    )),
+                }
+            }
+            _ => Err(CompileError::new(
+                "Case value must be integer constant",
+                line,
+                col,
+            )),
+        }
     }
 }

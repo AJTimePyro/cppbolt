@@ -59,7 +59,7 @@ pub enum StmtKind {
         expr: Expr,
         body: Box<Stmt>,
     },
-    Case(i64),
+    Case(Expr, i64),
     Default,
     Break,
     Continue,
