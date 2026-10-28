@@ -28,19 +28,29 @@ Following the implementation of foundational operator overloads, modern C++ patt
    - Supported storing lambdas in `auto` variables and direct invocation expressions.
 5. **Captureless Lambda Conversion to C Function Pointers**:
    - For captureless lambdas (`[]`), synthesized static `__invoke` trampoline methods and member conversion operators `__to_fn_ptr`.
-   - Enabled implicit conversion from captureless lambdas to standard C function pointer types (`R (*)(P...)`) via WebAssembly function table dispatch.
+   - Enabled implicit conversion from captureless lambdas to standard C function pointer types (`R (*)(P...)`) via WebAssembly function table dispatch, including return statement target conversion and unary `+` pointer decay (`+[](){}`).
+6. **Semantic Conformance & Bug Fixes**:
+   - Wrapped conversion calls in `analyze_return` when returning captureless lambdas to function pointer targets to avoid runtime table index traps.
+   - Extended free-variable traversal (`FreeVarCollector`) to cover `RangeFor`, `StructuredBinding`, and nested `Lambda`/`New` expressions, with array by-value capture copying.
+   - Enforced `const` qualification on fields accessed inside `const` methods, diagnosing mutation of by-value captures in non-mutable lambdas.
+   - Enforced capture-default ordering in the parser (must appear first) and aligned reference field dereferencing in class member codegen.
 
 ### Verification
-- 8 dedicated test suites added across `tests/classes_oop/` and `tests/negative/`:
+- 13 dedicated test suites added across `tests/classes_oop/` and `tests/negative/`:
   - `tests/classes_oop/operators/operator_arrow_chaining.cpp`
   - `tests/classes_oop/constructors_destructors/prvalue_default_constructor.cpp`
   - `tests/classes_oop/lambdas/lambda_basic.cpp`
   - `tests/classes_oop/lambdas/lambda_default_captures.cpp`
   - `tests/classes_oop/lambdas/lambda_function_pointer.cpp`
+  - `tests/classes_oop/lambdas/lambda_return_fn_ptr.cpp`
+  - `tests/classes_oop/lambdas/lambda_range_for_capture.cpp`
+  - `tests/classes_oop/lambdas/lambda_unary_plus.cpp`
   - `tests/negative/operator_arrow_cycle.cpp`
   - `tests/negative/operator_arrow_self_cycle.cpp`
   - `tests/negative/operator_arrow_non_pointer.cpp`
-- Full corpus expanded to 295 passing tests with zero regressions.
+  - `tests/negative/lambda_const_capture_mutation.cpp`
+  - `tests/negative/lambda_out_of_order_default_capture.cpp`
+- Full corpus expanded to 300 passing tests with zero regressions.
 - Verified all census limits (functions <= 80 lines, files <= 500 lines) and clippy checks (`-D warnings`).
 
 ---
