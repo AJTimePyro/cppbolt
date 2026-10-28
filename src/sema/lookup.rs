@@ -115,6 +115,21 @@ impl Sema {
         overloads
     }
 
+    /// Finds a method with an exact parameter count (including the implicit receiver).
+    pub fn find_method_with_param_count(
+        &self,
+        class_name: &str,
+        method_name: &str,
+        param_count: usize,
+        receiver_const: bool,
+    ) -> Option<FunctionSig> {
+        let overloads =
+            self.find_method_overloads_in_class(class_name, method_name, receiver_const);
+        overloads
+            .into_iter()
+            .find(|s| s.param_types.len() == param_count)
+    }
+
     fn collect_method_overloads(
         &self,
         class_name: &str,

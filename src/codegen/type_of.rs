@@ -181,13 +181,17 @@ impl<'a> Codegen<'a> {
         let ty = self.get_expr_type(expr, ctx);
         if let Type::Struct(sname) = ty.strip_const() {
             let op_m = match op {
-                UnaryOp::Neg => Some("operator-"),
-                UnaryOp::PreInc => Some("operator++"),
-                UnaryOp::PreDec => Some("operator--"),
+                UnaryOp::Neg => Some(("operator-", 1)),
+                UnaryOp::PreInc => Some(("operator++", 1)),
+                UnaryOp::PreDec => Some(("operator--", 1)),
+                UnaryOp::PostInc => Some(("operator++", 2)),
+                UnaryOp::PostDec => Some(("operator--", 2)),
                 _ => None,
             };
-            if let Some(m) = op_m
-                && let Some((_, sig)) = self.find_method(sname, m, &[])
+            if let Some((m, count)) = op_m
+                && let Some(sig) = self
+                    .sema
+                    .find_method_with_param_count(sname, m, count, false)
             {
                 return sig.return_type.clone();
             }

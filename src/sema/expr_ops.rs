@@ -163,8 +163,29 @@ impl Sema {
                 }
                 Ok(ty.integer_promotion())
             }
-            UnaryOp::PreInc | UnaryOp::PreDec | UnaryOp::PostInc | UnaryOp::PostDec => Ok(ty),
+            UnaryOp::PreInc | UnaryOp::PreDec | UnaryOp::PostInc | UnaryOp::PostDec => {
+                Ok(self.analyze_unary_incdec(op, &ty))
+            }
         }
+    }
+
+    fn analyze_unary_incdec(&self, op: &UnaryOp, ty: &Type) -> Type {
+        if let Type::Struct(sname) = ty.strip_const() {
+            let is_inc = matches!(op, UnaryOp::PreInc | UnaryOp::PostInc);
+            let m_name = if is_inc { "operator++" } else { "operator--" };
+            let count = if matches!(op, UnaryOp::PreInc | UnaryOp::PreDec) {
+                1
+            } else {
+                2
+            };
+            let receiver_const = receiver_is_const_type(ty);
+            if let Some(sig) =
+                self.find_method_with_param_count(sname, m_name, count, receiver_const)
+            {
+                return sig.return_type;
+            }
+        }
+        ty.clone()
     }
 
     /// Finds the operator that a unary operator on `operand` resolves to.
