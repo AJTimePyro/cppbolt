@@ -8,3 +8,5 @@ Mutated field: 250
 Mutated via method: 350
 ValProxy1 field: 350
 ValProxy1 method: 350
+PtrRefProxy field: 350
+PtrRefProxy method: 350

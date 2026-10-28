@@ -42,6 +42,14 @@ struct ValProxy1 {
     }
 };
 
+struct PtrRefProxy {
+    Target* ptr;
+    PtrRefProxy(Target* p) : ptr(p) {}
+    Target*& operator->() {
+        return ptr;
+    }
+};
+
 int main() {
     Target target;
     target.value = 100;
@@ -71,6 +79,11 @@ int main() {
     ValProxy1 vp(&target);
     printf("ValProxy1 field: %d\n", vp->value);
     printf("ValProxy1 method: %d\n", vp->getValue());
+
+    // Reference-to-pointer return
+    PtrRefProxy prp(&target);
+    printf("PtrRefProxy field: %d\n", prp->value);
+    printf("PtrRefProxy method: %d\n", prp->getValue());
 
     return 0;
 }

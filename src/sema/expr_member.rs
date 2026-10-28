@@ -151,13 +151,13 @@ impl Sema {
                 } else if let Type::Struct(next) = clean {
                     visited.push(current_class);
                     current_class = next.clone();
-                    current_const = current_const || inner.is_const();
+                    current_const = inner.is_const();
                     continue;
                 }
             } else if let Type::Struct(next) = ret {
                 visited.push(current_class);
                 current_class = next.clone();
-                current_const = current_const || sig.return_type.is_const();
+                current_const = sig.return_type.is_const();
                 continue;
             }
             return Err(CompileError::new(

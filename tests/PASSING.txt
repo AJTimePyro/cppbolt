@@ -257,6 +257,7 @@ negative/nesting_depth_limit
 negative/operator_arrow_cycle
 negative/operator_arrow_invalid
 negative/operator_arrow_non_pointer
+negative/operator_arrow_self_cycle
 negative/operator_deref_assign_rvalue
 negative/operator_incdec_invalid
 negative/pointer_plus_pointer

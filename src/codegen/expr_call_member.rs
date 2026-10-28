@@ -73,13 +73,15 @@ impl<'a> Codegen<'a> {
             }
             if let Type::Struct(s) = clean {
                 let mut current = s.clone();
+                let mut current_is_const = crate::sema::receiver_is_const_type(obj_ty);
                 let mut visited = Vec::new();
                 while !visited.iter().any(|v| v == &current) && visited.len() < 128 {
                     visited.push(current.clone());
-                    let Some(sig) =
-                        self.sema
-                            .find_method_in_class_for_receiver(&current, "operator->", false)
-                    else {
+                    let Some(sig) = self.sema.find_method_in_class_for_receiver(
+                        &current,
+                        "operator->",
+                        current_is_const,
+                    ) else {
                         break;
                     };
                     let ret = sig.return_type.strip_const();
@@ -96,10 +98,12 @@ impl<'a> Codegen<'a> {
                             }
                         } else if let Type::Struct(next) = clean_inner {
                             current = next.clone();
+                            current_is_const = inner.is_const();
                             continue;
                         }
                     } else if let Type::Struct(next) = ret {
                         current = next.clone();
+                        current_is_const = sig.return_type.is_const();
                         continue;
                     }
                     break;
@@ -146,17 +150,18 @@ impl<'a> Codegen<'a> {
                     let clean_inner = inner.strip_const();
                     if let Type::Pointer(ptr_inner) = clean_inner {
                         if matches!(ptr_inner.strip_reference().strip_const(), Type::Struct(_)) {
+                            self.emit_load(clean_inner, 0, code);
                             return Ok(());
                         }
                     } else if let Type::Struct(next) = clean_inner {
                         current = next.clone();
-                        current_is_const = current_is_const || inner.is_const();
+                        current_is_const = inner.is_const();
                         continue;
                     }
                 } else if let Type::Struct(next) = ret {
                     self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
                     current = next.clone();
-                    current_is_const = current_is_const || sig.return_type.is_const();
+                    current_is_const = sig.return_type.is_const();
                     continue;
                 }
                 break;
