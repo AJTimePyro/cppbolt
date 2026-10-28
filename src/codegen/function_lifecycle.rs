@@ -192,18 +192,49 @@ impl<'a> Codegen<'a> {
             } else if let Some(args) = init_args
                 && !args.is_empty()
             {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, 0); // this
-                if fld.ty.is_reference() {
-                    self.compile_lvalue_addr(&args[0], ctx, code)?;
-                    self.emit_store(&fld.ty, fld.offset as u32, code);
-                } else {
-                    let item_ty = self.get_expr_type(&args[0], ctx);
-                    self.compile_expr(&args[0], ctx, code)?;
-                    self.emit_conversion(&item_ty, &fld.ty, code);
-                    self.emit_store(&fld.ty, fld.offset as u32, code);
-                }
+                self.compile_member_init_expr(fld, args, ctx, code)?;
             }
+        }
+        Ok(())
+    }
+
+    fn compile_member_init_expr(
+        &mut self,
+        fld: &crate::sema::StructField,
+        args: &[Expr],
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        if fld.ty.is_reference() {
+            code.push(OP_LOCAL_GET);
+            write_u32(code, 0); // this
+            self.compile_lvalue_addr(&args[0], ctx, code)?;
+            self.emit_store(&fld.ty, fld.offset as u32, code);
+        } else if matches!(fld.ty.strip_const(), Type::Array(_, _)) {
+            self.compile_expr(&args[0], ctx, code)?;
+            code.push(OP_LOCAL_SET);
+            write_u32(code, ctx.scratch1);
+            let size = fld.ty.size_of(&self.sema.struct_sizes);
+            crate::codegen::raii::emit_struct_byte_copy(
+                size,
+                fld.offset as u32,
+                |code| {
+                    code.push(OP_LOCAL_GET);
+                    write_u32(code, 0);
+                },
+                |code| {
+                    code.push(OP_LOCAL_GET);
+                    write_u32(code, ctx.scratch1);
+                },
+                code,
+            );
+        } else {
+            code.push(OP_LOCAL_GET);
+            write_u32(code, 0); // this
+            let item_ty = self.get_expr_type(&args[0], ctx);
+            self.compile_expr(&args[0], ctx, code)?;
+            self.emit_conversion(&item_ty, &fld.ty, code);
+            self.emit_store(&fld.ty, fld.offset as u32, code);
         }
         Ok(())
     }
