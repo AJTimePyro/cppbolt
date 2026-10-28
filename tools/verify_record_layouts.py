@@ -39,7 +39,7 @@ def parse_records(text):
 def main():
     compiler_bin = sys.argv[1] if len(sys.argv) > 1 else "./target/release/cppwasm-cli"
     test_dir = sys.argv[2] if len(sys.argv) > 2 else "tests/classes_oop"
-    files = sorted(glob.glob(os.path.join(test_dir, "*.cpp")))
+    files = sorted(glob.glob(os.path.join(test_dir, "**", "*.cpp"), recursive=True))
     
     total_records = 0
     failures = 0

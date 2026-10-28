@@ -215,8 +215,8 @@ def generate_file(target_cpp, expected_file, is_heldout):
     print(f"GATES PASSED for {target_cpp}: g++ and clang++ ASan/UBSan outputs match!")
 
 def main():
-    generate_file("tests/c_basics/lvalue_matrix.cpp", "tests/c_basics/lvalue_matrix.expected", False)
-    generate_file("tests/c_basics_variant/lvalue_matrix.cpp", "tests/c_basics_variant/lvalue_matrix.expected", True)
+    generate_file("tests/c_basics/misc/lvalue_matrix.cpp", "tests/c_basics/misc/lvalue_matrix.expected", False)
+    generate_file("tests/c_basics_variant/misc/lvalue_matrix.cpp", "tests/c_basics_variant/misc/lvalue_matrix.expected", True)
 
 if __name__ == "__main__":
     main()
