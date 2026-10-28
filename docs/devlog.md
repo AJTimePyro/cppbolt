@@ -4,6 +4,47 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-10-28: C++17 Lambda Expressions & Recursive operator-> Chaining
+
+### Context & Motivation
+Following the implementation of foundational operator overloads, modern C++ patterns require two major language capabilities: C++17 lambda expressions (anonymous closures, variable captures, return type deduction, functor invocation, and function pointer conversions) and full recursive chaining of `operator->()` (smart pointer wrappers delegating to other smart pointers until reaching a concrete target). Additionally, unassigned class prvalue expressions (`Value().get()`) exposed a missing constructor synthesis path for classes without explicit constructors.
+
+### Work Executed
+1. **Recursive `operator->()` Chaining & Cycle Detection**:
+   - Updated `src/sema/expr_member.rs` to iteratively resolve `operator->()` calls across intermediate wrapper classes until reaching a pointer to a struct or class.
+   - Enforced cycle detection (`visited` set tracking) and a 128-hop delegation budget, producing clear diagnostics (`circular operator-> delegation on '<class>'` and `operator-> delegation nesting exceeds limit`).
+   - Propagated receiver `const`-qualification across delegation hops and handled pointer reference returns (`Type::Reference(Type::Pointer(...))`).
+   - Emitted recursive `OP_CALL` instructions in WebAssembly codegen (`src/codegen/expr_call_member.rs:emit_arrow_chain`) for field accesses and member method calls.
+2. **Implicit Default Constructor Synthesis for Prvalues**:
+   - Adjusted `src/sema/analyze.rs` to synthesize default constructors for classes without explicit constructors even when member fields do not strictly require non-trivial construction.
+   - Enabled direct invocation of member functions on unassigned prvalue instances (`Value().get()`).
+3. **C++17 Lambda Expressions AST & Parsing**:
+   - Added `Expr::Lambda` AST variant and dedicated parser in `src/parser/expr_lambda.rs`.
+   - Supported capture lists (`[]`, `[x]`, `[&x]`, `[=]`, `[&]`), parameters, optional trailing return types (`-> T`), and the `mutable` specifier.
+4. **Closure Class Synthesis & Semantic Analysis**:
+   - Lowered lambda expressions in `src/sema/expr_lambda.rs` by generating unique anonymous closure structs (`__lambda_N`).
+   - Added capture members stored as by-value values or references, synthesized member initializers, and generated `operator()` with `const`-qualification by default (or non-const if `mutable`).
+   - Implemented automatic return type deduction from return statements in lambda bodies when trailing return type is omitted.
+   - Supported storing lambdas in `auto` variables and direct invocation expressions.
+5. **Captureless Lambda Conversion to C Function Pointers**:
+   - For captureless lambdas (`[]`), synthesized static `__invoke` trampoline methods and member conversion operators `__to_fn_ptr`.
+   - Enabled implicit conversion from captureless lambdas to standard C function pointer types (`R (*)(P...)`) via WebAssembly function table dispatch.
+
+### Verification
+- 8 dedicated test suites added across `tests/classes_oop/` and `tests/negative/`:
+  - `tests/classes_oop/operators/operator_arrow_chaining.cpp`
+  - `tests/classes_oop/constructors_destructors/prvalue_default_constructor.cpp`
+  - `tests/classes_oop/lambdas/lambda_basic.cpp`
+  - `tests/classes_oop/lambdas/lambda_default_captures.cpp`
+  - `tests/classes_oop/lambdas/lambda_function_pointer.cpp`
+  - `tests/negative/operator_arrow_cycle.cpp`
+  - `tests/negative/operator_arrow_self_cycle.cpp`
+  - `tests/negative/operator_arrow_non_pointer.cpp`
+- Full corpus expanded to 295 passing tests with zero regressions.
+- Verified all census limits (functions <= 80 lines, files <= 500 lines) and clippy checks (`-D warnings`).
+
+---
+
 ## 2026-10-28: C++17 Compatibility Fixes & Feature Completeness
 
 ### Context & Motivation

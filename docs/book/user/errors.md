@@ -85,6 +85,32 @@ The following catalog lists diagnostics emitted by the compiler, paired with rea
   }
   ```
 
+#### `circular operator-> delegation on '<class>'`
+- **Cause**: Recursive `operator->()` chaining encounters a cyclical delegation loop (e.g. `A -> B -> A` or `A -> A`).
+- **Trigger** (`tests/negative/operator_arrow_cycle.cpp`):
+  ```cpp
+  struct B;
+  struct A { B operator->(); };
+  struct B { A operator->(); };
+  int main() {
+      A a;
+      return a->val; // error: circular operator-> delegation on 'A'
+  }
+  ```
+
+#### `operator-> must return a pointer to a struct or class`
+- **Cause**: Overloaded `operator->()` returns a primitive or non-pointer type instead of a class pointer or wrapper object.
+- **Trigger** (`tests/negative/operator_arrow_non_pointer.cpp`):
+  ```cpp
+  struct Bad {
+      int operator->() { return 42; }
+  };
+  int main() {
+      Bad b;
+      return b->val; // error: operator-> must return a pointer to a struct or class
+  }
+  ```
+
 #### `reference to '<name>' is ambiguous`
 - **Cause**: An unqualified identifier is provided by two active `using namespace` directives or using declarations with equal precedence.
 - **Trigger** (`tests/negative/ambiguous_using_directives.cpp`):
