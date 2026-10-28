@@ -107,16 +107,9 @@ impl Sema {
     }
 
     fn synthesize_constructors(&mut self, program: &mut Program) {
-        // A default constructor is synthesized when the members require
-        // construction, and for polymorphic classes that need their vtable
-        // installed by a constructor. Iterate to a fixed point so a class
-        // becomes constructible once its dependencies do.
-        let polymorphic: std::collections::HashSet<String> = self
-            .struct_layouts
-            .iter()
-            .filter(|(_, layout)| layout.has_vtable)
-            .map(|(name, _)| name.clone())
-            .collect();
+        // A default constructor is synthesized for classes without explicit
+        // constructors unless blocked by subobject constructors. Iterate to a
+        // fixed point so a class becomes constructible once its dependencies do.
         let (mut any_ctor, mut default_ctor) = self.collect_explicit_constructors(program);
 
         loop {
@@ -141,20 +134,13 @@ impl Sema {
                     continue;
                 }
 
-                let base_needs = base_classes.iter().any(|base| default_ctor.contains(base));
                 let base_blocks = base_classes
                     .iter()
                     .any(|base| any_ctor.contains(base) && !default_ctor.contains(base));
-                let (field_needs, field_blocks) =
-                    fields
-                        .iter()
-                        .fold((false, false), |(needs, blocks), (_, ty)| {
-                            let (needs_status, blocks_status) =
-                                type_ctor_status(ty, &any_ctor, &default_ctor);
-                            (needs || needs_status, blocks || blocks_status)
-                        });
-                let needs_ctor = base_needs || field_needs || polymorphic.contains(name);
-                if needs_ctor && !base_blocks && !field_blocks {
+                let field_blocks = fields
+                    .iter()
+                    .any(|(_, ty)| type_ctor_status(ty, &any_ctor, &default_ctor).1);
+                if !base_blocks && !field_blocks {
                     methods.push(FunctionDecl {
                         name: name.clone(),
                         return_type: Type::Void,
