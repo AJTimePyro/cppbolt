@@ -15,6 +15,7 @@ mod decl;
 mod decl_func;
 mod enums_operators;
 mod expr;
+mod expr_lambda;
 mod prefix;
 mod stmt;
 mod structs;
@@ -330,6 +331,45 @@ mod tests {
                 ..
             })
         ));
+        Ok(())
+    }
+
+    #[test]
+    pub(super) fn parses_lambda_expression() -> Result<(), Box<dyn std::error::Error>> {
+        let tokens = Lexer::new(
+            "void f() { auto g = [x, &y](int a) mutable -> int { return x + y + a; }; }",
+        )
+        .tokenize()?;
+        let program = Parser::new(tokens).parse_program()?;
+        let Some(Decl::Function(func)) = program.declarations.first() else {
+            return Err("expected function declaration".into());
+        };
+        let Some(body) = &func.body else {
+            return Err("expected body".into());
+        };
+        let StmtKind::Compound(stmts) = &body.kind else {
+            return Err("expected compound".into());
+        };
+        let StmtKind::VarDecl {
+            init:
+                Some(Expr::Lambda {
+                    captures,
+                    is_mutable,
+                    return_type,
+                    ..
+                }),
+            ..
+        } = &stmts[0].kind
+        else {
+            return Err("expected lambda var decl".into());
+        };
+        assert_eq!(captures.len(), 2);
+        assert_eq!(captures[0].name, "x");
+        assert!(!captures[0].is_reference);
+        assert_eq!(captures[1].name, "y");
+        assert!(captures[1].is_reference);
+        assert!(*is_mutable);
+        assert_eq!(*return_type, Some(Type::Int));
         Ok(())
     }
 }

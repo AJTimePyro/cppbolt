@@ -16,8 +16,14 @@ impl Sema {
                 ));
             }
         }
-        self.current_func_return_type = Some(func.return_type.clone());
+        if func.return_type == Type::Auto {
+            self.current_func_return_type = None;
+        } else {
+            self.current_func_return_type = Some(func.return_type.clone());
+        }
         self.current_func_name = Some(func.name.clone());
+        let prev_func_const = self.current_func_is_const;
+        self.current_func_is_const = func.is_const;
         self.current_frame_size = 0;
         self.enter_scope();
 
@@ -45,7 +51,12 @@ impl Sema {
         }
 
         self.exit_scope();
-        self.current_func_return_type = None;
+        self.current_func_is_const = prev_func_const;
+        if func.return_type == Type::Auto {
+            func.return_type = self.current_func_return_type.take().unwrap_or(Type::Void);
+        } else {
+            self.current_func_return_type = None;
+        }
         self.current_func_name = None;
         Ok(())
     }
@@ -311,19 +322,29 @@ impl Sema {
         col: usize,
     ) -> Result<(), CompileError> {
         if let Some(expr) = expr_opt {
-            let ret_ty = self.analyze_expr(expr)?;
-            if let Some(expected) = &self.current_func_return_type
-                && !self.can_assign(expected, &ret_ty)
-            {
-                return Err(CompileError::new(
-                    format!(
-                        "Return type mismatch: expected {}, found {}",
-                        expected.to_c_type(),
-                        ret_ty.to_c_type()
-                    ),
-                    line,
-                    col,
-                ));
+            let mut ret_ty = self.analyze_expr(expr)?;
+            if let Some(expected) = &self.current_func_return_type {
+                if let Type::Struct(sname) = ret_ty.strip_reference().strip_const() {
+                    let is_const = ret_ty.strip_reference().is_const();
+                    if let Some(sig) = self.find_conversion_to(sname, expected, is_const) {
+                        Self::wrap_conversion_call(expr, &sig.name, ExprPos::new(line, col));
+                        ret_ty = expected.clone();
+                    }
+                }
+                if !self.can_assign(expected, &ret_ty) {
+                    return Err(CompileError::new(
+                        format!(
+                            "Return type mismatch: expected {}, found {}",
+                            expected.to_c_type(),
+                            ret_ty.to_c_type()
+                        ),
+                        line,
+                        col,
+                    ));
+                }
+            } else {
+                self.current_func_return_type =
+                    Some(ret_ty.strip_reference().strip_const().clone());
             }
         }
         Ok(())

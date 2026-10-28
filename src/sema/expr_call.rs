@@ -157,12 +157,12 @@ impl Sema {
         } = &mut *callee
         {
             let obj_ty = self.analyze_expr(object.as_mut())?;
-            let struct_name = self.member_struct_name(&obj_ty, *is_arrow, *pos)?;
+            let (struct_name, receiver_const) =
+                self.member_struct_name(&obj_ty, *is_arrow, *pos)?;
 
             if member.starts_with('~') {
                 return Ok(Some(Type::Void));
             }
-            let receiver_const = crate::sema::receiver_is_const_type(&obj_ty);
             let receiver_is_lvalue = if *is_arrow {
                 true
             } else {

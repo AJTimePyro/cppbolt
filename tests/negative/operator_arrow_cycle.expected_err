@@ -1,0 +1,1 @@
+tests/negative/operator_arrow_cycle.cpp:13:12: error: circular operator-> delegation on 'A'

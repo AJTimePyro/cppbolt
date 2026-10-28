@@ -1,0 +1,1 @@
+tests/negative/unary_plus_invalid_struct.cpp:4:5: error: invalid argument type to unary expression

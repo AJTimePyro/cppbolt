@@ -7,6 +7,7 @@ impl Sema {
         self.synthesize_constructors(program);
         self.register_declarations(program)?;
         self.analyze_declarations(program)?;
+        program.declarations.append(&mut self.synthesized_decls);
         Ok(())
     }
 
@@ -107,16 +108,9 @@ impl Sema {
     }
 
     fn synthesize_constructors(&mut self, program: &mut Program) {
-        // A default constructor is synthesized when the members require
-        // construction, and for polymorphic classes that need their vtable
-        // installed by a constructor. Iterate to a fixed point so a class
-        // becomes constructible once its dependencies do.
-        let polymorphic: std::collections::HashSet<String> = self
-            .struct_layouts
-            .iter()
-            .filter(|(_, layout)| layout.has_vtable)
-            .map(|(name, _)| name.clone())
-            .collect();
+        // A default constructor is synthesized for classes without explicit
+        // constructors unless blocked by subobject constructors. Iterate to a
+        // fixed point so a class becomes constructible once its dependencies do.
         let (mut any_ctor, mut default_ctor) = self.collect_explicit_constructors(program);
 
         loop {
@@ -141,20 +135,13 @@ impl Sema {
                     continue;
                 }
 
-                let base_needs = base_classes.iter().any(|base| default_ctor.contains(base));
                 let base_blocks = base_classes
                     .iter()
                     .any(|base| any_ctor.contains(base) && !default_ctor.contains(base));
-                let (field_needs, field_blocks) =
-                    fields
-                        .iter()
-                        .fold((false, false), |(needs, blocks), (_, ty)| {
-                            let (needs_status, blocks_status) =
-                                type_ctor_status(ty, &any_ctor, &default_ctor);
-                            (needs || needs_status, blocks || blocks_status)
-                        });
-                let needs_ctor = base_needs || field_needs || polymorphic.contains(name);
-                if needs_ctor && !base_blocks && !field_blocks {
+                let field_blocks = fields
+                    .iter()
+                    .any(|(_, ty)| type_ctor_status(ty, &any_ctor, &default_ctor).1);
+                if !base_blocks && !field_blocks {
                     methods.push(FunctionDecl {
                         name: name.clone(),
                         return_type: Type::Void,
@@ -286,30 +273,34 @@ impl Sema {
             }
         }
         for m in methods {
-            let mut params = m.params.clone();
-            if !m.is_static {
-                params.insert(0, this_param(name, m.is_const));
-            }
-            let qual_name = format!("{}::{}", name, m.name);
-            let mut mangled = self.mangle_name(&qual_name, &params);
-            match m.ref_qualifier {
-                RefQualifier::LValue => mangled.push_str("_R"),
-                RefQualifier::RValue => mangled.push_str("_O"),
-                RefQualifier::None => {}
-            }
-            let sig = FunctionSig {
-                name: m.name.clone(),
-                mangled_name: mangled,
-                return_type: m.return_type.clone(),
-                param_types: params.iter().map(|p| p.ty.clone()).collect(),
-                default_args: params.iter().map(|p| p.default_val.clone()).collect(),
-                is_static: m.is_static,
-                is_explicit: m.is_explicit,
-                ref_qualifier: m.ref_qualifier,
-            };
-            self.register_function(sig.clone());
-            self.functions.entry(qual_name).or_default().push(sig);
+            self.register_struct_method(name, m);
         }
+    }
+
+    pub(super) fn register_struct_method(&mut self, class_name: &str, m: &FunctionDecl) {
+        let mut params = m.params.clone();
+        if !m.is_static {
+            params.insert(0, this_param(class_name, m.is_const));
+        }
+        let qual_name = format!("{}::{}", class_name, m.name);
+        let mut mangled = self.mangle_name(&qual_name, &params);
+        match m.ref_qualifier {
+            RefQualifier::LValue => mangled.push_str("_R"),
+            RefQualifier::RValue => mangled.push_str("_O"),
+            RefQualifier::None => {}
+        }
+        let sig = FunctionSig {
+            name: m.name.clone(),
+            mangled_name: mangled,
+            return_type: m.return_type.clone(),
+            param_types: params.iter().map(|p| p.ty.clone()).collect(),
+            default_args: params.iter().map(|p| p.default_val.clone()).collect(),
+            is_static: m.is_static,
+            is_explicit: m.is_explicit,
+            ref_qualifier: m.ref_qualifier,
+        };
+        self.register_function(sig.clone());
+        self.functions.entry(qual_name).or_default().push(sig);
     }
 
     /// Rejects abstract variable types and completes a zero-length array type
@@ -425,7 +416,7 @@ impl Sema {
 }
 
 /// Builds the implicit `this` parameter of a non-static method.
-fn this_param(class: &str, is_const: bool) -> Param {
+pub(super) fn this_param(class: &str, is_const: bool) -> Param {
     let inner = if is_const {
         Type::Const(Box::new(Type::Struct(class.to_string())))
     } else {

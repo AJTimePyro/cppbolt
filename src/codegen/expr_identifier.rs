@@ -19,25 +19,31 @@ impl<'a> Codegen<'a> {
             self.emit_local_identifier(name, offset, ctx, code);
             return Ok(());
         }
+        let table_idx = self
+            .func_table_indices
+            .get(name)
+            .or_else(|| self.func_table_indices.get(&format!("std::{}", name)))
+            .or_else(|| {
+                ctx.current_class
+                    .as_ref()
+                    .and_then(|cls| self.func_table_indices.get(&format!("{}::{}", cls, name)))
+            })
+            .or_else(|| {
+                self.func_table_indices
+                    .get(QualifiedName::new(name).plain())
+            })
+            .copied();
+        if let Some(table_idx) = table_idx {
+            code.push(OP_I32_CONST);
+            write_i32(code, table_idx as i32);
+            return Ok(());
+        }
         if let Some(cls) = ctx.current_class.clone() {
             return self.compile_identifier_class_member(&cls, name, ctx, code);
         }
         if let Some(&val) = self.sema.enum_values.get(name) {
             code.push(OP_I32_CONST);
             write_i32(code, val as i32);
-            return Ok(());
-        }
-        if let Some(&table_idx) = self
-            .func_table_indices
-            .get(name)
-            .or_else(|| self.func_table_indices.get(&format!("std::{}", name)))
-            .or_else(|| {
-                self.func_table_indices
-                    .get(QualifiedName::new(name).plain())
-            })
-        {
-            code.push(OP_I32_CONST);
-            write_i32(code, table_idx as i32);
             return Ok(());
         }
         if let Some(sym) = self
@@ -114,7 +120,16 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         if let Some(fld) = self.sema.find_field_in_class(cls, name) {
-            if matches!(fld.ty.strip_const(), Type::Struct(_) | Type::Array(_, _)) {
+            if let Type::Reference(inner) = &fld.ty {
+                code.push(OP_LOCAL_GET);
+                write_u32(code, 0); // this
+                code.push(OP_I32_LOAD);
+                write_u32(code, 2);
+                write_u32(code, fld.offset as u32);
+                if !matches!(inner.strip_const(), Type::Struct(_) | Type::Array(_, _)) {
+                    self.emit_load(inner, 0, code);
+                }
+            } else if matches!(fld.ty.strip_const(), Type::Struct(_) | Type::Array(_, _)) {
                 code.push(OP_LOCAL_GET);
                 write_u32(code, 0); // this
                 code.push(OP_I32_CONST);

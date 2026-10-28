@@ -228,6 +228,21 @@ impl Sema {
                 if let Some(sig) = self.find_unary_operator(*op, &ty) {
                     return Ok(sig.return_type);
                 }
+                if *op == UnaryOp::Plus
+                    && let Type::Struct(sname) = ty.strip_const()
+                    && let Some(conv_sig) =
+                        self.find_method_in_class_for_receiver(sname, "__to_fn_ptr", ty.is_const())
+                {
+                    Self::wrap_conversion_call(expr, &conv_sig.name, *pos);
+                    return Ok(conv_sig.return_type);
+                }
+                if matches!(ty.strip_const(), Type::Struct(_)) {
+                    return Err(CompileError::new(
+                        "invalid argument type to unary expression",
+                        pos.line,
+                        pos.col,
+                    ));
+                }
                 Ok(ty.integer_promotion())
             }
             UnaryOp::PreInc | UnaryOp::PreDec | UnaryOp::PostInc | UnaryOp::PostDec => {
@@ -339,6 +354,7 @@ impl Sema {
         if target_ty.is_const() {
             let name = match &**target {
                 Expr::Identifier(n) => n.clone(),
+                Expr::MemberAccess { member, .. } => member.clone(),
                 _ => "variable".to_string(),
             };
             return Err(CompileError::new(

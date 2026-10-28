@@ -13,6 +13,8 @@ The semantic analysis stage validates the Abstract Syntax Tree, computes record 
 5. **Overload Resolution Ranking**: Implements standard overload ranking rules to pick the best function or constructor candidate and detect ambiguous calls (`src/sema/overload.rs`).
 6. **Type Inference & Checking**: Annotates expression nodes with resolved concrete types, validates assignments, usual arithmetic conversions, and C++17 copy elision rules.
 7. **AST Desugaring**: Lowers high-level syntax nodes (such as range-based `for` loops in `src/sema/stmt_range_for.rs`) into standard scoped primitives, synthesizing pointer and iterator bounds while preserving RAII and loop control flow.
+8. **Closure Synthesis & Lambda Desugaring**: Synthesizes unique anonymous closure structs (`__lambda_N`) for C++17 lambda expressions (`src/sema/expr_lambda.rs`), generating fields for captures, constructor initialization, `operator()` call signatures, return type deduction, and static `__invoke` trampoline methods for implicit conversion to C function pointers.
+9. **Recursive `operator->` Resolution**: Resolves chained member-arrow accesses recursively until a raw pointer is reached, enforcing cycle detection and receiver `const` propagation (`src/sema/expr_member.rs`).
 
 ---
 

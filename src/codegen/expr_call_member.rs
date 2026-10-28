@@ -71,14 +71,13 @@ impl<'a> Codegen<'a> {
             {
                 return s.clone();
             }
-            if let Type::Struct(s) = clean
-                && let Some(sig) =
-                    self.sema
-                        .find_method_in_class_for_receiver(s, "operator->", false)
-                && let Type::Pointer(inner) | Type::Reference(inner) = sig.return_type.strip_const()
-                && let Type::Struct(target) = inner.strip_reference().strip_const()
-            {
-                return target.clone();
+            if let Type::Struct(s) = clean {
+                let current_is_const = crate::sema::receiver_is_const_type(obj_ty);
+                return self
+                    .sema
+                    .resolve_arrow_struct_name(s, current_is_const, crate::ast::ExprPos::new(0, 0))
+                    .map(|(name, _)| name)
+                    .unwrap_or_default();
             }
             return String::new();
         }
@@ -86,6 +85,61 @@ impl<'a> Codegen<'a> {
             return s.clone();
         }
         String::new()
+    }
+
+    /// Evaluates chained operator->() calls or pointer expressions to leave the
+    /// target object pointer on the stack.
+    pub(super) fn emit_arrow_chain(
+        &mut self,
+        object: &Expr,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        let obj_ty = self.get_expr_type_raw(object, ctx);
+        let clean = obj_ty.strip_reference().strip_const();
+        if let Type::Struct(s) = clean {
+            let mut current = s.clone();
+            let mut current_is_const = crate::sema::receiver_is_const_type(&obj_ty);
+            self.compile_lvalue_addr(object, ctx, code)?;
+            let mut visited = Vec::new();
+            while !visited.iter().any(|v| v == &current) && visited.len() < 128 {
+                visited.push(current.clone());
+                let Some((m_idx, sig)) =
+                    self.find_method_for_receiver(&current, "operator->", &[], current_is_const)
+                else {
+                    break;
+                };
+                code.push(OP_CALL);
+                write_u32(code, m_idx);
+                let ret = sig.return_type.strip_const();
+                if let Type::Pointer(inner) = ret {
+                    if matches!(inner.strip_reference().strip_const(), Type::Struct(_)) {
+                        return Ok(());
+                    }
+                } else if let Type::Reference(inner) = ret {
+                    let clean_inner = inner.strip_const();
+                    if let Type::Pointer(ptr_inner) = clean_inner {
+                        if matches!(ptr_inner.strip_reference().strip_const(), Type::Struct(_)) {
+                            self.emit_load(clean_inner, 0, code);
+                            return Ok(());
+                        }
+                    } else if let Type::Struct(next) = clean_inner {
+                        current = next.clone();
+                        current_is_const = inner.is_const();
+                        continue;
+                    }
+                } else if let Type::Struct(next) = ret {
+                    self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
+                    current = next.clone();
+                    current_is_const = sig.return_type.is_const();
+                    continue;
+                }
+                break;
+            }
+            Ok(())
+        } else {
+            self.compile_expr(object, ctx, code)
+        }
     }
 
     /// Evaluates the receiver and stores its address in a frame slot.
@@ -97,17 +151,8 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let obj_ty = self.get_expr_type_raw(object, ctx);
         if is_arrow {
-            if let Type::Struct(s) = obj_ty.strip_reference().strip_const()
-                && let Some((m_idx, _)) = self.find_method(s, "operator->", &[])
-            {
-                self.compile_lvalue_addr(object, ctx, code)?;
-                code.push(OP_CALL);
-                write_u32(code, m_idx);
-            } else {
-                self.compile_expr(object, ctx, code)?;
-            }
+            self.emit_arrow_chain(object, ctx, code)?;
         } else {
             self.compile_lvalue_addr(object, ctx, code)?;
         }

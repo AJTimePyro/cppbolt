@@ -1,0 +1,5 @@
+add(3, 4) = 7
+sq = 25
+scale(7) = 70
+inc(5) = 5
+counter after inc = 5

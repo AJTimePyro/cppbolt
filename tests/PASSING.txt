@@ -80,6 +80,7 @@ classes_oop/constructors_destructors/implicit_copy_member_objects
 classes_oop/constructors_destructors/member_default_argument
 classes_oop/constructors_destructors/member_objects_order
 classes_oop/constructors_destructors/return_val_dtor_order
+classes_oop/constructors_destructors/prvalue_default_constructor
 classes_oop/constructors_destructors/self_assignment
 classes_oop/constructors_destructors/vcall_base_ctor_dtor
 classes_oop/inheritance/multi_level_inheritance
@@ -88,6 +89,14 @@ classes_oop/inheritance/single_inheritance
 classes_oop/inheritance/virtual_destructor
 classes_oop/inheritance/virtual_dispatch_hierarchy
 classes_oop/inheritance/virtual_functions
+classes_oop/lambdas/lambda_basic
+classes_oop/lambdas/lambda_capture_struct_array
+classes_oop/lambdas/lambda_default_captures
+classes_oop/lambdas/lambda_function_pointer
+classes_oop/lambdas/lambda_nested_captures
+classes_oop/lambdas/lambda_range_for_capture
+classes_oop/lambdas/lambda_return_fn_ptr
+classes_oop/lambdas/lambda_unary_plus
 classes_oop/memory_raii/class_raii
 classes_oop/memory_raii/direct_initialization_elision
 classes_oop/memory_raii/new_delete
@@ -110,6 +119,7 @@ classes_oop/operators/chained_compound_assign
 classes_oop/operators/const_subscript
 classes_oop/operators/contextual_bool_comprehensive
 classes_oop/operators/conversion_operator
+classes_oop/operators/operator_arrow_chaining
 classes_oop/operators/operator_call_functor
 classes_oop/operators/operator_postfix_incdec
 classes_oop/operators/operator_smart_pointer
@@ -244,6 +254,9 @@ negative/function_struct_to_int
 negative/function_too_few_arguments
 negative/function_too_many_arguments
 negative/include_cycle
+negative/lambda_const_capture_mutation
+negative/lambda_duplicate_default_capture
+negative/lambda_out_of_order_default_capture
 negative/member_access_non_struct
 negative/method_string_argument
 negative/method_struct_argument
@@ -252,7 +265,10 @@ negative/multiple_inheritance
 negative/multiple_inheritance_access
 negative/namespace_alias
 negative/nesting_depth_limit
+negative/operator_arrow_cycle
 negative/operator_arrow_invalid
+negative/operator_arrow_non_pointer
+negative/operator_arrow_self_cycle
 negative/operator_deref_assign_rvalue
 negative/operator_incdec_invalid
 negative/pointer_plus_pointer
@@ -271,6 +287,7 @@ negative/switch_case_non_constant
 negative/syntax_error
 negative/throw_unsupported
 negative/type_mismatch
+negative/unary_plus_invalid_struct
 negative/undeclared_var
 negative/undefined_func
 negative/unterminated_if

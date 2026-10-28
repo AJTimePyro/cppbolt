@@ -1,0 +1,1 @@
+tests/negative/operator_arrow_non_pointer.cpp:9:12: error: operator-> must return a pointer to a struct or class

@@ -33,7 +33,12 @@ impl Sema {
             Expr::StringLiteral(_) => Ok(Type::Pointer(Box::new(Type::Char))),
             Expr::This => {
                 if let Some(cls) = &self.current_class {
-                    Ok(Type::Pointer(Box::new(Type::Struct(cls.clone()))))
+                    let struct_ty = if self.current_func_is_const {
+                        Type::Const(Box::new(Type::Struct(cls.clone())))
+                    } else {
+                        Type::Struct(cls.clone())
+                    };
+                    Ok(Type::Pointer(Box::new(struct_ty)))
                 } else {
                     Err(CompileError::new(
                         "'this' cannot be used outside of member function",
@@ -82,6 +87,7 @@ impl Sema {
             }
             Expr::SizeofType(_) | Expr::SizeofExpr(_) => Ok(Type::UnsignedInt),
             Expr::InitializerList { .. } => self.analyze_initializer(expr),
+            Expr::Lambda { .. } => self.analyze_lambda(expr),
         }
     }
 
@@ -164,22 +170,7 @@ impl Sema {
         };
 
         if let Some(global_name) = name.strip_prefix("::") {
-            if let Some(var) = self.global_vars.get(global_name) {
-                return Ok(var.ty.clone());
-            } else if let Some(var) = self.lookup_var(global_name) {
-                return Ok(var.ty.clone());
-            } else if let Some(sigs) = self.functions.get(global_name) {
-                return Ok(Type::Pointer(Box::new(Type::Function {
-                    return_type: Box::new(sigs[0].return_type.clone()),
-                    param_types: sigs[0].param_types.clone(),
-                })));
-            } else {
-                return Err(CompileError::new(
-                    format!("Undeclared variable or identifier '{}'", name),
-                    self.current_line,
-                    self.current_col,
-                ));
-            }
+            return self.analyze_global_identifier(name, global_name);
         }
         self.check_ambiguous_name(name)?;
         if let Some(var) = self.lookup_var(name) {
@@ -200,7 +191,11 @@ impl Sema {
                     is_arrow: true,
                     pos: ExprPos::new(self.current_line, self.current_col),
                 };
-                Ok(fld.ty.clone())
+                let mut ret_ty = fld.ty.clone();
+                if self.current_func_is_const && !ret_ty.is_reference() && !ret_ty.is_const() {
+                    ret_ty = Type::Const(Box::new(ret_ty));
+                }
+                Ok(ret_ty)
             } else if let Some(var) = self.lookup_var(&format!("{}::{}", cls, name)) {
                 Ok(var.ty.clone())
             } else if self.find_method_in_class(cls, name).is_some()
@@ -228,6 +223,25 @@ impl Sema {
         } else {
             Err(CompileError::new(
                 format!("Undeclared variable or identifier '{}'", name),
+                self.current_line,
+                self.current_col,
+            ))
+        }
+    }
+
+    fn analyze_global_identifier(&self, raw: &str, name: &str) -> Result<Type, CompileError> {
+        if let Some(var) = self.global_vars.get(name) {
+            Ok(var.ty.clone())
+        } else if let Some(var) = self.lookup_var(name) {
+            Ok(var.ty.clone())
+        } else if let Some(sigs) = self.functions.get(name) {
+            Ok(Type::Pointer(Box::new(Type::Function {
+                return_type: Box::new(sigs[0].return_type.clone()),
+                param_types: sigs[0].param_types.clone(),
+            })))
+        } else {
+            Err(CompileError::new(
+                format!("Undeclared variable or identifier '{}'", raw),
                 self.current_line,
                 self.current_col,
             ))

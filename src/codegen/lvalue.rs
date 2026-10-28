@@ -163,6 +163,11 @@ impl<'a> Codegen<'a> {
             code.push(OP_I32_CONST);
             write_i32(code, fld.offset as i32);
             code.push(OP_I32_ADD);
+            if fld.ty.is_reference() {
+                code.push(OP_I32_LOAD);
+                write_u32(code, 2);
+                write_u32(code, 0);
+            }
             return Ok(());
         }
         if let Some(&offset) = self
@@ -244,28 +249,26 @@ impl<'a> Codegen<'a> {
     ) -> Result<(), CompileError> {
         let obj_ty = self.get_expr_type_raw(object, ctx);
         let sname = self.member_class_name(&obj_ty, is_arrow);
-        let offset = self
+        let fld = self
             .sema
             .find_field_in_class(&sname, member)
-            .map(|field| field.offset as i32)
             .ok_or_else(|| self.internal_error("missing field layout"))?;
+        let offset = fld.offset as i32;
+        let is_ref = fld.ty.is_reference();
 
         if is_arrow {
-            if let Type::Struct(s) = obj_ty.strip_reference().strip_const()
-                && let Some((m_idx, _)) = self.find_method(s, "operator->", &[])
-            {
-                self.compile_lvalue_addr(object, ctx, code)?;
-                code.push(OP_CALL);
-                write_u32(code, m_idx);
-            } else {
-                self.compile_expr(object, ctx, code)?;
-            }
+            self.emit_arrow_chain(object, ctx, code)?;
         } else {
             self.compile_lvalue_addr(object, ctx, code)?;
         }
         code.push(OP_I32_CONST);
         write_i32(code, offset);
         code.push(OP_I32_ADD);
+        if is_ref {
+            code.push(OP_I32_LOAD);
+            write_u32(code, 2);
+            write_u32(code, 0);
+        }
         Ok(())
     }
 

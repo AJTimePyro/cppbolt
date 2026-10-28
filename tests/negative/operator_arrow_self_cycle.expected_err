@@ -1,0 +1,1 @@
+tests/negative/operator_arrow_self_cycle.cpp:7:12: error: circular operator-> delegation on 'SelfLoop'

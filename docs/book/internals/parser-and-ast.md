@@ -32,7 +32,7 @@ The parser transforms the flat token stream into a structured Abstract Syntax Tr
 - `ast::Stmt`: Statement nodes:
   - `Expr(Expr)`, `Block(Vec<Stmt>)`, `If { cond, then_branch, else_branch }`, `While`, `DoWhile`, `For`, `RangeFor { decl, range, body }`, `Switch`, `Return(Option<Expr>)`, `Break`, `Continue`, `VarDecl`.
 - `ast::Expr`: Expression tree nodes:
-  - `IntLiteral`, `FloatLiteral`, `StringLiteral`, `BoolLiteral`, `Identifier`, `BinaryOp`, `UnaryOp`, `Call`, `MemberCall`, `MemberAccess`, `ArraySubscript`, `New`, `Delete`, `Ternary`, `Assign`, `Cast`.
+  - `IntLiteral`, `FloatLiteral`, `StringLiteral`, `BoolLiteral`, `Identifier`, `BinaryOp`, `UnaryOp`, `Call`, `MemberCall`, `MemberAccess`, `ArraySubscript`, `New`, `Delete`, `Ternary`, `Assign`, `Cast`, `Lambda`.
   - Every `Expr` variant carries an `ExprPos` (`line`, `col`) recording the position of its leading token.
 - `ast::types::Type`: Representation of types:
   - `Int`, `LongLong`, `Short`, `Char`, `Float`, `Double`, `Bool`, `Void`.
