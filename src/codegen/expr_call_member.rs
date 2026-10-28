@@ -90,7 +90,8 @@ impl<'a> Codegen<'a> {
                     } else if let Type::Reference(inner) = ret {
                         let clean_inner = inner.strip_const();
                         if let Type::Pointer(ptr_inner) = clean_inner {
-                            if let Type::Struct(target) = ptr_inner.strip_reference().strip_const() {
+                            if let Type::Struct(target) = ptr_inner.strip_reference().strip_const()
+                            {
                                 return target.clone();
                             }
                         } else if let Type::Struct(next) = clean_inner {
