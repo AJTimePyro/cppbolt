@@ -16,7 +16,11 @@ impl Sema {
                 ));
             }
         }
-        self.current_func_return_type = Some(func.return_type.clone());
+        if func.return_type == Type::Auto {
+            self.current_func_return_type = None;
+        } else {
+            self.current_func_return_type = Some(func.return_type.clone());
+        }
         self.current_func_name = Some(func.name.clone());
         self.current_frame_size = 0;
         self.enter_scope();
@@ -45,7 +49,11 @@ impl Sema {
         }
 
         self.exit_scope();
-        self.current_func_return_type = None;
+        if func.return_type == Type::Auto {
+            func.return_type = self.current_func_return_type.take().unwrap_or(Type::Void);
+        } else {
+            self.current_func_return_type = None;
+        }
         self.current_func_name = None;
         Ok(())
     }
@@ -312,18 +320,21 @@ impl Sema {
     ) -> Result<(), CompileError> {
         if let Some(expr) = expr_opt {
             let ret_ty = self.analyze_expr(expr)?;
-            if let Some(expected) = &self.current_func_return_type
-                && !self.can_assign(expected, &ret_ty)
-            {
-                return Err(CompileError::new(
-                    format!(
-                        "Return type mismatch: expected {}, found {}",
-                        expected.to_c_type(),
-                        ret_ty.to_c_type()
-                    ),
-                    line,
-                    col,
-                ));
+            if let Some(expected) = &self.current_func_return_type {
+                if !self.can_assign(expected, &ret_ty) {
+                    return Err(CompileError::new(
+                        format!(
+                            "Return type mismatch: expected {}, found {}",
+                            expected.to_c_type(),
+                            ret_ty.to_c_type()
+                        ),
+                        line,
+                        col,
+                    ));
+                }
+            } else {
+                self.current_func_return_type =
+                    Some(ret_ty.strip_reference().strip_const().clone());
             }
         }
         Ok(())

@@ -38,7 +38,11 @@ impl Sema {
         }
 
         if let Some(fld) = self.find_field_in_class(&struct_name, member) {
-            Ok(fld.ty.clone())
+            let mut ret_ty = fld.ty.clone();
+            if receiver_is_const_type(&obj_ty) && !ret_ty.is_reference() && !ret_ty.is_const() {
+                ret_ty = Type::Const(Box::new(ret_ty));
+            }
+            Ok(ret_ty)
         } else if self.find_method_in_class(&struct_name, member).is_some() {
             Ok(Type::Function {
                 return_type: Box::new(Type::Int),

@@ -247,11 +247,16 @@ impl<'a> Codegen<'a> {
         }
         let mut params = m.params.clone();
         if !m.is_static {
+            let this_inner = if m.is_const {
+                Type::Const(Box::new(Type::Struct(name.to_string())))
+            } else {
+                Type::Struct(name.to_string())
+            };
             params.insert(
                 0,
                 Param {
                     name: "this".to_string(),
-                    ty: Type::Pointer(Box::new(Type::Struct(name.to_string()))),
+                    ty: Type::Pointer(Box::new(this_inner)),
                     default_val: None,
                 },
             );

@@ -7,6 +7,7 @@ impl Sema {
         self.synthesize_constructors(program);
         self.register_declarations(program)?;
         self.analyze_declarations(program)?;
+        program.declarations.append(&mut self.synthesized_decls);
         Ok(())
     }
 
@@ -272,30 +273,34 @@ impl Sema {
             }
         }
         for m in methods {
-            let mut params = m.params.clone();
-            if !m.is_static {
-                params.insert(0, this_param(name, m.is_const));
-            }
-            let qual_name = format!("{}::{}", name, m.name);
-            let mut mangled = self.mangle_name(&qual_name, &params);
-            match m.ref_qualifier {
-                RefQualifier::LValue => mangled.push_str("_R"),
-                RefQualifier::RValue => mangled.push_str("_O"),
-                RefQualifier::None => {}
-            }
-            let sig = FunctionSig {
-                name: m.name.clone(),
-                mangled_name: mangled,
-                return_type: m.return_type.clone(),
-                param_types: params.iter().map(|p| p.ty.clone()).collect(),
-                default_args: params.iter().map(|p| p.default_val.clone()).collect(),
-                is_static: m.is_static,
-                is_explicit: m.is_explicit,
-                ref_qualifier: m.ref_qualifier,
-            };
-            self.register_function(sig.clone());
-            self.functions.entry(qual_name).or_default().push(sig);
+            self.register_struct_method(name, m);
         }
+    }
+
+    pub(super) fn register_struct_method(&mut self, class_name: &str, m: &FunctionDecl) {
+        let mut params = m.params.clone();
+        if !m.is_static {
+            params.insert(0, this_param(class_name, m.is_const));
+        }
+        let qual_name = format!("{}::{}", class_name, m.name);
+        let mut mangled = self.mangle_name(&qual_name, &params);
+        match m.ref_qualifier {
+            RefQualifier::LValue => mangled.push_str("_R"),
+            RefQualifier::RValue => mangled.push_str("_O"),
+            RefQualifier::None => {}
+        }
+        let sig = FunctionSig {
+            name: m.name.clone(),
+            mangled_name: mangled,
+            return_type: m.return_type.clone(),
+            param_types: params.iter().map(|p| p.ty.clone()).collect(),
+            default_args: params.iter().map(|p| p.default_val.clone()).collect(),
+            is_static: m.is_static,
+            is_explicit: m.is_explicit,
+            ref_qualifier: m.ref_qualifier,
+        };
+        self.register_function(sig.clone());
+        self.functions.entry(qual_name).or_default().push(sig);
     }
 
     /// Rejects abstract variable types and completes a zero-length array type
@@ -411,7 +416,7 @@ impl Sema {
 }
 
 /// Builds the implicit `this` parameter of a non-static method.
-fn this_param(class: &str, is_const: bool) -> Param {
+pub(super) fn this_param(class: &str, is_const: bool) -> Param {
     let inner = if is_const {
         Type::Const(Box::new(Type::Struct(class.to_string())))
     } else {

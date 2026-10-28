@@ -194,10 +194,15 @@ impl<'a> Codegen<'a> {
             {
                 code.push(OP_LOCAL_GET);
                 write_u32(code, 0); // this
-                let item_ty = self.get_expr_type(&args[0], ctx);
-                self.compile_expr(&args[0], ctx, code)?;
-                self.emit_conversion(&item_ty, &fld.ty, code);
-                self.emit_store(&fld.ty, fld.offset as u32, code);
+                if fld.ty.is_reference() {
+                    self.compile_lvalue_addr(&args[0], ctx, code)?;
+                    self.emit_store(&fld.ty, fld.offset as u32, code);
+                } else {
+                    let item_ty = self.get_expr_type(&args[0], ctx);
+                    self.compile_expr(&args[0], ctx, code)?;
+                    self.emit_conversion(&item_ty, &fld.ty, code);
+                    self.emit_store(&fld.ty, fld.offset as u32, code);
+                }
             }
         }
         Ok(())
