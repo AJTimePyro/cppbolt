@@ -41,7 +41,7 @@ impl<'a> Codegen<'a> {
             receiver_const,
         };
 
-        let receiver_is_lvalue = is_arrow || object.is_lvalue();
+        let receiver_is_lvalue = is_arrow || obj_ty.is_reference() || object.is_lvalue();
         if let Some(slot_idx) = is_virtual {
             self.compile_member_call_virtual(CallSite { slot_idx, ..site }, ctx, code)?;
         } else if let Some((m_idx, sig)) = self.find_method_for_receiver_category(

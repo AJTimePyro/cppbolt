@@ -163,7 +163,11 @@ impl Sema {
                 return Ok(Some(Type::Void));
             }
             let receiver_const = crate::sema::receiver_is_const_type(&obj_ty);
-            let receiver_is_lvalue = if *is_arrow { true } else { object.is_lvalue() };
+            let receiver_is_lvalue = if *is_arrow {
+                true
+            } else {
+                obj_ty.is_reference() || object.is_lvalue()
+            };
             let all_overloads = self.find_method_overloads_in_class(&struct_name, member, false);
             if all_overloads.is_empty() {
                 return Err(CompileError::new(
@@ -172,29 +176,7 @@ impl Sema {
                     pos.col,
                 ));
             }
-            let has_matching_ref_qualifier =
-                all_overloads.iter().any(|sig| match sig.ref_qualifier {
-                    RefQualifier::None => true,
-                    RefQualifier::LValue => {
-                        receiver_is_lvalue || crate::sema::sig_receiver_is_const(sig)
-                    }
-                    RefQualifier::RValue => !receiver_is_lvalue,
-                });
-            if !has_matching_ref_qualifier {
-                if receiver_is_lvalue {
-                    return Err(CompileError::new(
-                        "cannot call rvalue ref-qualified method on an lvalue",
-                        pos.line,
-                        pos.col,
-                    ));
-                } else {
-                    return Err(CompileError::new(
-                        "cannot call lvalue ref-qualified method on an rvalue",
-                        pos.line,
-                        pos.col,
-                    ));
-                }
-            }
+            Self::check_ref_qualifier_compatibility(&all_overloads, receiver_is_lvalue, *pos)?;
             if let Some(sig) = self.find_method_in_class_for_receiver_category(
                 &struct_name,
                 member,
@@ -205,14 +187,14 @@ impl Sema {
                 self.check_member_arguments(
                     &struct_name,
                     member,
-                    receiver_const,
-                    receiver_is_lvalue,
+                    (receiver_const, receiver_is_lvalue),
                     arg_types,
                     *pos,
                 )?;
                 // A member call may leave out arguments that have default
                 // values.
                 self.fill_member_defaults(&sig, args)?;
+                self.convert_call_args(args, &sig.param_types[1..], arg_types, *pos);
                 return Ok(Some(sig.return_type.clone()));
             } else {
                 return Err(CompileError::new(
@@ -225,6 +207,27 @@ impl Sema {
         Ok(None)
     }
 
+    fn check_ref_qualifier_compatibility(
+        all_overloads: &[FunctionSig],
+        receiver_is_lvalue: bool,
+        pos: ExprPos,
+    ) -> Result<(), CompileError> {
+        let has_matching = all_overloads.iter().any(|sig| match sig.ref_qualifier {
+            RefQualifier::None => true,
+            RefQualifier::LValue => receiver_is_lvalue || crate::sema::sig_receiver_is_const(sig),
+            RefQualifier::RValue => !receiver_is_lvalue,
+        });
+        if !has_matching {
+            let msg = if receiver_is_lvalue {
+                "cannot call rvalue ref-qualified method on an lvalue"
+            } else {
+                "cannot call lvalue ref-qualified method on an rvalue"
+            };
+            return Err(CompileError::new(msg, pos.line, pos.col));
+        }
+        Ok(())
+    }
+
     /// Checks that the arguments of a method call match an overload.
     ///
     /// The first parameter of a method is the implicit `this`, so the
@@ -233,56 +236,22 @@ impl Sema {
         &self,
         class_name: &str,
         member: &str,
-        receiver_const: bool,
-        receiver_is_lvalue: bool,
+        receiver: (bool, bool),
         arg_types: &[Type],
         pos: ExprPos,
     ) -> Result<(), CompileError> {
+        let (receiver_const, receiver_is_lvalue) = receiver;
         let overloads = self.find_method_overloads_in_class(class_name, member, receiver_const);
         if overloads.is_empty() {
             return Ok(());
         }
         let mut conversion_failure: Option<ConversionFailure> = None;
-        let mut expected: Option<usize> = None;
         let mut best_score = usize::MAX;
         let mut best: Option<&FunctionSig> = None;
         let mut ambiguous = false;
         for sig in &overloads {
-            if receiver_is_lvalue && sig.ref_qualifier == RefQualifier::RValue {
-                continue;
-            }
-            if !receiver_is_lvalue
-                && sig.ref_qualifier == RefQualifier::LValue
-                && !crate::sema::sig_receiver_is_const(sig)
-            {
-                continue;
-            }
-            let params = if sig.param_types.is_empty() {
-                &[][..]
-            } else {
-                &sig.param_types[1..]
-            };
-            let defaults = if sig.default_args.is_empty() {
-                &[][..]
-            } else {
-                &sig.default_args[1..]
-            };
-            let min_args = defaults.iter().take_while(|d| d.is_none()).count();
-            if arg_types.len() < min_args || arg_types.len() > params.len() {
-                expected = Some(params.len());
-                continue;
-            }
-            match self.score_arguments(params, arg_types) {
-                Ok(score) => {
-                    // A non-const receiver prefers the non-const overload.
-                    let const_bonus =
-                        usize::from(!receiver_const && crate::sema::sig_receiver_is_const(sig));
-                    let ref_bonus = match (receiver_is_lvalue, sig.ref_qualifier) {
-                        (true, RefQualifier::None) => 1,
-                        (false, RefQualifier::None) => 1,
-                        _ => 0,
-                    };
-                    let score = score + const_bonus + ref_bonus;
+            match self.score_member_sig(sig, receiver_const, receiver_is_lvalue, arg_types) {
+                Some(Ok(score)) => {
                     if score < best_score {
                         best_score = score;
                         best = Some(sig);
@@ -291,15 +260,13 @@ impl Sema {
                         && let Some(best) = best
                         && !same_parameters(best, sig)
                     {
-                        // Two overloads convert the arguments equally well.
                         ambiguous = true;
                     }
                 }
-                Err(failure) => {
-                    if conversion_failure.is_none() {
-                        conversion_failure = Some(failure);
-                    }
+                Some(Err(failure)) => {
+                    conversion_failure.get_or_insert(failure);
                 }
+                None => {}
             }
         }
         if ambiguous {
@@ -311,16 +278,84 @@ impl Sema {
         if let Some(failure) = conversion_failure {
             return Err(self.no_matching_conversion(member, &failure, pos));
         }
+        let expected = overloads
+            .first()
+            .map(|s| s.param_types.len().saturating_sub(1))
+            .unwrap_or(0);
         Err(CompileError::new(
             format!(
                 "No matching function call for '{}': expected {} arguments, found {}",
                 member,
-                expected.unwrap_or(0),
+                expected,
                 arg_types.len()
             ),
             pos.line,
             pos.col,
         ))
+    }
+
+    fn score_member_sig(
+        &self,
+        sig: &FunctionSig,
+        receiver_const: bool,
+        receiver_is_lvalue: bool,
+        arg_types: &[Type],
+    ) -> Option<Result<usize, ConversionFailure>> {
+        if receiver_is_lvalue && sig.ref_qualifier == RefQualifier::RValue {
+            return None;
+        }
+        if !receiver_is_lvalue
+            && sig.ref_qualifier == RefQualifier::LValue
+            && !crate::sema::sig_receiver_is_const(sig)
+        {
+            return None;
+        }
+        let params = if sig.param_types.is_empty() {
+            &[][..]
+        } else {
+            &sig.param_types[1..]
+        };
+        let defaults = if sig.default_args.is_empty() {
+            &[][..]
+        } else {
+            &sig.default_args[1..]
+        };
+        let min_args = defaults.iter().take_while(|d| d.is_none()).count();
+        if arg_types.len() < min_args || arg_types.len() > params.len() {
+            return None;
+        }
+        Some(self.score_arguments(params, arg_types).map(|score| {
+            let const_bonus =
+                usize::from(!receiver_const && crate::sema::sig_receiver_is_const(sig));
+            let ref_bonus = match (receiver_is_lvalue, sig.ref_qualifier) {
+                (true, RefQualifier::None) | (false, RefQualifier::None) => 1,
+                _ => 0,
+            };
+            score + const_bonus + ref_bonus
+        }))
+    }
+
+    fn convert_call_args(
+        &self,
+        args: &mut [Expr],
+        param_types: &[Type],
+        arg_types: &[Type],
+        pos: ExprPos,
+    ) {
+        for (i, (arg, param_ty)) in args.iter_mut().zip(param_types).enumerate() {
+            if i < arg_types.len() {
+                let arg_ty = &arg_types[i];
+                if let Type::Struct(sname) = arg_ty.strip_reference().strip_const() {
+                    let param_clean = param_ty.strip_reference().strip_const();
+                    if !matches!(param_clean, Type::Struct(p) if p == sname) {
+                        let is_const = arg_ty.strip_reference().is_const();
+                        if let Some(sig) = self.find_conversion_to(sname, param_clean, is_const) {
+                            Self::wrap_conversion_call(arg, &sig.name, pos);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fn resolve_named_call(
@@ -344,7 +379,8 @@ impl Sema {
         if selection.ambiguous {
             return Err(self.ambiguous_call(name, arg_types, pos));
         }
-        if let Some((cand, full_args)) = selection.best {
+        if let Some((cand, mut full_args)) = selection.best {
+            self.convert_call_args(&mut full_args, &cand.param_types, arg_types, pos);
             let mangled = cand.mangled_name.clone();
             let ret_type = cand.return_type.clone();
             *callee = Expr::Identifier(mangled);

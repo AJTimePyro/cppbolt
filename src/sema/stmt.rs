@@ -381,43 +381,7 @@ impl Sema {
             } => {
                 let l = self.eval_const_int_node(left, line, col)?;
                 let r = self.eval_const_int_node(right, line, col)?;
-                match op {
-                    BinaryOp::Add => Ok(l + r),
-                    BinaryOp::Sub => Ok(l - r),
-                    BinaryOp::Mul => Ok(l * r),
-                    BinaryOp::Div => {
-                        if r == 0 {
-                            Err(CompileError::new(
-                                "division by zero in constant expression",
-                                line,
-                                col,
-                            ))
-                        } else {
-                            Ok(l / r)
-                        }
-                    }
-                    BinaryOp::Rem => {
-                        if r == 0 {
-                            Err(CompileError::new(
-                                "remainder by zero in constant expression",
-                                line,
-                                col,
-                            ))
-                        } else {
-                            Ok(l % r)
-                        }
-                    }
-                    BinaryOp::BitAnd => Ok(l & r),
-                    BinaryOp::BitOr => Ok(l | r),
-                    BinaryOp::BitXor => Ok(l ^ r),
-                    BinaryOp::Shl => Ok(l << r),
-                    BinaryOp::Shr => Ok(l >> r),
-                    _ => Err(CompileError::new(
-                        "Case value must be integer constant",
-                        line,
-                        col,
-                    )),
-                }
+                Self::eval_const_binary_op(*op, l, r, line, col)
             }
             _ => Err(CompileError::new(
                 "Case value must be integer constant",
@@ -427,92 +391,49 @@ impl Sema {
         }
     }
 
-    fn desugar_structured_binding(&mut self, stmt: Stmt) -> Result<Stmt, CompileError> {
-        let StmtKind::StructuredBinding {
-            bindings,
-            ty,
-            mut init,
-        } = stmt.kind
-        else {
-            return Ok(stmt);
-        };
-        let init_ty = self.analyze_expr(&mut init)?;
-        let struct_name = match init_ty.strip_reference().strip_const() {
-            Type::Struct(name) => name.clone(),
-            _ => {
-                return Err(CompileError::new(
-                    "cannot decompose non-class type in structured binding",
-                    stmt.line,
-                    stmt.col,
-                ));
+    fn eval_const_binary_op(
+        op: BinaryOp,
+        l: i64,
+        r: i64,
+        line: usize,
+        col: usize,
+    ) -> Result<i64, CompileError> {
+        match op {
+            BinaryOp::Add => Ok(l + r),
+            BinaryOp::Sub => Ok(l - r),
+            BinaryOp::Mul => Ok(l * r),
+            BinaryOp::Div => {
+                if r == 0 {
+                    Err(CompileError::new(
+                        "division by zero in constant expression",
+                        line,
+                        col,
+                    ))
+                } else {
+                    Ok(l / r)
+                }
             }
-        };
-        let fields = match self.struct_layouts.get(&struct_name) {
-            Some(layout) => layout.fields.clone(),
-            None => {
-                return Err(CompileError::new(
-                    format!("undefined struct '{}'", struct_name),
-                    stmt.line,
-                    stmt.col,
-                ));
+            BinaryOp::Rem => {
+                if r == 0 {
+                    Err(CompileError::new(
+                        "remainder by zero in constant expression",
+                        line,
+                        col,
+                    ))
+                } else {
+                    Ok(l % r)
+                }
             }
-        };
-        if bindings.len() != fields.len() {
-            return Err(CompileError::new(
-                format!(
-                    "{} names provided in structured binding, but struct '{}' only has {} fields",
-                    bindings.len(),
-                    struct_name,
-                    fields.len()
-                ),
-                stmt.line,
-                stmt.col,
-            ));
+            BinaryOp::BitAnd => Ok(l & r),
+            BinaryOp::BitOr => Ok(l | r),
+            BinaryOp::BitXor => Ok(l ^ r),
+            BinaryOp::Shl => Ok(l << r),
+            BinaryOp::Shr => Ok(l >> r),
+            _ => Err(CompileError::new(
+                "Case value must be integer constant",
+                line,
+                col,
+            )),
         }
-
-        let hidden_name = format!("__sb_{}_{}", stmt.line, stmt.col);
-        let hidden_decl = Stmt::new(
-            StmtKind::VarDecl {
-                name: hidden_name.clone(),
-                ty: ty.clone(),
-                init: Some(init),
-                is_static: false,
-            },
-            stmt.line,
-            stmt.col,
-        );
-
-        let is_const_ref = matches!(ty, Type::Reference(ref inner) if inner.is_const())
-            || matches!(ty, Type::Const(_));
-        let mut stmts = vec![hidden_decl];
-        for (name, field) in bindings.iter().zip(fields.iter()) {
-            let binding_ty = if is_const_ref {
-                Type::Reference(Box::new(Type::Const(Box::new(Type::Auto))))
-            } else {
-                Type::Reference(Box::new(Type::Auto))
-            };
-            let member_expr = Expr::MemberAccess {
-                object: Box::new(Expr::Identifier(hidden_name.clone())),
-                member: field.name.clone(),
-                is_arrow: false,
-                pos: ExprPos::new(stmt.line, stmt.col),
-            };
-            stmts.push(Stmt::new(
-                StmtKind::VarDecl {
-                    name: name.clone(),
-                    ty: binding_ty,
-                    init: Some(member_expr),
-                    is_static: false,
-                },
-                stmt.line,
-                stmt.col,
-            ));
-        }
-
-        Ok(Stmt::new(
-            StmtKind::VarDeclGroup(stmts),
-            stmt.line,
-            stmt.col,
-        ))
     }
 }

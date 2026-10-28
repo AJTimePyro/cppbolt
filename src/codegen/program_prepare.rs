@@ -179,41 +179,12 @@ impl<'a> Codegen<'a> {
         name: &'p String,
         m: &'p FunctionDecl,
     ) -> Option<FuncCandidate<'p>> {
-        let qual_name = format!("{}::{}", name, m.name);
-        let mut aliases = vec![
-            m.name.clone(),
-            qual_name.clone(),
-            format!("{}_{}", name, m.name),
-        ];
+        let aliases = self.collect_method_aliases(name, m);
         let mut calls = HashSet::new();
         if m.name == *name {
-            aliases.push(format!("{}_{}", name, name));
-            aliases.push(format!("{}::{}", name, name));
             calls.insert(format!("{}_~{}", name, name));
             calls.insert(format!("{}::~{}", name, name));
         }
-        if m.name == format!("~{}", name) {
-            aliases.push(format!("{}_~{}", name, name));
-            aliases.push(format!("{}::~{}", name, name));
-        }
-        let mut params = m.params.clone();
-        if !m.is_static {
-            params.insert(
-                0,
-                Param {
-                    name: "this".to_string(),
-                    ty: Type::Pointer(Box::new(Type::Struct(name.clone()))),
-                    default_val: None,
-                },
-            );
-        }
-        let mut mangled = self.sema.mangle_name(&qual_name, &params);
-        match m.ref_qualifier {
-            RefQualifier::LValue => mangled.push_str("_R"),
-            RefQualifier::RValue => mangled.push_str("_O"),
-            RefQualifier::None => {}
-        }
-        aliases.push(mangled);
         if let Some(body) = &m.body {
             collect_stmt_calls(body, &mut calls);
         }
@@ -257,6 +228,42 @@ impl<'a> Codegen<'a> {
             aliases,
             calls,
         })
+    }
+
+    fn collect_method_aliases(&self, name: &str, m: &FunctionDecl) -> Vec<String> {
+        let qual_name = format!("{}::{}", name, m.name);
+        let mut aliases = vec![
+            m.name.clone(),
+            qual_name.clone(),
+            format!("{}_{}", name, m.name),
+        ];
+        if m.name == name {
+            aliases.push(format!("{}_{}", name, name));
+            aliases.push(format!("{}::{}", name, name));
+        }
+        if m.name == format!("~{}", name) {
+            aliases.push(format!("{}_~{}", name, name));
+            aliases.push(format!("{}::~{}", name, name));
+        }
+        let mut params = m.params.clone();
+        if !m.is_static {
+            params.insert(
+                0,
+                Param {
+                    name: "this".to_string(),
+                    ty: Type::Pointer(Box::new(Type::Struct(name.to_string()))),
+                    default_val: None,
+                },
+            );
+        }
+        let mut mangled = self.sema.mangle_name(&qual_name, &params);
+        match m.ref_qualifier {
+            RefQualifier::LValue => mangled.push_str("_R"),
+            RefQualifier::RValue => mangled.push_str("_O"),
+            RefQualifier::None => {}
+        }
+        aliases.push(mangled);
+        aliases
     }
 
     fn compute_reachable(candidates: &[FuncCandidate<'_>]) -> HashSet<usize> {

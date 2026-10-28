@@ -281,40 +281,14 @@ impl Parser {
         is_static: bool,
         is_explicit: bool,
     ) -> Result<bool, CompileError> {
-        if self.peek() == &TokenKind::KwOperator {
-            let next_tok = self.peek_ahead(1);
-            let is_conv_type = matches!(
-                next_tok,
-                TokenKind::KwInt
-                    | TokenKind::KwLong
-                    | TokenKind::KwChar
-                    | TokenKind::KwBool
-                    | TokenKind::KwFloat
-                    | TokenKind::KwDouble
-                    | TokenKind::KwUnsigned
-                    | TokenKind::KwSigned
-                    | TokenKind::KwShort
-                    | TokenKind::KwVoid
-            ) || matches!(next_tok, TokenKind::Ident(id) if self.known_types.contains(id) || self.type_aliases.contains_key(id));
-            if is_conv_type {
-                self.advance();
-                let target_type = self.parse_type()?;
-                let fname = format!("operator {}", target_type.to_c_type());
-                let mut func = self.parse_function_tail(
-                    fname.clone(),
-                    target_type,
-                    start_tok.line,
-                    start_tok.col,
-                )?;
-                func.is_virtual = is_virtual;
-                func.is_static = is_static;
-                func.is_explicit = is_explicit;
-                if body.is_private {
-                    body.private_members.push(fname);
-                }
-                body.methods.push(func);
-                return Ok(true);
-            }
+        if self.parse_struct_conversion_operator(
+            body,
+            start_tok,
+            is_virtual,
+            is_static,
+            is_explicit,
+        )? {
+            return Ok(true);
         }
 
         if self.peek() == &TokenKind::Tilde {
@@ -355,6 +329,49 @@ impl Parser {
         }
 
         Ok(false)
+    }
+
+    fn parse_struct_conversion_operator(
+        &mut self,
+        body: &mut StructBody,
+        start_tok: &Token,
+        is_virtual: bool,
+        is_static: bool,
+        is_explicit: bool,
+    ) -> Result<bool, CompileError> {
+        if self.peek() != &TokenKind::KwOperator {
+            return Ok(false);
+        }
+        let next_tok = self.peek_ahead(1);
+        let is_conv_type = matches!(
+            next_tok,
+            TokenKind::KwInt
+                | TokenKind::KwLong
+                | TokenKind::KwChar
+                | TokenKind::KwBool
+                | TokenKind::KwFloat
+                | TokenKind::KwDouble
+                | TokenKind::KwUnsigned
+                | TokenKind::KwSigned
+                | TokenKind::KwShort
+                | TokenKind::KwVoid
+        ) || matches!(next_tok, TokenKind::Ident(id) if self.known_types.contains(id) || self.type_aliases.contains_key(id));
+        if !is_conv_type {
+            return Ok(false);
+        }
+        self.advance();
+        let target_type = self.parse_type()?;
+        let fname = format!("operator {}", target_type.to_c_type());
+        let mut func =
+            self.parse_function_tail(fname.clone(), target_type, start_tok.line, start_tok.col)?;
+        func.is_virtual = is_virtual;
+        func.is_static = is_static;
+        func.is_explicit = is_explicit;
+        if body.is_private {
+            body.private_members.push(fname);
+        }
+        body.methods.push(func);
+        Ok(true)
     }
 
     fn parse_struct_function_or_field(

@@ -1,6 +1,6 @@
 #include <cstdio>
 
-int compute_factor(int x) {
+constexpr int compute_factor(int x) {
     return x * x + 1;
 }
 

@@ -23,6 +23,29 @@ impl Sema {
             }
         }
 
+        if let Type::Struct(sname) = lty.strip_reference().strip_const()
+            && !matches!(rty.strip_reference().strip_const(), Type::Struct(_))
+        {
+            let is_const = lty.strip_reference().is_const();
+            if let Some(sig) =
+                self.find_conversion_to(sname, rty.strip_reference().strip_const(), is_const)
+            {
+                let conv_ty = sig.return_type.strip_reference().clone();
+                return self.binary_result_type(op, &conv_ty, rty);
+            }
+        }
+        if let Type::Struct(sname) = rty.strip_reference().strip_const()
+            && !matches!(lty.strip_reference().strip_const(), Type::Struct(_))
+        {
+            let is_const = rty.strip_reference().is_const();
+            if let Some(sig) =
+                self.find_conversion_to(sname, lty.strip_reference().strip_const(), is_const)
+            {
+                let conv_ty = sig.return_type.strip_reference().clone();
+                return self.binary_result_type(op, lty, &conv_ty);
+            }
+        }
+
         match op {
             BinaryOp::LogicalAnd | BinaryOp::LogicalOr => Type::Bool,
             BinaryOp::Eq
@@ -91,7 +114,8 @@ impl Sema {
         let mut base = owned;
         let mut lty = self.analyze_expr(&mut base)?;
         for (op, right, pos) in spine.iter_mut().rev() {
-            let rty = self.analyze_expr(right)?;
+            let mut rty = self.analyze_expr(right)?;
+            self.apply_binary_conversions(*op, (&mut base, &mut lty), (right, &mut rty), *pos);
             // Adding two pointers is not a C++ expression.
             if *op == BinaryOp::Add
                 && lty.decay_array().is_pointer()
@@ -117,6 +141,48 @@ impl Sema {
         }
         *expr = rebuilt;
         Ok(lty)
+    }
+
+    fn apply_binary_conversions(
+        &mut self,
+        op: BinaryOp,
+        left: (&mut Expr, &mut Type),
+        right: (&mut Expr, &mut Type),
+        pos: ExprPos,
+    ) {
+        let (base, lty) = left;
+        let (right, rty) = right;
+        let clean_lty = lty.strip_reference().strip_const().clone();
+        let clean_rty = rty.strip_reference().strip_const().clone();
+        let has_overload = op.op_name().is_some_and(|op_str| {
+            if let Type::Struct(ref sname) = clean_lty
+                && self.find_method_in_class(sname, op_str).is_some()
+            {
+                return true;
+            }
+            self.find_call_candidates(op_str, &[lty.clone(), rty.clone()])
+                .is_some()
+        });
+        if !has_overload {
+            if let Type::Struct(ref sname) = clean_lty
+                && !matches!(clean_rty, Type::Struct(_))
+            {
+                let is_const = lty.strip_reference().is_const();
+                if let Some(sig) = self.find_conversion_to(sname, &clean_rty, is_const) {
+                    Self::wrap_conversion_call(base, &sig.name, pos);
+                    *lty = sig.return_type.strip_reference().clone();
+                }
+            }
+            if let Type::Struct(ref sname) = clean_rty
+                && !matches!(clean_lty, Type::Struct(_))
+            {
+                let is_const = rty.strip_reference().is_const();
+                if let Some(sig) = self.find_conversion_to(sname, &clean_lty, is_const) {
+                    Self::wrap_conversion_call(right, &sig.name, pos);
+                    *rty = sig.return_type.strip_reference().clone();
+                }
+            }
+        }
     }
 
     pub(super) fn analyze_unary(&mut self, expr: &mut Expr) -> Result<Type, CompileError> {
@@ -285,22 +351,9 @@ impl Sema {
         }
         let mut value_ty = self.analyze_expr(value)?;
         if let Type::Struct(sname) = value_ty.strip_reference().strip_const() {
-            let conv_name = format!("operator {}", target_ty.to_c_type());
             let is_const = value_ty.strip_reference().is_const();
-            if let Some(sig) = self.find_method_in_class_for_receiver(sname, &conv_name, is_const)
-                && !sig.is_explicit
-            {
-                let old_val = (**value).clone();
-                **value = Expr::Call {
-                    callee: Box::new(Expr::MemberAccess {
-                        object: Box::new(old_val),
-                        member: conv_name,
-                        is_arrow: false,
-                        pos: *pos,
-                    }),
-                    args: vec![],
-                    pos: *pos,
-                };
+            if let Some(sig) = self.find_conversion_to(sname, &target_ty, is_const) {
+                Self::wrap_conversion_call(value, &sig.name, *pos);
                 value_ty = target_ty.clone();
             }
         }
@@ -397,12 +450,7 @@ impl Sema {
         let e_ty = self.analyze_expr(else_expr)?;
         Ok(t_ty.conditional_result_type(&e_ty))
     }
-}
 
-/// Returns true when an expression names a storage location that an
-/// assignment may modify.
-///
-impl Sema {
     /// Returns true when an expression names a storage location that an
     /// assignment may modify.
     pub(super) fn is_assignable_target(&mut self, expr: &Expr, ty: &Type) -> bool {

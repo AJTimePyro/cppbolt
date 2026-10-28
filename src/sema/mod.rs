@@ -15,6 +15,7 @@ mod overload;
 mod stmt;
 mod stmt_decl;
 mod stmt_range_for;
+mod stmt_structured_binding;
 
 pub(crate) use layout::RecordLayout;
 pub(crate) use stmt_decl::VarDecl;
@@ -170,8 +171,13 @@ impl Sema {
             depth: crate::depth::DepthCounters::new(),
         };
 
+        sema.register_builtins();
+        sema
+    }
+
+    fn register_builtins(&mut self) {
         // Built-in printf: variadic, mangled as "printf"
-        sema.register_function(FunctionSig {
+        self.register_function(FunctionSig {
             name: "printf".to_string(),
             mangled_name: "printf".to_string(),
             return_type: Type::Int,
@@ -181,7 +187,7 @@ impl Sema {
             is_explicit: false,
             ref_qualifier: RefQualifier::None,
         });
-        sema.register_function(FunctionSig {
+        self.register_function(FunctionSig {
             name: "std::printf".to_string(),
             mangled_name: "std::printf".to_string(),
             return_type: Type::Int,
@@ -193,7 +199,7 @@ impl Sema {
         });
 
         // Built-in malloc & free
-        sema.register_function(FunctionSig {
+        self.register_function(FunctionSig {
             name: "malloc".to_string(),
             mangled_name: "malloc".to_string(),
             return_type: Type::Pointer(Box::new(Type::Void)),
@@ -204,7 +210,7 @@ impl Sema {
             ref_qualifier: RefQualifier::None,
         });
 
-        sema.register_function(FunctionSig {
+        self.register_function(FunctionSig {
             name: "free".to_string(),
             mangled_name: "free".to_string(),
             return_type: Type::Void,
@@ -215,7 +221,7 @@ impl Sema {
             ref_qualifier: RefQualifier::None,
         });
 
-        sema.register_function(FunctionSig {
+        self.register_function(FunctionSig {
             name: "__builtin_wasm_memory_size".to_string(),
             mangled_name: "__builtin_wasm_memory_size".to_string(),
             return_type: Type::Int,
@@ -225,8 +231,6 @@ impl Sema {
             is_explicit: false,
             ref_qualifier: RefQualifier::None,
         });
-
-        sema
     }
 
     /// Registers an overload under its source name, mangled name, and any

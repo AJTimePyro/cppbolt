@@ -1,0 +1,1 @@
+tests/negative/delegating_constructor_not_found.cpp:2:5: error: no matching target constructor found in class 'Foo'

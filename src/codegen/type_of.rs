@@ -338,7 +338,7 @@ impl<'a> Codegen<'a> {
     ) -> Type {
         let obj_ty = self.get_expr_type_raw(object, ctx);
         let receiver_const = crate::sema::receiver_is_const_type(&obj_ty);
-        let receiver_is_lvalue = *is_arrow || object.is_lvalue();
+        let receiver_is_lvalue = *is_arrow || obj_ty.is_reference() || object.is_lvalue();
         let sname = self.member_class_name(&obj_ty, *is_arrow);
         if let Some(sig) = self.sema.find_method_in_class_for_receiver_category(
             &sname,

@@ -85,22 +85,9 @@ impl Sema {
             result?
         };
         if let Type::Struct(sname) = init_ty.strip_reference().strip_const() {
-            let conv_name = format!("operator {}", ty.to_c_type());
             let is_const = init_ty.strip_reference().is_const();
-            if let Some(sig) = self.find_method_in_class_for_receiver(sname, &conv_name, is_const)
-                && !sig.is_explicit
-            {
-                let old_init = init_expr.clone();
-                *init_expr = Expr::Call {
-                    callee: Box::new(Expr::MemberAccess {
-                        object: Box::new(old_init),
-                        member: conv_name,
-                        is_arrow: false,
-                        pos: ExprPos::new(line, col),
-                    }),
-                    args: vec![],
-                    pos: ExprPos::new(line, col),
-                };
+            if let Some(sig) = self.find_conversion_to(sname, ty, is_const) {
+                Self::wrap_conversion_call(init_expr, &sig.name, ExprPos::new(line, col));
                 init_ty = ty.clone();
             }
         }

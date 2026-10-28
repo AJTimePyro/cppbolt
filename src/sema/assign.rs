@@ -21,11 +21,8 @@ impl Sema {
             return true;
         }
         if let Type::Struct(sname) = value.strip_reference().strip_const() {
-            let conv_name = format!("operator {}", target.to_c_type());
             let is_const = value.strip_reference().is_const();
-            if let Some(sig) = self.find_method_in_class_for_receiver(sname, &conv_name, is_const)
-                && !sig.is_explicit
-            {
+            if self.find_conversion_to(sname, target, is_const).is_some() {
                 return true;
             }
         }
@@ -173,6 +170,44 @@ impl Sema {
             return true;
         }
         false
+    }
+
+    /// Finds a non-explicit conversion operator from a struct to `target_ty`.
+    pub fn find_conversion_to(
+        &self,
+        sname: &str,
+        target_ty: &Type,
+        is_const: bool,
+    ) -> Option<FunctionSig> {
+        let conv_name = format!("operator {}", target_ty.to_c_type());
+        if let Some(sig) = self.find_method_in_class_for_receiver(sname, &conv_name, is_const)
+            && !sig.is_explicit
+        {
+            return Some(sig);
+        }
+        if target_ty.is_integer()
+            && let Some(sig) =
+                self.find_method_in_class_for_receiver(sname, "operator int", is_const)
+            && !sig.is_explicit
+        {
+            return Some(sig);
+        }
+        None
+    }
+
+    /// Wraps an expression in a user-defined conversion call node.
+    pub fn wrap_conversion_call(expr: &mut Expr, conv_name: &str, pos: ExprPos) {
+        let old = std::mem::replace(expr, Expr::BoolLiteral(false));
+        *expr = Expr::Call {
+            callee: Box::new(Expr::MemberAccess {
+                object: Box::new(old),
+                member: conv_name.to_string(),
+                is_arrow: false,
+                pos,
+            }),
+            args: vec![],
+            pos,
+        };
     }
 }
 

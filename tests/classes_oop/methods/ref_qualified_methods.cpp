@@ -18,11 +18,16 @@ Resource make_resource(int id) {
     return r;
 }
 
+Resource& get_ref(Resource& r) {
+    return r;
+}
+
 int main() {
     Resource r;
     r.id = 5;
     int from_lvalue = r.get();
     int from_rvalue = make_resource(5).get();
-    std::printf("lvalue=%d rvalue=%d\n", from_lvalue, from_rvalue);
+    int from_ref_call = get_ref(r).get();
+    std::printf("lvalue=%d rvalue=%d ref_call=%d\n", from_lvalue, from_rvalue, from_ref_call);
     return 0;
 }

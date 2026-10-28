@@ -226,6 +226,7 @@ negative/constructor_struct_argument
 negative/constructor_too_few_arguments
 negative/constructor_too_many_arguments
 negative/delegating_constructor_mixed
+negative/delegating_constructor_not_found
 negative/contextual_bool_reject_bool
 negative/contextual_bool_reject_int
 negative/dereference_non_pointer
@@ -260,6 +261,7 @@ negative/pure_virtual_instantiation
 negative/range_for_non_iterable
 negative/redefined_func
 negative/ref_qualifier_lvalue_mismatch
+negative/scoped_enum_call_arg
 negative/scoped_enum_implicit_conversion
 negative/scoped_enum_leak
 negative/stray_endif
