@@ -55,7 +55,16 @@ impl Parser {
                     } else {
                         String::new()
                     };
-                    (base_type, name)
+                    let ptype = if self.peek() == &TokenKind::LBracket {
+                        let arr_type = self.parse_array_suffix(base_type)?;
+                        match arr_type {
+                            Type::Array(inner, _) => Type::Pointer(inner),
+                            other => other,
+                        }
+                    } else {
+                        base_type
+                    };
+                    (ptype, name)
                 };
 
             let default_val = if self.peek() == &TokenKind::Assign {
