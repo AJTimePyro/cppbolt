@@ -267,6 +267,7 @@ negative/subscript_non_array
 negative/structured_binding_count_mismatch
 negative/switch_case_non_constant
 negative/syntax_error
+negative/throw_unsupported
 negative/type_mismatch
 negative/undeclared_var
 negative/undefined_func
