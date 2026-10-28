@@ -108,7 +108,7 @@ impl Sema {
         Ok(struct_name)
     }
 
-    fn resolve_arrow_struct_name(
+    pub(crate) fn resolve_arrow_struct_name(
         &self,
         initial_class: &str,
         initial_const: bool,

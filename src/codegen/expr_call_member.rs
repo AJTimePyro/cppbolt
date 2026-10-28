@@ -72,42 +72,11 @@ impl<'a> Codegen<'a> {
                 return s.clone();
             }
             if let Type::Struct(s) = clean {
-                let mut current = s.clone();
-                let mut current_is_const = crate::sema::receiver_is_const_type(obj_ty);
-                let mut visited = Vec::new();
-                while !visited.iter().any(|v| v == &current) && visited.len() < 128 {
-                    visited.push(current.clone());
-                    let Some(sig) = self.sema.find_method_in_class_for_receiver(
-                        &current,
-                        "operator->",
-                        current_is_const,
-                    ) else {
-                        break;
-                    };
-                    let ret = sig.return_type.strip_const();
-                    if let Type::Pointer(inner) = ret {
-                        if let Type::Struct(target) = inner.strip_reference().strip_const() {
-                            return target.clone();
-                        }
-                    } else if let Type::Reference(inner) = ret {
-                        let clean_inner = inner.strip_const();
-                        if let Type::Pointer(ptr_inner) = clean_inner {
-                            if let Type::Struct(target) = ptr_inner.strip_reference().strip_const()
-                            {
-                                return target.clone();
-                            }
-                        } else if let Type::Struct(next) = clean_inner {
-                            current = next.clone();
-                            current_is_const = inner.is_const();
-                            continue;
-                        }
-                    } else if let Type::Struct(next) = ret {
-                        current = next.clone();
-                        current_is_const = sig.return_type.is_const();
-                        continue;
-                    }
-                    break;
-                }
+                let current_is_const = crate::sema::receiver_is_const_type(obj_ty);
+                return self
+                    .sema
+                    .resolve_arrow_struct_name(s, current_is_const, crate::ast::ExprPos::new(0, 0))
+                    .unwrap_or_default();
             }
             return String::new();
         }
