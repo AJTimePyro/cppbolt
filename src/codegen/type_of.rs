@@ -337,9 +337,8 @@ impl<'a> Codegen<'a> {
         ctx: &FunctionContext,
     ) -> Type {
         let obj_ty = self.get_expr_type_raw(object, ctx);
-        let is_ref = obj_ty.is_reference();
         let receiver_const = crate::sema::receiver_is_const_type(&obj_ty);
-        let sname = self.member_class_name(&obj_ty, *is_arrow || is_ref);
+        let sname = self.member_class_name(&obj_ty, *is_arrow);
         if let Some(sig) =
             self.sema
                 .find_method_in_class_for_receiver(&sname, member, receiver_const)
@@ -358,8 +357,7 @@ impl<'a> Codegen<'a> {
         ctx: &FunctionContext,
     ) -> Type {
         let obj_ty = self.get_expr_type_raw(object, ctx);
-        let is_ref = obj_ty.is_reference();
-        let sname = self.member_class_name(&obj_ty, is_arrow || is_ref);
+        let sname = self.member_class_name(&obj_ty, is_arrow);
         if let Some(fld) = self.sema.find_field_in_class(&sname, member) {
             fld.ty
         } else {

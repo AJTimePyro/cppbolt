@@ -19,16 +19,15 @@ impl<'a> Codegen<'a> {
         } = access;
         let arg_types: Vec<Type> = args.iter().map(|a| self.get_expr_type(a, ctx)).collect();
         let obj_ty = self.get_expr_type_raw(object, ctx);
-        let is_ref = obj_ty.is_reference();
         let receiver_const = crate::sema::receiver_is_const_type(&obj_ty);
-        let sname = self.member_class_name(&obj_ty, is_arrow || is_ref);
+        let sname = self.member_class_name(&obj_ty, is_arrow);
 
         let this_slot = ctx.alloc_frame(4, 4)?;
         let fn_slot = ctx.alloc_frame(4, 4)?;
 
         // Evaluate the object once and keep its address in a frame slot;
         // argument evaluation may clobber the scratch locals.
-        self.emit_member_receiver(object, is_arrow || is_ref, this_slot, ctx, code)?;
+        self.emit_member_receiver(object, is_arrow, this_slot, ctx, code)?;
 
         let layout = self.sema.struct_layouts.get(&sname);
         let is_virtual = layout.and_then(|l| l.vtable_slots.iter().position(|s| s == member));
@@ -59,25 +58,26 @@ impl<'a> Codegen<'a> {
     }
 
     /// Returns the name of the class the receiver belongs to.
-    pub(super) fn member_class_name(&self, obj_ty: &Type, through_pointer: bool) -> String {
-        if through_pointer {
-            if let Type::Pointer(inner) | Type::Reference(inner) = obj_ty.strip_const()
-                && let Type::Struct(s) = inner.strip_const()
+    pub(super) fn member_class_name(&self, obj_ty: &Type, is_arrow: bool) -> String {
+        let clean = obj_ty.strip_reference().strip_const();
+        if is_arrow {
+            if let Type::Pointer(inner) = clean
+                && let Type::Struct(s) = inner.strip_reference().strip_const()
             {
                 return s.clone();
             }
-            if let Type::Struct(s) = obj_ty.strip_const().strip_reference()
+            if let Type::Struct(s) = clean
                 && let Some(sig) =
                     self.sema
                         .find_method_in_class_for_receiver(s, "operator->", false)
                 && let Type::Pointer(inner) | Type::Reference(inner) = sig.return_type.strip_const()
-                && let Type::Struct(target) = inner.strip_const()
+                && let Type::Struct(target) = inner.strip_reference().strip_const()
             {
                 return target.clone();
             }
             return String::new();
         }
-        if let Type::Struct(s) = obj_ty.strip_const() {
+        if let Type::Struct(s) = clean {
             return s.clone();
         }
         String::new()
@@ -87,14 +87,14 @@ impl<'a> Codegen<'a> {
     fn emit_member_receiver(
         &mut self,
         object: &Expr,
-        through_pointer: bool,
+        is_arrow: bool,
         this_slot: u32,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let obj_ty = self.get_expr_type_raw(object, ctx);
-        if through_pointer {
-            if let Type::Struct(s) = obj_ty.strip_const().strip_reference()
+        if is_arrow {
+            if let Type::Struct(s) = obj_ty.strip_reference().strip_const()
                 && let Some((m_idx, _)) = self.find_method(s, "operator->", &[])
             {
                 self.compile_lvalue_addr(object, ctx, code)?;

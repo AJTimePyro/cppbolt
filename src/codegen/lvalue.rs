@@ -5,8 +5,18 @@ impl<'a> Codegen<'a> {
         match expr {
             Expr::Identifier(_) | Expr::MemberAccess { .. } => true,
             Expr::Unary {
-                op: UnaryOp::Deref, ..
-            } => true,
+                op: UnaryOp::Deref,
+                expr,
+                ..
+            } => {
+                let ty = self.get_expr_type(expr, ctx);
+                if let Type::Struct(sname) = ty.strip_reference().strip_const()
+                    && let Some((_, sig)) = self.find_method(sname, "operator*", &[])
+                {
+                    return sig.return_type.is_reference();
+                }
+                true
+            }
             Expr::ArraySubscript { .. } => true,
             Expr::Call { callee, args, .. } => {
                 let arg_types: Vec<Type> =
@@ -233,8 +243,7 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let obj_ty = self.get_expr_type_raw(object, ctx);
-        let is_ref = obj_ty.is_reference();
-        let sname = self.member_class_name(&obj_ty, is_arrow || is_ref);
+        let sname = self.member_class_name(&obj_ty, is_arrow);
         let offset = self
             .sema
             .find_field_in_class(&sname, member)
@@ -242,7 +251,7 @@ impl<'a> Codegen<'a> {
             .ok_or_else(|| self.internal_error("missing field layout"))?;
 
         if is_arrow {
-            if let Type::Struct(s) = obj_ty.strip_const().strip_reference()
+            if let Type::Struct(s) = obj_ty.strip_reference().strip_const()
                 && let Some((m_idx, _)) = self.find_method(s, "operator->", &[])
             {
                 self.compile_lvalue_addr(object, ctx, code)?;

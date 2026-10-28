@@ -20,6 +20,11 @@ struct PtrWrapper {
     }
 };
 
+void inspect(PtrWrapper& ref) {
+    printf("%d\n", ref->y);
+    printf("%d\n", ref->sum());
+}
+
 int main() {
     Point pt(10, 20);
     PtrWrapper wrap(&pt);
@@ -33,5 +38,8 @@ int main() {
 
     // Test operator-> method call
     printf("%d\n", wrap->sum()); // 62
+
+    // Test operator-> on reference
+    inspect(wrap);
     return 0;
 }

@@ -1,0 +1,1 @@
+tests/negative/operator_incdec_invalid.cpp:8:5: error: no matching 'operator++' for type 'Dummy'

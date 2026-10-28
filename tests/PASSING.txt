@@ -243,10 +243,12 @@ negative/multiple_inheritance_access
 negative/namespace_alias
 negative/nesting_depth_limit
 negative/operator_arrow_invalid
+negative/operator_deref_assign_rvalue
+negative/operator_incdec_invalid
 negative/pointer_plus_pointer
-negative/range_for_non_iterable
 negative/private_access
 negative/pure_virtual_instantiation
+negative/range_for_non_iterable
 negative/redefined_func
 negative/stray_endif
 negative/subscript_non_array
