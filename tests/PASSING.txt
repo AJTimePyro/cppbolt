@@ -35,6 +35,7 @@ c_basics/printf_table
 c_basics/range_for_array
 c_basics/regress_char_ptr_assign
 c_basics/rounding_ties
+c_basics/scoped_enums
 c_basics/sizeof_expr
 c_basics/switch_enum_case
 c_basics/ternary_mixed_types
@@ -255,6 +256,8 @@ negative/private_access
 negative/pure_virtual_instantiation
 negative/range_for_non_iterable
 negative/redefined_func
+negative/scoped_enum_implicit_conversion
+negative/scoped_enum_leak
 negative/stray_endif
 negative/subscript_non_array
 negative/switch_case_non_constant

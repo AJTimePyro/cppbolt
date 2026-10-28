@@ -1,0 +1,1 @@
+tests/negative/scoped_enum_leak.cpp:4:5: error: Undeclared variable or identifier 'SUCCESS'

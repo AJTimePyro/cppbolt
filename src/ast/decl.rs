@@ -47,6 +47,7 @@ pub enum Decl {
     },
     EnumDecl {
         name: String,
+        is_scoped: bool,
         variants: Vec<(String, i64)>,
     },
     UsingNamespace(String),

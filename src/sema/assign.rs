@@ -7,6 +7,16 @@ impl Sema {
         if target == value {
             return true;
         }
+        if let Type::Enum(ename) = value
+            && self.scoped_enums.contains(ename)
+        {
+            return false;
+        }
+        if let Type::Enum(ename) = target
+            && self.scoped_enums.contains(ename)
+        {
+            return false;
+        }
         if self.struct_assignable(target, value) {
             return true;
         }

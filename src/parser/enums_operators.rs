@@ -3,6 +3,13 @@ use super::*;
 impl Parser {
     pub(super) fn parse_enum(&mut self) -> Result<Decl, CompileError> {
         self.advance();
+        let is_scoped = if self.peek() == &TokenKind::KwClass || self.peek() == &TokenKind::KwStruct
+        {
+            self.advance();
+            true
+        } else {
+            false
+        };
         let name = match self.advance().kind.clone() {
             TokenKind::Ident(id) => id,
             _ => {
@@ -13,6 +20,10 @@ impl Parser {
                 ));
             }
         };
+        if self.peek() == &TokenKind::Colon {
+            self.advance();
+            let _underlying = self.parse_type()?;
+        }
         self.known_types.insert(name.clone());
         self.known_enums.insert(name.clone());
 
@@ -62,7 +73,11 @@ impl Parser {
         self.expect(TokenKind::RBrace)?;
         self.expect(TokenKind::Semi)?;
 
-        Ok(Decl::EnumDecl { name, variants })
+        Ok(Decl::EnumDecl {
+            name,
+            is_scoped,
+            variants,
+        })
     }
 
     pub(super) fn parse_operator_name(&mut self) -> Result<String, CompileError> {

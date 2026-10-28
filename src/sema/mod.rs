@@ -23,7 +23,7 @@ use crate::ast::types::Type;
 use crate::ast::*;
 use crate::diagnostics::CompileError;
 use crate::name::QualifiedName;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
 pub struct StructField {
@@ -113,6 +113,8 @@ pub struct Sema {
     pub struct_layouts: HashMap<String, StructLayout>,
     pub struct_order: Vec<String>,
     pub enum_values: HashMap<String, i64>,
+    pub enum_types: HashMap<String, String>,
+    pub scoped_enums: HashSet<String>,
     pub functions: HashMap<String, Vec<FunctionSig>>,
     pub global_vars: HashMap<String, VarSymbol>,
     pub scopes: Vec<Scope>,
@@ -144,6 +146,8 @@ impl Sema {
             struct_layouts: HashMap::new(),
             struct_order: Vec::new(),
             enum_values: HashMap::new(),
+            enum_types: HashMap::new(),
+            scoped_enums: HashSet::new(),
             functions: HashMap::new(),
             global_vars: HashMap::new(),
             scopes: Vec::new(),

@@ -165,8 +165,13 @@ impl Sema {
         if let Some(var) = self.lookup_var(name) {
             Ok(var.ty.clone())
         } else if let Some(&val) = self.enum_values.get(name) {
-            *expr = Expr::IntLiteral(val, Type::Int);
-            Ok(Type::Int)
+            let enum_ty = self
+                .enum_types
+                .get(name)
+                .map(|t| Type::Enum(t.clone()))
+                .unwrap_or(Type::Int);
+            *expr = Expr::IntLiteral(val, enum_ty.clone());
+            Ok(enum_ty)
         } else if let Some(cls) = &self.current_class {
             if let Some(fld) = self.find_field_in_class(cls, name) {
                 *expr = Expr::MemberAccess {

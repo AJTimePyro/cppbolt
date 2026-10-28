@@ -13,9 +13,22 @@ impl Sema {
     fn register_types(&mut self, program: &Program) -> Result<(), CompileError> {
         for decl in &program.declarations {
             match decl {
-                Decl::EnumDecl { name: _, variants } => {
+                Decl::EnumDecl {
+                    name,
+                    is_scoped,
+                    variants,
+                } => {
+                    if *is_scoped {
+                        self.scoped_enums.insert(name.clone());
+                    }
                     for (vname, val) in variants {
-                        self.enum_values.insert(vname.clone(), *val);
+                        let scoped_name = format!("{}::{}", name, vname);
+                        self.enum_values.insert(scoped_name.clone(), *val);
+                        self.enum_types.insert(scoped_name, name.clone());
+                        if !*is_scoped {
+                            self.enum_values.insert(vname.clone(), *val);
+                            self.enum_types.insert(vname.clone(), name.clone());
+                        }
                     }
                 }
                 Decl::StructDecl {

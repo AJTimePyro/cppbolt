@@ -1,0 +1,1 @@
+tests/negative/scoped_enum_implicit_conversion.cpp:4:5: error: cannot initialize variable 'x' of type int with Status
