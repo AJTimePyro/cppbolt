@@ -2,6 +2,7 @@
 
 use super::analyze::this_param;
 use super::*;
+use std::collections::HashSet;
 
 struct LambdaCaptureInfo {
     fields: Vec<(String, Type)>,
@@ -87,16 +88,19 @@ impl Sema {
 
     fn collect_lambda_captures(
         &self,
-        _default_capture: Option<DefaultCapture>,
+        default_capture: Option<DefaultCapture>,
         captures: &[LambdaCapture],
-        _body: &Stmt,
-        _params: &[Param],
+        body: &Stmt,
+        params: &[Param],
         pos: ExprPos,
     ) -> Result<LambdaCaptureInfo, CompileError> {
-        let mut fields = Vec::new();
-        let mut ctor_params = Vec::new();
-        let mut ctor_inits = Vec::new();
-        let mut ctor_call_args = Vec::new();
+        let mut info = LambdaCaptureInfo {
+            fields: Vec::new(),
+            ctor_params: Vec::new(),
+            ctor_inits: Vec::new(),
+            ctor_call_args: Vec::new(),
+        };
+        let mut seen = HashSet::new();
 
         for cap in captures {
             let Some(var) = self.lookup_var(&cap.name) else {
@@ -109,33 +113,55 @@ impl Sema {
                     pos.col,
                 ));
             };
-
-            let (field_ty, param_ty) = if cap.is_reference {
-                let inner = var.ty.strip_reference().clone();
-                let ref_ty = Type::Reference(Box::new(inner));
-                (ref_ty.clone(), ref_ty)
-            } else {
-                let val_ty = var.ty.strip_reference().strip_const().clone();
-                (val_ty.clone(), val_ty)
-            };
-
-            let param_name = format!("__p_{}", cap.name);
-            ctor_params.push(Param {
-                name: param_name.clone(),
-                ty: param_ty,
-                default_val: None,
-            });
-            ctor_inits.push((cap.name.clone(), vec![Expr::Identifier(param_name)]));
-            ctor_call_args.push(Expr::Identifier(cap.name.clone()));
-            fields.push((cap.name.clone(), field_ty));
+            self.add_capture(&mut info, &cap.name, &var.ty, cap.is_reference);
+            seen.insert(cap.name.clone());
         }
 
-        Ok(LambdaCaptureInfo {
-            fields,
-            ctor_params,
-            ctor_inits,
-            ctor_call_args,
-        })
+        if let Some(def_cap) = default_capture {
+            let is_ref = def_cap == DefaultCapture::ByReference;
+            let mut locals = HashSet::new();
+            let mut free_vars = Vec::new();
+            collect_free_variables(body, params, &seen, &mut locals, &mut free_vars);
+
+            for var_name in free_vars {
+                if let Some(var) = self.lookup_var(&var_name)
+                    && !var.is_global
+                    && seen.insert(var_name.clone())
+                {
+                    self.add_capture(&mut info, &var_name, &var.ty, is_ref);
+                }
+            }
+        }
+
+        Ok(info)
+    }
+
+    fn add_capture(
+        &self,
+        info: &mut LambdaCaptureInfo,
+        name: &str,
+        var_ty: &Type,
+        is_reference: bool,
+    ) {
+        let (field_ty, param_ty) = if is_reference {
+            let inner = var_ty.strip_reference().clone();
+            let ref_ty = Type::Reference(Box::new(inner));
+            (ref_ty.clone(), ref_ty)
+        } else {
+            let val_ty = var_ty.strip_reference().strip_const().clone();
+            (val_ty.clone(), val_ty)
+        };
+
+        let param_name = format!("__p_{}", name);
+        info.ctor_params.push(Param {
+            name: param_name.clone(),
+            ty: param_ty,
+            default_val: None,
+        });
+        info.ctor_inits
+            .push((name.to_string(), vec![Expr::Identifier(param_name)]));
+        info.ctor_call_args.push(Expr::Identifier(name.to_string()));
+        info.fields.push((name.to_string(), field_ty));
     }
 
     fn analyze_lambda_operator(
@@ -214,5 +240,140 @@ fn build_lambda_op(
         ctor_initializers: vec![],
         line: pos.line,
         col: pos.col,
+    }
+}
+
+fn collect_free_variables(
+    stmt: &Stmt,
+    params: &[Param],
+    explicit: &HashSet<String>,
+    locals: &mut HashSet<String>,
+    discovered: &mut Vec<String>,
+) {
+    match &stmt.kind {
+        StmtKind::VarDecl { name, init, .. } => {
+            if let Some(e) = init {
+                collect_free_vars_expr(e, params, explicit, locals, discovered);
+            }
+            locals.insert(name.clone());
+        }
+        StmtKind::VarDeclGroup(stmts) => {
+            for s in stmts {
+                collect_free_variables(s, params, explicit, locals, discovered);
+            }
+        }
+        StmtKind::Compound(stmts) => {
+            let prev = locals.clone();
+            for s in stmts {
+                collect_free_variables(s, params, explicit, locals, discovered);
+            }
+            *locals = prev;
+        }
+        StmtKind::Expr(e) | StmtKind::Return(Some(e)) => {
+            collect_free_vars_expr(e, params, explicit, locals, discovered);
+        }
+        StmtKind::If {
+            branches,
+            else_stmt,
+        } => {
+            for (cond, branch) in branches {
+                collect_free_vars_expr(cond, params, explicit, locals, discovered);
+                collect_free_variables(branch, params, explicit, locals, discovered);
+            }
+            if let Some(eb) = else_stmt {
+                collect_free_variables(eb, params, explicit, locals, discovered);
+            }
+        }
+        StmtKind::While { cond, body } | StmtKind::DoWhile { cond, body } => {
+            collect_free_vars_expr(cond, params, explicit, locals, discovered);
+            collect_free_variables(body, params, explicit, locals, discovered);
+        }
+        StmtKind::For {
+            init,
+            cond,
+            step,
+            body,
+        } => {
+            let prev = locals.clone();
+            if let Some(s) = init {
+                collect_free_variables(s, params, explicit, locals, discovered);
+            }
+            if let Some(e) = cond {
+                collect_free_vars_expr(e, params, explicit, locals, discovered);
+            }
+            if let Some(e) = step {
+                collect_free_vars_expr(e, params, explicit, locals, discovered);
+            }
+            collect_free_variables(body, params, explicit, locals, discovered);
+            *locals = prev;
+        }
+        StmtKind::Switch { expr, body } => {
+            collect_free_vars_expr(expr, params, explicit, locals, discovered);
+            collect_free_variables(body, params, explicit, locals, discovered);
+        }
+        StmtKind::Case(e, _) => {
+            collect_free_vars_expr(e, params, explicit, locals, discovered);
+        }
+        _ => {}
+    }
+}
+
+fn collect_free_vars_expr(
+    expr: &Expr,
+    params: &[Param],
+    explicit: &HashSet<String>,
+    locals: &HashSet<String>,
+    discovered: &mut Vec<String>,
+) {
+    match expr {
+        Expr::Identifier(name) => {
+            if !params.iter().any(|p| &p.name == name)
+                && !explicit.contains(name)
+                && !locals.contains(name)
+                && !discovered.contains(name)
+            {
+                discovered.push(name.clone());
+            }
+        }
+        Expr::Binary { left, right, .. } => {
+            collect_free_vars_expr(left, params, explicit, locals, discovered);
+            collect_free_vars_expr(right, params, explicit, locals, discovered);
+        }
+        Expr::Assign { target, value, .. } | Expr::CompoundAssign { target, value, .. } => {
+            collect_free_vars_expr(target, params, explicit, locals, discovered);
+            collect_free_vars_expr(value, params, explicit, locals, discovered);
+        }
+        Expr::Unary { expr, .. } | Expr::Cast { expr, .. } => {
+            collect_free_vars_expr(expr, params, explicit, locals, discovered);
+        }
+        Expr::MemberAccess { object, .. } => {
+            collect_free_vars_expr(object, params, explicit, locals, discovered);
+        }
+        Expr::ArraySubscript { array, index, .. } => {
+            collect_free_vars_expr(array, params, explicit, locals, discovered);
+            collect_free_vars_expr(index, params, explicit, locals, discovered);
+        }
+        Expr::Call { callee, args, .. } => {
+            collect_free_vars_expr(callee, params, explicit, locals, discovered);
+            for a in args {
+                collect_free_vars_expr(a, params, explicit, locals, discovered);
+            }
+        }
+        Expr::Ternary {
+            cond,
+            then_expr,
+            else_expr,
+            ..
+        } => {
+            collect_free_vars_expr(cond, params, explicit, locals, discovered);
+            collect_free_vars_expr(then_expr, params, explicit, locals, discovered);
+            collect_free_vars_expr(else_expr, params, explicit, locals, discovered);
+        }
+        Expr::InitializerList(list) => {
+            for item in list {
+                collect_free_vars_expr(item, params, explicit, locals, discovered);
+            }
+        }
+        _ => {}
     }
 }
