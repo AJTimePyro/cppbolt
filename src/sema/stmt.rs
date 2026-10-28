@@ -58,6 +58,9 @@ impl Sema {
         if let StmtKind::RangeFor { .. } = stmt.kind {
             *stmt = self.desugar_range_for(stmt.clone())?;
         }
+        if let StmtKind::StructuredBinding { .. } = stmt.kind {
+            *stmt = self.desugar_structured_binding(stmt.clone())?;
+        }
         // A compound block has its own budget, so a nested `if` with its
         // block costs one statement level and one block level.
         if let StmtKind::Compound(stmts) = &mut stmt.kind {
@@ -119,6 +122,9 @@ impl Sema {
                 self.analyze_return(expr_opt, stmt.line, stmt.col)?;
             }
             StmtKind::RangeFor { .. } => unreachable!("RangeFor is desugared before dispatch"),
+            StmtKind::StructuredBinding { .. } => {
+                unreachable!("StructuredBinding is desugared before dispatch")
+            }
         }
         Ok(())
     }
@@ -419,5 +425,94 @@ impl Sema {
                 col,
             )),
         }
+    }
+
+    fn desugar_structured_binding(&mut self, stmt: Stmt) -> Result<Stmt, CompileError> {
+        let StmtKind::StructuredBinding {
+            bindings,
+            ty,
+            mut init,
+        } = stmt.kind
+        else {
+            return Ok(stmt);
+        };
+        let init_ty = self.analyze_expr(&mut init)?;
+        let struct_name = match init_ty.strip_reference().strip_const() {
+            Type::Struct(name) => name.clone(),
+            _ => {
+                return Err(CompileError::new(
+                    "cannot decompose non-class type in structured binding",
+                    stmt.line,
+                    stmt.col,
+                ));
+            }
+        };
+        let fields = match self.struct_layouts.get(&struct_name) {
+            Some(layout) => layout.fields.clone(),
+            None => {
+                return Err(CompileError::new(
+                    format!("undefined struct '{}'", struct_name),
+                    stmt.line,
+                    stmt.col,
+                ));
+            }
+        };
+        if bindings.len() != fields.len() {
+            return Err(CompileError::new(
+                format!(
+                    "{} names provided in structured binding, but struct '{}' only has {} fields",
+                    bindings.len(),
+                    struct_name,
+                    fields.len()
+                ),
+                stmt.line,
+                stmt.col,
+            ));
+        }
+
+        let hidden_name = format!("__sb_{}_{}", stmt.line, stmt.col);
+        let hidden_decl = Stmt::new(
+            StmtKind::VarDecl {
+                name: hidden_name.clone(),
+                ty: ty.clone(),
+                init: Some(init),
+                is_static: false,
+            },
+            stmt.line,
+            stmt.col,
+        );
+
+        let is_const_ref = matches!(ty, Type::Reference(ref inner) if inner.is_const())
+            || matches!(ty, Type::Const(_));
+        let mut stmts = vec![hidden_decl];
+        for (name, field) in bindings.iter().zip(fields.iter()) {
+            let binding_ty = if is_const_ref {
+                Type::Reference(Box::new(Type::Const(Box::new(Type::Auto))))
+            } else {
+                Type::Reference(Box::new(Type::Auto))
+            };
+            let member_expr = Expr::MemberAccess {
+                object: Box::new(Expr::Identifier(hidden_name.clone())),
+                member: field.name.clone(),
+                is_arrow: false,
+                pos: ExprPos::new(stmt.line, stmt.col),
+            };
+            stmts.push(Stmt::new(
+                StmtKind::VarDecl {
+                    name: name.clone(),
+                    ty: binding_ty,
+                    init: Some(member_expr),
+                    is_static: false,
+                },
+                stmt.line,
+                stmt.col,
+            ));
+        }
+
+        Ok(Stmt::new(
+            StmtKind::VarDeclGroup(stmts),
+            stmt.line,
+            stmt.col,
+        ))
     }
 }

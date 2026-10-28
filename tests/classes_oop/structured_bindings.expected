@@ -1,0 +1,4 @@
+by_val: vx=99 vy=20 orig_x=10
+by_ref: rx=42 ry=84 orig_x=42 orig_y=84
+by_const_ref: cx=42 cy=84
+person: id=1 age=30 score=100

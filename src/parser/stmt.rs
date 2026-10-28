@@ -122,8 +122,61 @@ impl Parser {
     pub(super) fn parse_var_decl(&mut self) -> Result<Stmt, CompileError> {
         let tok = self.current().clone();
         let specifiers = self.parse_specifier_type()?;
+        if specifiers.strip_const() == &Type::Auto {
+            if self.peek() == &TokenKind::LBracket {
+                return self.parse_structured_binding(tok.line, tok.col, specifiers);
+            } else if matches!(self.peek(), TokenKind::Amp | TokenKind::AndAnd)
+                && self.peek_ahead(1) == &TokenKind::LBracket
+            {
+                self.advance();
+                return self.parse_structured_binding(
+                    tok.line,
+                    tok.col,
+                    Type::Reference(Box::new(specifiers)),
+                );
+            }
+        }
         let first = self.parse_declarator(&specifiers, "Expected variable name")?;
         self.finish_var_decl(&tok, &specifiers, first)
+    }
+
+    fn parse_structured_binding(
+        &mut self,
+        line: usize,
+        col: usize,
+        ty: Type,
+    ) -> Result<Stmt, CompileError> {
+        self.expect(TokenKind::LBracket)?;
+        let mut bindings = Vec::new();
+        while self.peek() != &TokenKind::RBracket && self.peek() != &TokenKind::Eof {
+            let tok = self.advance().clone();
+            let name = match tok.kind {
+                TokenKind::Ident(id) => id,
+                _ => {
+                    return Err(CompileError::new(
+                        "Expected identifier in structured binding",
+                        tok.line,
+                        tok.col,
+                    ));
+                }
+            };
+            bindings.push(name);
+            if self.peek() == &TokenKind::Comma {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        self.expect(TokenKind::RBracket)?;
+        self.expect(TokenKind::Assign)?;
+        let init = self.parse_expr()?;
+        self.expect(TokenKind::Semi)?;
+
+        Ok(Stmt::new(
+            StmtKind::StructuredBinding { bindings, ty, init },
+            line,
+            col,
+        ))
     }
 
     fn finish_var_decl(

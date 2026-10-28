@@ -1,0 +1,1 @@
+tests/negative/structured_binding_count_mismatch.cpp:8:5: error: 3 names provided in structured binding, but struct 'Point' only has 2 fields

@@ -122,6 +122,7 @@ classes_oop/single_inheritance
 classes_oop/static_local_constructor_args
 classes_oop/static_members
 classes_oop/struct_basic
+classes_oop/structured_bindings
 classes_oop/vcall_base_ctor_dtor
 classes_oop/virtual_destructor
 classes_oop/virtual_dispatch_hierarchy
@@ -263,6 +264,7 @@ negative/scoped_enum_implicit_conversion
 negative/scoped_enum_leak
 negative/stray_endif
 negative/subscript_non_array
+negative/structured_binding_count_mismatch
 negative/switch_case_non_constant
 negative/syntax_error
 negative/type_mismatch
