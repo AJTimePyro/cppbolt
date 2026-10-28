@@ -1,0 +1,1 @@
+tests/negative/lambda_out_of_order_default_capture.cpp:3:9: error: default capture must appear first in capture list

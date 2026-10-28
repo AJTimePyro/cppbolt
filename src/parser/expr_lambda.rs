@@ -47,12 +47,26 @@ impl Parser {
         }
         while self.peek() != &TokenKind::RBracket && self.peek() != &TokenKind::Eof {
             if self.peek() == &TokenKind::Assign {
-                self.advance();
+                let tok = self.advance().clone();
+                if !captures.is_empty() {
+                    return Err(CompileError::new(
+                        "default capture must appear first in capture list",
+                        tok.line,
+                        tok.col,
+                    ));
+                }
                 default_capture = Some(DefaultCapture::ByValue);
             } else if self.peek() == &TokenKind::Amp
                 && matches!(self.peek_ahead(1), TokenKind::Comma | TokenKind::RBracket)
             {
-                self.advance();
+                let tok = self.advance().clone();
+                if !captures.is_empty() {
+                    return Err(CompileError::new(
+                        "default capture must appear first in capture list",
+                        tok.line,
+                        tok.col,
+                    ));
+                }
                 default_capture = Some(DefaultCapture::ByReference);
             } else {
                 let is_reference = if self.peek() == &TokenKind::Amp {

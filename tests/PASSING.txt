@@ -253,6 +253,7 @@ negative/function_too_few_arguments
 negative/function_too_many_arguments
 negative/include_cycle
 negative/lambda_const_capture_mutation
+negative/lambda_out_of_order_default_capture
 negative/member_access_non_struct
 negative/method_string_argument
 negative/method_struct_argument
