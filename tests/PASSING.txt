@@ -92,6 +92,7 @@ classes_oop/inheritance/virtual_functions
 classes_oop/lambdas/lambda_basic
 classes_oop/lambdas/lambda_default_captures
 classes_oop/lambdas/lambda_function_pointer
+classes_oop/lambdas/lambda_return_fn_ptr
 classes_oop/memory_raii/class_raii
 classes_oop/memory_raii/direct_initialization_elision
 classes_oop/memory_raii/new_delete

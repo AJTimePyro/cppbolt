@@ -319,8 +319,15 @@ impl Sema {
         col: usize,
     ) -> Result<(), CompileError> {
         if let Some(expr) = expr_opt {
-            let ret_ty = self.analyze_expr(expr)?;
+            let mut ret_ty = self.analyze_expr(expr)?;
             if let Some(expected) = &self.current_func_return_type {
+                if let Type::Struct(sname) = ret_ty.strip_reference().strip_const() {
+                    let is_const = ret_ty.strip_reference().is_const();
+                    if let Some(sig) = self.find_conversion_to(sname, expected, is_const) {
+                        Self::wrap_conversion_call(expr, &sig.name, ExprPos::new(line, col));
+                        ret_ty = expected.clone();
+                    }
+                }
                 if !self.can_assign(expected, &ret_ty) {
                     return Err(CompileError::new(
                         format!(
