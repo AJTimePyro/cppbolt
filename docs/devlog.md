@@ -30,8 +30,8 @@ An audit of compiler compatibility against C++17 highlighted 9 critical areas ac
    - Analyzed WebAssembly MVP vs Wasm Exception Handling proposal requirements (Tag Section 13, RAII unwinding landing pads, RTTI matching). Formally rejected fake trap implementations, recognized `throw` in lexer and parser, and emitted an explicit target diagnostic.
 
 ### Verification
-- 9 dedicated test suites added across `tests/c_basics/`, `tests/classes_oop/`, and `tests/negative/`.
-- Full corpus expanded to 285 passing tests with zero manifest violations.
+- 11 dedicated test suites added across `tests/c_basics/`, `tests/classes_oop/`, and `tests/negative/`.
+- Full corpus expanded to 287 passing tests with zero manifest violations.
 - All linter, unit test, and formatting gates passing cleanly.
 
 ---

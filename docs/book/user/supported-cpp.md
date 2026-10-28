@@ -66,7 +66,7 @@ cargo run --bin cppwasm-testrunner -- target/release/cppwasm-cli
 - **Multiple and Virtual Inheritance**: Explicitly rejected at parse time:
   - Second base specifier yields: `multiple inheritance is not supported`
   - `virtual` base specifier yields: `virtual inheritance is not supported`
-- **Operator Overloading Boundaries**: While built-in primitive pointer member access `->`, pointer dereference `*`, and numeric postfix `++`/`--` are fully supported, **user-defined operator overloads** for `operator->`, `operator*()`, `operator()`, and postfix `operator++(int)` / `operator--(int)` are rejected by the parser (`src/parser/unsupported.rs`). Method ref-qualifier overloading (`const &`) is likewise rejected.
+- **Operator Overloading Boundaries**: User-defined operator overloads for arithmetic, relational, bitwise, assignment, subscript `[]`, smart-pointer `->`, dereference `*()`, functor `()`, postfix `++`/`--`, and conversion operators `operator T()` are supported. Method ref-qualifier overloading with const-lvalue references (`const &`) is explicitly rejected with `const overloading is not supported`.
 
 ### 2. Nesting Limits per Construct
 

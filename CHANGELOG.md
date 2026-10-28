@@ -9,6 +9,19 @@ This project does not yet have tagged semantic releases; all historical work is 
 
 ## [Unreleased]
 
+### C++17 Compatibility Fixes & Test Corpus Reorganization
+- **Feature**: Implemented C++17 language constructs across parser, semantic analysis, and WebAssembly codegen:
+  - **Array Parameter Decay**: Adjusted function parameters declared with array syntax (`int arr[]`, `int arr[N]`) to pointer types (`int* arr`).
+  - **Scoped Enums**: Supported `enum class` with distinct type identities and qualified lookup (`Scope::Val`), prohibiting implicit conversion to integer in overload resolution.
+  - **Delegating Constructors**: Lowered target constructor invocations (`C() : C(args) {}`) and enforced mutual exclusivity against member/base initializers.
+  - **Constant Expression Switch Cases**: Extended switch case labels to accept arbitrary constant expressions and scoped enum variants evaluated at compile time.
+  - **User-Defined Conversion Operators**: Supported `operator T() const` across variable initialization, assignment, explicit casts, and binary expressions, respecting `explicit` qualification.
+  - **Ref-Qualified Member Functions**: Added `&` and `&&` ref-qualifiers on member methods with receiver value-category dispatch and distinct symbol mangling (`_R`, `_O`).
+  - **Structured Bindings**: Added decomposition for aggregate structs (`auto [a, b] = p;`, `auto&`, `const auto&`) desugared into hidden bindings and member references.
+  - **Global Initializer Reachability**: Updated dead-code elimination root collection to traverse function calls in global variable initializers.
+  - **Exception Diagnostics**: Emitted explicit target diagnostic on encountering `throw` (`C++ exception handling ('throw') is not supported on this WebAssembly target`).
+- **Tests & Tooling**: Reorganized test directories into functional subdirectories (`control_flow`, `enums`, `functions`, `io_printf`, `misc`, `pointers_arrays`, `preprocessor`, `types`, `constructors_destructors`, `inheritance`, `memory_raii`, `methods`, `operators`, `statics_namespaces`, `structs`) and upgraded `cppwasm-testrunner` with recursive discovery and nested output path mirroring.
+
 ### Overloaded Operators: Postfix `++`/`--`, Arrow `->`, Dereference `*`, and Functor `()`
 - **Feature**: Implemented support for overloaded `operator*()`, `operator->`, `operator()`, and postfix `operator++(int)`/`operator--(int)`.
 - **Semantics**:
