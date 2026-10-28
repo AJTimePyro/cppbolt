@@ -348,7 +348,7 @@ impl Sema {
         match expr {
             Expr::IntLiteral(n, _) => Ok(*n),
             Expr::CharLiteral(c) => Ok(*c as i64),
-            Expr::BoolLiteral(b) => Ok(if *b { 1 } else { 0 }),
+            Expr::BoolLiteral(b) => Ok(i64::from(*b)),
             Expr::Identifier(name) => {
                 if let Some(&val) = self.enum_values.get(name) {
                     Ok(val)
@@ -367,7 +367,7 @@ impl Sema {
                 match op {
                     UnaryOp::Neg => Ok(-v),
                     UnaryOp::Plus => Ok(v),
-                    UnaryOp::Not => Ok(if v == 0 { 1 } else { 0 }),
+                    UnaryOp::Not => Ok(i64::from(v == 0)),
                     UnaryOp::BitNot => Ok(!v),
                     _ => Err(CompileError::new(
                         "Case value must be integer constant",

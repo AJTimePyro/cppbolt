@@ -163,24 +163,25 @@ impl Sema {
             self.find_call_candidates(op_str, &[lty.clone(), rty.clone()])
                 .is_some()
         });
-        if !has_overload {
-            if let Type::Struct(ref sname) = clean_lty
-                && !matches!(clean_rty, Type::Struct(_))
-            {
-                let is_const = lty.strip_reference().is_const();
-                if let Some(sig) = self.find_conversion_to(sname, &clean_rty, is_const) {
-                    Self::wrap_conversion_call(base, &sig.name, pos);
-                    *lty = sig.return_type.strip_reference().clone();
-                }
+        if has_overload {
+            return;
+        }
+        if let Type::Struct(ref sname) = clean_lty
+            && !matches!(clean_rty, Type::Struct(_))
+        {
+            let is_const = lty.strip_reference().is_const();
+            if let Some(sig) = self.find_conversion_to(sname, &clean_rty, is_const) {
+                Self::wrap_conversion_call(base, &sig.name, pos);
+                *lty = sig.return_type.strip_reference().clone();
             }
-            if let Type::Struct(ref sname) = clean_rty
-                && !matches!(clean_lty, Type::Struct(_))
-            {
-                let is_const = rty.strip_reference().is_const();
-                if let Some(sig) = self.find_conversion_to(sname, &clean_lty, is_const) {
-                    Self::wrap_conversion_call(right, &sig.name, pos);
-                    *rty = sig.return_type.strip_reference().clone();
-                }
+        }
+        if let Type::Struct(ref sname) = clean_rty
+            && !matches!(clean_lty, Type::Struct(_))
+        {
+            let is_const = rty.strip_reference().is_const();
+            if let Some(sig) = self.find_conversion_to(sname, &clean_lty, is_const) {
+                Self::wrap_conversion_call(right, &sig.name, pos);
+                *rty = sig.return_type.strip_reference().clone();
             }
         }
     }

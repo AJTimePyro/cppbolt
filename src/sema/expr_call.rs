@@ -342,16 +342,13 @@ impl Sema {
         arg_types: &[Type],
         pos: ExprPos,
     ) {
-        for (i, (arg, param_ty)) in args.iter_mut().zip(param_types).enumerate() {
-            if i < arg_types.len() {
-                let arg_ty = &arg_types[i];
-                if let Type::Struct(sname) = arg_ty.strip_reference().strip_const() {
-                    let param_clean = param_ty.strip_reference().strip_const();
-                    if !matches!(param_clean, Type::Struct(p) if p == sname) {
-                        let is_const = arg_ty.strip_reference().is_const();
-                        if let Some(sig) = self.find_conversion_to(sname, param_clean, is_const) {
-                            Self::wrap_conversion_call(arg, &sig.name, pos);
-                        }
+        for ((arg, param_ty), arg_ty) in args.iter_mut().zip(param_types).zip(arg_types) {
+            if let Type::Struct(sname) = arg_ty.strip_reference().strip_const() {
+                let param_clean = param_ty.strip_reference().strip_const();
+                if !matches!(param_clean, Type::Struct(p) if p == sname) {
+                    let is_const = arg_ty.strip_reference().is_const();
+                    if let Some(sig) = self.find_conversion_to(sname, param_clean, is_const) {
+                        Self::wrap_conversion_call(arg, &sig.name, pos);
                     }
                 }
             }

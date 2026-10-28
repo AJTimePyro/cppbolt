@@ -168,8 +168,7 @@ impl<'a> Codegen<'a> {
                 _ => 0,
             };
             let ref_penalty = match (receiver_is_lvalue, sig.ref_qualifier) {
-                (Some(true), RefQualifier::None) => 1,
-                (Some(false), RefQualifier::None) => 1,
+                (Some(_), RefQualifier::None) => 1,
                 _ => 0,
             };
             let score = score + receiver_penalty + ref_penalty;
