@@ -212,6 +212,13 @@ impl<'a> Codegen<'a> {
         if let Some(body) = &m.body {
             collect_stmt_calls(body, &mut calls);
         }
+        for (c_name, c_args) in &m.ctor_initializers {
+            calls.insert(c_name.clone());
+            calls.insert(format!("{}_{}", name, c_name));
+            for arg in c_args {
+                collect_expr_calls(arg, &mut calls);
+            }
+        }
 
         // A constructor or destructor implicitly calls the lifecycle methods
         // of its bases and members.

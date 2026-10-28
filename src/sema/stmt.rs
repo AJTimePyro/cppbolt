@@ -2,6 +2,20 @@ use super::*;
 
 impl Sema {
     pub(super) fn analyze_function(&mut self, func: &mut FunctionDecl) -> Result<(), CompileError> {
+        if let Some(cls) = &self.current_class {
+            let short_cls = cls.split("::").last().unwrap_or(cls);
+            let has_delegating = func
+                .ctor_initializers
+                .iter()
+                .any(|(name, _)| name == cls || name == short_cls);
+            if has_delegating && func.ctor_initializers.len() > 1 {
+                return Err(CompileError::new(
+                    "mem-initializer for delegating constructor cannot be combined with other member or base initializers",
+                    func.line,
+                    func.col,
+                ));
+            }
+        }
         self.current_func_return_type = Some(func.return_type.clone());
         self.current_func_name = Some(func.name.clone());
         self.current_frame_size = 0;
