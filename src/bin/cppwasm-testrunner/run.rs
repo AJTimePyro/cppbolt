@@ -15,6 +15,9 @@ fn run_command(
     cpp: &Path,
     out: &Path,
 ) -> Result<std::process::Output, String> {
+    if let Some(parent) = out.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
     let mut command = Command::new("timeout");
     command.arg("5s").arg(program);
     for arg in extra {

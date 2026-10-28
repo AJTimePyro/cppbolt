@@ -5,8 +5,7 @@
 //! this gate a wrong expectation would hide a behavior change, so the gate
 //! runs both in the corpus runner and as a cargo test.
 
-use crate::corpus::{compare_output, cpp_files, input_path, run_with_input};
-use std::ffi::OsStr;
+use crate::corpus::{compare_output, cpp_files, input_path, run_with_input, test_name};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -73,11 +72,7 @@ pub fn run_oracle(groups: &[&str]) -> OracleReport {
                 }
             };
             for cpp in tests {
-                let name = cpp
-                    .file_stem()
-                    .and_then(OsStr::to_str)
-                    .unwrap_or_default()
-                    .to_string();
+                let name = test_name(&directory, &cpp).unwrap_or_default();
                 match run_one(compiler, &work, feature, &name, &cpp) {
                     OracleResult::Passed => report.matched += 1,
                     OracleResult::Skipped => report.skipped += 1,
@@ -98,7 +93,8 @@ pub fn run_oracle(groups: &[&str]) -> OracleReport {
 
 /// Replays one test through one compiler.
 fn run_one(compiler: &str, work: &Path, feature: &str, name: &str, cpp: &Path) -> OracleResult {
-    let binary: PathBuf = work.join(format!("{compiler}_{feature}_{name}"));
+    let sanitized = name.replace('/', "_");
+    let binary: PathBuf = work.join(format!("{compiler}_{feature}_{sanitized}"));
     let compiled = Command::new("timeout")
         .arg("10s")
         .arg(compiler)
