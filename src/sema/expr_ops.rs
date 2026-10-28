@@ -228,6 +228,14 @@ impl Sema {
                 if let Some(sig) = self.find_unary_operator(*op, &ty) {
                     return Ok(sig.return_type);
                 }
+                if *op == UnaryOp::Plus
+                    && let Type::Struct(sname) = ty.strip_const()
+                    && let Some(conv_sig) =
+                        self.find_method_in_class_for_receiver(sname, "__to_fn_ptr", ty.is_const())
+                {
+                    Self::wrap_conversion_call(expr, &conv_sig.name, *pos);
+                    return Ok(conv_sig.return_type);
+                }
                 Ok(ty.integer_promotion())
             }
             UnaryOp::PreInc | UnaryOp::PreDec | UnaryOp::PostInc | UnaryOp::PostDec => {
