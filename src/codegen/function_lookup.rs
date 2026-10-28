@@ -96,5 +96,7 @@ fn default_signature(name: &str) -> FunctionSig {
         param_types: vec![],
         default_args: vec![],
         is_static: false,
+        is_explicit: false,
+        ref_qualifier: RefQualifier::None,
     }
 }

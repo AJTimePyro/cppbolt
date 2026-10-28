@@ -163,11 +163,53 @@ impl Sema {
                 return Ok(Some(Type::Void));
             }
             let receiver_const = crate::sema::receiver_is_const_type(&obj_ty);
-            if let Some(sig) =
-                self.find_method_in_class_for_receiver(&struct_name, member, receiver_const)
-            {
+            let receiver_is_lvalue = if *is_arrow { true } else { object.is_lvalue() };
+            let all_overloads = self.find_method_overloads_in_class(&struct_name, member, false);
+            if all_overloads.is_empty() {
+                return Err(CompileError::new(
+                    format!("No member named '{}' in struct '{}'", member, struct_name),
+                    pos.line,
+                    pos.col,
+                ));
+            }
+            let has_matching_ref_qualifier =
+                all_overloads.iter().any(|sig| match sig.ref_qualifier {
+                    RefQualifier::None => true,
+                    RefQualifier::LValue => {
+                        receiver_is_lvalue || crate::sema::sig_receiver_is_const(sig)
+                    }
+                    RefQualifier::RValue => !receiver_is_lvalue,
+                });
+            if !has_matching_ref_qualifier {
+                if receiver_is_lvalue {
+                    return Err(CompileError::new(
+                        "cannot call rvalue ref-qualified method on an lvalue",
+                        pos.line,
+                        pos.col,
+                    ));
+                } else {
+                    return Err(CompileError::new(
+                        "cannot call lvalue ref-qualified method on an rvalue",
+                        pos.line,
+                        pos.col,
+                    ));
+                }
+            }
+            if let Some(sig) = self.find_method_in_class_for_receiver_category(
+                &struct_name,
+                member,
+                receiver_const,
+                receiver_is_lvalue,
+            ) {
                 // The arguments must match one of the overloads of the method.
-                self.check_member_arguments(&struct_name, member, receiver_const, arg_types, *pos)?;
+                self.check_member_arguments(
+                    &struct_name,
+                    member,
+                    receiver_const,
+                    receiver_is_lvalue,
+                    arg_types,
+                    *pos,
+                )?;
                 // A member call may leave out arguments that have default
                 // values.
                 self.fill_member_defaults(&sig, args)?;
@@ -192,6 +234,7 @@ impl Sema {
         class_name: &str,
         member: &str,
         receiver_const: bool,
+        receiver_is_lvalue: bool,
         arg_types: &[Type],
         pos: ExprPos,
     ) -> Result<(), CompileError> {
@@ -205,6 +248,15 @@ impl Sema {
         let mut best: Option<&FunctionSig> = None;
         let mut ambiguous = false;
         for sig in &overloads {
+            if receiver_is_lvalue && sig.ref_qualifier == RefQualifier::RValue {
+                continue;
+            }
+            if !receiver_is_lvalue
+                && sig.ref_qualifier == RefQualifier::LValue
+                && !crate::sema::sig_receiver_is_const(sig)
+            {
+                continue;
+            }
             let params = if sig.param_types.is_empty() {
                 &[][..]
             } else {
@@ -223,8 +275,14 @@ impl Sema {
             match self.score_arguments(params, arg_types) {
                 Ok(score) => {
                     // A non-const receiver prefers the non-const overload.
-                    let score = score
-                        + usize::from(!receiver_const && crate::sema::sig_receiver_is_const(sig));
+                    let const_bonus =
+                        usize::from(!receiver_const && crate::sema::sig_receiver_is_const(sig));
+                    let ref_bonus = match (receiver_is_lvalue, sig.ref_qualifier) {
+                        (true, RefQualifier::None) => 1,
+                        (false, RefQualifier::None) => 1,
+                        _ => 0,
+                    };
+                    let score = score + const_bonus + ref_bonus;
                     if score < best_score {
                         best_score = score;
                         best = Some(sig);

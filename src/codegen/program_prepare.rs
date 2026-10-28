@@ -207,7 +207,12 @@ impl<'a> Codegen<'a> {
                 },
             );
         }
-        let mangled = self.sema.mangle_name(&qual_name, &params);
+        let mut mangled = self.sema.mangle_name(&qual_name, &params);
+        match m.ref_qualifier {
+            RefQualifier::LValue => mangled.push_str("_R"),
+            RefQualifier::RValue => mangled.push_str("_O"),
+            RefQualifier::None => {}
+        }
         aliases.push(mangled);
         if let Some(body) = &m.body {
             collect_stmt_calls(body, &mut calls);

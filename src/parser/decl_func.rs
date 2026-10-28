@@ -12,7 +12,7 @@ impl Parser {
     ) -> Result<FunctionDecl, CompileError> {
         self.expect(TokenKind::LParen)?;
         let params = self.parse_function_params()?;
-        let is_const = self.parse_function_qualifiers()?;
+        let (is_const, ref_qualifier) = self.parse_function_qualifiers()?;
         let ctor_initializers = self.parse_ctor_initializers()?;
         let (body, is_pure_virtual) = self.parse_function_body(line, col)?;
 
@@ -24,6 +24,8 @@ impl Parser {
             is_virtual: false,
             is_pure_virtual,
             is_const,
+            is_explicit: false,
+            ref_qualifier,
             is_static: false,
             ctor_initializers,
             line,
@@ -149,14 +151,25 @@ impl Parser {
         ))
     }
 
-    pub(super) fn parse_function_qualifiers(&mut self) -> Result<bool, CompileError> {
+    pub(super) fn parse_function_qualifiers(
+        &mut self,
+    ) -> Result<(bool, RefQualifier), CompileError> {
         let mut is_const = false;
-        while matches!(self.peek(), TokenKind::KwConst | TokenKind::KwOverride)
-            || matches!(self.peek(), TokenKind::Ident(id) if id == "noexcept")
+        let mut ref_qualifier = RefQualifier::None;
+        while matches!(
+            self.peek(),
+            TokenKind::KwConst | TokenKind::KwOverride | TokenKind::Amp | TokenKind::AndAnd
+        ) || matches!(self.peek(), TokenKind::Ident(id) if id == "noexcept")
         {
             if self.peek() == &TokenKind::KwConst {
                 self.advance();
                 is_const = true;
+            } else if self.peek() == &TokenKind::Amp {
+                self.advance();
+                ref_qualifier = RefQualifier::LValue;
+            } else if self.peek() == &TokenKind::AndAnd {
+                self.advance();
+                ref_qualifier = RefQualifier::RValue;
             } else if self.peek() == &TokenKind::KwOverride {
                 self.advance();
             } else if matches!(self.peek(), TokenKind::Ident(id) if id == "noexcept") {
@@ -173,7 +186,7 @@ impl Parser {
             }
         }
 
-        Ok(is_const)
+        Ok((is_const, ref_qualifier))
     }
 
     pub(super) fn parse_ctor_initializers(

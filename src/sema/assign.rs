@@ -23,9 +23,8 @@ impl Sema {
         if let Type::Struct(sname) = value.strip_reference().strip_const() {
             let conv_name = format!("operator {}", target.to_c_type());
             let is_const = value.strip_reference().is_const();
-            if self
-                .find_method_in_class_for_receiver(sname, &conv_name, is_const)
-                .is_some()
+            if let Some(sig) = self.find_method_in_class_for_receiver(sname, &conv_name, is_const)
+                && !sig.is_explicit
             {
                 return true;
             }

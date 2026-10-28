@@ -41,11 +41,16 @@ impl<'a> Codegen<'a> {
             receiver_const,
         };
 
+        let receiver_is_lvalue = is_arrow || object.is_lvalue();
         if let Some(slot_idx) = is_virtual {
             self.compile_member_call_virtual(CallSite { slot_idx, ..site }, ctx, code)?;
-        } else if let Some((m_idx, sig)) =
-            self.find_method_for_receiver(&sname, member, &arg_types, receiver_const)
-        {
+        } else if let Some((m_idx, sig)) = self.find_method_for_receiver_category(
+            &sname,
+            member,
+            &arg_types,
+            receiver_const,
+            receiver_is_lvalue,
+        ) {
             self.compile_member_call_direct(site, &sig, m_idx, ctx, code)?;
         } else {
             return Err(CompileError::new(

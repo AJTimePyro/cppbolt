@@ -9,6 +9,14 @@ pub struct Param {
     pub default_val: Option<Expr>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RefQualifier {
+    #[default]
+    None,
+    LValue,
+    RValue,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionDecl {
     pub name: String,
@@ -18,6 +26,8 @@ pub struct FunctionDecl {
     pub is_virtual: bool,
     pub is_pure_virtual: bool,
     pub is_const: bool,
+    pub is_explicit: bool,
+    pub ref_qualifier: RefQualifier,
     pub is_static: bool,
     pub ctor_initializers: Vec<(String, Vec<Expr>)>,
     pub line: usize,

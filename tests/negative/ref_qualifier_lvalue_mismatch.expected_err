@@ -1,0 +1,1 @@
+tests/negative/ref_qualifier_lvalue_mismatch.cpp:7:5: error: cannot call rvalue ref-qualified method on an lvalue

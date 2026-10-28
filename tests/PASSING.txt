@@ -110,6 +110,7 @@ classes_oop/raii_loop_break
 classes_oop/raii_nested_loop_return
 classes_oop/raii_temporaries
 classes_oop/range_for_raii
+classes_oop/ref_qualified_methods
 classes_oop/references
 classes_oop/regress_contextual_bool
 classes_oop/regress_struct_ref_assign
@@ -257,6 +258,7 @@ negative/private_access
 negative/pure_virtual_instantiation
 negative/range_for_non_iterable
 negative/redefined_func
+negative/ref_qualifier_lvalue_mismatch
 negative/scoped_enum_implicit_conversion
 negative/scoped_enum_leak
 negative/stray_endif

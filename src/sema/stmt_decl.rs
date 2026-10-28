@@ -87,9 +87,8 @@ impl Sema {
         if let Type::Struct(sname) = init_ty.strip_reference().strip_const() {
             let conv_name = format!("operator {}", ty.to_c_type());
             let is_const = init_ty.strip_reference().is_const();
-            if self
-                .find_method_in_class_for_receiver(sname, &conv_name, is_const)
-                .is_some()
+            if let Some(sig) = self.find_method_in_class_for_receiver(sname, &conv_name, is_const)
+                && !sig.is_explicit
             {
                 let old_init = init_expr.clone();
                 *init_expr = Expr::Call {

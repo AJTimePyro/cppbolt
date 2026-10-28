@@ -112,7 +112,12 @@ impl<'a> Codegen<'a> {
             );
         }
         let qual_name = format!("{}::{}", name, m.name);
-        let mangled = self.sema.mangle_name(&qual_name, &params);
+        let mut mangled = self.sema.mangle_name(&qual_name, &params);
+        match m.ref_qualifier {
+            RefQualifier::LValue => mangled.push_str("_R"),
+            RefQualifier::RValue => mangled.push_str("_O"),
+            RefQualifier::None => {}
+        }
         let params_wasm = wasm_params(&params);
         let results_wasm = wasm_results(&m.return_type);
 

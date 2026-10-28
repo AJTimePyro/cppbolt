@@ -63,6 +63,8 @@ pub struct FunctionSig {
     pub param_types: Vec<Type>,
     pub default_args: Vec<Option<Expr>>,
     pub is_static: bool,
+    pub is_explicit: bool,
+    pub ref_qualifier: RefQualifier,
 }
 
 /// The first argument of a call that does not convert to its parameter.
@@ -176,6 +178,8 @@ impl Sema {
             param_types: vec![Type::Pointer(Box::new(Type::Char))],
             default_args: vec![None],
             is_static: false,
+            is_explicit: false,
+            ref_qualifier: RefQualifier::None,
         });
         sema.register_function(FunctionSig {
             name: "std::printf".to_string(),
@@ -184,6 +188,8 @@ impl Sema {
             param_types: vec![Type::Pointer(Box::new(Type::Char))],
             default_args: vec![None],
             is_static: false,
+            is_explicit: false,
+            ref_qualifier: RefQualifier::None,
         });
 
         // Built-in malloc & free
@@ -194,6 +200,8 @@ impl Sema {
             param_types: vec![Type::Int],
             default_args: vec![None],
             is_static: false,
+            is_explicit: false,
+            ref_qualifier: RefQualifier::None,
         });
 
         sema.register_function(FunctionSig {
@@ -203,6 +211,8 @@ impl Sema {
             param_types: vec![Type::Pointer(Box::new(Type::Void))],
             default_args: vec![None],
             is_static: false,
+            is_explicit: false,
+            ref_qualifier: RefQualifier::None,
         });
 
         sema.register_function(FunctionSig {
@@ -212,6 +222,8 @@ impl Sema {
             param_types: vec![Type::Int],
             default_args: vec![None],
             is_static: false,
+            is_explicit: false,
+            ref_qualifier: RefQualifier::None,
         });
 
         sema
