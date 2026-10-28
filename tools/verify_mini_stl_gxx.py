@@ -117,7 +117,7 @@ def main():
         if not os.path.isdir(directory):
             print(f"[FAIL] missing test directory: {directory}")
             return 1
-        files.extend(sorted(glob.glob(os.path.join(directory, "*.cpp"))))
+        files.extend(sorted(glob.glob(os.path.join(directory, "**", "*.cpp"), recursive=True)))
     if not files:
         print(f"[FAIL] no tests found under {tests_dir}")
         return 1

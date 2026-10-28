@@ -7,8 +7,8 @@ import sys
 import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-CPP = ROOT / "tests" / "c_basics" / "printf_table.cpp"
-EXPECTED = ROOT / "tests" / "c_basics" / "printf_table.expected"
+CPP = ROOT / "tests" / "c_basics" / "io_printf" / "printf_table.cpp"
+EXPECTED = ROOT / "tests" / "c_basics" / "io_printf" / "printf_table.expected"
 
 
 def main() -> int:

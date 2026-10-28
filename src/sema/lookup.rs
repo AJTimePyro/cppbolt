@@ -47,12 +47,54 @@ impl Sema {
         method_name: &str,
         receiver_const: bool,
     ) -> Option<FunctionSig> {
+        self.find_method_in_class_for_receiver_category(
+            class_name,
+            method_name,
+            receiver_const,
+            true,
+        )
+    }
+
+    pub fn find_method_in_class_for_receiver_category(
+        &self,
+        class_name: &str,
+        method_name: &str,
+        receiver_const: bool,
+        receiver_is_lvalue: bool,
+    ) -> Option<FunctionSig> {
         if class_name.is_empty() {
             return None;
         }
         let pick_sig = |sigs: &[FunctionSig]| -> Option<FunctionSig> {
-            let receiver_matches =
-                |sig: &FunctionSig| !receiver_const || crate::sema::sig_receiver_is_const(sig);
+            let receiver_matches = |sig: &FunctionSig| {
+                if receiver_const && !crate::sema::sig_receiver_is_const(sig) {
+                    return false;
+                }
+                if receiver_is_lvalue && sig.ref_qualifier == RefQualifier::RValue {
+                    return false;
+                }
+                if !receiver_is_lvalue
+                    && sig.ref_qualifier == RefQualifier::LValue
+                    && !crate::sema::sig_receiver_is_const(sig)
+                {
+                    return false;
+                }
+                true
+            };
+            if !receiver_is_lvalue
+                && let Some(rval) = sigs
+                    .iter()
+                    .find(|s| receiver_matches(s) && s.ref_qualifier == RefQualifier::RValue)
+            {
+                return Some(rval.clone());
+            }
+            if receiver_is_lvalue
+                && let Some(lval) = sigs
+                    .iter()
+                    .find(|s| receiver_matches(s) && s.ref_qualifier == RefQualifier::LValue)
+            {
+                return Some(lval.clone());
+            }
             if let Some(non_const) = sigs
                 .iter()
                 .find(|s| receiver_matches(s) && !crate::sema::sig_receiver_is_const(s))
@@ -74,9 +116,12 @@ impl Sema {
         }
         if let Some(layout) = self.struct_layouts.get(class_name) {
             for b in &layout.base_classes {
-                if let Some(sig) =
-                    self.find_method_in_class_for_receiver(b, method_name, receiver_const)
-                {
+                if let Some(sig) = self.find_method_in_class_for_receiver_category(
+                    b,
+                    method_name,
+                    receiver_const,
+                    receiver_is_lvalue,
+                ) {
                     return Some(sig);
                 }
             }
@@ -219,6 +264,8 @@ mod tests {
             param_types: vec![Type::Int],
             default_args: vec![None],
             is_static,
+            is_explicit: false,
+            ref_qualifier: RefQualifier::None,
         }
     }
 

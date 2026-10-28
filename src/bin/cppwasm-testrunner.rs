@@ -16,7 +16,6 @@ mod oracle;
 
 use cppwasm::corpus::{self, FEATURES};
 use std::collections::BTreeSet;
-use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -247,11 +246,7 @@ fn run_feature(paths: &Paths, feature: &str, negative: bool) -> Report {
     };
 
     for cpp in tests {
-        let name = cpp
-            .file_stem()
-            .and_then(OsStr::to_str)
-            .unwrap_or_default()
-            .to_string();
+        let name = corpus::test_name(&directory, &cpp).unwrap_or_default();
         report.executed += 1;
         let result = if negative {
             run::check_negative(paths, feature, &name, &cpp)

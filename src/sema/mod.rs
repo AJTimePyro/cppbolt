@@ -15,6 +15,7 @@ mod overload;
 mod stmt;
 mod stmt_decl;
 mod stmt_range_for;
+mod stmt_structured_binding;
 
 pub(crate) use layout::RecordLayout;
 pub(crate) use stmt_decl::VarDecl;
@@ -23,7 +24,7 @@ use crate::ast::types::Type;
 use crate::ast::*;
 use crate::diagnostics::CompileError;
 use crate::name::QualifiedName;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
 pub struct StructField {
@@ -63,6 +64,8 @@ pub struct FunctionSig {
     pub param_types: Vec<Type>,
     pub default_args: Vec<Option<Expr>>,
     pub is_static: bool,
+    pub is_explicit: bool,
+    pub ref_qualifier: RefQualifier,
 }
 
 /// The first argument of a call that does not convert to its parameter.
@@ -113,6 +116,8 @@ pub struct Sema {
     pub struct_layouts: HashMap<String, StructLayout>,
     pub struct_order: Vec<String>,
     pub enum_values: HashMap<String, i64>,
+    pub enum_types: HashMap<String, String>,
+    pub scoped_enums: HashSet<String>,
     pub functions: HashMap<String, Vec<FunctionSig>>,
     pub global_vars: HashMap<String, VarSymbol>,
     pub scopes: Vec<Scope>,
@@ -144,6 +149,8 @@ impl Sema {
             struct_layouts: HashMap::new(),
             struct_order: Vec::new(),
             enum_values: HashMap::new(),
+            enum_types: HashMap::new(),
+            scoped_enums: HashSet::new(),
             functions: HashMap::new(),
             global_vars: HashMap::new(),
             scopes: Vec::new(),
@@ -164,53 +171,66 @@ impl Sema {
             depth: crate::depth::DepthCounters::new(),
         };
 
+        sema.register_builtins();
+        sema
+    }
+
+    fn register_builtins(&mut self) {
         // Built-in printf: variadic, mangled as "printf"
-        sema.register_function(FunctionSig {
+        self.register_function(FunctionSig {
             name: "printf".to_string(),
             mangled_name: "printf".to_string(),
             return_type: Type::Int,
             param_types: vec![Type::Pointer(Box::new(Type::Char))],
             default_args: vec![None],
             is_static: false,
+            is_explicit: false,
+            ref_qualifier: RefQualifier::None,
         });
-        sema.register_function(FunctionSig {
+        self.register_function(FunctionSig {
             name: "std::printf".to_string(),
             mangled_name: "std::printf".to_string(),
             return_type: Type::Int,
             param_types: vec![Type::Pointer(Box::new(Type::Char))],
             default_args: vec![None],
             is_static: false,
+            is_explicit: false,
+            ref_qualifier: RefQualifier::None,
         });
 
         // Built-in malloc & free
-        sema.register_function(FunctionSig {
+        self.register_function(FunctionSig {
             name: "malloc".to_string(),
             mangled_name: "malloc".to_string(),
             return_type: Type::Pointer(Box::new(Type::Void)),
             param_types: vec![Type::Int],
             default_args: vec![None],
             is_static: false,
+            is_explicit: false,
+            ref_qualifier: RefQualifier::None,
         });
 
-        sema.register_function(FunctionSig {
+        self.register_function(FunctionSig {
             name: "free".to_string(),
             mangled_name: "free".to_string(),
             return_type: Type::Void,
             param_types: vec![Type::Pointer(Box::new(Type::Void))],
             default_args: vec![None],
             is_static: false,
+            is_explicit: false,
+            ref_qualifier: RefQualifier::None,
         });
 
-        sema.register_function(FunctionSig {
+        self.register_function(FunctionSig {
             name: "__builtin_wasm_memory_size".to_string(),
             mangled_name: "__builtin_wasm_memory_size".to_string(),
             return_type: Type::Int,
             param_types: vec![Type::Int],
             default_args: vec![None],
             is_static: false,
+            is_explicit: false,
+            ref_qualifier: RefQualifier::None,
         });
-
-        sema
     }
 
     /// Registers an overload under its source name, mangled name, and any

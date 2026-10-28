@@ -1,7 +1,7 @@
 //! Variant and independent corpus checks used by the runner's regression gate.
 
 use super::golden::sha256_hex;
-use cppwasm::corpus::cpp_files;
+use cppwasm::corpus::{cpp_files, test_name};
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fs;
@@ -29,7 +29,7 @@ pub(super) fn check_variant_tests() -> usize {
             }
         };
         for path in files {
-            let Some(name) = path.file_stem().and_then(OsStr::to_str) else {
+            let Some(name) = test_name(&directory, &path) else {
                 eprintln!("[FAIL] non-UTF-8 variant file name: {}", path.display());
                 failures += 1;
                 continue;

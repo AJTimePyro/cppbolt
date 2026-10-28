@@ -178,6 +178,8 @@ impl<'a> Codegen<'a> {
                 )))],
                 default_args: vec![],
                 is_static: false,
+                is_explicit: false,
+                ref_qualifier: RefQualifier::None,
             },
         ))
     }

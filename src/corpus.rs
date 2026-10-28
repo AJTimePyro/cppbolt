@@ -26,16 +26,29 @@ pub const FEATURES: &[&str] = &[
     "independent",
 ];
 
-/// Lists the C++ sources of a directory.
+/// Lists the C++ sources of a directory, recursively traversing subdirectories.
+/// Results are sorted deterministically.
 pub fn cpp_files(directory: &Path) -> std::io::Result<Vec<PathBuf>> {
     let mut files = Vec::new();
+    collect_cpp_files(directory, &mut files)?;
+    files.sort();
+    Ok(files)
+}
+
+fn collect_cpp_files(directory: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
+    if !directory.is_dir() {
+        return Ok(());
+    }
     for entry in fs::read_dir(directory)? {
-        let path = entry?.path();
-        if path.extension() == Some(OsStr::new("cpp")) {
-            files.push(path);
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_cpp_files(&path, out)?;
+        } else if path.extension() == Some(OsStr::new("cpp")) {
+            out.push(path);
         }
     }
-    Ok(files)
+    Ok(())
 }
 
 /// The stdin file of a test, if the test has one.
@@ -93,5 +106,42 @@ pub fn compare_output(
         Ok(())
     } else {
         Err("output mismatch".to_string())
+    }
+}
+
+/// Extracts the relative test identifier from a test source path given the feature directory.
+/// Returns a normalized path with forward slashes and no `.cpp` extension.
+pub fn test_name(feature_dir: &Path, cpp_path: &Path) -> Option<String> {
+    let rel = cpp_path.strip_prefix(feature_dir).ok()?;
+    let without_ext = rel.with_extension("");
+    Some(without_ext.to_string_lossy().replace('\\', "/"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn cpp_files_recursively_finds_and_sorts_sources() -> Result<(), Box<dyn std::error::Error>> {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|error| format!("{error}"))?
+            .as_nanos();
+        let temp = std::env::temp_dir().join(format!("cppwasm_corpus_test_{nonce}"));
+        let sub = temp.join("sub");
+        fs::create_dir_all(&sub)?;
+
+        fs::write(temp.join("root.cpp"), "")?;
+        fs::write(temp.join("ignored.txt"), "")?;
+        fs::write(sub.join("nested.cpp"), "")?;
+
+        let files = cpp_files(&temp)?;
+        let names: Vec<String> = files.iter().filter_map(|p| test_name(&temp, p)).collect();
+
+        let _ = fs::remove_dir_all(&temp);
+
+        assert_eq!(names, vec!["root".to_string(), "sub/nested".to_string()]);
+        Ok(())
     }
 }

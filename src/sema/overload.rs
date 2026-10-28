@@ -95,7 +95,7 @@ impl Sema {
                 && p.deref_type().map(|d| d.strip_const()) == Some(arg_ty.strip_const())
             {
                 score += 1;
-            } else if is_promotion(arg_ty, p) {
+            } else if self.is_promotion(arg_ty, p) {
                 score += 2;
             } else if self.can_assign(p, arg_ty) {
                 if self.is_user_conversion(p, arg_ty) {
@@ -181,22 +181,29 @@ pub(super) fn same_parameters(first: &FunctionSig, second: &FunctionSig) -> bool
         && crate::sema::sig_receiver_is_const(first) == crate::sema::sig_receiver_is_const(second)
 }
 
-/// Returns true when the conversion from `from` to `to` is a promotion.
-///
-/// A small integer or an enum promotes to `int`, and a `float` promotes to
-/// `double`.  Every other conversion is a plain conversion.
-pub(super) fn is_promotion(from: &Type, to: &Type) -> bool {
-    let from = from.strip_const();
-    let to = to.strip_const();
-    match from {
-        Type::Bool
-        | Type::Char
-        | Type::SignedChar
-        | Type::UnsignedChar
-        | Type::Short
-        | Type::UnsignedShort
-        | Type::Enum(_) => matches!(to, Type::Int | Type::UnsignedInt),
-        Type::Float => matches!(to, Type::Double),
-        _ => false,
+impl Sema {
+    /// Returns true when the conversion from `from` to `to` is a promotion.
+    ///
+    /// A small integer or an unscoped enum promotes to `int`, and a `float`
+    /// promotes to `double`. Scoped enums (`enum class`) never promote to `int`.
+    pub(super) fn is_promotion(&self, from: &Type, to: &Type) -> bool {
+        let from = from.strip_const();
+        let to = to.strip_const();
+        if let Type::Enum(ename) = from
+            && self.scoped_enums.contains(ename)
+        {
+            return false;
+        }
+        match from {
+            Type::Bool
+            | Type::Char
+            | Type::SignedChar
+            | Type::UnsignedChar
+            | Type::Short
+            | Type::UnsignedShort
+            | Type::Enum(_) => matches!(to, Type::Int | Type::UnsignedInt),
+            Type::Float => matches!(to, Type::Double),
+            _ => false,
+        }
     }
 }

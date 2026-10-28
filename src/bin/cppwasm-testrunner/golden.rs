@@ -6,9 +6,8 @@
 
 use super::Paths;
 use super::run::run_wasm;
-use cppwasm::corpus::{FEATURES, cpp_files, input_path};
+use cppwasm::corpus::{FEATURES, cpp_files, input_path, test_name};
 use std::collections::BTreeMap;
-use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -44,10 +43,10 @@ pub(super) fn run(mode: Mode, manifest: &Path, compiler: PathBuf) -> ExitCode {
             }
         };
         for cpp in tests {
-            let Some(name) = cpp.file_stem().and_then(OsStr::to_str) else {
+            let Some(name) = test_name(&directory, &cpp) else {
                 continue;
             };
-            match hash_one(&paths, feature, name, &cpp) {
+            match hash_one(&paths, feature, &name, &cpp) {
                 Ok(Some(entry)) => {
                     entries.insert(format!("{feature}/{name}"), entry);
                 }
@@ -75,6 +74,9 @@ fn hash_one(
     cpp: &Path,
 ) -> Result<Option<(String, String)>, String> {
     let wasm = paths.output(feature, name, "wasm");
+    if let Some(parent) = wasm.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
     let compiled = Command::new("timeout")
         .arg("5s")
         .arg(&paths.compiler)

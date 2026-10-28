@@ -13,9 +13,22 @@ impl Sema {
     fn register_types(&mut self, program: &Program) -> Result<(), CompileError> {
         for decl in &program.declarations {
             match decl {
-                Decl::EnumDecl { name: _, variants } => {
+                Decl::EnumDecl {
+                    name,
+                    is_scoped,
+                    variants,
+                } => {
+                    if *is_scoped {
+                        self.scoped_enums.insert(name.clone());
+                    }
                     for (vname, val) in variants {
-                        self.enum_values.insert(vname.clone(), *val);
+                        let scoped_name = format!("{}::{}", name, vname);
+                        self.enum_values.insert(scoped_name.clone(), *val);
+                        self.enum_types.insert(scoped_name, name.clone());
+                        if !*is_scoped {
+                            self.enum_values.insert(vname.clone(), *val);
+                            self.enum_types.insert(vname.clone(), name.clone());
+                        }
                     }
                 }
                 Decl::StructDecl {
@@ -80,6 +93,8 @@ impl Sema {
                             is_virtual: false,
                             is_pure_virtual: false,
                             is_const: false,
+                            is_explicit: false,
+                            ref_qualifier: RefQualifier::None,
                             is_static: false,
                             ctor_initializers: vec![],
                             line: 0,
@@ -148,6 +163,8 @@ impl Sema {
                         is_virtual: false,
                         is_pure_virtual: false,
                         is_const: false,
+                        is_explicit: false,
+                        ref_qualifier: RefQualifier::None,
                         is_static: false,
                         ctor_initializers: vec![],
                         line: 0,
@@ -219,6 +236,8 @@ impl Sema {
                         param_types: f.params.iter().map(|p| p.ty.clone()).collect(),
                         default_args: f.params.iter().map(|p| p.default_val.clone()).collect(),
                         is_static: false,
+                        is_explicit: f.is_explicit,
+                        ref_qualifier: f.ref_qualifier,
                     };
                     self.register_function(sig);
                 }
@@ -272,7 +291,12 @@ impl Sema {
                 params.insert(0, this_param(name, m.is_const));
             }
             let qual_name = format!("{}::{}", name, m.name);
-            let mangled = self.mangle_name(&qual_name, &params);
+            let mut mangled = self.mangle_name(&qual_name, &params);
+            match m.ref_qualifier {
+                RefQualifier::LValue => mangled.push_str("_R"),
+                RefQualifier::RValue => mangled.push_str("_O"),
+                RefQualifier::None => {}
+            }
             let sig = FunctionSig {
                 name: m.name.clone(),
                 mangled_name: mangled,
@@ -280,6 +304,8 @@ impl Sema {
                 param_types: params.iter().map(|p| p.ty.clone()).collect(),
                 default_args: params.iter().map(|p| p.default_val.clone()).collect(),
                 is_static: m.is_static,
+                is_explicit: m.is_explicit,
+                ref_qualifier: m.ref_qualifier,
             };
             self.register_function(sig.clone());
             self.functions.entry(qual_name).or_default().push(sig);

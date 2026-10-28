@@ -229,3 +229,18 @@ fn take_expr_children(expr: &mut Expr, out: &mut Vec<Expr>) {
         | Expr::SizeofType(_) => {}
     }
 }
+
+impl Expr {
+    pub fn is_lvalue(&self) -> bool {
+        match self {
+            Expr::Identifier(_) | Expr::ArraySubscript { .. } => true,
+            Expr::MemberAccess {
+                object, is_arrow, ..
+            } => *is_arrow || object.is_lvalue(),
+            Expr::Unary {
+                op: UnaryOp::Deref, ..
+            } => true,
+            _ => false,
+        }
+    }
+}

@@ -1,0 +1,1 @@
+tests/negative/delegating_constructor_mixed.cpp:4:5: error: mem-initializer for delegating constructor cannot be combined with other member or base initializers

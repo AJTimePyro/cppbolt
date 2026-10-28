@@ -5,7 +5,7 @@ async function main() {
     const module = await WebAssembly.instantiate(compilerWasmBytes, {});
     const instance = module.instance;
 
-    const source = fs.readFileSync("tests/c_basics/arithmetic.cpp", "utf8");
+    const source = fs.readFileSync("tests/c_basics/types/arithmetic.cpp", "utf8");
     const sourceBytes = Buffer.from(source, "utf8");
 
     // Allocate memory in wasm

@@ -248,7 +248,7 @@ pub(super) fn collect_address_taken_stmt(stmt: &Stmt, address_taken: &mut HashSe
     }
 }
 
-fn collect_expr_calls(expr: &Expr, calls: &mut HashSet<String>) {
+pub(super) fn collect_expr_calls(expr: &Expr, calls: &mut HashSet<String>) {
     let mut stack = vec![expr];
     while let Some(expr) = stack.pop() {
         collect_call_node(expr, calls, &mut stack);

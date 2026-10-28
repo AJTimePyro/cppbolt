@@ -20,7 +20,7 @@ Exclude exceptions and RTTI from the v1 compiler subset (`docs/decisions/005-no-
 ## Consequences
 ### Positive
 - Unsupported constructs produce clear compile-time diagnostics rather than silently lowering to a different runtime model (`docs/decisions/005-no-exceptions-rtti.md`, commit `d23afed`, `tests/negative/`).
-- Destructor invocations and RAII cleanups follow straightforward lexical scope exit rules (`src/codegen/stmt.rs#L180-L240`, `tests/classes_oop/class_raii.cpp`).
+- Destructor invocations and RAII cleanups follow straightforward lexical scope exit rules (`src/codegen/stmt.rs#L180-L240`, `tests/classes_oop/memory_raii/class_raii.cpp`).
 - Vtables contain only function pointers for virtual method dispatch, without type descriptor pointers (`src/codegen/vtables.rs#L20-L45`).
 
 ### Negative / Trade-offs

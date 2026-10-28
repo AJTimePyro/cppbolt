@@ -76,7 +76,7 @@ Once the body completes and `self.frame_size` is calculated, `FunctionContext::p
 
 ## 4. Real Input & WebAssembly Opcode Output Example
 
-Taken from `tests/c_basics/arithmetic.cpp`:
+Taken from `tests/c_basics/types/arithmetic.cpp`:
 
 ### Input C++ Source
 ```cpp

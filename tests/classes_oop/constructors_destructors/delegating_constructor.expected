@@ -1,0 +1,4 @@
+target ctor: (5, 10)
+delegating ctor: tag=101
+default delegating ctor: tag=103
+final: x=5 y=10 tag=103

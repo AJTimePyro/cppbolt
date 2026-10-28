@@ -118,10 +118,14 @@ impl Parser {
             return Ok(());
         }
 
+        let mut is_explicit = false;
         while matches!(
             self.peek(),
             TokenKind::KwConstexpr | TokenKind::KwInline | TokenKind::KwExplicit
         ) {
+            if self.peek() == &TokenKind::KwExplicit {
+                is_explicit = true;
+            }
             self.advance();
         }
 
@@ -138,11 +142,11 @@ impl Parser {
             is_static = true;
         }
 
-        if self.parse_struct_special_member(body, &start_tok, is_virtual, is_static)? {
+        if self.parse_struct_special_member(body, &start_tok, is_virtual, is_static, is_explicit)? {
             return Ok(());
         }
 
-        self.parse_struct_function_or_field(body, start_tok, is_virtual, is_static)
+        self.parse_struct_function_or_field(body, start_tok, is_virtual, is_static, is_explicit)
     }
 }
 
@@ -275,19 +279,15 @@ impl Parser {
         start_tok: &Token,
         is_virtual: bool,
         is_static: bool,
+        is_explicit: bool,
     ) -> Result<bool, CompileError> {
-        if self.peek() == &TokenKind::KwOperator && self.peek_ahead(1) == &TokenKind::KwBool {
-            self.advance();
-            self.advance();
-            let fname = "operator bool".to_string();
-            let mut func =
-                self.parse_function_tail(fname.clone(), Type::Bool, start_tok.line, start_tok.col)?;
-            func.is_virtual = is_virtual;
-            func.is_static = is_static;
-            if body.is_private {
-                body.private_members.push(fname);
-            }
-            body.methods.push(func);
+        if self.parse_struct_conversion_operator(
+            body,
+            start_tok,
+            is_virtual,
+            is_static,
+            is_explicit,
+        )? {
             return Ok(true);
         }
 
@@ -323,11 +323,55 @@ impl Parser {
                 start_tok.col,
             )?;
             ctor.is_virtual = is_virtual;
+            ctor.is_explicit = is_explicit;
             body.methods.push(ctor);
             return Ok(true);
         }
 
         Ok(false)
+    }
+
+    fn parse_struct_conversion_operator(
+        &mut self,
+        body: &mut StructBody,
+        start_tok: &Token,
+        is_virtual: bool,
+        is_static: bool,
+        is_explicit: bool,
+    ) -> Result<bool, CompileError> {
+        if self.peek() != &TokenKind::KwOperator {
+            return Ok(false);
+        }
+        let next_tok = self.peek_ahead(1);
+        let is_conv_type = matches!(
+            next_tok,
+            TokenKind::KwInt
+                | TokenKind::KwLong
+                | TokenKind::KwChar
+                | TokenKind::KwBool
+                | TokenKind::KwFloat
+                | TokenKind::KwDouble
+                | TokenKind::KwUnsigned
+                | TokenKind::KwSigned
+                | TokenKind::KwShort
+                | TokenKind::KwVoid
+        ) || matches!(next_tok, TokenKind::Ident(id) if self.known_types.contains(id) || self.type_aliases.contains_key(id));
+        if !is_conv_type {
+            return Ok(false);
+        }
+        self.advance();
+        let target_type = self.parse_type()?;
+        let fname = format!("operator {}", target_type.to_c_type());
+        let mut func =
+            self.parse_function_tail(fname.clone(), target_type, start_tok.line, start_tok.col)?;
+        func.is_virtual = is_virtual;
+        func.is_static = is_static;
+        func.is_explicit = is_explicit;
+        if body.is_private {
+            body.private_members.push(fname);
+        }
+        body.methods.push(func);
+        Ok(true)
     }
 
     fn parse_struct_function_or_field(
@@ -336,6 +380,7 @@ impl Parser {
         start_tok: Token,
         is_virtual: bool,
         is_static: bool,
+        is_explicit: bool,
     ) -> Result<(), CompileError> {
         if self.is_type_start() {
             let specifiers = self.parse_specifier_type()?;
@@ -363,6 +408,7 @@ impl Parser {
                     self.parse_function_tail(fname.clone(), ty, start_tok.line, start_tok.col)?;
                 func.is_virtual = is_virtual;
                 func.is_static = is_static;
+                func.is_explicit = is_explicit;
                 if body.is_private {
                     body.private_members.push(fname);
                 }

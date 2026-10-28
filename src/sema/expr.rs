@@ -57,7 +57,27 @@ impl Sema {
             Expr::MemberAccess { .. } => self.analyze_member(expr),
             Expr::Ternary { .. } => self.analyze_ternary(expr),
             Expr::Cast { target_type, expr } => {
-                self.analyze_expr(expr)?;
+                let expr_ty = self.analyze_expr(expr)?;
+                if let Type::Struct(sname) = expr_ty.strip_reference().strip_const() {
+                    let conv_name = format!("operator {}", target_type.to_c_type());
+                    let is_const = expr_ty.strip_reference().is_const();
+                    if let Some(_sig) =
+                        self.find_method_in_class_for_receiver(sname, &conv_name, is_const)
+                    {
+                        let old_expr = (**expr).clone();
+                        let pos = ExprPos::new(self.current_line, self.current_col);
+                        **expr = Expr::Call {
+                            callee: Box::new(Expr::MemberAccess {
+                                object: Box::new(old_expr),
+                                member: conv_name,
+                                is_arrow: false,
+                                pos,
+                            }),
+                            args: vec![],
+                            pos,
+                        };
+                    }
+                }
                 Ok(target_type.clone())
             }
             Expr::SizeofType(_) | Expr::SizeofExpr(_) => Ok(Type::UnsignedInt),
@@ -165,8 +185,13 @@ impl Sema {
         if let Some(var) = self.lookup_var(name) {
             Ok(var.ty.clone())
         } else if let Some(&val) = self.enum_values.get(name) {
-            *expr = Expr::IntLiteral(val, Type::Int);
-            Ok(Type::Int)
+            let enum_ty = self
+                .enum_types
+                .get(name)
+                .map(|t| Type::Enum(t.clone()))
+                .unwrap_or(Type::Int);
+            *expr = Expr::IntLiteral(val, enum_ty.clone());
+            Ok(enum_ty)
         } else if let Some(cls) = &self.current_class {
             if let Some(fld) = self.find_field_in_class(cls, name) {
                 *expr = Expr::MemberAccess {

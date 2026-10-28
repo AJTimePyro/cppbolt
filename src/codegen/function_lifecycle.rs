@@ -30,6 +30,35 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let short_cls = cls.split("::").last().unwrap_or(cls);
+        if let Some((_, target_args)) = f
+            .ctor_initializers
+            .iter()
+            .find(|(name, _)| name == cls || name == short_cls)
+        {
+            let arg_types: Vec<Type> = target_args
+                .iter()
+                .map(|a| self.get_expr_type(a, ctx))
+                .collect();
+            let Some((ctor_idx, sig)) = self.find_constructor_sig(cls, &arg_types) else {
+                return Err(CompileError::new(
+                    format!("no matching target constructor found in class '{cls}'"),
+                    f.line,
+                    f.col,
+                ));
+            };
+            code.push(OP_LOCAL_GET);
+            write_u32(code, 0); // this
+            let full_args = self.constructor_arguments(&sig, target_args);
+            for (i, a) in full_args.iter().enumerate() {
+                let param_ty = sig.param_types.get(i + 1);
+                self.compile_call_arg(a, param_ty, ctx, code)?;
+            }
+            code.push(OP_CALL);
+            write_u32(code, ctor_idx);
+            return Ok(());
+        }
+
         self.compile_base_constructor_calls(f, cls, ctx, code)?;
         self.install_class_vtable(cls, code);
         let Some(layout) = self.sema.struct_layouts.get(cls) else {

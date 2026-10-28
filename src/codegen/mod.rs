@@ -48,7 +48,8 @@ use crate::sema::{FunctionSig, Sema};
 use crate::wasm::*;
 use analysis::{
     FuncCandidate, FuncDeclRef, check_stmt_has_new_delete, collect_address_taken_expr,
-    collect_address_taken_stmt, collect_static_vars, collect_stmt_calls, collect_type_lifecycle,
+    collect_address_taken_stmt, collect_expr_calls, collect_static_vars, collect_stmt_calls,
+    collect_type_lifecycle,
 };
 use emit_context::{
     ArrayLocal, ArraySlots, BinaryTypes, CallSite, CtorCall, GlobalInit, MemberAccess, NamedCall,

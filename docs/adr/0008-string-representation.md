@@ -4,7 +4,7 @@
 Accepted (reconstructed) <!-- TODO: confirm with author -->
 
 ## Context
-Strings in C++ exist both as static string literals (`const char*`) and dynamically resizable objects (`std::string`) (`tests/c_basics/printf_conversions.cpp`, `tests/mini_stl/string_basic.cpp`). The compiler requires a deterministic layout for string literals in the WebAssembly data section and a memory-safe structure for `std::string` in the embedded standard library (`src/codegen/strings.rs`, `stdlib/string`, commit `0b21628`).
+Strings in C++ exist both as static string literals (`const char*`) and dynamically resizable objects (`std::string`) (`tests/c_basics/io_printf/printf_conversions.cpp`, `tests/mini_stl/string_basic.cpp`). The compiler requires a deterministic layout for string literals in the WebAssembly data section and a memory-safe structure for `std::string` in the embedded standard library (`src/codegen/strings.rs`, `stdlib/string`, commit `0b21628`).
 
 ## Options Considered
 - **Option 1: Duplicate string literals per occurrence**
@@ -25,9 +25,9 @@ Strings in C++ exist both as static string literals (`const char*`) and dynamica
 
 ## Consequences
 ### Positive
-- Identical string literals share single data section addresses via interning (`src/codegen/strings.rs#L30-L55`, `tests/c_basics/preprocessor.cpp`).
+- Identical string literals share single data section addresses via interning (`src/codegen/strings.rs#L30-L55`, `tests/c_basics/preprocessor/preprocessor.cpp`).
 - `std::string::c_str()` provides a zero-overhead pointer compatible with C standard library functions like `printf` and `puts` (`stdlib/string#L45-L60`, `tests/mini_stl/string_basic.cpp`).
-- Destructors cleanly release heap memory on scope exit via RAII (`stdlib/string#L62-L75`, `tests/classes_oop/class_raii.cpp`).
+- Destructors cleanly release heap memory on scope exit via RAII (`stdlib/string#L62-L75`, `tests/classes_oop/memory_raii/class_raii.cpp`).
 
 ### Negative / Trade-offs
 - Without Small String Optimization (SSO), small strings always perform a heap allocation (`stdlib/string#L30-L45`).

@@ -75,7 +75,7 @@ impl Sema {
         line: usize,
         col: usize,
     ) -> Result<(), CompileError> {
-        let init_ty = {
+        let mut init_ty = {
             // A constructor call in an initializer reports an
             // initialization diagnostic.
             let previous = self.in_initializer;
@@ -84,6 +84,13 @@ impl Sema {
             self.in_initializer = previous;
             result?
         };
+        if let Type::Struct(sname) = init_ty.strip_reference().strip_const() {
+            let is_const = init_ty.strip_reference().is_const();
+            if let Some(sig) = self.find_conversion_to(sname, ty, is_const) {
+                Self::wrap_conversion_call(init_expr, &sig.name, ExprPos::new(line, col));
+                init_ty = ty.clone();
+            }
+        }
         if *ty == Type::Auto {
             *ty = init_ty.strip_reference().clone();
         } else if let Type::Const(inner) = ty

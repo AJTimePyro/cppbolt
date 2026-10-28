@@ -55,6 +55,20 @@ impl Parser {
                 }
                 Ok(Expr::Identifier(id))
             }
+            TokenKind::KwThrow => {
+                if self.peek() != &TokenKind::Semi
+                    && self.peek() != &TokenKind::RParen
+                    && self.peek() != &TokenKind::Colon
+                    && self.peek() != &TokenKind::Eof
+                {
+                    let _ = self.parse_expr()?;
+                }
+                Err(CompileError::new(
+                    "C++ exception handling ('throw') is not supported on this WebAssembly target",
+                    tok.line,
+                    tok.col,
+                ))
+            }
             _ => Err(CompileError::new(
                 format!(
                     "Unexpected token in expression: {}",

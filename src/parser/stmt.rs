@@ -39,6 +39,7 @@ impl Parser {
                 Ok(Stmt::new(StmtKind::Continue, line, col))
             }
             TokenKind::KwReturn => self.parse_return_stmt(line, col),
+            TokenKind::KwThrow => self.parse_throw_stmt(line, col),
             TokenKind::KwStatic => self.parse_static_stmt(),
             _ => self.parse_expr_or_decl_stmt(line, col),
         }
@@ -62,18 +63,8 @@ impl Parser {
     fn parse_case_label(&mut self, line: usize, col: usize) -> Result<Stmt, CompileError> {
         self.advance();
         let expr = self.parse_expr()?;
-        let val = match expr {
-            Expr::IntLiteral(n, _) => n,
-            _ => {
-                return Err(CompileError::new(
-                    "Case value must be integer constant",
-                    self.current().line,
-                    self.current().col,
-                ));
-            }
-        };
         self.expect(TokenKind::Colon)?;
-        Ok(Stmt::new(StmtKind::Case(val), line, col))
+        Ok(Stmt::new(StmtKind::Case(expr, 0), line, col))
     }
 
     fn parse_return_stmt(&mut self, line: usize, col: usize) -> Result<Stmt, CompileError> {
@@ -85,6 +76,21 @@ impl Parser {
         };
         self.expect(TokenKind::Semi)?;
         Ok(Stmt::new(StmtKind::Return(expr), line, col))
+    }
+
+    fn parse_throw_stmt(&mut self, line: usize, col: usize) -> Result<Stmt, CompileError> {
+        self.advance();
+        if self.peek() != &TokenKind::Semi && self.peek() != &TokenKind::Eof {
+            let _ = self.parse_expr()?;
+        }
+        if self.peek() == &TokenKind::Semi {
+            self.advance();
+        }
+        Err(CompileError::new(
+            "C++ exception handling ('throw') is not supported on this WebAssembly target",
+            line,
+            col,
+        ))
     }
 
     fn parse_static_stmt(&mut self) -> Result<Stmt, CompileError> {
@@ -132,8 +138,61 @@ impl Parser {
     pub(super) fn parse_var_decl(&mut self) -> Result<Stmt, CompileError> {
         let tok = self.current().clone();
         let specifiers = self.parse_specifier_type()?;
+        if specifiers.strip_const() == &Type::Auto {
+            if self.peek() == &TokenKind::LBracket {
+                return self.parse_structured_binding(tok.line, tok.col, specifiers);
+            } else if matches!(self.peek(), TokenKind::Amp | TokenKind::AndAnd)
+                && self.peek_ahead(1) == &TokenKind::LBracket
+            {
+                self.advance();
+                return self.parse_structured_binding(
+                    tok.line,
+                    tok.col,
+                    Type::Reference(Box::new(specifiers)),
+                );
+            }
+        }
         let first = self.parse_declarator(&specifiers, "Expected variable name")?;
         self.finish_var_decl(&tok, &specifiers, first)
+    }
+
+    fn parse_structured_binding(
+        &mut self,
+        line: usize,
+        col: usize,
+        ty: Type,
+    ) -> Result<Stmt, CompileError> {
+        self.expect(TokenKind::LBracket)?;
+        let mut bindings = Vec::new();
+        while self.peek() != &TokenKind::RBracket && self.peek() != &TokenKind::Eof {
+            let tok = self.advance().clone();
+            let name = match tok.kind {
+                TokenKind::Ident(id) => id,
+                _ => {
+                    return Err(CompileError::new(
+                        "Expected identifier in structured binding",
+                        tok.line,
+                        tok.col,
+                    ));
+                }
+            };
+            bindings.push(name);
+            if self.peek() == &TokenKind::Comma {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        self.expect(TokenKind::RBracket)?;
+        self.expect(TokenKind::Assign)?;
+        let init = self.parse_expr()?;
+        self.expect(TokenKind::Semi)?;
+
+        Ok(Stmt::new(
+            StmtKind::StructuredBinding { bindings, ty, init },
+            line,
+            col,
+        ))
     }
 
     fn finish_var_decl(

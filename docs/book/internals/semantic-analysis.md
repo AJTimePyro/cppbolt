@@ -59,7 +59,7 @@ If two candidates have identical rank scores across all arguments, overload reso
 ```text
 file.cpp:line:col: error: call of overloaded 'func(...)' is ambiguous
 ```
-Verified by `tests/c_basics/overload_resolution.cpp` and `tests/negative/ambiguous_overload_call.cpp`.
+Verified by `tests/c_basics/functions/overload_resolution.cpp` and `tests/negative/ambiguous_overload_call.cpp`.
 
 ---
 

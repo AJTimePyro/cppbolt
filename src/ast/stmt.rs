@@ -55,11 +55,16 @@ pub enum StmtKind {
         range: Expr,
         body: Box<Stmt>,
     },
+    StructuredBinding {
+        bindings: Vec<String>,
+        ty: Type,
+        init: Expr,
+    },
     Switch {
         expr: Expr,
         body: Box<Stmt>,
     },
-    Case(i64),
+    Case(Expr, i64),
     Default,
     Break,
     Continue,

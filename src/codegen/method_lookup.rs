@@ -13,7 +13,7 @@ impl<'a> Codegen<'a> {
         method_name: &str,
         arg_types: &[Type],
     ) -> Option<(u32, FunctionSig)> {
-        self.find_method_filtered(class_name, method_name, arg_types, None)
+        self.find_method_filtered(class_name, method_name, arg_types, None, None)
     }
 
     /// Resolves a method for a receiver whose constness is known.
@@ -27,7 +27,30 @@ impl<'a> Codegen<'a> {
         arg_types: &[Type],
         receiver_const: bool,
     ) -> Option<(u32, FunctionSig)> {
-        self.find_method_filtered(class_name, method_name, arg_types, Some(receiver_const))
+        self.find_method_filtered(
+            class_name,
+            method_name,
+            arg_types,
+            Some(receiver_const),
+            None,
+        )
+    }
+
+    pub fn find_method_for_receiver_category(
+        &self,
+        class_name: &str,
+        method_name: &str,
+        arg_types: &[Type],
+        receiver_const: bool,
+        receiver_is_lvalue: bool,
+    ) -> Option<(u32, FunctionSig)> {
+        self.find_method_filtered(
+            class_name,
+            method_name,
+            arg_types,
+            Some(receiver_const),
+            Some(receiver_is_lvalue),
+        )
     }
 
     fn find_method_filtered(
@@ -36,6 +59,7 @@ impl<'a> Codegen<'a> {
         method_name: &str,
         arg_types: &[Type],
         receiver: Option<bool>,
+        receiver_is_lvalue: Option<bool>,
     ) -> Option<(u32, FunctionSig)> {
         if let Some(result) = self.find_destructor_sig(class_name, method_name) {
             return Some(result);
@@ -50,14 +74,22 @@ impl<'a> Codegen<'a> {
             let Some(sigs) = self.sema.functions.get(*qual_name) else {
                 continue;
             };
-            let Some(sig) = self.best_method_overload(sigs, arg_types, receiver) else {
+            let Some(sig) =
+                self.best_method_overload(sigs, arg_types, receiver, receiver_is_lvalue)
+            else {
                 continue;
             };
             if let Some(idx) = self.resolve_method_index(class_name, method_name, &sig) {
                 return Some((idx, sig));
             }
         }
-        self.find_method_in_bases(class_name, method_name, arg_types, receiver)
+        self.find_method_in_bases(
+            class_name,
+            method_name,
+            arg_types,
+            receiver,
+            receiver_is_lvalue,
+        )
     }
 
     /// Resolves a destructor call, which has no overloads.
@@ -87,6 +119,8 @@ impl<'a> Codegen<'a> {
                 )))],
                 default_args: vec![],
                 is_static: false,
+                is_explicit: false,
+                ref_qualifier: RefQualifier::None,
             },
         ))
     }
@@ -97,6 +131,7 @@ impl<'a> Codegen<'a> {
         sigs: &[FunctionSig],
         arg_types: &[Type],
         receiver: Option<bool>,
+        receiver_is_lvalue: Option<bool>,
     ) -> Option<FunctionSig> {
         let mut best_sig = None;
         let mut best_score = usize::MAX;
@@ -106,6 +141,17 @@ impl<'a> Codegen<'a> {
                 && !crate::sema::sig_receiver_is_const(sig)
             {
                 continue;
+            }
+            if let Some(is_lval) = receiver_is_lvalue {
+                if is_lval && sig.ref_qualifier == RefQualifier::RValue {
+                    continue;
+                }
+                if !is_lval
+                    && sig.ref_qualifier == RefQualifier::LValue
+                    && !crate::sema::sig_receiver_is_const(sig)
+                {
+                    continue;
+                }
             }
             let params = if sig.is_static {
                 &sig.param_types[..]
@@ -121,7 +167,11 @@ impl<'a> Codegen<'a> {
                 Some(false) if crate::sema::sig_receiver_is_const(sig) => 1,
                 _ => 0,
             };
-            let score = score + receiver_penalty;
+            let ref_penalty = match (receiver_is_lvalue, sig.ref_qualifier) {
+                (Some(_), RefQualifier::None) => 1,
+                _ => 0,
+            };
+            let score = score + receiver_penalty + ref_penalty;
             if score < best_score {
                 best_score = score;
                 best_sig = Some(sig.clone());
@@ -162,6 +212,7 @@ impl<'a> Codegen<'a> {
         method_name: &str,
         arg_types: &[Type],
         receiver: Option<bool>,
+        receiver_is_lvalue: Option<bool>,
     ) -> Option<(u32, FunctionSig)> {
         let layout = self
             .sema
@@ -179,7 +230,13 @@ impl<'a> Codegen<'a> {
             });
         let layout = layout?;
         if let Some(base) = layout.base_classes.first()
-            && let Some(result) = self.find_method_filtered(base, method_name, arg_types, receiver)
+            && let Some(result) = self.find_method_filtered(
+                base,
+                method_name,
+                arg_types,
+                receiver,
+                receiver_is_lvalue,
+            )
         {
             return Some(result);
         }

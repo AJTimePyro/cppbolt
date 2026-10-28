@@ -9,6 +9,19 @@ This project does not yet have tagged semantic releases; all historical work is 
 
 ## [Unreleased]
 
+### C++17 Compatibility Fixes & Test Corpus Reorganization
+- **Feature**: Implemented C++17 language constructs across parser, semantic analysis, and WebAssembly codegen:
+  - **Array Parameter Decay**: Adjusted function parameters declared with array syntax (`int arr[]`, `int arr[N]`) to pointer types (`int* arr`).
+  - **Scoped Enums**: Supported `enum class` with distinct type identities and qualified lookup (`Scope::Val`), prohibiting implicit conversion to integer in overload resolution.
+  - **Delegating Constructors**: Lowered target constructor invocations (`C() : C(args) {}`) and enforced mutual exclusivity against member/base initializers.
+  - **Constant Expression Switch Cases**: Extended switch case labels to accept arbitrary constant expressions and scoped enum variants evaluated at compile time.
+  - **User-Defined Conversion Operators**: Supported `operator T() const` across variable initialization, assignment, explicit casts, and binary expressions, respecting `explicit` qualification.
+  - **Ref-Qualified Member Functions**: Added `&` and `&&` ref-qualifiers on member methods with receiver value-category dispatch and distinct symbol mangling (`_R`, `_O`).
+  - **Structured Bindings**: Added decomposition for aggregate structs (`auto [a, b] = p;`, `auto&`, `const auto&`) desugared into hidden bindings and member references.
+  - **Global Initializer Reachability**: Updated dead-code elimination root collection to traverse function calls in global variable initializers.
+  - **Exception Diagnostics**: Emitted explicit target diagnostic on encountering `throw` (`C++ exception handling ('throw') is not supported on this WebAssembly target`).
+- **Tests & Tooling**: Reorganized test directories into functional subdirectories (`control_flow`, `enums`, `functions`, `io_printf`, `misc`, `pointers_arrays`, `preprocessor`, `types`, `constructors_destructors`, `inheritance`, `memory_raii`, `methods`, `operators`, `statics_namespaces`, `structs`) and upgraded `cppwasm-testrunner` with recursive discovery and nested output path mirroring.
+
 ### Overloaded Operators: Postfix `++`/`--`, Arrow `->`, Dereference `*`, and Functor `()`
 - **Feature**: Implemented support for overloaded `operator*()`, `operator->`, `operator()`, and postfix `operator++(int)`/`operator--(int)`.
 - **Semantics**:
@@ -17,7 +30,7 @@ This project does not yet have tagged semantic releases; all historical work is 
   - Functor call `operator()` desugars `obj(...)` invocations directly into member call dispatches with overload resolution on const and non-const receivers.
   - Postfix `operator++(int)` and `operator--(int)` distinguish postfix from prefix overloads via dummy `int` parameter resolution.
 - **Diagnostics**: Added `Arrow member access on non-pointer` diagnostic when `->` is invoked on a class instance that does not define `operator->()`.
-- **Tests**: Added comprehensive test cases in `tests/classes_oop/operator_smart_pointer.cpp`, `tests/classes_oop/operator_call_functor.cpp`, `tests/classes_oop/operator_postfix_incdec.cpp`, and negative test `tests/negative/operator_arrow_invalid.cpp`.
+- **Tests**: Added comprehensive test cases in `tests/classes_oop/operators/operator_smart_pointer.cpp`, `tests/classes_oop/operators/operator_call_functor.cpp`, `tests/classes_oop/operators/operator_postfix_incdec.cpp`, and negative test `tests/negative/operator_arrow_invalid.cpp`.
 
 ### Range-Based `for` Loops
 - **Feature**: Implemented C++11 range-based `for` loops (`for (range_decl : range_expr) body`).
@@ -25,7 +38,7 @@ This project does not yet have tagged semantic releases; all historical work is 
 - **Standard Library**: Supported container iteration via member `.begin()` and `.end()` calls (e.g. `std::string`).
 - **Type Deduction**: Extended local variable type deduction for `auto`, `const auto`, `auto&`, and `const auto&` loop bindings.
 - **Diagnostics**: Added validation error `"range expression must be an array or class with begin() and end()"` for non-iterable types.
-- **Tests**: Added tests for array value iteration and reference mutation (`tests/c_basics/range_for_array.cpp`), string iteration (`tests/mini_stl/range_for_string.cpp`), RAII cleanups on `break`/`continue`/`return` (`tests/classes_oop/range_for_raii.cpp`), and non-iterable negative diagnostics (`tests/negative/range_for_non_iterable.cpp`).
+- **Tests**: Added tests for array value iteration and reference mutation (`tests/c_basics/pointers_arrays/range_for_array.cpp`), string iteration (`tests/mini_stl/range_for_string.cpp`), RAII cleanups on `break`/`continue`/`return` (`tests/classes_oop/memory_raii/range_for_raii.cpp`), and non-iterable negative diagnostics (`tests/negative/range_for_non_iterable.cpp`).
 
 ### Comma-Separated Multi-Declarators & Parser Deduplication
 - **Feature**: Added support for comma-separated multi-declarator declarations sharing base specifiers (e.g. `int *p, q = 2;`, `Pair one(1), two(5);`, `static int a = 1, b = 2;`).
