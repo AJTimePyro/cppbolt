@@ -111,6 +111,7 @@ classes_oop/operators/chained_compound_assign
 classes_oop/operators/const_subscript
 classes_oop/operators/contextual_bool_comprehensive
 classes_oop/operators/conversion_operator
+classes_oop/operators/operator_arrow_chaining
 classes_oop/operators/operator_call_functor
 classes_oop/operators/operator_postfix_incdec
 classes_oop/operators/operator_smart_pointer

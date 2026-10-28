@@ -251,15 +251,7 @@ impl<'a> Codegen<'a> {
             .ok_or_else(|| self.internal_error("missing field layout"))?;
 
         if is_arrow {
-            if let Type::Struct(s) = obj_ty.strip_reference().strip_const()
-                && let Some((m_idx, _)) = self.find_method(s, "operator->", &[])
-            {
-                self.compile_lvalue_addr(object, ctx, code)?;
-                code.push(OP_CALL);
-                write_u32(code, m_idx);
-            } else {
-                self.compile_expr(object, ctx, code)?;
-            }
+            self.emit_arrow_chain(object, ctx, code)?;
         } else {
             self.compile_lvalue_addr(object, ctx, code)?;
         }

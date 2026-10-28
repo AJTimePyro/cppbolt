@@ -1,0 +1,10 @@
+Proxy2 field: 100
+Proxy2 method: 100
+Proxy1 field: 100
+Proxy1 method: 100
+SmartPtr field: 100
+SmartPtr method: 100
+Mutated field: 250
+Mutated via method: 350
+ValProxy1 field: 350
+ValProxy1 method: 350
