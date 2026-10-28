@@ -71,12 +71,22 @@ impl Sema {
         self.analyze_lambda_operator(lambda_name, op_decl)?;
         self.register_struct_method(lambda_name, op_decl);
 
+        let mut methods = vec![ctor_decl.clone(), op_decl.clone()];
+        if capture_info.fields.is_empty() {
+            let (invoke_decl, to_fn_ptr_decl) =
+                build_lambda_fn_ptr_methods(lambda_name, op_decl, pos);
+            self.register_struct_method(lambda_name, &invoke_decl);
+            self.register_struct_method(lambda_name, &to_fn_ptr_decl);
+            methods.push(invoke_decl);
+            methods.push(to_fn_ptr_decl);
+        }
+
         self.synthesized_decls.push(Decl::StructDecl {
             name: lambda_name.to_string(),
             is_class: true,
             base_classes: vec![],
             fields: capture_info.fields.clone(),
-            methods: vec![ctor_decl.clone(), op_decl.clone()],
+            methods,
             static_fields: vec![],
             private_members: vec![],
             line: pos.line,
@@ -376,4 +386,52 @@ fn collect_free_vars_expr(
         }
         _ => {}
     }
+}
+
+fn build_lambda_fn_ptr_methods(
+    lambda_name: &str,
+    op_decl: &FunctionDecl,
+    pos: ExprPos,
+) -> (FunctionDecl, FunctionDecl) {
+    let invoke_decl = FunctionDecl {
+        name: "__invoke".to_string(),
+        return_type: op_decl.return_type.clone(),
+        params: op_decl.params.clone(),
+        body: op_decl.body.clone(),
+        is_virtual: false,
+        is_pure_virtual: false,
+        is_const: false,
+        is_explicit: false,
+        ref_qualifier: RefQualifier::None,
+        is_static: true,
+        ctor_initializers: vec![],
+        line: pos.line,
+        col: pos.col,
+    };
+
+    let fn_ptr_type = Type::Pointer(Box::new(Type::Function {
+        return_type: Box::new(op_decl.return_type.clone()),
+        param_types: op_decl.params.iter().map(|p| p.ty.clone()).collect(),
+    }));
+    let to_fn_ptr_decl = FunctionDecl {
+        name: "__to_fn_ptr".to_string(),
+        return_type: fn_ptr_type,
+        params: vec![],
+        body: Some(Stmt::new(
+            StmtKind::Return(Some(Expr::Identifier(format!("{}::__invoke", lambda_name)))),
+            pos.line,
+            pos.col,
+        )),
+        is_virtual: false,
+        is_pure_virtual: false,
+        is_const: true,
+        is_explicit: false,
+        ref_qualifier: RefQualifier::None,
+        is_static: false,
+        ctor_initializers: vec![],
+        line: pos.line,
+        col: pos.col,
+    };
+
+    (invoke_decl, to_fn_ptr_decl)
 }

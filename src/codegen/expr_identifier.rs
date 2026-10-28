@@ -19,25 +19,31 @@ impl<'a> Codegen<'a> {
             self.emit_local_identifier(name, offset, ctx, code);
             return Ok(());
         }
+        let table_idx = self
+            .func_table_indices
+            .get(name)
+            .or_else(|| self.func_table_indices.get(&format!("std::{}", name)))
+            .or_else(|| {
+                ctx.current_class
+                    .as_ref()
+                    .and_then(|cls| self.func_table_indices.get(&format!("{}::{}", cls, name)))
+            })
+            .or_else(|| {
+                self.func_table_indices
+                    .get(QualifiedName::new(name).plain())
+            })
+            .copied();
+        if let Some(table_idx) = table_idx {
+            code.push(OP_I32_CONST);
+            write_i32(code, table_idx as i32);
+            return Ok(());
+        }
         if let Some(cls) = ctx.current_class.clone() {
             return self.compile_identifier_class_member(&cls, name, ctx, code);
         }
         if let Some(&val) = self.sema.enum_values.get(name) {
             code.push(OP_I32_CONST);
             write_i32(code, val as i32);
-            return Ok(());
-        }
-        if let Some(&table_idx) = self
-            .func_table_indices
-            .get(name)
-            .or_else(|| self.func_table_indices.get(&format!("std::{}", name)))
-            .or_else(|| {
-                self.func_table_indices
-                    .get(QualifiedName::new(name).plain())
-            })
-        {
-            code.push(OP_I32_CONST);
-            write_i32(code, table_idx as i32);
             return Ok(());
         }
         if let Some(sym) = self
