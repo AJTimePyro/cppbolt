@@ -56,7 +56,7 @@ Following range-based `for` loops, the next priority from Section 2 of `ROADMAP.
    - In `src/codegen/lvalue.rs` and `src/codegen/expr_call_member.rs`, routed arrow access through `operator->()` to evaluate the receiver address.
    - Updated dead code elimination in `src/codegen/analysis.rs` to track usages of `operator->`, `operator*`, and postfix `operator++`/`operator--`.
 4. **Testing & Verification**:
-   - Added positive test cases in `tests/classes_oop/operator_smart_pointer.cpp`, `tests/classes_oop/operator_call_functor.cpp`, and `tests/classes_oop/operator_postfix_incdec.cpp`.
+   - Added positive test cases in `tests/classes_oop/operators/operator_smart_pointer.cpp`, `tests/classes_oop/operators/operator_call_functor.cpp`, and `tests/classes_oop/operators/operator_postfix_incdec.cpp`.
    - Added negative test in `tests/negative/operator_arrow_invalid.cpp`.
    - Updated `tests/PASSING.txt` and `tests/golden.txt` (268 passing corpus tests).
 
@@ -81,7 +81,7 @@ Following completion of the foundational v1 compiler subset, language feature ex
 3. **Diagnostics & Testing**:
    - Added validation diagnostic `"range expression must be an array or class with begin() and end()"` for non-iterable types.
    - Verified RAII destructor invocations on early `break`, `continue`, and early `return`.
-   - Added automated tests: `tests/c_basics/range_for_array.cpp`, `tests/mini_stl/range_for_string.cpp`, `tests/classes_oop/range_for_raii.cpp`, and `tests/negative/range_for_non_iterable.cpp`.
+   - Added automated tests: `tests/c_basics/pointers_arrays/range_for_array.cpp`, `tests/mini_stl/range_for_string.cpp`, `tests/classes_oop/memory_raii/range_for_raii.cpp`, and `tests/negative/range_for_non_iterable.cpp`.
 
 ---
 

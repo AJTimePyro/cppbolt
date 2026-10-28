@@ -56,7 +56,7 @@ The parser transforms the flat token stream into a structured Abstract Syntax Tr
 
 ## 4. Real Input & AST Example
 
-Taken from `tests/c_basics/arithmetic.cpp`:
+Taken from `tests/c_basics/types/arithmetic.cpp`:
 
 ### Input C++ Source
 ```cpp

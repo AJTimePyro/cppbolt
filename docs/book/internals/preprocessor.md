@@ -43,7 +43,7 @@ The preprocessor returns `Result<PreprocessedSource, CompileError>`:
 
 ## 4. Real Input & Output Example
 
-Taken from `tests/c_basics/macro_rescan.cpp` and `tests/c_basics/preprocessor_macros.cpp`:
+Taken from `tests/c_basics/preprocessor/macro_rescan.cpp` and `tests/c_basics/preprocessor/preprocessor_macros.cpp`:
 
 ### Input C++ Source
 ```cpp

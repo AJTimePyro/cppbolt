@@ -45,7 +45,7 @@ The lexer produces `CompileError` with `ErrorKind::Lexical`:
 
 ## 4. Real Input & Token Output Example
 
-Taken from `tests/c_basics/arithmetic.cpp`:
+Taken from `tests/c_basics/types/arithmetic.cpp`:
 
 ### Input C++ Source
 ```cpp
