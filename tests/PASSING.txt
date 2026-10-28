@@ -92,6 +92,9 @@ classes_oop/multi_level_inheritance
 classes_oop/namespaces_comprehensive
 classes_oop/new_delete
 classes_oop/new_delete_object_arrays
+classes_oop/operator_call_functor
+classes_oop/operator_postfix_incdec
+classes_oop/operator_smart_pointer
 classes_oop/operator_unary_overload
 classes_oop/placement_new
 classes_oop/prvalue_elision
@@ -239,12 +242,9 @@ negative/multiple_inheritance
 negative/multiple_inheritance_access
 negative/namespace_alias
 negative/nesting_depth_limit
-negative/operator_arrow_unsupported
-negative/operator_call_unsupported
-negative/operator_deref_unsupported
+negative/operator_arrow_invalid
 negative/pointer_plus_pointer
 negative/range_for_non_iterable
-negative/postfix_increment_unsupported
 negative/private_access
 negative/pure_virtual_instantiation
 negative/redefined_func

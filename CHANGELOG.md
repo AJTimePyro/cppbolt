@@ -9,6 +9,16 @@ This project does not yet have tagged semantic releases; all historical work is 
 
 ## [Unreleased]
 
+### Overloaded Operators: Postfix `++`/`--`, Arrow `->`, Dereference `*`, and Functor `()`
+- **Feature**: Implemented support for overloaded `operator*()`, `operator->`, `operator()`, and postfix `operator++(int)`/`operator--(int)`.
+- **Semantics**:
+  - Dereference `operator*()` allows classes to behave as smart pointers and iterators with lvalue reference writes (`*ptr = val`) and rvalue loads.
+  - Arrow member access `operator->()` delegates field access and method calls to the pointed-to object.
+  - Functor call `operator()` desugars `obj(...)` invocations directly into member call dispatches with overload resolution on const and non-const receivers.
+  - Postfix `operator++(int)` and `operator--(int)` distinguish postfix from prefix overloads via dummy `int` parameter resolution.
+- **Diagnostics**: Added `Arrow member access on non-pointer` diagnostic when `->` is invoked on a class instance that does not define `operator->()`.
+- **Tests**: Added comprehensive test cases in `tests/classes_oop/operator_smart_pointer.cpp`, `tests/classes_oop/operator_call_functor.cpp`, `tests/classes_oop/operator_postfix_incdec.cpp`, and negative test `tests/negative/operator_arrow_invalid.cpp`.
+
 ### Range-Based `for` Loops
 - **Feature**: Implemented C++11 range-based `for` loops (`for (range_decl : range_expr) body`).
 - **Semantics**: Added semantic desugaring for fixed-size 1D and multi-dimensional C-style arrays into pointer interval bounds (`__begin`, `__end`).
