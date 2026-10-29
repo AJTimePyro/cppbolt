@@ -366,24 +366,31 @@ impl Sema {
                 pos.col,
             ));
         }
-        let mut value_ty = self.analyze_expr(value)?;
-        if let Type::Struct(sname) = value_ty.strip_reference().strip_const() {
-            let is_const = value_ty.strip_reference().is_const();
-            if let Some(sig) = self.find_conversion_to(sname, &target_ty, is_const) {
-                Self::wrap_conversion_call(value, &sig.name, *pos);
-                value_ty = target_ty.clone();
+        let is_list_init = matches!(&**value, Expr::InitializerList { .. });
+        let mut value_ty = if let Expr::InitializerList { elements, pos: v_pos } = &mut **value {
+            self.resolve_list_init(&target_ty, elements, InitContext::CopyListAssign, *v_pos)?
+        } else {
+            self.analyze_expr(value)?
+        };
+        if !is_list_init {
+            if let Type::Struct(sname) = value_ty.strip_reference().strip_const() {
+                let is_const = value_ty.strip_reference().is_const();
+                if let Some(sig) = self.find_conversion_to(sname, &target_ty, is_const) {
+                    Self::wrap_conversion_call(value, &sig.name, *pos);
+                    value_ty = target_ty.clone();
+                }
             }
-        }
-        if !self.can_assign(&target_ty, &value_ty) {
-            return Err(CompileError::new(
-                format!(
-                    "Type mismatch in assignment: cannot assign {} to {}",
-                    value_ty.to_c_type(),
-                    target_ty.to_c_type()
-                ),
-                pos.line,
-                pos.col,
-            ));
+            if !self.can_assign(&target_ty, &value_ty) {
+                return Err(CompileError::new(
+                    format!(
+                        "Type mismatch in assignment: cannot assign {} to {}",
+                        value_ty.to_c_type(),
+                        target_ty.to_c_type()
+                    ),
+                    pos.line,
+                    pos.col,
+                ));
+            }
         }
         Ok(target_ty)
     }

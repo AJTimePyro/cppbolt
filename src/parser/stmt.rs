@@ -275,7 +275,16 @@ impl Parser {
                 })),
             }
         } else if self.peek() == &TokenKind::LBrace {
-            Ok(Some(self.parse_initializer()?))
+            let mut init = self.parse_initializer()?;
+            if let Expr::InitializerList { elements, pos } = &mut init {
+                Ok(Some(Expr::TypedInitList {
+                    ty: ty.clone(),
+                    elements: std::mem::take(elements),
+                    pos: *pos,
+                }))
+            } else {
+                Ok(Some(init))
+            }
         } else {
             Ok(None)
         }

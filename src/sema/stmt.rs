@@ -322,25 +322,56 @@ impl Sema {
         col: usize,
     ) -> Result<(), CompileError> {
         if let Some(expr) = expr_opt {
-            let mut ret_ty = self.analyze_expr(expr)?;
-            if let Some(expected) = &self.current_func_return_type {
-                if let Type::Struct(sname) = ret_ty.strip_reference().strip_const() {
-                    let is_const = ret_ty.strip_reference().is_const();
-                    if let Some(sig) = self.find_conversion_to(sname, expected, is_const) {
-                        Self::wrap_conversion_call(expr, &sig.name, ExprPos::new(line, col));
-                        ret_ty = expected.clone();
-                    }
+            let mut ret_ty = match expr {
+                Expr::InitializerList { elements, pos } => {
+                    let Some(expected) = self.current_func_return_type.clone() else {
+                        return Err(CompileError::new(
+                            "cannot deduce return type from initializer list",
+                            line,
+                            col,
+                        ));
+                    };
+                    self.resolve_list_init(
+                        &expected,
+                        elements,
+                        InitContext::CopyListInitReturn,
+                        *pos,
+                    )?
                 }
-                if !self.can_assign(expected, &ret_ty) {
-                    return Err(CompileError::new(
-                        format!(
-                            "Return type mismatch: expected {}, found {}",
-                            expected.to_c_type(),
-                            ret_ty.to_c_type()
-                        ),
-                        line,
-                        col,
-                    ));
+                Expr::TypedInitList {
+                    ty: explicit_ty,
+                    elements,
+                    pos,
+                } => {
+                    self.resolve_list_init(
+                        explicit_ty,
+                        elements,
+                        InitContext::DirectList,
+                        *pos,
+                    )?
+                }
+                _ => self.analyze_expr(expr)?,
+            };
+            if let Some(expected) = &self.current_func_return_type {
+                if !matches!(expr, Expr::InitializerList { .. } | Expr::TypedInitList { .. }) {
+                    if let Type::Struct(sname) = ret_ty.strip_reference().strip_const() {
+                        let is_const = ret_ty.strip_reference().is_const();
+                        if let Some(sig) = self.find_conversion_to(sname, expected, is_const) {
+                            Self::wrap_conversion_call(expr, &sig.name, ExprPos::new(line, col));
+                            ret_ty = expected.clone();
+                        }
+                    }
+                    if !self.can_assign(expected, &ret_ty) {
+                        return Err(CompileError::new(
+                            format!(
+                                "Return type mismatch: expected {}, found {}",
+                                expected.to_c_type(),
+                                ret_ty.to_c_type()
+                            ),
+                            line,
+                            col,
+                        ));
+                    }
                 }
             } else {
                 self.current_func_return_type =

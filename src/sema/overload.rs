@@ -105,6 +105,8 @@ impl Sema {
                 } else {
                     score += 3;
                 }
+            } else if *arg_ty == Type::Void && *p != Type::Void {
+                score += 4;
             } else {
                 return Err(ConversionFailure {
                     index: i,

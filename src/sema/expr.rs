@@ -122,12 +122,23 @@ impl Sema {
                 self.current_col,
             ));
         }
+        let pos = ExprPos::new(self.current_line, self.current_col);
         if *is_array {
             if let Some(s) = array_size {
                 self.analyze_expr(s)?;
             }
+            for a in args.iter_mut() {
+                let a_ty = self.analyze_expr(a)?;
+                self.check_narrowing(a, &a_ty, ty, pos)?;
+            }
             Ok(Type::Pointer(Box::new(ty.clone())))
         } else {
+            if let Type::Struct(sname) = ty.strip_const() {
+                if self.is_cxx17_aggregate(sname) {
+                    self.resolve_list_init(ty, args, InitContext::DirectList, pos)?;
+                    return Ok(Type::Pointer(Box::new(ty.clone())));
+                }
+            }
             for a in args {
                 self.analyze_expr(a)?;
             }
@@ -251,21 +262,25 @@ impl Sema {
     }
 
     pub(super) fn analyze_initializer(&mut self, expr: &mut Expr) -> Result<Type, CompileError> {
-        let (list, ty) = match expr {
-            Expr::InitializerList { elements, .. } => (elements, Type::Void),
-            Expr::TypedInitList { ty, elements, .. } => (elements, ty.clone()),
+        match expr {
+            Expr::InitializerList { elements, .. } => {
+                for item in elements {
+                    self.analyze_expr(item)?;
+                }
+                Ok(Type::Void)
+            }
+            Expr::TypedInitList { ty, elements, pos } => {
+                let explicit_ty = ty.clone();
+                let p = *pos;
+                self.resolve_list_init(&explicit_ty, elements, InitContext::DirectList, p)
+            }
             _ => {
-                return Err(crate::internal_error!(
+                Err(crate::internal_error!(
                     self.current_line,
                     self.current_col,
                     "unexpected expression kind"
-                ));
+                ))
             }
-        };
-
-        for item in list {
-            self.analyze_expr(item)?;
         }
-        Ok(ty)
     }
 }

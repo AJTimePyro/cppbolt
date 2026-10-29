@@ -79,14 +79,46 @@ impl Sema {
         line: usize,
         col: usize,
     ) -> Result<(), CompileError> {
-        let mut init_ty = {
-            // A constructor call in an initializer reports an
-            // initialization diagnostic.
-            let previous = self.in_initializer;
-            self.in_initializer = true;
-            let result = self.analyze_expr(init_expr);
-            self.in_initializer = previous;
-            result?
+        let mut is_list_init = false;
+        let mut init_ty = match init_expr {
+            Expr::InitializerList { elements, pos } => {
+                is_list_init = true;
+                let context = if elements.is_empty() {
+                    InitContext::ValueInit
+                } else {
+                    InitContext::CopyListInitVar
+                };
+                self.resolve_list_init(ty, elements, context, *pos)?
+            }
+            Expr::TypedInitList {
+                ty: explicit_ty,
+                elements,
+                pos,
+            } => {
+                is_list_init = true;
+                let context = if elements.is_empty() {
+                    InitContext::ValueInit
+                } else {
+                    InitContext::DirectList
+                };
+                let target = if *ty == Type::Auto {
+                    explicit_ty.clone()
+                } else {
+                    ty.clone()
+                };
+                let res = self.resolve_list_init(&target, elements, context, *pos)?;
+                if *ty == Type::Auto {
+                    *ty = res.clone();
+                }
+                res
+            }
+            _ => {
+                let previous = self.in_initializer;
+                self.in_initializer = true;
+                let result = self.analyze_expr(init_expr);
+                self.in_initializer = previous;
+                result?
+            }
         };
         if let Type::Struct(sname) = init_ty.strip_reference().strip_const() {
             let is_const = init_ty.strip_reference().is_const();
@@ -121,7 +153,7 @@ impl Sema {
                 ))));
             }
         }
-        if !self.can_assign(ty, &init_ty) {
+        if !is_list_init && !self.can_assign(ty, &init_ty) {
             return Err(CompileError::new(
                 format!(
                     "cannot initialize variable '{}' of type {} with {}",

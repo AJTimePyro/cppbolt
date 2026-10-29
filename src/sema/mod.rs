@@ -10,6 +10,7 @@ mod expr_call;
 mod expr_lambda;
 mod expr_member;
 mod expr_ops;
+mod init;
 mod layout;
 mod lookup;
 mod overload;
@@ -20,6 +21,7 @@ mod stmt_structured_binding;
 
 pub(crate) use layout::RecordLayout;
 pub(crate) use stmt_decl::VarDecl;
+pub use init::InitContext;
 
 use crate::ast::types::Type;
 use crate::ast::*;
