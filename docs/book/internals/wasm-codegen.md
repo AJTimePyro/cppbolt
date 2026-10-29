@@ -10,7 +10,7 @@ The code generation stage lowers the typed AST and semantic symbol table directl
 2. **Function Frame Management**: Allocates checked local stack slots, emits prologue stack overflow checks, and coordinates RAII destructor calls before every function return point (`src/codegen/function_context.rs`).
 3. **Fixed-Width LEB128 Patching**: Because the final stack frame size is only known after traversing the entire function body, prologues and epilogues emit 5-byte fixed-width LEB128 placeholders that are patched in place after body lowering.
 4. **Binary Section Assembly**: Packs types, imports, functions, tables, memory, globals, exports, elements, code bodies, and data segments into the standard WebAssembly binary module format (`src/wasm/module.rs`).
-5. **List-Initialization Lowering**: Emits zero-fill stores for empty braces (`{}`), lowers aggregate field and base subobject assignments (`src/codegen/stmt_var_init.rs`), manages stack allocation for typed temporary values (`Type{args...}.member()`), and generates runtime loops for dynamic array initialization (`new T[n]{...}`) in `src/codegen/expr_new_array.rs` to value-initialize omitted trailing elements.
+5. **List Initialization Lowering**: Emits zero-fill stores for empty braces (`{}`), lowers aggregate field and base subobject stores (`src/codegen/stmt_var_init.rs`), allocates frame slots for typed temporaries (`Type{args...}.member()`), and generates loops for dynamic array initialization (`new T[n]{...}`) in `src/codegen/expr_new_array.rs` to value-initialize trailing elements.
 
 ---
 

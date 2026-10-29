@@ -20,7 +20,7 @@ For current baseline results, see [`tests/PASSING.txt`](tests/PASSING.txt) and r
 These features build naturally on existing language constructs without requiring a full template engine:
 
 - [x] **Range-Based `for` Loops**: Lower `for (decl : range)` into standard iterator loops using `begin()` / `end()` or pointer intervals across fixed-size 1D/multidimensional arrays and container classes (e.g. `std::string`).
-- [x] **C++11/C++17 List-Initialization (Brace Initialization)**: Direct-list and copy-list-initialization, empty brace value initialization (`{}`), C++17 aggregates with base subobjects and brace elision, narrowing conversion rejection ([dcl.init.list] p7), dynamic allocation (`new T{...}`, `new T[n]{...}` with loop value-initialization of omitted elements), typed temporaries (`Type{...}.get()`), and explicit constructor enforcement.
+- [x] **List Initialization & Aggregates**: Direct-list and copy-list initialization, value initialization with empty braces (`{}`), aggregate base subobjects and brace elision, narrowing conversion checks, dynamic array allocations (`new T[n]{...}`), and typed temporaries.
 - [x] **Additional Operator Overloads**:
   - Overloaded postfix `operator++(int)` and `operator--(int)` distinguishing from prefix via dummy `int` parameter.
   - Overloaded pointer member access `operator->`.

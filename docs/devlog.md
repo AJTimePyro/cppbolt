@@ -4,48 +4,44 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
-## 2026-10-29: C++11/C++17 List-Initialization (Brace Initialization) Architecture & Desloping
+## 2026-10-29: List Initialization and Aggregate Semantics
 
 ### Context & Motivation
-Prior to this milestone, `cppwasm` only supported minimal C-style initializer lists on array declarations and simple struct assignments. Braced lists (`{...}`) in all other positions were either rejected at parse time, misclassified as returning `Type::Void` during semantic analysis, or emitted invalid WebAssembly stack operations during code generation. Specifically:
-1. Direct-list-initialization (`Type x{42}`, `Point p{10, 20}`) and value-initialization via empty braces (`Type x{}`, `Point p{}`) were not recognized.
-2. C++17 aggregate classification lacked rules for public non-virtual base classes and brace elision.
-3. Narrowing conversions inside braced initializers were not diagnosed.
-4. Typed temporaries (`Type{args...}.member()`), member initializers (`: member{val}`), returns (`return {args}`), call arguments (`fn({args})`), and dynamic allocations (`new T{...}`, `new T[n]{...}`) lacked syntactic and codegen lowering.
+Previously, `cppwasm` only accepted C-style initializer lists on array definitions and struct assignments. Braced lists in other positions either triggered syntax errors, returned `Type::Void` in semantic analysis, or emitted mismatched stack instructions in code generation. Direct initialization (`Type x{42}`), empty brace value initialization (`Type x{}`), C++17 base subobject aggregates, narrowing conversions, typed temporaries (`Type{}.get()`), and braced `new` allocations were unsupported.
 
 ### Work Executed
-1. **Grammar & Pratt Parsing**:
-   - Added `ExprPos` to `Expr::InitializerList` and introduced `Expr::TypedInitList { ty, elements, pos }` in `src/ast/expr.rs`.
-   - Updated Pratt prefix/atom parsing in `src/parser/` to parse typed initializers (`Type{...}`) and braced lists across variable declarations, constructor member initializers, return statements, function arguments, assignments, and `new` expressions.
-   - Factored braced-list parsing into `Parser::parse_brace_expr_list` in `src/parser/mod.rs` to deduplicate grammar loops.
-2. **Centralized Semantic Resolver (`src/sema/init.rs`)**:
-   - Implemented `resolve_list_init` driven by `InitContext` (`DirectList`, `CopyListInitVar`, `CopyListInitReturn`, `CopyListInitArg`, `CopyListAssign`, `ValueInit`).
-   - Differentiated direct-list (allowing `explicit` constructors) from copy-list contexts (strictly rejecting `explicit` constructors).
-   - Implemented C++17 [dcl.init.list] p7 narrowing checks, rejecting floating-to-integer, double-to-float, and integer range/signedness conversions, with compile-time constant expression evaluation supporting negative literals.
-   - Implemented C++17 aggregate classification (`is_cxx17_aggregate`), checking that classes lack user-declared constructors (`layout.has_user_declared_constructors`), private members, and virtual functions, while supporting public non-virtual base subobjects and flattened brace elision.
-   - Synthesized clear diagnostics when attempting `std::initializer_list` construction (identifying missing template support).
-3. **WebAssembly Code Generation**:
-   - Extended `src/codegen/stmt_var_init.rs` to emit zero-fill stores for empty braces (`{}`) across scalars and aggregates.
-   - Modularized dynamic array allocation into `src/codegen/expr_new_array.rs`, supporting `new T[n]{...}` with element direct-initialization and a WebAssembly runtime loop value-initializing omitted trailing elements.
-   - Added temporary stack allocation in `src/codegen/expr.rs` for typed temporary expressions (`Type{args...}.member()`).
-   - Deduplicated struct field and base initializers via `emit_field_initializers` in `src/codegen/function_lifecycle.rs`.
-   - Extracted unit tests into `src/sema/init_tests.rs`.
+1. Grammar and parsing:
+   - Added `Expr::TypedInitList { ty, elements, pos }` to the AST and attached source positions to `Expr::InitializerList`.
+   - Updated Pratt expression parsing to handle typed initializers (`Type{...}`) and braced lists in declarations, member initializers, returns, call arguments, assignments, and `new` expressions.
+   - Extracted `Parser::parse_brace_expr_list` in `src/parser/mod.rs` to deduplicate braced token parsing.
+2. Semantic resolution (`src/sema/init.rs`):
+   - Implemented `resolve_list_init` with `InitContext` (`DirectList`, `CopyListInitVar`, `CopyListInitReturn`, `CopyListInitArg`, `CopyListAssign`, `ValueInit`).
+   - Allowed explicit constructors in direct-list contexts while rejecting them in copy-list contexts.
+   - Enforced C++17 [dcl.init.list] p7 narrowing checks, rejecting floating-to-integer, double-to-float, and integer range/sign conversions, with compile-time range evaluation for constant expressions and negative literals.
+   - Added C++17 aggregate classification (`is_cxx17_aggregate`), requiring no user-declared constructors (`layout.has_user_declared_constructors`), no private members, and no virtual functions, while supporting public non-virtual base subobjects and flattened brace elision.
+   - Emitted explicit diagnostics for `std::initializer_list` construction until template support is available.
+3. WebAssembly code generation:
+   - Added zero-fill emission for empty braces (`{}`) across scalars and aggregates.
+   - Moved dynamic array allocations to `src/codegen/expr_new_array.rs`, supporting `new T[n]{...}` with element direct initialization and a WebAssembly loop value-initializing omitted trailing elements.
+   - Added stack allocation for typed temporary expressions (`Type{args...}.member()`).
+   - Deduplicated field and base initializers in `src/codegen/function_lifecycle.rs`.
+   - Extracted sema unit tests into `src/sema/init_tests.rs`.
 
 ### Verification
-- Added positive execution tests in `tests/classes_oop/structs/`:
-  - `brace_init_scalars.cpp`: Scalar and pointer direct/copy list-init and empty brace zeroing.
-  - `brace_init_classes.cpp`: Constructor selection, explicit constructors, and member initializers.
-  - `brace_init_aggregates.cpp`: Struct aggregates, public base subobjects, and trailing field zeroing.
-  - `brace_init_brace_elision.cpp`: Flattened aggregate initialization across base and member fields.
-  - `brace_init_temporaries.cpp`: Typed temporaries, chained member access, returns, and arguments.
-  - `brace_init_dynamic_new.cpp`: Single object `new T{...}` and array `new T[n]{...}` with trailing element loops.
+- Added positive tests in `tests/classes_oop/structs/`:
+  - `brace_init_scalars.cpp`: scalar and pointer initialization, empty brace zeroing.
+  - `brace_init_classes.cpp`: constructor selection, explicit constructors, member initializers.
+  - `brace_init_aggregates.cpp`: struct aggregates, public base subobjects, trailing zeroing.
+  - `brace_init_brace_elision.cpp`: flattened aggregate initialization.
+  - `brace_init_temporaries.cpp`: typed temporaries, member calls, returns, arguments.
+  - `brace_init_dynamic_new.cpp`: single-object and array `new` with trailing loops.
 - Added negative diagnostic tests in `tests/negative/`:
-  - `narrowing_float_to_int.cpp`, `narrowing_constant_overflow.cpp`, `narrowing_signed_to_unsigned.cpp`
-  - `explicit_ctor_copy_list.cpp`, `explicit_ctor_return.cpp`, `explicit_ctor_arg.cpp`
-  - `scalar_excess_elements.cpp`, `aggregate_excess_elements.cpp`, `new_array_excess_elements.cpp`, `no_matching_constructor_list.cpp`
-- All 51 library unit tests pass (`cargo test --lib`).
-- Full testrunner suite passing with 324 passing tests and 0 manifest violations (`cargo run --bin cppwasm-testrunner`).
-- Clippy (`cargo clippy --all-targets`) and formatting (`cargo fmt --check`) clean.
+  - Narrowing: `narrowing_float_to_int.cpp`, `narrowing_constant_overflow.cpp`, `narrowing_signed_to_unsigned.cpp`.
+  - Explicit constructors: `explicit_ctor_copy_list.cpp`, `explicit_ctor_return.cpp`, `explicit_ctor_arg.cpp`.
+  - Excess initializers: `scalar_excess_elements.cpp`, `aggregate_excess_elements.cpp`, `new_array_excess_elements.cpp`, `no_matching_constructor_list.cpp`.
+- All 51 library tests pass (`cargo test --lib`).
+- All 324 corpus tests pass without manifest violations (`cargo run --bin cppwasm-testrunner`).
+- Clippy and formatting clean.
 
 ---
 
