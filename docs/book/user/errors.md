@@ -204,6 +204,70 @@ The following catalog lists diagnostics emitted by the compiler, paired with rea
   }
   ```
 
+#### `narrowing conversion from '<type1>' to '<type2>' inside braced-init-list`
+- **Cause**: Converting between incompatible types inside a braced initializer list (e.g. floating-point to integer).
+- **Trigger** (`tests/negative/narrowing_float_to_int.cpp`):
+  ```cpp
+  int main() {
+      int x{3.14}; // error: narrowing conversion from 'double' to 'int' inside braced-init-list
+      return x;
+  }
+  ```
+
+#### `narrowing conversion of constant <val> from '<type1>' to '<type2>' inside braced-init-list`
+- **Cause**: Converting a constant expression or literal to an integer type whose representable range cannot accommodate the value.
+- **Trigger** (`tests/negative/narrowing_constant_overflow.cpp`):
+  ```cpp
+  int main() {
+      char c{300}; // error: narrowing conversion of constant 300 from 'int' to 'char' inside braced-init-list
+      return c;
+  }
+  ```
+
+#### `chosen constructor for '<class>' is explicit in copy-list-initialization`
+- **Cause**: An `explicit` constructor is matched during copy-list-initialization (`Type x = {...}`, `return {...}`, `fn({...})`).
+- **Trigger** (`tests/negative/explicit_ctor_copy_list.cpp`):
+  ```cpp
+  struct Foo {
+      explicit Foo(int) {}
+  };
+  int main() {
+      Foo f = {42}; // error: chosen constructor for 'Foo' is explicit in copy-list-initialization
+      return 0;
+  }
+  ```
+
+#### `scalar initializer has multiple expressions`
+- **Cause**: Initializing a scalar or pointer variable with a braced list containing more than one element.
+- **Trigger** (`tests/negative/scalar_excess_elements.cpp`):
+  ```cpp
+  int main() {
+      int x{1, 2}; // error: scalar initializer has multiple expressions
+      return x;
+  }
+  ```
+
+#### `too many initializers for aggregate '<class>'`
+- **Cause**: Providing more initializer elements in a braced list than the target aggregate class has fields or subobjects.
+- **Trigger** (`tests/negative/aggregate_excess_elements.cpp`):
+  ```cpp
+  struct Point { int x; int y; };
+  int main() {
+      Point p{1, 2, 3}; // error: too many initializers for aggregate 'Point'
+      return 0;
+  }
+  ```
+
+#### `excess elements in array initializer: expected at most <N>, have <M>`
+- **Cause**: A dynamic array allocation `new T[N]{...}` specifies more initializer expressions than the declared array bound `N`.
+- **Trigger** (`tests/negative/new_array_excess_elements.cpp`):
+  ```cpp
+  int main() {
+      int* p = new int[2]{1, 2, 3}; // error: excess elements in array initializer: expected at most 2, have 3
+      return 0;
+  }
+  ```
+
 ---
 
 ### Preprocessor & Lexical Errors (`ErrorKind::Lexical`)

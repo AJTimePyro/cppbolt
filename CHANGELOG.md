@@ -9,6 +9,17 @@ This project does not yet have tagged semantic releases; all historical work is 
 
 ## [Unreleased]
 
+### C++11/C++17 List-Initialization (Brace Initialization)
+- **Feature**: Implemented C++11 and C++17 list-initialization across parser, semantic analysis, and WebAssembly codegen:
+  - **Direct-List & Copy-List-Initialization**: Supported `Type var{args...};`, `Type var = {args...};`, `return {args...};`, function arguments `fn({args...})`, and assignment `var = {args...};`, with strict rejection of `explicit` constructors in copy-list contexts.
+  - **Value-Initialization**: Evaluated empty braces `{}` to zero-initialize scalar types, zero aggregate fields, and invoke default constructors.
+  - **C++17 Aggregates & Brace Elision**: Classified aggregates under C++17 rules (excluding user-provided constructors and classes with private members or vtables), supporting public non-virtual base class subobjects with nested braces (`Derived{{base_args}, derived_args}`) and flattened aggregate brace elision.
+  - **Narrowing Conversion Rejection**: Enforced C++17 narrowing rules ([dcl.init.list] p7) rejecting floating-to-integer, double-to-float, and integer range/signedness conversions, with compile-time constant expression range evaluation (including negative integers).
+  - **Dynamic Allocations**: Supported heap allocations `new T{...}` and dynamic arrays `new T[n]{...}`, emitting WebAssembly loops to value-initialize omitted trailing elements.
+  - **Typed Temporaries & Lifecycles**: Lowered explicit temporary expressions (`Type{args...}.member()`) into local stack slots with proper alignment and lifetime management.
+- **Diagnostics**: Added diagnostics for narrowing conversions, explicit constructor rejection in copy-list contexts, scalar/aggregate/array excess element counts, and uninstantiable `std::initializer_list` (blocked on templates).
+- **Tests**: Added 6 positive tests in `tests/classes_oop/structs/` and 10 negative diagnostic tests in `tests/negative/`.
+
 ### C++17 Compatibility Fixes & Test Corpus Reorganization
 - **Feature**: Implemented C++17 language constructs across parser, semantic analysis, and WebAssembly codegen:
   - **Array Parameter Decay**: Adjusted function parameters declared with array syntax (`int arr[]`, `int arr[N]`) to pointer types (`int* arr`).
