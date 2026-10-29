@@ -246,22 +246,16 @@ fn copy_constructor_param_const(sig: &FunctionSig, class_name: &str) -> Option<b
     if sig.param_types.len() < 2 {
         return None;
     }
-    let param1 = &sig.param_types[1];
-    let inner = param1.deref_type()?;
-    let is_class = match inner.strip_const() {
-        Type::Struct(s) => QualifiedName::new(s).matches(QualifiedName::new(class_name)),
-        _ => false,
-    };
-    if !is_class {
+    let inner = sig.param_types[1].deref_type()?;
+    if !matches!(
+        inner.strip_const(),
+        Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(class_name))
+    ) {
         return None;
     }
-    let defaults = if !sig.default_args.is_empty() {
-        &sig.default_args[1..]
-    } else {
-        &[]
-    };
+    let defaults = sig.default_args.get(1..).unwrap_or_default();
     if defaults.len() < sig.param_types.len() - 1
-        || !defaults[1..].iter().all(|d| d.is_some())
+        || defaults.get(1..).is_some_and(|rest| !rest.iter().all(|d| d.is_some()))
     {
         return None;
     }

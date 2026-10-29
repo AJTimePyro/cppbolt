@@ -198,23 +198,14 @@ impl Parser {
                             return Err(func_err);
                         }
                         self.pos = saved_pos;
-                        let var_decl = self.parse_global_var(name, ty, &start_tok);
-                        match var_decl {
-                            Ok(decl) => {
-                                declarations.push(decl);
-                            }
-                            Err(_) => return Err(func_err),
-                        }
-                        if self.peek() != &TokenKind::Comma {
-                            break;
-                        }
-                        self.advance();
-                        continue;
+                        let decl = self.parse_global_var(name, ty, &start_tok).map_err(|_| func_err)?;
+                        declarations.push(decl);
                     }
                 }
+            } else {
+                declarations.push(self.parse_global_var(name, ty, &start_tok)?);
             }
 
-            declarations.push(self.parse_global_var(name, ty, &start_tok)?);
             if self.peek() != &TokenKind::Comma {
                 break;
             }
@@ -248,8 +239,7 @@ impl Parser {
         let Some(idx) = rparen_idx else {
             return false;
         };
-        let after_idx = idx + 1;
-        match self.tokens.get(after_idx).map(|t| &t.kind) {
+        match self.tokens.get(idx + 1).map(|t| &t.kind) {
             Some(
                 TokenKind::LBrace
                 | TokenKind::Colon
@@ -260,7 +250,7 @@ impl Parser {
                 | TokenKind::Arrow
                 | TokenKind::Assign,
             ) => true,
-            Some(TokenKind::Ident(id)) if id == "noexcept" => true,
+            Some(TokenKind::Ident(id)) => id == "noexcept",
             _ => false,
         }
     }
