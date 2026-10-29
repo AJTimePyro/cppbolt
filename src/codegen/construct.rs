@@ -24,7 +24,7 @@ impl<'a> Codegen<'a> {
                 continue;
             };
             saw_declared_constructor = true;
-            let Some(sig) = self.best_constructor_overload(sigs, arg_types) else {
+            let Some(sig) = self.best_constructor_overload(class_name, sigs, arg_types) else {
                 continue;
             };
             if let Some(&idx) = self.func_indices.get(&sig.mangled_name) {
@@ -44,18 +44,68 @@ impl<'a> Codegen<'a> {
         }
     }
 
+    /// Finds an explicit copy constructor for `class_name` that can bind an
+    /// argument with the given constness.
+    pub fn find_copy_constructor(&self, class_name: &str, is_source_const: bool) -> Option<u32> {
+        let short_name = class_name.split("::").last().unwrap_or(class_name);
+        let q1 = format!("{}::{}", class_name, short_name);
+        let q2 = format!(
+            "{}::{}",
+            QualifiedName::new(class_name).alternate(),
+            short_name
+        );
+        let mut best_idx = None;
+        let mut best_is_exact = false;
+        for qual_name in &[&q1, &q2] {
+            let Some(sigs) = self.sema.functions.get(*qual_name) else {
+                continue;
+            };
+            for sig in sigs {
+                if let Some(param_is_const) = copy_constructor_param_const(sig, class_name) {
+                    if is_source_const && !param_is_const {
+                        continue;
+                    }
+                    let idx = self.func_indices.get(&sig.mangled_name).copied().or_else(|| {
+                        self.func_indices
+                            .get(&format!("{}_{}", class_name, short_name))
+                            .copied()
+                    });
+                    if let Some(idx) = idx {
+                        if !is_source_const && !param_is_const {
+                            return Some(idx);
+                        }
+                        if best_idx.is_none() || (!best_is_exact && param_is_const == is_source_const) {
+                            best_idx = Some(idx);
+                            best_is_exact = param_is_const == is_source_const;
+                        }
+                    }
+                }
+            }
+        }
+        best_idx
+    }
+
     /// Picks the lowest-cost constructor overload.
     ///
     /// A constructor may take fewer arguments than it has parameters when the
     /// omitted ones have default values.
     fn best_constructor_overload(
         &self,
+        class_name: &str,
         sigs: &[FunctionSig],
         arg_types: &[Type],
     ) -> Option<FunctionSig> {
+        let is_copy_init = arg_types.len() == 1
+            && matches!(
+                arg_types[0].strip_const().strip_reference(),
+                Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(class_name))
+            );
         let mut best_sig = None;
         let mut best_score = usize::MAX;
         for sig in sigs {
+            if is_copy_init && copy_constructor_param_const(sig, class_name).is_none() {
+                continue;
+            }
             let params = if !sig.param_types.is_empty() {
                 &sig.param_types[1..]
             } else {
@@ -189,4 +239,31 @@ impl<'a> Codegen<'a> {
         self.find_constructor_sig(class_name, arg_types)
             .map(|(idx, _)| idx)
     }
+}
+
+/// Returns `Some(is_const)` if `sig` is a copy constructor for `class_name`.
+fn copy_constructor_param_const(sig: &FunctionSig, class_name: &str) -> Option<bool> {
+    if sig.param_types.len() < 2 {
+        return None;
+    }
+    let param1 = &sig.param_types[1];
+    let inner = param1.deref_type()?;
+    let is_class = match inner.strip_const() {
+        Type::Struct(s) => QualifiedName::new(s).matches(QualifiedName::new(class_name)),
+        _ => false,
+    };
+    if !is_class {
+        return None;
+    }
+    let defaults = if !sig.default_args.is_empty() {
+        &sig.default_args[1..]
+    } else {
+        &[]
+    };
+    if defaults.len() < sig.param_types.len() - 1
+        || !defaults[1..].iter().all(|d| d.is_some())
+    {
+        return None;
+    }
+    Some(inner.is_const())
 }

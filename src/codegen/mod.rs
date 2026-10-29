@@ -493,4 +493,74 @@ mod tests {
         );
         assert!(code.contains(&OP_I32_WRAP_I64));
     }
+
+    #[test]
+    fn copy_constructor_lookup_ignores_conversion_operators_and_scalar_constructors() {
+        let mut sema = Sema::new();
+        // Register struct Foo with constructor Foo(int) and conversion operator int()
+        sema.register_function(FunctionSig {
+            name: "Foo::Foo".to_string(),
+            mangled_name: "Foo_Foo_i".to_string(),
+            return_type: Type::Void,
+            param_types: vec![
+                Type::Pointer(Box::new(Type::Struct("Foo".to_string()))),
+                Type::Int,
+            ],
+            default_args: vec![None, None],
+            is_static: false,
+            is_explicit: false,
+            ref_qualifier: RefQualifier::None,
+        });
+        sema.register_function(FunctionSig {
+            name: "Foo::operator int".to_string(),
+            mangled_name: "Foo_operator_int".to_string(),
+            return_type: Type::Int,
+            param_types: vec![Type::Pointer(Box::new(Type::Const(Box::new(Type::Struct(
+                "Foo".to_string(),
+            )))))],
+            default_args: vec![None],
+            is_static: false,
+            is_explicit: false,
+            ref_qualifier: RefQualifier::None,
+        });
+
+        // Register struct Bar with an explicit copy constructor Bar(const Bar&)
+        sema.register_function(FunctionSig {
+            name: "Bar::Bar".to_string(),
+            mangled_name: "Bar_Bar_R".to_string(),
+            return_type: Type::Void,
+            param_types: vec![
+                Type::Pointer(Box::new(Type::Struct("Bar".to_string()))),
+                Type::Reference(Box::new(Type::Const(Box::new(Type::Struct(
+                    "Bar".to_string(),
+                ))))),
+            ],
+            default_args: vec![None, None],
+            is_static: false,
+            is_explicit: false,
+            ref_qualifier: RefQualifier::None,
+        });
+
+        let mut codegen = Codegen::new(&sema);
+        codegen.func_indices.insert("Foo_Foo_i".to_string(), 10);
+        codegen.func_indices.insert("Bar_Bar_R".to_string(), 20);
+
+        // Foo has no copy constructor; Foo(int) must not be matched as copy constructor
+        assert_eq!(codegen.find_copy_constructor("Foo", false), None);
+        assert_eq!(codegen.find_copy_constructor("Foo", true), None);
+        assert!(
+            codegen
+                .find_constructor_sig("Foo", &[Type::Struct("Foo".to_string())])
+                .is_none()
+        );
+
+        // Bar has Bar(const Bar&); it matches copy constructor
+        assert_eq!(codegen.find_copy_constructor("Bar", false), Some(20));
+        assert_eq!(codegen.find_copy_constructor("Bar", true), Some(20));
+        assert!(
+            codegen
+                .find_constructor_sig("Bar", &[Type::Struct("Bar".to_string())])
+                .is_some()
+        );
+    }
 }

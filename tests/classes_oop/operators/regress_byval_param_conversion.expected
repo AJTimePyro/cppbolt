@@ -1,0 +1,3 @@
+byval: 42, copy_init: 42, direct_init: 42, ret_byval: 42
+byval_other: 999
+custom_copy byval: 110, copy_init: 110

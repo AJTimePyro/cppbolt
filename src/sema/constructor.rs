@@ -84,6 +84,11 @@ impl Sema {
         if candidates.is_empty() {
             return None;
         }
+        let is_copy_init = arg_types.len() == 1
+            && matches!(
+                arg_types[0].strip_const().strip_reference(),
+                Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(class_name))
+            );
         let mut best: Option<FunctionSig> = None;
         let mut best_score = usize::MAX;
         for cand in &candidates {
@@ -108,6 +113,17 @@ impl Sema {
             let mut fits = true;
             for (index, arg_ty) in arg_types.iter().enumerate() {
                 let param = &params[index];
+                if is_copy_init {
+                    let is_copy_param = param.is_reference()
+                        && param.deref_type().map(|d| d.strip_all_const())
+                            == Some(arg_ty.strip_all_const());
+                    if !is_copy_param {
+                        fits = false;
+                        break;
+                    }
+                    score += 1;
+                    continue;
+                }
                 if param.strip_all_const() == arg_ty.strip_all_const() {
                     continue;
                 }
