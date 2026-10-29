@@ -144,8 +144,7 @@ impl Sema {
                 continue;
             }
             if param.is_reference()
-                && param.deref_type().map(|d| d.strip_all_const())
-                    == Some(arg_ty.strip_all_const())
+                && param.deref_type().map(|d| d.strip_all_const()) == Some(arg_ty.strip_all_const())
             {
                 score += 1;
                 continue;

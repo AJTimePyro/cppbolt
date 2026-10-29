@@ -136,9 +136,9 @@ fn copy_constructor_lookup_ignores_conversion_operators_and_scalar_constructors(
         name: "Foo::operator int".to_string(),
         mangled_name: "Foo_operator_int".to_string(),
         return_type: Type::Int,
-        param_types: vec![Type::Pointer(Box::new(Type::Const(Box::new(Type::Struct(
-            "Foo".to_string(),
-        )))))],
+        param_types: vec![Type::Pointer(Box::new(Type::Const(Box::new(
+            Type::Struct("Foo".to_string()),
+        ))))],
         default_args: vec![None],
         is_static: false,
         is_explicit: false,
@@ -201,7 +201,11 @@ fn dereferencing_pointer_to_array_does_not_emit_scalar_load() {
         Type::Pointer(Box::new(Type::Array(Box::new(Type::Int), 3))),
     );
 
-    assert!(codegen.compile_expr(&deref_expr, &mut ctx, &mut code).is_ok());
+    assert!(
+        codegen
+            .compile_expr(&deref_expr, &mut ctx, &mut code)
+            .is_ok()
+    );
     let load_count = code.iter().filter(|&&b| b == OP_I32_LOAD).count();
     assert_eq!(load_count, 1);
 }

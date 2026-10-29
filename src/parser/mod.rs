@@ -374,7 +374,8 @@ mod tests {
     }
 
     #[test]
-    fn parses_global_var_with_parenthesized_initializer() -> Result<(), Box<dyn std::error::Error>> {
+    fn parses_global_var_with_parenthesized_initializer() -> Result<(), Box<dyn std::error::Error>>
+    {
         let tokens = Lexer::new("class Item {}; Item global_item(1);").tokenize()?;
         let program = Parser::new(tokens).parse_program()?;
         let Some(Decl::GlobalVar { name, ty, init, .. }) = program.declarations.get(1) else {

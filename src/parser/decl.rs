@@ -183,22 +183,29 @@ impl Parser {
             name = self.qualify_name(name);
 
             if declarations.is_empty() && self.peek() == &TokenKind::LParen {
-                let is_definite_function = self.peek_ahead(1) == &TokenKind::RParen
-                    || self.has_function_tail_indicators();
+                let is_definite_function =
+                    self.peek_ahead(1) == &TokenKind::RParen || self.has_function_tail_indicators();
                 if is_definite_function {
                     let func = self.parse_function_tail(name, ty, start_tok.line, start_tok.col)?;
                     return Ok(vec![Decl::Function(func)]);
                 }
 
                 let saved_pos = self.pos;
-                match self.parse_function_tail(name.clone(), ty.clone(), start_tok.line, start_tok.col) {
+                match self.parse_function_tail(
+                    name.clone(),
+                    ty.clone(),
+                    start_tok.line,
+                    start_tok.col,
+                ) {
                     Ok(func) => return Ok(vec![Decl::Function(func)]),
                     Err(func_err) => {
                         if self.nesting_exceeded.get() {
                             return Err(func_err);
                         }
                         self.pos = saved_pos;
-                        let decl = self.parse_global_var(name, ty, &start_tok).map_err(|_| func_err)?;
+                        let decl = self
+                            .parse_global_var(name, ty, &start_tok)
+                            .map_err(|_| func_err)?;
                         declarations.push(decl);
                     }
                 }

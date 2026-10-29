@@ -66,11 +66,15 @@ impl<'a> Codegen<'a> {
                 if is_source_const && !param_is_const {
                     continue;
                 }
-                let idx = self.func_indices.get(&sig.mangled_name).copied().or_else(|| {
-                    self.func_indices
-                        .get(&format!("{class_name}_{short_name}"))
-                        .copied()
-                });
+                let idx = self
+                    .func_indices
+                    .get(&sig.mangled_name)
+                    .copied()
+                    .or_else(|| {
+                        self.func_indices
+                            .get(&format!("{class_name}_{short_name}"))
+                            .copied()
+                    });
                 let Some(idx) = idx else {
                     continue;
                 };
@@ -256,7 +260,9 @@ fn copy_constructor_param_const(sig: &FunctionSig, class_name: &str) -> Option<b
     }
     let defaults = sig.default_args.get(1..).unwrap_or_default();
     if defaults.len() < sig.param_types.len() - 1
-        || defaults.get(1..).is_some_and(|rest| !rest.iter().all(|d| d.is_some()))
+        || defaults
+            .get(1..)
+            .is_some_and(|rest| !rest.iter().all(|d| d.is_some()))
     {
         return None;
     }
