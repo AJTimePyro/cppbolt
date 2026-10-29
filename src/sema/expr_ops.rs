@@ -367,7 +367,11 @@ impl Sema {
             ));
         }
         let is_list_init = matches!(&**value, Expr::InitializerList { .. });
-        let mut value_ty = if let Expr::InitializerList { elements, pos: v_pos } = &mut **value {
+        let mut value_ty = if let Expr::InitializerList {
+            elements,
+            pos: v_pos,
+        } = &mut **value
+        {
             self.resolve_list_init(&target_ty, elements, InitContext::CopyListAssign, *v_pos)?
         } else {
             self.analyze_expr(value)?

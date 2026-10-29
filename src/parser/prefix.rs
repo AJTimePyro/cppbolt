@@ -8,26 +8,26 @@ impl Parser {
         if self.is_type_start() && !matches!(self.peek(), TokenKind::LParen) {
             let saved_pos = self.pos;
             let start = self.current_pos();
-            if let Ok(ty) = self.parse_type() {
-                if self.peek() == &TokenKind::LBrace {
-                    self.advance();
-                    let mut elements = Vec::new();
-                    while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
-                        elements.push(self.parse_initializer()?);
-                        if self.peek() == &TokenKind::Comma {
-                            self.advance();
-                        } else {
-                            break;
-                        }
+            if let Ok(ty) = self.parse_type()
+                && self.peek() == &TokenKind::LBrace
+            {
+                self.advance();
+                let mut elements = Vec::new();
+                while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
+                    elements.push(self.parse_initializer()?);
+                    if self.peek() == &TokenKind::Comma {
+                        self.advance();
+                    } else {
+                        break;
                     }
-                    self.expect(TokenKind::RBrace)?;
-                    let init_expr = Expr::TypedInitList {
-                        ty,
-                        elements,
-                        pos: start,
-                    };
-                    return self.parse_postfix(init_expr, start);
                 }
+                self.expect(TokenKind::RBrace)?;
+                let init_expr = Expr::TypedInitList {
+                    ty,
+                    elements,
+                    pos: start,
+                };
+                return self.parse_postfix(init_expr, start);
             }
             self.pos = saved_pos;
         }

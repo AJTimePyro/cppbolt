@@ -357,24 +357,30 @@ impl<'a> Codegen<'a> {
         } else if let Some(layout) = self.sema.struct_layouts.get(name).cloned() {
             let mut field_idx = 0;
             let mut elem_idx = 0;
-            if let Some(base_name) = layout.base_classes.first() {
-                if let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned() {
-                    let base_field_count = base_layout.fields.len();
-                    if elem_idx < args.len()
-                        && matches!(
-                            &args[elem_idx],
-                            Expr::InitializerList { .. } | Expr::TypedInitList { .. }
-                        )
-                    {
-                        let sub_elements = match &args[elem_idx] {
-                            Expr::InitializerList { elements, .. }
-                            | Expr::TypedInitList { elements, .. } => elements.as_slice(),
-                            _ => &[],
-                        };
-                        self.compile_struct_value_ctor(base_name, temp_ptr_slot, sub_elements, ctx, code)?;
-                        elem_idx += 1;
-                        field_idx += base_field_count;
-                    }
+            if let Some(base_name) = layout.base_classes.first()
+                && let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned()
+            {
+                let base_field_count = base_layout.fields.len();
+                if elem_idx < args.len()
+                    && matches!(
+                        &args[elem_idx],
+                        Expr::InitializerList { .. } | Expr::TypedInitList { .. }
+                    )
+                {
+                    let sub_elements = match &args[elem_idx] {
+                        Expr::InitializerList { elements, .. }
+                        | Expr::TypedInitList { elements, .. } => elements.as_slice(),
+                        _ => &[],
+                    };
+                    self.compile_struct_value_ctor(
+                        base_name,
+                        temp_ptr_slot,
+                        sub_elements,
+                        ctx,
+                        code,
+                    )?;
+                    elem_idx += 1;
+                    field_idx += base_field_count;
                 }
             }
             while elem_idx < args.len() {

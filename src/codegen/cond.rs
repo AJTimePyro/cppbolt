@@ -71,8 +71,9 @@ impl<'a> Codegen<'a> {
                     stack.push(array);
                     stack.push(index);
                 }
-                Expr::InitializerList { elements, .. }
-                | Expr::TypedInitList { elements, .. } => stack.extend(elements.iter()),
+                Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } => {
+                    stack.extend(elements.iter())
+                }
                 Expr::Assign { target, value, .. } => {
                     stack.push(target);
                     stack.push(value);

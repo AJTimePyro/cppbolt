@@ -343,7 +343,11 @@ impl Sema {
         pos: ExprPos,
     ) -> Result<(), CompileError> {
         for ((arg, param_ty), arg_ty) in args.iter_mut().zip(param_types).zip(arg_types) {
-            if let Expr::InitializerList { elements, pos: a_pos } = arg {
+            if let Expr::InitializerList {
+                elements,
+                pos: a_pos,
+            } = arg
+            {
                 self.resolve_list_init(param_ty, elements, InitContext::CopyListInitArg, *a_pos)?;
             } else if let Type::Struct(sname) = arg_ty.strip_reference().strip_const() {
                 let param_clean = param_ty.strip_reference().strip_const();

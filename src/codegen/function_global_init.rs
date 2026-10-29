@@ -81,8 +81,12 @@ impl<'a> Codegen<'a> {
             let item_offset = (global.offset + (i as u32) * elem_size) as i32;
             if let (
                 Type::Struct(sname),
-                Expr::InitializerList { elements: sublist, .. }
-                | Expr::TypedInitList { elements: sublist, .. },
+                Expr::InitializerList {
+                    elements: sublist, ..
+                }
+                | Expr::TypedInitList {
+                    elements: sublist, ..
+                },
             ) = (elem_ty.strip_const(), item)
             {
                 let Some(layout) = self.sema.struct_layouts.get(sname) else {

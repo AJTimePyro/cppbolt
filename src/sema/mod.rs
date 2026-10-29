@@ -19,9 +19,9 @@ mod stmt_decl;
 mod stmt_range_for;
 mod stmt_structured_binding;
 
+pub use init::InitContext;
 pub(crate) use layout::RecordLayout;
 pub(crate) use stmt_decl::VarDecl;
-pub use init::InitContext;
 
 use crate::ast::types::Type;
 use crate::ast::*;

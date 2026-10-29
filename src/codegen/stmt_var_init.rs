@@ -12,20 +12,16 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         if let Expr::InitializerList { elements: list, .. }
-            | Expr::TypedInitList { elements: list, .. } = init
+        | Expr::TypedInitList { elements: list, .. } = init
         {
-            if list.is_empty()
-                && !matches!(ty.strip_const(), Type::Struct(_) | Type::Array(_, _))
-            {
+            if list.is_empty() && !matches!(ty.strip_const(), Type::Struct(_) | Type::Array(_, _)) {
                 code.push(OP_LOCAL_GET);
                 write_u32(code, ctx.fp_local);
                 self.emit_zero_value(ty, code);
                 self.emit_store(ty, offset, code);
                 return Ok(());
             }
-            if list.len() == 1
-                && !matches!(ty.strip_const(), Type::Struct(_) | Type::Array(_, _))
-            {
+            if list.len() == 1 && !matches!(ty.strip_const(), Type::Struct(_) | Type::Array(_, _)) {
                 return self.compile_aggregate_local(ty, &list[0], offset, ctx, code);
             }
         }
@@ -38,7 +34,8 @@ impl<'a> Codegen<'a> {
             Type::Array(elem_ty, count),
             Expr::InitializerList { elements: list, .. }
             | Expr::TypedInitList { elements: list, .. },
-        ) = (ty.strip_const(), init) {
+        ) = (ty.strip_const(), init)
+        {
             return self.compile_aggregate_array(elem_ty, *count, list, offset, ctx, code);
         }
 
@@ -65,7 +62,7 @@ impl<'a> Codegen<'a> {
             return self.compile_aggregate_struct_call(sname, args, offset, ctx, code);
         }
         if let Expr::InitializerList { elements: list, .. }
-            | Expr::TypedInitList { elements: list, .. } = init
+        | Expr::TypedInitList { elements: list, .. } = init
         {
             return self.compile_aggregate_struct_list(sname, list, offset, ctx, code);
         }
@@ -130,20 +127,20 @@ impl<'a> Codegen<'a> {
         if let Some(layout) = self.sema.struct_layouts.get(sname).cloned() {
             let mut field_idx = 0;
             let mut elem_idx = 0;
-            if let Some(base_name) = layout.base_classes.first() {
-                if let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned() {
-                    let base_field_count = base_layout.fields.len();
-                    if elem_idx < list.len()
-                        && matches!(
-                            &list[elem_idx],
-                            Expr::InitializerList { .. } | Expr::TypedInitList { .. }
-                        )
-                    {
-                        let base_ty = Type::Struct(base_name.clone());
-                        self.compile_aggregate_local(&base_ty, &list[elem_idx], offset, ctx, code)?;
-                        elem_idx += 1;
-                        field_idx += base_field_count;
-                    }
+            if let Some(base_name) = layout.base_classes.first()
+                && let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned()
+            {
+                let base_field_count = base_layout.fields.len();
+                if elem_idx < list.len()
+                    && matches!(
+                        &list[elem_idx],
+                        Expr::InitializerList { .. } | Expr::TypedInitList { .. }
+                    )
+                {
+                    let base_ty = Type::Struct(base_name.clone());
+                    self.compile_aggregate_local(&base_ty, &list[elem_idx], offset, ctx, code)?;
+                    elem_idx += 1;
+                    field_idx += base_field_count;
                 }
             }
             while elem_idx < list.len() {

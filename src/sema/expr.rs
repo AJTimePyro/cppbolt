@@ -126,18 +126,19 @@ impl Sema {
         if *is_array {
             if let Some(s) = array_size {
                 self.analyze_expr(s)?;
-                if let Expr::IntLiteral(count, _) = &**s {
-                    if *count >= 0 && args.len() > *count as usize {
-                        return Err(CompileError::new(
-                            format!(
-                                "excess elements in array initializer: expected at most {}, have {}",
-                                count,
-                                args.len()
-                            ),
-                            pos.line,
-                            pos.col,
-                        ));
-                    }
+                if let Expr::IntLiteral(count, _) = &**s
+                    && *count >= 0
+                    && args.len() > *count as usize
+                {
+                    return Err(CompileError::new(
+                        format!(
+                            "excess elements in array initializer: expected at most {}, have {}",
+                            count,
+                            args.len()
+                        ),
+                        pos.line,
+                        pos.col,
+                    ));
                 }
             }
             for a in args.iter_mut() {
@@ -146,11 +147,11 @@ impl Sema {
             }
             Ok(Type::Pointer(Box::new(ty.clone())))
         } else {
-            if let Type::Struct(sname) = ty.strip_const() {
-                if self.is_cxx17_aggregate(sname) {
-                    self.resolve_list_init(ty, args, InitContext::DirectList, pos)?;
-                    return Ok(Type::Pointer(Box::new(ty.clone())));
-                }
+            if let Type::Struct(sname) = ty.strip_const()
+                && self.is_cxx17_aggregate(sname)
+            {
+                self.resolve_list_init(ty, args, InitContext::DirectList, pos)?;
+                return Ok(Type::Pointer(Box::new(ty.clone())));
             }
             for a in args {
                 self.analyze_expr(a)?;
@@ -287,13 +288,11 @@ impl Sema {
                 let p = *pos;
                 self.resolve_list_init(&explicit_ty, elements, InitContext::DirectList, p)
             }
-            _ => {
-                Err(crate::internal_error!(
-                    self.current_line,
-                    self.current_col,
-                    "unexpected expression kind"
-                ))
-            }
+            _ => Err(crate::internal_error!(
+                self.current_line,
+                self.current_col,
+                "unexpected expression kind"
+            )),
         }
     }
 }

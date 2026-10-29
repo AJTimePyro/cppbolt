@@ -328,14 +328,16 @@ impl<'a> Codegen<'a> {
 
         if ctor_idx.is_some() || v_off.is_some() || args.is_empty() {
             self.emit_array_element_loop(
-                ctor_idx,
-                v_off,
-                ArraySlots {
-                    elem_size,
-                    count_slot,
+                ArrayLoop {
+                    ctor_idx,
+                    v_off,
+                    slots: ArraySlots {
+                        elem_size,
+                        count_slot,
+                    },
+                    start_idx: args.len() as i32,
+                    user_slot,
                 },
-                args.len() as i32,
-                user_slot,
                 ctx,
                 code,
             );
@@ -397,14 +399,17 @@ impl<'a> Codegen<'a> {
     /// Installs each element's vtable and runs its constructor.
     fn emit_array_element_loop(
         &mut self,
-        ctor_idx: Option<u32>,
-        v_off: Option<u32>,
-        slots: ArraySlots,
-        start_idx: i32,
-        user_slot: u32,
+        loop_info: ArrayLoop,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) {
+        let ArrayLoop {
+            ctor_idx,
+            v_off,
+            slots,
+            start_idx,
+            user_slot,
+        } = loop_info;
         let ArraySlots {
             elem_size,
             count_slot,

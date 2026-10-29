@@ -80,6 +80,15 @@ pub(super) struct ArraySlots {
     pub(super) count_slot: u32,
 }
 
+/// Parameters for iterating array element constructors/vtables.
+pub(super) struct ArrayLoop {
+    pub(super) ctor_idx: Option<u32>,
+    pub(super) v_off: Option<u32>,
+    pub(super) slots: ArraySlots,
+    pub(super) start_idx: i32,
+    pub(super) user_slot: u32,
+}
+
 /// One namespace-scope object that is initialized before `main` runs.
 pub(super) struct GlobalInit<'e> {
     pub(super) ty: &'e Type,

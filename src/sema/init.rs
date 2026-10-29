@@ -4,12 +4,12 @@ use super::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InitContext {
-    DirectList,          // e.g. T x{...}, T{...}, : member{...}
-    CopyListInitVar,     // e.g. T x = {...}
-    CopyListInitReturn,  // e.g. return {...} in a function returning T
-    CopyListInitArg,     // e.g. fn({...}) for parameter T
-    CopyListAssign,      // e.g. target = {...} for existing lvalue of type T
-    ValueInit,           // e.g. T x{}, T{}
+    DirectList,         // e.g. T x{...}, T{...}, : member{...}
+    CopyListInitVar,    // e.g. T x = {...}
+    CopyListInitReturn, // e.g. return {...} in a function returning T
+    CopyListInitArg,    // e.g. fn({...}) for parameter T
+    CopyListAssign,     // e.g. target = {...} for existing lvalue of type T
+    ValueInit,          // e.g. T x{}, T{}
 }
 
 impl InitContext {
@@ -299,27 +299,21 @@ impl Sema {
         let mut elem_idx = 0;
 
         // Base subobject check if first base class exists and first element is a braced list
-        if let Some(base_name) = layout.base_classes.first() {
-            if let Some(base_layout) = self.struct_layouts.get(base_name).cloned() {
-                let base_field_count = base_layout.fields.len();
-                if elem_idx < init_elements.len() {
-                    if let Expr::InitializerList {
-                        elements: sub_elements,
-                        pos: sub_pos,
-                    } = &mut init_elements[elem_idx]
-                    {
-                        // Explicitly braced base subobject
-                        let base_ty = Type::Struct(base_name.clone());
-                        self.resolve_list_init(
-                            &base_ty,
-                            sub_elements,
-                            InitContext::DirectList,
-                            *sub_pos,
-                        )?;
-                        elem_idx += 1;
-                        field_idx += base_field_count;
-                    }
-                }
+        if let Some(base_name) = layout.base_classes.first()
+            && let Some(base_layout) = self.struct_layouts.get(base_name).cloned()
+        {
+            let base_field_count = base_layout.fields.len();
+            if elem_idx < init_elements.len()
+                && let Expr::InitializerList {
+                    elements: sub_elements,
+                    pos: sub_pos,
+                } = &mut init_elements[elem_idx]
+            {
+                // Explicitly braced base subobject
+                let base_ty = Type::Struct(base_name.clone());
+                self.resolve_list_init(&base_ty, sub_elements, InitContext::DirectList, *sub_pos)?;
+                elem_idx += 1;
+                field_idx += base_field_count;
             }
         }
 
@@ -471,10 +465,9 @@ mod tests {
     #[test]
     fn test_narrowing_float_to_int_rejected() {
         let sema = Sema::new();
-        let expr = Expr::FloatLiteral(3.14, Type::Double);
+        let expr = Expr::FloatLiteral(3.25, Type::Double);
         let res = sema.check_narrowing(&expr, &Type::Double, &Type::Int, ExprPos::new(1, 1));
-        assert!(res.is_err());
-        assert!(res.unwrap_err().to_string().contains("narrowing conversion"));
+        assert!(matches!(res, Err(err) if err.to_string().contains("narrowing conversion")));
     }
 
     #[test]
@@ -482,8 +475,7 @@ mod tests {
         let sema = Sema::new();
         let expr = Expr::IntLiteral(-1, Type::Int);
         let res = sema.check_narrowing(&expr, &Type::Int, &Type::UnsignedInt, ExprPos::new(1, 1));
-        assert!(res.is_err());
-        assert!(res.unwrap_err().to_string().contains("narrowing conversion"));
+        assert!(matches!(res, Err(err) if err.to_string().contains("narrowing conversion")));
     }
 
     #[test]
@@ -491,8 +483,7 @@ mod tests {
         let sema = Sema::new();
         let expr = Expr::IntLiteral(300, Type::Int);
         let res = sema.check_narrowing(&expr, &Type::Int, &Type::Char, ExprPos::new(1, 1));
-        assert!(res.is_err());
-        assert!(res.unwrap_err().to_string().contains("narrowing conversion"));
+        assert!(matches!(res, Err(err) if err.to_string().contains("narrowing conversion")));
     }
 
     #[test]
@@ -516,8 +507,9 @@ mod tests {
             InitContext::DirectList,
             ExprPos::new(1, 1),
         );
-        assert!(res.is_err());
-        assert!(res.unwrap_err().to_string().contains("scalar initializer has multiple expressions"));
+        assert!(
+            matches!(res, Err(err) if err.to_string().contains("scalar initializer has multiple expressions"))
+        );
     }
 
     #[test]
@@ -542,7 +534,10 @@ mod tests {
             name: "Foo::Foo".to_string(),
             mangled_name: "_ZN3FooC1Ei".to_string(),
             return_type: Type::Void,
-            param_types: vec![Type::Pointer(Box::new(Type::Struct("Foo".to_string()))), Type::Int],
+            param_types: vec![
+                Type::Pointer(Box::new(Type::Struct("Foo".to_string()))),
+                Type::Int,
+            ],
             default_args: vec![None, None],
             is_static: false,
             is_explicit: true,
@@ -567,7 +562,8 @@ mod tests {
             InitContext::CopyListInitVar,
             ExprPos::new(1, 1),
         );
-        assert!(copy_res.is_err());
-        assert!(copy_res.unwrap_err().to_string().contains("is explicit in copy-list-initialization"));
+        assert!(
+            matches!(copy_res, Err(err) if err.to_string().contains("is explicit in copy-list-initialization"))
+        );
     }
 }

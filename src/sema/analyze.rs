@@ -322,14 +322,13 @@ impl Sema {
                 col,
             ));
         }
-        if let Type::Array(elem, 0) = ty.clone() {
-            if let Some(
+        if let Type::Array(elem, 0) = ty.clone()
+            && let Some(
                 Expr::InitializerList { elements: list, .. }
                 | Expr::TypedInitList { elements: list, .. },
             ) = init
-            {
-                *ty = Type::Array(elem, list.len());
-            }
+        {
+            *ty = Type::Array(elem, list.len());
         }
         Ok(())
     }

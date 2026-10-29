@@ -343,17 +343,15 @@ impl Sema {
                     elements,
                     pos,
                 } => {
-                    self.resolve_list_init(
-                        explicit_ty,
-                        elements,
-                        InitContext::DirectList,
-                        *pos,
-                    )?
+                    self.resolve_list_init(explicit_ty, elements, InitContext::DirectList, *pos)?
                 }
                 _ => self.analyze_expr(expr)?,
             };
             if let Some(expected) = &self.current_func_return_type {
-                if !matches!(expr, Expr::InitializerList { .. } | Expr::TypedInitList { .. }) {
+                if !matches!(
+                    expr,
+                    Expr::InitializerList { .. } | Expr::TypedInitList { .. }
+                ) {
                     if let Type::Struct(sname) = ret_ty.strip_reference().strip_const() {
                         let is_const = ret_ty.strip_reference().is_const();
                         if let Some(sig) = self.find_conversion_to(sname, expected, is_const) {

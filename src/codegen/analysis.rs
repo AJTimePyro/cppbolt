@@ -18,8 +18,9 @@ fn check_expr_has_new_delete(expr: &Expr) -> bool {
             Expr::ArraySubscript { array, index, .. } => {
                 stack.extend([array.as_ref(), index.as_ref()]);
             }
-            Expr::InitializerList { elements, .. }
-            | Expr::TypedInitList { elements, .. } => stack.extend(elements.iter()),
+            Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } => {
+                stack.extend(elements.iter())
+            }
             Expr::Assign { target, value, .. } | Expr::CompoundAssign { target, value, .. } => {
                 stack.extend([target.as_ref(), value.as_ref()]);
             }
@@ -186,8 +187,9 @@ pub(super) fn collect_address_taken_expr(expr: &Expr, address_taken: &mut HashSe
             }
             Expr::New { args, .. } => stack.extend(args.iter()),
             Expr::Delete { expr, .. } => stack.push(expr),
-            Expr::InitializerList { elements, .. }
-            | Expr::TypedInitList { elements, .. } => stack.extend(elements.iter()),
+            Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } => {
+                stack.extend(elements.iter())
+            }
             _ => {}
         }
     }
