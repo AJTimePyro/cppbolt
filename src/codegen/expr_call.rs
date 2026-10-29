@@ -290,7 +290,7 @@ impl<'a> Codegen<'a> {
         Ok(())
     }
 
-    fn compile_struct_value_ctor(
+    pub(super) fn compile_struct_value_ctor(
         &mut self,
         name: &str,
         temp_ptr_slot: u32,
