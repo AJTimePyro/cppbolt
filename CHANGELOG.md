@@ -9,6 +9,17 @@ This project does not yet have tagged semantic releases; all historical work is 
 
 ## [Unreleased]
 
+### List Initialization & Aggregates
+- Added support for braced list initialization across declarations, member initializers, return values, function arguments, assignments, and heap allocations.
+- Direct-list initialization allows explicit constructors; copy-list initialization rejects them.
+- Empty braces (`{}`) zero-initialize scalars, clear aggregate fields, or invoke default constructors.
+- Added C++17 aggregate classification, supporting public non-virtual base subobjects and flattened brace elision.
+- Enforced narrowing conversion rejection per C++17 [dcl.init.list] p7, with compile-time constant range checks for integer literals.
+- Added dynamic allocation for single objects (`new T{...}`) and arrays (`new T[n]{...}`), value-initializing omitted trailing elements in a WebAssembly loop.
+- Lowered typed temporaries (`Type{args...}.member()`) to local stack storage.
+- Added diagnostics for narrowing errors, explicit constructor mismatches, excess initializer counts, and `std::initializer_list` (blocked on template support).
+- Added 6 positive tests in `tests/classes_oop/structs/` and 10 negative diagnostic tests in `tests/negative/`.
+
 ### C++17 Compatibility Fixes & Test Corpus Reorganization
 - **Feature**: Implemented C++17 language constructs across parser, semantic analysis, and WebAssembly codegen:
   - **Array Parameter Decay**: Adjusted function parameters declared with array syntax (`int arr[]`, `int arr[N]`) to pointer types (`int* arr`).

@@ -54,6 +54,18 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let synthetic;
+        let expr = match expr {
+            Expr::InitializerList { elements, pos } => {
+                synthetic = Expr::TypedInitList {
+                    ty: ctx.return_type.strip_reference().strip_const().clone(),
+                    elements: elements.clone(),
+                    pos: *pos,
+                };
+                &synthetic
+            }
+            _ => expr,
+        };
         let ty = self.get_expr_type(expr, ctx);
         if ctx.is_reference_return {
             self.compile_lvalue_addr(expr, ctx, code)?;

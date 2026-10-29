@@ -1,0 +1,1 @@
+tests/negative/new_array_excess_elements.cpp:2:5: error: excess elements in array initializer: expected at most 2, have 3

@@ -1,0 +1,1 @@
+tests/negative/explicit_ctor_copy_list.cpp:6:13: error: chosen constructor for 'Foo' is explicit in copy-list-initialization

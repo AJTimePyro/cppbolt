@@ -13,6 +13,19 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let synthetic;
+        let a = match (a, param_ty) {
+            (Expr::InitializerList { elements, pos }, Some(pty)) => {
+                synthetic = Expr::TypedInitList {
+                    ty: pty.strip_reference().strip_const().clone(),
+                    elements: elements.clone(),
+                    pos: *pos,
+                };
+                &synthetic
+            }
+            _ => a,
+        };
+
         let is_ref = param_ty.map(|p| p.is_reference()).unwrap_or(false);
         let is_byval_struct = param_ty
             .map(|p| matches!(p.strip_const(), Type::Struct(_)))

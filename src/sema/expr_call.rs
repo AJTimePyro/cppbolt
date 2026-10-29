@@ -194,7 +194,7 @@ impl Sema {
                 // A member call may leave out arguments that have default
                 // values.
                 self.fill_member_defaults(&sig, args)?;
-                self.convert_call_args(args, &sig.param_types[1..], arg_types, *pos);
+                self.convert_call_args(args, &sig.param_types[1..], arg_types, *pos)?;
                 return Ok(Some(sig.return_type.clone()));
             } else {
                 return Err(CompileError::new(
@@ -336,14 +336,20 @@ impl Sema {
     }
 
     fn convert_call_args(
-        &self,
+        &mut self,
         args: &mut [Expr],
         param_types: &[Type],
         arg_types: &[Type],
         pos: ExprPos,
-    ) {
+    ) -> Result<(), CompileError> {
         for ((arg, param_ty), arg_ty) in args.iter_mut().zip(param_types).zip(arg_types) {
-            if let Type::Struct(sname) = arg_ty.strip_reference().strip_const() {
+            if let Expr::InitializerList {
+                elements,
+                pos: a_pos,
+            } = arg
+            {
+                self.resolve_list_init(param_ty, elements, InitContext::CopyListInitArg, *a_pos)?;
+            } else if let Type::Struct(sname) = arg_ty.strip_reference().strip_const() {
                 let param_clean = param_ty.strip_reference().strip_const();
                 if !matches!(param_clean, Type::Struct(p) if p == sname) {
                     let is_const = arg_ty.strip_reference().is_const();
@@ -353,6 +359,7 @@ impl Sema {
                 }
             }
         }
+        Ok(())
     }
 
     fn resolve_named_call(
@@ -377,7 +384,7 @@ impl Sema {
             return Err(self.ambiguous_call(name, arg_types, pos));
         }
         if let Some((cand, mut full_args)) = selection.best {
-            self.convert_call_args(&mut full_args, &cand.param_types, arg_types, pos);
+            self.convert_call_args(&mut full_args, &cand.param_types, arg_types, pos)?;
             let mangled = cand.mangled_name.clone();
             let ret_type = cand.return_type.clone();
             *callee = Expr::Identifier(mangled);

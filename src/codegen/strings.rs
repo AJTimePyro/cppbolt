@@ -119,7 +119,9 @@ impl<'a> Codegen<'a> {
                     children.push(else_expr);
                 }
                 Expr::Cast { expr, .. } => children.push(expr),
-                Expr::InitializerList(list) => children.extend(list.iter()),
+                Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } => {
+                    children.extend(elements.iter())
+                }
                 _ => {}
             }
             // Preserve the original left-to-right visit order so string data

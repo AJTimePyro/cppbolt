@@ -20,6 +20,7 @@ For current baseline results, see [`tests/PASSING.txt`](tests/PASSING.txt) and r
 These features build naturally on existing language constructs without requiring a full template engine:
 
 - [x] **Range-Based `for` Loops**: Lower `for (decl : range)` into standard iterator loops using `begin()` / `end()` or pointer intervals across fixed-size 1D/multidimensional arrays and container classes (e.g. `std::string`).
+- [x] **List Initialization & Aggregates**: Direct-list and copy-list initialization, value initialization with empty braces (`{}`), aggregate base subobjects and brace elision, narrowing conversion checks, dynamic array allocations (`new T[n]{...}`), and typed temporaries.
 - [x] **Additional Operator Overloads**:
   - Overloaded postfix `operator++(int)` and `operator--(int)` distinguishing from prefix via dummy `int` parameter.
   - Overloaded pointer member access `operator->`.
@@ -37,6 +38,7 @@ Templates and standard containers remain the primary boundary between the v1 com
 - [ ] **Template Support**:
   - Function templates and class templates with type parameters (`template <typename T>`).
   - Template specialization and method instantiation.
+  - `std::initializer_list<T>` constructors and overload resolution priority.
   - *Target*: Resolve expected failures currently tracked in [`tests/templates_operators`](tests/templates_operators/).
 - [ ] **Standard Containers & Algorithms**:
   - Full templated implementations of `<vector>`, `<map>`, `<set>`, and `<utility>` (`std::pair`).

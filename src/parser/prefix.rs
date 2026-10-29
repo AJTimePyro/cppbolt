@@ -5,6 +5,18 @@ impl Parser {
         if let Some(expr) = self.parse_unary_prefix()? {
             return Ok(expr);
         }
+        if self.is_type_start() && !matches!(self.peek(), TokenKind::LParen) {
+            let saved_pos = self.pos;
+            let start = self.current_pos();
+            if let Ok(ty) = self.parse_type()
+                && self.peek() == &TokenKind::LBrace
+            {
+                let (elements, pos) = self.parse_brace_expr_list()?;
+                let init_expr = Expr::TypedInitList { ty, elements, pos };
+                return self.parse_postfix(init_expr, start);
+            }
+            self.pos = saved_pos;
+        }
         match self.peek() {
             TokenKind::KwNew => self.parse_new_expr(),
             TokenKind::KwDelete => self.parse_delete_expr(),
@@ -56,9 +68,14 @@ impl Parser {
             self.advance();
             let size = self.parse_expr()?;
             self.expect(TokenKind::RBracket)?;
+            let args = if self.peek() == &TokenKind::LBrace {
+                self.parse_brace_expr_list()?.0
+            } else {
+                vec![]
+            };
             Ok(Expr::New {
                 ty,
-                args: vec![],
+                args,
                 is_array: true,
                 array_size: Some(Box::new(size)),
                 placement,
@@ -66,6 +83,15 @@ impl Parser {
         } else if self.peek() == &TokenKind::LParen {
             self.advance();
             let args = self.parse_paren_expr_list()?;
+            Ok(Expr::New {
+                ty,
+                args,
+                is_array: false,
+                array_size: None,
+                placement,
+            })
+        } else if self.peek() == &TokenKind::LBrace {
+            let (args, _) = self.parse_brace_expr_list()?;
             Ok(Expr::New {
                 ty,
                 args,

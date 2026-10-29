@@ -15,6 +15,7 @@ The semantic analysis stage validates the Abstract Syntax Tree, computes record 
 7. **AST Desugaring**: Lowers high-level syntax nodes (such as range-based `for` loops in `src/sema/stmt_range_for.rs`) into standard scoped primitives, synthesizing pointer and iterator bounds while preserving RAII and loop control flow.
 8. **Closure Synthesis & Lambda Desugaring**: Synthesizes unique anonymous closure structs (`__lambda_N`) for C++17 lambda expressions (`src/sema/expr_lambda.rs`), generating fields for captures, constructor initialization, `operator()` call signatures, return type deduction, and static `__invoke` trampoline methods for implicit conversion to C function pointers.
 9. **Recursive `operator->` Resolution**: Resolves chained member-arrow accesses recursively until a raw pointer is reached, enforcing cycle detection and receiver `const` propagation (`src/sema/expr_member.rs`).
+10. **List Initialization**: Resolves braced initializers (`src/sema/init.rs`) across direct-list, copy-list, and value-initialization contexts. Enforces C++17 narrowing rules ([dcl.init.list] p7) and `explicit` constructor rejection in copy contexts, and handles aggregate base subobjects and brace elision.
 
 ---
 
@@ -29,6 +30,7 @@ The semantic analysis stage validates the Abstract Syntax Tree, computes record 
   ```rust
   pub struct StructLayout {
       pub is_class: bool,
+      pub has_user_declared_constructors: bool,
       pub base_classes: Vec<String>,
       pub base_offsets: Vec<(String, usize)>,
       pub fields: Vec<StructField>,

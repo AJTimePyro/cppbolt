@@ -15,6 +15,7 @@ mod expr_call_member;
 mod expr_delete;
 mod expr_identifier;
 mod expr_new;
+mod expr_new_array;
 mod expr_printf;
 mod expr_unary;
 mod function;
@@ -52,8 +53,8 @@ use analysis::{
     collect_type_lifecycle,
 };
 use emit_context::{
-    ArrayLocal, ArraySlots, BinaryTypes, CallSite, CtorCall, GlobalInit, MemberAccess, NamedCall,
-    ScalarAssign, SwitchSlots,
+    ArrayLocal, ArrayLoop, ArraySlots, BinaryTypes, CallSite, CtorCall, GlobalInit, MemberAccess,
+    NamedCall, ScalarAssign, SwitchSlots,
 };
 use program::Plan;
 use std::collections::{HashMap, HashSet};

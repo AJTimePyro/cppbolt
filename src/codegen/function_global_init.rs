@@ -43,9 +43,22 @@ impl<'a> Codegen<'a> {
     ) -> Result<(), CompileError> {
         code.push(OP_I32_CONST);
         write_i32(code, global.offset as i32);
-        let init_ty = self.get_expr_type(init_expr, ctx);
-        self.compile_expr(init_expr, ctx, code)?;
-        self.emit_conversion(&init_ty, global.ty, code);
+        match init_expr {
+            Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } => {
+                if elements.is_empty() {
+                    self.emit_zero_value(global.ty, code);
+                } else if elements.len() == 1 {
+                    let init_ty = self.get_expr_type(&elements[0], ctx);
+                    self.compile_expr(&elements[0], ctx, code)?;
+                    self.emit_conversion(&init_ty, global.ty, code);
+                }
+            }
+            _ => {
+                let init_ty = self.get_expr_type(init_expr, ctx);
+                self.compile_expr(init_expr, ctx, code)?;
+                self.emit_conversion(&init_ty, global.ty, code);
+            }
+        }
         self.emit_store(global.ty, 0, code);
         Ok(())
     }
@@ -58,14 +71,23 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let Some(Expr::InitializerList(list)) = global.init.as_ref() else {
-            return Ok(());
+        let list = match global.init.as_ref() {
+            Some(Expr::InitializerList { elements, .. })
+            | Some(Expr::TypedInitList { elements, .. }) => elements,
+            _ => return Ok(()),
         };
         let elem_size = elem_ty.size_of(&self.sema.struct_sizes) as u32;
         for (i, item) in list.iter().enumerate() {
             let item_offset = (global.offset + (i as u32) * elem_size) as i32;
-            if let (Type::Struct(sname), Expr::InitializerList(sublist)) =
-                (elem_ty.strip_const(), item)
+            if let (
+                Type::Struct(sname),
+                Expr::InitializerList {
+                    elements: sublist, ..
+                }
+                | Expr::TypedInitList {
+                    elements: sublist, ..
+                },
+            ) = (elem_ty.strip_const(), item)
             {
                 let Some(layout) = self.sema.struct_layouts.get(sname) else {
                     continue;
@@ -168,8 +190,10 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<bool, CompileError> {
-        let Some(Expr::InitializerList(list)) = global.init.as_ref() else {
-            return Ok(false);
+        let list = match global.init.as_ref() {
+            Some(Expr::InitializerList { elements, .. })
+            | Some(Expr::TypedInitList { elements, .. }) => elements,
+            _ => return Ok(false),
         };
         self.emit_global_ctor(global, sname, list, ctx, code)
     }
@@ -200,8 +224,10 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let Some(Expr::InitializerList(list)) = global.init.as_ref() else {
-            return Ok(());
+        let list = match global.init.as_ref() {
+            Some(Expr::InitializerList { elements, .. })
+            | Some(Expr::TypedInitList { elements, .. }) => elements,
+            _ => return Ok(()),
         };
         let Some(layout) = self.sema.struct_layouts.get(sname) else {
             return Ok(());

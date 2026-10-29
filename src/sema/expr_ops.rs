@@ -366,6 +366,10 @@ impl Sema {
                 pos.col,
             ));
         }
+        if let Expr::InitializerList { elements, pos } = &mut **value {
+            let ctx = InitContext::CopyListAssign;
+            return self.resolve_list_init(&target_ty, elements, ctx, *pos);
+        }
         let mut value_ty = self.analyze_expr(value)?;
         if let Type::Struct(sname) = value_ty.strip_reference().strip_const() {
             let is_const = value_ty.strip_reference().is_const();

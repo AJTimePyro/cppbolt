@@ -143,7 +143,8 @@ impl<'a> Codegen<'a> {
         let elem_size = u32::try_from(elem_ty.size_of(&self.sema.struct_sizes))
             .map_err(|_| crate::internal_error!(stmt.line, stmt.col, "array is too large"))?;
         let init_list = match init {
-            Some(Expr::InitializerList(list)) => Some(list.as_slice()),
+            Some(Expr::InitializerList { elements, .. })
+            | Some(Expr::TypedInitList { elements, .. }) => Some(elements.as_slice()),
             _ => None,
         };
         let mut scope_entries = Vec::new();
@@ -185,12 +186,24 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let init_ty = self.get_expr_type(init_expr, ctx);
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.fp_local);
-        self.compile_expr(init_expr, ctx, code)?;
-
-        self.emit_conversion(&init_ty, ty, code);
+        match init_expr {
+            Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } => {
+                if elements.is_empty() {
+                    self.emit_zero_value(ty, code);
+                } else if elements.len() == 1 {
+                    let elem_ty = self.get_expr_type(&elements[0], ctx);
+                    self.compile_expr(&elements[0], ctx, code)?;
+                    self.emit_conversion(&elem_ty, ty, code);
+                }
+            }
+            _ => {
+                let init_ty = self.get_expr_type(init_expr, ctx);
+                self.compile_expr(init_expr, ctx, code)?;
+                self.emit_conversion(&init_ty, ty, code);
+            }
+        }
         self.emit_store(ty, offset, code);
         Ok(())
     }

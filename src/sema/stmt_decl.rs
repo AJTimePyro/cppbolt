@@ -51,7 +51,10 @@ impl Sema {
             ));
         }
         if let Type::Array(elem, 0) = ty.clone()
-            && let Some(Expr::InitializerList(list)) = init
+            && let Some(
+                Expr::InitializerList { elements: list, .. }
+                | Expr::TypedInitList { elements: list, .. },
+            ) = init
         {
             *ty = Type::Array(elem, list.len());
         }
@@ -66,6 +69,51 @@ impl Sema {
         Ok(())
     }
 
+    fn resolve_var_init_type(
+        &mut self,
+        ty: &mut Type,
+        init_expr: &mut Expr,
+    ) -> Result<(Type, bool), CompileError> {
+        match init_expr {
+            Expr::InitializerList { elements, pos } => {
+                let context = if elements.is_empty() {
+                    InitContext::ValueInit
+                } else {
+                    InitContext::CopyListInitVar
+                };
+                Ok((self.resolve_list_init(ty, elements, context, *pos)?, true))
+            }
+            Expr::TypedInitList {
+                ty: explicit_ty,
+                elements,
+                pos,
+            } => {
+                let context = if elements.is_empty() {
+                    InitContext::ValueInit
+                } else {
+                    InitContext::DirectList
+                };
+                let target = if *ty == Type::Auto {
+                    explicit_ty.clone()
+                } else {
+                    ty.clone()
+                };
+                let res = self.resolve_list_init(&target, elements, context, *pos)?;
+                if *ty == Type::Auto {
+                    *ty = res.clone();
+                }
+                Ok((res, true))
+            }
+            _ => {
+                let previous = self.in_initializer;
+                self.in_initializer = true;
+                let result = self.analyze_expr(init_expr);
+                self.in_initializer = previous;
+                Ok((result?, false))
+            }
+        }
+    }
+
     /// Checks the initializer of a variable and completes its type.
     fn analyze_var_init(
         &mut self,
@@ -75,15 +123,7 @@ impl Sema {
         line: usize,
         col: usize,
     ) -> Result<(), CompileError> {
-        let mut init_ty = {
-            // A constructor call in an initializer reports an
-            // initialization diagnostic.
-            let previous = self.in_initializer;
-            self.in_initializer = true;
-            let result = self.analyze_expr(init_expr);
-            self.in_initializer = previous;
-            result?
-        };
+        let (mut init_ty, is_list_init) = self.resolve_var_init_type(ty, init_expr)?;
         if let Type::Struct(sname) = init_ty.strip_reference().strip_const() {
             let is_const = init_ty.strip_reference().is_const();
             if let Some(sig) = self.find_conversion_to(sname, ty, is_const) {
@@ -117,7 +157,7 @@ impl Sema {
                 ))));
             }
         }
-        if !self.can_assign(ty, &init_ty) {
+        if !is_list_init && !self.can_assign(ty, &init_ty) {
             return Err(CompileError::new(
                 format!(
                     "cannot initialize variable '{}' of type {} with {}",

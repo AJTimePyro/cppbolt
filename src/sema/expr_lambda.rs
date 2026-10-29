@@ -401,7 +401,8 @@ impl<'a> FreeVarCollector<'a> {
                 self.visit_expr(then_expr, locals);
                 self.visit_expr(else_expr, locals);
             }
-            Expr::InitializerList(list) => {
+            Expr::InitializerList { elements: list, .. }
+            | Expr::TypedInitList { elements: list, .. } => {
                 for item in list {
                     self.visit_expr(item, locals);
                 }

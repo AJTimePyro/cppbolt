@@ -243,6 +243,7 @@ mod tests {
     fn layout(base_classes: Vec<String>) -> StructLayout {
         StructLayout {
             is_class: true,
+            has_user_declared_constructors: false,
             base_classes,
             base_offsets: Vec::new(),
             fields: Vec::new(),

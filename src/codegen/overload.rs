@@ -38,6 +38,8 @@ impl<'a> Codegen<'a> {
                 } else {
                     score += 20;
                 }
+            } else if *a == Type::Void && *p != Type::Void {
+                score += 40;
             } else {
                 return None;
             }

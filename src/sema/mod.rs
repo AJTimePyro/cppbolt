@@ -10,6 +10,7 @@ mod expr_call;
 mod expr_lambda;
 mod expr_member;
 mod expr_ops;
+mod init;
 mod layout;
 mod lookup;
 mod overload;
@@ -18,6 +19,7 @@ mod stmt_decl;
 mod stmt_range_for;
 mod stmt_structured_binding;
 
+pub use init::InitContext;
 pub(crate) use layout::RecordLayout;
 pub(crate) use stmt_decl::VarDecl;
 
@@ -42,6 +44,7 @@ pub struct StructField {
 #[derive(Debug, Clone)]
 pub struct StructLayout {
     pub is_class: bool,
+    pub has_user_declared_constructors: bool,
     pub base_classes: Vec<String>,
     pub base_offsets: Vec<(String, usize)>,
     pub fields: Vec<StructField>,

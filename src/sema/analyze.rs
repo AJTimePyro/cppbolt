@@ -323,7 +323,10 @@ impl Sema {
             ));
         }
         if let Type::Array(elem, 0) = ty.clone()
-            && let Some(Expr::InitializerList(list)) = init
+            && let Some(
+                Expr::InitializerList { elements: list, .. }
+                | Expr::TypedInitList { elements: list, .. },
+            ) = init
         {
             *ty = Type::Array(elem, list.len());
         }

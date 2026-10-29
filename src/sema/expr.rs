@@ -86,7 +86,9 @@ impl Sema {
                 Ok(target_type.clone())
             }
             Expr::SizeofType(_) | Expr::SizeofExpr(_) => Ok(Type::UnsignedInt),
-            Expr::InitializerList { .. } => self.analyze_initializer(expr),
+            Expr::InitializerList { .. } | Expr::TypedInitList { .. } => {
+                self.analyze_initializer(expr)
+            }
             Expr::Lambda { .. } => self.analyze_lambda(expr),
         }
     }
@@ -120,12 +122,37 @@ impl Sema {
                 self.current_col,
             ));
         }
+        let pos = ExprPos::new(self.current_line, self.current_col);
         if *is_array {
             if let Some(s) = array_size {
                 self.analyze_expr(s)?;
+                if let Expr::IntLiteral(count, _) = &**s
+                    && *count >= 0
+                    && args.len() > *count as usize
+                {
+                    return Err(CompileError::new(
+                        format!(
+                            "excess elements in array initializer: expected at most {}, have {}",
+                            count,
+                            args.len()
+                        ),
+                        pos.line,
+                        pos.col,
+                    ));
+                }
+            }
+            for a in args.iter_mut() {
+                let a_ty = self.analyze_expr(a)?;
+                self.check_narrowing(a, &a_ty, ty, pos)?;
             }
             Ok(Type::Pointer(Box::new(ty.clone())))
         } else {
+            if let Type::Struct(sname) = ty.strip_const()
+                && self.is_cxx17_aggregate(sname)
+            {
+                self.resolve_list_init(ty, args, InitContext::DirectList, pos)?;
+                return Ok(Type::Pointer(Box::new(ty.clone())));
+            }
             for a in args {
                 self.analyze_expr(a)?;
             }
@@ -249,17 +276,23 @@ impl Sema {
     }
 
     pub(super) fn analyze_initializer(&mut self, expr: &mut Expr) -> Result<Type, CompileError> {
-        let Expr::InitializerList(list) = expr else {
-            return Err(crate::internal_error!(
+        match expr {
+            Expr::InitializerList { elements, .. } => {
+                for item in elements {
+                    self.analyze_expr(item)?;
+                }
+                Ok(Type::Void)
+            }
+            Expr::TypedInitList { ty, elements, pos } => {
+                let explicit_ty = ty.clone();
+                let p = *pos;
+                self.resolve_list_init(&explicit_ty, elements, InitContext::DirectList, p)
+            }
+            _ => Err(crate::internal_error!(
                 self.current_line,
                 self.current_col,
                 "unexpected expression kind"
-            ));
-        };
-
-        for item in list {
-            self.analyze_expr(item)?;
+            )),
         }
-        Ok(Type::Void)
     }
 }

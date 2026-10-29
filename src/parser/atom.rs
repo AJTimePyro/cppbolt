@@ -97,6 +97,18 @@ impl Parser {
                         pos: start,
                     };
                 }
+                TokenKind::LBrace => {
+                    if let Expr::Identifier(ref name) = expr {
+                        let (elements, pos) = self.parse_brace_expr_list()?;
+                        expr = Expr::TypedInitList {
+                            ty: Type::Struct(name.clone()),
+                            elements,
+                            pos,
+                        };
+                    } else {
+                        break;
+                    }
+                }
                 TokenKind::LBracket => {
                     self.advance();
                     let index = self.parse_expr()?;

@@ -206,8 +206,12 @@ impl Parser {
                         ));
                     }
                 };
-                self.expect(TokenKind::LParen)?;
-                let args = self.parse_paren_expr_list()?;
+                let args = if self.peek() == &TokenKind::LBrace {
+                    self.parse_brace_expr_list()?.0
+                } else {
+                    self.expect(TokenKind::LParen)?;
+                    self.parse_paren_expr_list()?
+                };
                 ctor_initializers.push((iname, args));
                 if self.peek() == &TokenKind::Comma {
                     self.advance();

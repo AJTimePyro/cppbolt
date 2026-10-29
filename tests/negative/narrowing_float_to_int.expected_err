@@ -1,0 +1,1 @@
+tests/negative/narrowing_float_to_int.cpp:2:10: error: narrowing conversion from 'double' to 'int' inside braced-init-list

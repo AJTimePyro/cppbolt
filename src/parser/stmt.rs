@@ -69,7 +69,9 @@ impl Parser {
 
     fn parse_return_stmt(&mut self, line: usize, col: usize) -> Result<Stmt, CompileError> {
         self.advance();
-        let expr = if self.peek() != &TokenKind::Semi {
+        let expr = if self.peek() == &TokenKind::LBrace {
+            Some(self.parse_initializer()?)
+        } else if self.peek() != &TokenKind::Semi {
             Some(self.parse_expr()?)
         } else {
             None
@@ -267,10 +269,18 @@ impl Parser {
                 _ if args.len() == 1 && !matches!(ty.strip_const(), Type::Array(_, _)) => {
                     Ok(args.into_iter().next())
                 }
-                _ => Ok(Some(Expr::InitializerList(args))),
+                _ => Ok(Some(Expr::InitializerList {
+                    elements: args,
+                    pos: ExprPos::new(line, col),
+                })),
             }
         } else if self.peek() == &TokenKind::LBrace {
-            Ok(Some(self.parse_initializer()?))
+            let (elements, pos) = self.parse_brace_expr_list()?;
+            Ok(Some(Expr::TypedInitList {
+                ty: ty.clone(),
+                elements,
+                pos,
+            }))
         } else {
             Ok(None)
         }
@@ -279,18 +289,8 @@ impl Parser {
     pub(super) fn parse_initializer(&mut self) -> Result<Expr, CompileError> {
         let _guard = self.enter_expression()?;
         if self.peek() == &TokenKind::LBrace {
-            self.advance();
-            let mut list = Vec::new();
-            while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
-                list.push(self.parse_initializer()?);
-                if self.peek() == &TokenKind::Comma {
-                    self.advance();
-                } else {
-                    break;
-                }
-            }
-            self.expect(TokenKind::RBrace)?;
-            Ok(Expr::InitializerList(list))
+            let (elements, pos) = self.parse_brace_expr_list()?;
+            Ok(Expr::InitializerList { elements, pos })
         } else {
             self.parse_expr()
         }

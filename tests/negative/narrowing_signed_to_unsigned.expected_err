@@ -1,0 +1,1 @@
+tests/negative/narrowing_signed_to_unsigned.cpp:2:19: error: narrowing conversion of constant -1 from 'int' to 'unsigned int' inside braced-init-list

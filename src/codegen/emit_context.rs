@@ -78,6 +78,16 @@ pub(super) struct CtorCall<'e> {
 pub(super) struct ArraySlots {
     pub(super) elem_size: i32,
     pub(super) count_slot: u32,
+    pub(super) base_slot: u32,
+}
+
+/// Parameters for iterating array element constructors/vtables.
+pub(super) struct ArrayLoop {
+    pub(super) ctor_idx: Option<u32>,
+    pub(super) v_off: Option<u32>,
+    pub(super) slots: ArraySlots,
+    pub(super) start_idx: i32,
+    pub(super) user_slot: u32,
 }
 
 /// One namespace-scope object that is initialized before `main` runs.

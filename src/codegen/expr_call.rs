@@ -225,7 +225,7 @@ impl<'a> Codegen<'a> {
         ))
     }
 
-    fn compile_struct_value_call(
+    pub(super) fn compile_struct_value_call(
         &mut self,
         name: &str,
         args: &[Expr],
@@ -290,7 +290,7 @@ impl<'a> Codegen<'a> {
         Ok(())
     }
 
-    fn compile_struct_value_ctor(
+    pub(super) fn compile_struct_value_ctor(
         &mut self,
         name: &str,
         temp_ptr_slot: u32,
@@ -341,17 +341,84 @@ impl<'a> Codegen<'a> {
                     code,
                 );
             }
-        } else if let Some(ctor_idx) = self.find_constructor(name, &arg_types) {
+        } else if let Some((ctor_idx, sig)) = self.find_constructor_sig(name, &arg_types) {
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.fp_local);
             code.push(OP_I32_LOAD);
             write_u32(code, 2);
             write_u32(code, temp_ptr_slot); // this
-            for a in args {
-                self.compile_expr(a, ctx, code)?;
+            let full_args = self.constructor_arguments(&sig, args);
+            for (i, a) in full_args.iter().enumerate() {
+                let param_ty = sig.param_types.get(i + 1);
+                self.compile_call_arg(a, param_ty, ctx, code)?;
             }
             code.push(OP_CALL);
             write_u32(code, ctor_idx);
+        } else if self.sema.struct_layouts.contains_key(name) {
+            self.compile_struct_value_aggregate(name, temp_ptr_slot, args, ctx, code)?;
+        }
+        Ok(())
+    }
+
+    fn compile_struct_value_aggregate(
+        &mut self,
+        name: &str,
+        temp_ptr_slot: u32,
+        args: &[Expr],
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        let Some(layout) = self.sema.struct_layouts.get(name).cloned() else {
+            return Ok(());
+        };
+        let mut field_idx = 0;
+        let mut elem_idx = 0;
+        if let Some(base_name) = layout.base_classes.first()
+            && let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned()
+        {
+            let base_field_count = base_layout.fields.len();
+            if elem_idx < args.len()
+                && matches!(
+                    &args[elem_idx],
+                    Expr::InitializerList { .. } | Expr::TypedInitList { .. }
+                )
+            {
+                let sub_elements = match &args[elem_idx] {
+                    Expr::InitializerList { elements, .. }
+                    | Expr::TypedInitList { elements, .. } => elements.as_slice(),
+                    _ => &[],
+                };
+                self.compile_struct_value_ctor(base_name, temp_ptr_slot, sub_elements, ctx, code)?;
+                elem_idx += 1;
+                field_idx += base_field_count;
+            }
+        }
+        while elem_idx < args.len() {
+            let a = &args[elem_idx];
+            if let Some(fld) = layout.fields.get(field_idx) {
+                code.push(OP_LOCAL_GET);
+                write_u32(code, ctx.fp_local);
+                code.push(OP_I32_LOAD);
+                write_u32(code, 2);
+                write_u32(code, temp_ptr_slot); // this
+                let a_ty = self.get_expr_type(a, ctx);
+                self.compile_expr(a, ctx, code)?;
+                self.emit_conversion(&a_ty, &fld.ty, code);
+                self.emit_store(&fld.ty, fld.offset as u32, code);
+                field_idx += 1;
+            }
+            elem_idx += 1;
+        }
+        while field_idx < layout.fields.len() {
+            let fld = &layout.fields[field_idx];
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.fp_local);
+            code.push(OP_I32_LOAD);
+            write_u32(code, 2);
+            write_u32(code, temp_ptr_slot); // this
+            self.emit_zero_value(&fld.ty, code);
+            self.emit_store(&fld.ty, fld.offset as u32, code);
+            field_idx += 1;
         }
         Ok(())
     }
