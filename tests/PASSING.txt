@@ -24,6 +24,7 @@ c_basics/misc/malloc_failure
 c_basics/misc/multi_declarator
 c_basics/pointers_arrays/array_parameter_decay
 c_basics/pointers_arrays/multidim_arrays
+c_basics/pointers_arrays/multidim_pointer_deref
 c_basics/pointers_arrays/pointers_arrays
 c_basics/pointers_arrays/range_for_array
 c_basics/pointers_arrays/regress_char_ptr_assign

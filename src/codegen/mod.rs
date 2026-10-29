@@ -563,4 +563,30 @@ mod tests {
                 .is_some()
         );
     }
+
+    #[test]
+    fn dereferencing_pointer_to_array_does_not_emit_scalar_load() {
+        let sema = Sema::new();
+        let mut codegen = Codegen::new(&sema);
+        let mut ctx = context();
+        let mut code = Vec::new();
+
+        let ptr_expr = Expr::Identifier("ptr".to_string());
+        let deref_expr = Expr::Unary {
+            op: UnaryOp::Deref,
+            expr: Box::new(ptr_expr),
+            pos: ExprPos { line: 1, col: 1 },
+        };
+        ctx.bind_local(
+            "ptr".to_string(),
+            16,
+            Type::Pointer(Box::new(Type::Array(Box::new(Type::Int), 3))),
+        );
+
+        assert!(codegen.compile_expr(&deref_expr, &mut ctx, &mut code).is_ok());
+        // Evaluating `ptr` loads the pointer variable from its local frame slot (1 load).
+        // Dereferencing the pointer-to-array should not emit a second load from the array.
+        let load_count = code.iter().filter(|&&b| b == OP_I32_LOAD).count();
+        assert_eq!(load_count, 1);
+    }
 }

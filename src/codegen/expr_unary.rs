@@ -192,9 +192,24 @@ impl<'a> Codegen<'a> {
             }
             return Ok(());
         }
+        if let Some((f_idx, sig)) = self.find_free_operator("operator*", ty) {
+            self.compile_call_arg(expr, sig.param_types.first(), ctx, code)?;
+            code.push(OP_CALL);
+            write_u32(code, f_idx);
+            self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
+            if sig.return_type.is_reference() {
+                let val_ty = sig.return_type.strip_const().strip_reference();
+                if !matches!(val_ty, Type::Struct(_) | Type::Array(_, _)) {
+                    self.emit_load(val_ty, 0, code);
+                }
+            }
+            return Ok(());
+        }
         self.compile_expr(expr, ctx, code)?;
         let elem_ty = ty.deref_type().cloned().unwrap_or(Type::Int);
-        self.emit_load(&elem_ty, 0, code);
+        if !matches!(elem_ty.strip_const(), Type::Struct(_) | Type::Array(_, _)) {
+            self.emit_load(&elem_ty, 0, code);
+        }
         Ok(())
     }
 
