@@ -63,7 +63,40 @@ impl<'a> Codegen<'a> {
 
                 self.emit_conversion(&src_ty, target_type, code);
             }
+            Expr::TypedInitList { ty, elements, .. } => {
+                self.compile_typed_init_list(ty, elements, ctx, code)?;
+            }
+            Expr::InitializerList { elements, .. } => {
+                if elements.is_empty() {
+                    code.push(OP_I32_CONST);
+                    write_i32(code, 0);
+                } else if elements.len() == 1 {
+                    self.compile_expr(&elements[0], ctx, code)?;
+                }
+            }
             _ => {}
+        }
+        Ok(())
+    }
+
+    pub(super) fn compile_typed_init_list(
+        &mut self,
+        ty: &Type,
+        elements: &[Expr],
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        let clean = ty.strip_const().strip_reference();
+        if let Type::Struct(sname) = clean {
+            self.compile_struct_value_call(sname, elements, ctx, code)?;
+            return Ok(());
+        }
+        if elements.is_empty() {
+            self.emit_zero_value(clean, code);
+        } else if elements.len() == 1 {
+            let elem_ty = self.get_expr_type(&elements[0], ctx);
+            self.compile_expr(&elements[0], ctx, code)?;
+            self.emit_conversion(&elem_ty, clean, code);
         }
         Ok(())
     }

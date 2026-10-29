@@ -186,12 +186,24 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let init_ty = self.get_expr_type(init_expr, ctx);
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.fp_local);
-        self.compile_expr(init_expr, ctx, code)?;
-
-        self.emit_conversion(&init_ty, ty, code);
+        match init_expr {
+            Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } => {
+                if elements.is_empty() {
+                    self.emit_zero_value(ty, code);
+                } else if elements.len() == 1 {
+                    let elem_ty = self.get_expr_type(&elements[0], ctx);
+                    self.compile_expr(&elements[0], ctx, code)?;
+                    self.emit_conversion(&elem_ty, ty, code);
+                }
+            }
+            _ => {
+                let init_ty = self.get_expr_type(init_expr, ctx);
+                self.compile_expr(init_expr, ctx, code)?;
+                self.emit_conversion(&init_ty, ty, code);
+            }
+        }
         self.emit_store(ty, offset, code);
         Ok(())
     }

@@ -82,6 +82,7 @@ impl<'a> Codegen<'a> {
                 ..
             } => self.compile_lvalue_member(object, member, *is_arrow, ctx, code),
             Expr::Call { .. }
+            | Expr::TypedInitList { .. }
             | Expr::Binary { .. }
             | Expr::Unary { .. }
             | Expr::CompoundAssign { .. } => self.compile_lvalue_value(expr, ctx, code),

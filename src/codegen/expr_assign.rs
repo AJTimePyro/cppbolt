@@ -14,6 +14,19 @@ impl<'a> Codegen<'a> {
         };
 
         let target_ty = self.get_expr_type(target, ctx);
+        let synthetic;
+        let value: &Expr = match &**value {
+            Expr::InitializerList { elements, pos } => {
+                synthetic = Expr::TypedInitList {
+                    ty: target_ty.strip_reference().strip_const().clone(),
+                    elements: elements.clone(),
+                    pos: *pos,
+                };
+                &synthetic
+            }
+            _ => value,
+        };
+
         if let Type::Struct(sname) = target_ty.strip_const() {
             return self.compile_assign_struct(target, value, sname, ctx, code);
         }

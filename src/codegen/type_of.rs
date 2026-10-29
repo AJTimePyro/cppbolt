@@ -59,6 +59,8 @@ impl<'a> Codegen<'a> {
                 then_ty.conditional_result_type(&else_ty)
             }
             Expr::Cast { target_type, .. } => target_type.clone(),
+            Expr::TypedInitList { ty, .. } => ty.clone(),
+            Expr::InitializerList { .. } => Type::Void,
             Expr::Delete { .. } => Type::Void,
             _ => Type::Int,
         }
