@@ -181,9 +181,7 @@ pub(super) fn collect_address_taken_expr(expr: &Expr, address_taken: &mut HashSe
                 then_expr,
                 else_expr,
             } => {
-                stack.push(cond);
-                stack.push(then_expr);
-                stack.push(else_expr);
+                stack.extend([cond.as_ref(), then_expr.as_ref(), else_expr.as_ref()]);
             }
             Expr::New { args, .. } => stack.extend(args.iter()),
             Expr::Delete { expr, .. } => stack.push(expr),

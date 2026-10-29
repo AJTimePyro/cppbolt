@@ -11,22 +11,8 @@ impl Parser {
             if let Ok(ty) = self.parse_type()
                 && self.peek() == &TokenKind::LBrace
             {
-                self.advance();
-                let mut elements = Vec::new();
-                while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
-                    elements.push(self.parse_initializer()?);
-                    if self.peek() == &TokenKind::Comma {
-                        self.advance();
-                    } else {
-                        break;
-                    }
-                }
-                self.expect(TokenKind::RBrace)?;
-                let init_expr = Expr::TypedInitList {
-                    ty,
-                    elements,
-                    pos: start,
-                };
+                let (elements, pos) = self.parse_brace_expr_list()?;
+                let init_expr = Expr::TypedInitList { ty, elements, pos };
                 return self.parse_postfix(init_expr, start);
             }
             self.pos = saved_pos;
@@ -83,11 +69,7 @@ impl Parser {
             let size = self.parse_expr()?;
             self.expect(TokenKind::RBracket)?;
             let args = if self.peek() == &TokenKind::LBrace {
-                let mut init = self.parse_initializer()?;
-                match &mut init {
-                    Expr::InitializerList { elements, .. } => std::mem::take(elements),
-                    _ => vec![],
-                }
+                self.parse_brace_expr_list()?.0
             } else {
                 vec![]
             };
@@ -109,11 +91,7 @@ impl Parser {
                 placement,
             })
         } else if self.peek() == &TokenKind::LBrace {
-            let mut init = self.parse_initializer()?;
-            let args = match &mut init {
-                Expr::InitializerList { elements, .. } => std::mem::take(elements),
-                _ => vec![],
-            };
+            let (args, _) = self.parse_brace_expr_list()?;
             Ok(Expr::New {
                 ty,
                 args,

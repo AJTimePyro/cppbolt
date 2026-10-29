@@ -15,6 +15,7 @@ mod expr_call_member;
 mod expr_delete;
 mod expr_identifier;
 mod expr_new;
+mod expr_new_array;
 mod expr_printf;
 mod expr_unary;
 mod function;

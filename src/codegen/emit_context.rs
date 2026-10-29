@@ -78,6 +78,7 @@ pub(super) struct CtorCall<'e> {
 pub(super) struct ArraySlots {
     pub(super) elem_size: i32,
     pub(super) count_slot: u32,
+    pub(super) base_slot: u32,
 }
 
 /// Parameters for iterating array element constructors/vtables.

@@ -69,32 +69,25 @@ impl Sema {
         Ok(())
     }
 
-    /// Checks the initializer of a variable and completes its type.
-    fn analyze_var_init(
+    fn resolve_var_init_type(
         &mut self,
-        name: &str,
         ty: &mut Type,
         init_expr: &mut Expr,
-        line: usize,
-        col: usize,
-    ) -> Result<(), CompileError> {
-        let mut is_list_init = false;
-        let mut init_ty = match init_expr {
+    ) -> Result<(Type, bool), CompileError> {
+        match init_expr {
             Expr::InitializerList { elements, pos } => {
-                is_list_init = true;
                 let context = if elements.is_empty() {
                     InitContext::ValueInit
                 } else {
                     InitContext::CopyListInitVar
                 };
-                self.resolve_list_init(ty, elements, context, *pos)?
+                Ok((self.resolve_list_init(ty, elements, context, *pos)?, true))
             }
             Expr::TypedInitList {
                 ty: explicit_ty,
                 elements,
                 pos,
             } => {
-                is_list_init = true;
                 let context = if elements.is_empty() {
                     InitContext::ValueInit
                 } else {
@@ -109,16 +102,28 @@ impl Sema {
                 if *ty == Type::Auto {
                     *ty = res.clone();
                 }
-                res
+                Ok((res, true))
             }
             _ => {
                 let previous = self.in_initializer;
                 self.in_initializer = true;
                 let result = self.analyze_expr(init_expr);
                 self.in_initializer = previous;
-                result?
+                Ok((result?, false))
             }
-        };
+        }
+    }
+
+    /// Checks the initializer of a variable and completes its type.
+    fn analyze_var_init(
+        &mut self,
+        name: &str,
+        ty: &mut Type,
+        init_expr: &mut Expr,
+        line: usize,
+        col: usize,
+    ) -> Result<(), CompileError> {
+        let (mut init_ty, is_list_init) = self.resolve_var_init_type(ty, init_expr)?;
         if let Type::Struct(sname) = init_ty.strip_reference().strip_const() {
             let is_const = init_ty.strip_reference().is_const();
             if let Some(sig) = self.find_conversion_to(sname, ty, is_const) {

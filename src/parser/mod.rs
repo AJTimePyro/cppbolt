@@ -211,6 +211,23 @@ impl Parser {
         Ok(args)
     }
 
+    /// Parses a braced expression list `{ ... }` and returns the elements and position.
+    pub(super) fn parse_brace_expr_list(&mut self) -> Result<(Vec<Expr>, ExprPos), CompileError> {
+        let pos = self.current_pos();
+        self.expect(TokenKind::LBrace)?;
+        let mut list = Vec::new();
+        while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
+            list.push(self.parse_initializer()?);
+            if self.peek() == &TokenKind::Comma {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        self.expect(TokenKind::RBrace)?;
+        Ok((list, pos))
+    }
+
     /// Prefixes `name` with the enclosing namespace when it is not already qualified.
     pub(super) fn qualify_name(&self, name: String) -> String {
         if self.current_namespace.is_empty() || name.contains("::") {

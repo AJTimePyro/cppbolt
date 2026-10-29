@@ -207,18 +207,7 @@ impl Parser {
                     }
                 };
                 let args = if self.peek() == &TokenKind::LBrace {
-                    self.advance();
-                    let mut list = Vec::new();
-                    while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
-                        list.push(self.parse_initializer()?);
-                        if self.peek() == &TokenKind::Comma {
-                            self.advance();
-                        } else {
-                            break;
-                        }
-                    }
-                    self.expect(TokenKind::RBrace)?;
-                    list
+                    self.parse_brace_expr_list()?.0
                 } else {
                     self.expect(TokenKind::LParen)?;
                     self.parse_paren_expr_list()?

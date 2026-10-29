@@ -31,12 +31,12 @@ impl<'a> Codegen<'a> {
         }
 
         if let (
-            Type::Array(elem_ty, count),
+            Type::Array(_, _),
             Expr::InitializerList { elements: list, .. }
             | Expr::TypedInitList { elements: list, .. },
         ) = (ty.strip_const(), init)
         {
-            return self.compile_aggregate_array(elem_ty, *count, list, offset, ctx, code);
+            return self.compile_aggregate_array(ty, list, offset, ctx, code);
         }
 
         let item_ty = self.get_expr_type(init, ctx);
@@ -295,13 +295,15 @@ impl<'a> Codegen<'a> {
 
     pub(super) fn compile_aggregate_array(
         &mut self,
-        elem_ty: &Type,
-        total_count: usize,
+        array_ty: &Type,
         list: &[Expr],
         offset: u32,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let Type::Array(elem_ty, total_count) = array_ty.strip_const() else {
+            return Ok(());
+        };
         let elem_size = u32::try_from(elem_ty.size_of(&self.sema.struct_sizes))
             .map_err(|_| self.internal_error("array is too large"))?;
         for (i, item) in list.iter().enumerate() {
@@ -314,7 +316,7 @@ impl<'a> Codegen<'a> {
                 .ok_or_else(|| self.internal_error("array is too large"))?;
             self.compile_aggregate_local(elem_ty, item, item_offset, ctx, code)?;
         }
-        for i in list.len()..total_count {
+        for i in list.len()..*total_count {
             let item_offset = offset
                 .checked_add(
                     (i as u32)

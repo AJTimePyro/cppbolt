@@ -275,16 +275,12 @@ impl Parser {
                 })),
             }
         } else if self.peek() == &TokenKind::LBrace {
-            let mut init = self.parse_initializer()?;
-            if let Expr::InitializerList { elements, pos } = &mut init {
-                Ok(Some(Expr::TypedInitList {
-                    ty: ty.clone(),
-                    elements: std::mem::take(elements),
-                    pos: *pos,
-                }))
-            } else {
-                Ok(Some(init))
-            }
+            let (elements, pos) = self.parse_brace_expr_list()?;
+            Ok(Some(Expr::TypedInitList {
+                ty: ty.clone(),
+                elements,
+                pos,
+            }))
         } else {
             Ok(None)
         }
@@ -293,21 +289,8 @@ impl Parser {
     pub(super) fn parse_initializer(&mut self) -> Result<Expr, CompileError> {
         let _guard = self.enter_expression()?;
         if self.peek() == &TokenKind::LBrace {
-            let tok = self.advance().clone();
-            let mut list = Vec::new();
-            while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
-                list.push(self.parse_initializer()?);
-                if self.peek() == &TokenKind::Comma {
-                    self.advance();
-                } else {
-                    break;
-                }
-            }
-            self.expect(TokenKind::RBrace)?;
-            Ok(Expr::InitializerList {
-                elements: list,
-                pos: ExprPos::new(tok.line, tok.col),
-            })
+            let (elements, pos) = self.parse_brace_expr_list()?;
+            Ok(Expr::InitializerList { elements, pos })
         } else {
             self.parse_expr()
         }
