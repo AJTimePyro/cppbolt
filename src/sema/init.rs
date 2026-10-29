@@ -102,20 +102,47 @@ impl Sema {
 
         // 4. Integer to integer with sign change or smaller range
         if s_ty.is_integer() && t_ty.is_integer() {
-            if let Expr::IntLiteral(val, _) = source_expr {
+            let const_val = match source_expr {
+                Expr::IntLiteral(val, _) => Some(*val),
+                Expr::Unary {
+                    op: UnaryOp::Neg,
+                    expr,
+                    ..
+                } => {
+                    if let Expr::IntLiteral(val, _) = &**expr {
+                        Some(-val)
+                    } else {
+                        None
+                    }
+                }
+                Expr::Unary {
+                    op: UnaryOp::Plus,
+                    expr,
+                    ..
+                } => {
+                    if let Expr::IntLiteral(val, _) = &**expr {
+                        Some(*val)
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            };
+
+            if let Some(val) = const_val {
                 // Check if constant fits in target_ty range
                 let fits = match t_ty {
-                    Type::Char => *val >= -128 && *val <= 127,
-                    Type::UnsignedChar => *val >= 0 && *val <= 255,
-                    Type::Short => *val >= -32768 && *val <= 32767,
-                    Type::UnsignedShort => *val >= 0 && *val <= 65535,
-                    Type::Int => *val >= i32::MIN as i64 && *val <= i32::MAX as i64,
-                    Type::UnsignedInt => *val >= 0 && *val <= u32::MAX as i64,
-                    Type::Long => *val >= i32::MIN as i64 && *val <= i32::MAX as i64,
-                    Type::UnsignedLong => *val >= 0 && *val <= u32::MAX as i64,
+                    Type::Char => (-128..=127).contains(&val),
+                    Type::UnsignedChar => (0..=255).contains(&val),
+                    Type::Short => (-32768..=32767).contains(&val),
+                    Type::UnsignedShort => (0..=65535).contains(&val),
+                    Type::Int => (i32::MIN as i64..=i32::MAX as i64).contains(&val),
+                    Type::UnsignedInt => (0..=u32::MAX as i64).contains(&val),
+                    Type::Long => (i32::MIN as i64..=i32::MAX as i64).contains(&val),
+                    Type::UnsignedLong => (0..=u32::MAX as i64).contains(&val),
                     Type::LongLong => true,
-                    Type::UnsignedLongLong => *val >= 0,
-                    Type::Bool => *val == 0 || *val == 1,
+                    Type::UnsignedLongLong => val >= 0,
+                    Type::Bool => val == 0 || val == 1,
                     _ => true,
                 };
                 if !fits {
@@ -443,12 +470,15 @@ impl Sema {
         }
 
         // No user-provided, explicit, or inherited constructors
+        if layout.has_user_declared_constructors {
+            return false;
+        }
+
         let short = sname.split("::").last().unwrap_or(sname);
         let ctor_name = format!("{}::{}", sname, short);
         if let Some(ctors) = self.functions.get(&ctor_name) {
             for ctor in ctors {
-                // If there are user-declared non-default constructors
-                if ctor.is_explicit || ctor.param_types.len() > 1 {
+                if ctor.is_explicit {
                     return false;
                 }
             }
@@ -495,6 +525,39 @@ mod tests {
     }
 
     #[test]
+    fn test_fitting_negative_constant_accepted() {
+        let sema = Sema::new();
+        let expr = Expr::Unary {
+            op: UnaryOp::Neg,
+            expr: Box::new(Expr::IntLiteral(1, Type::Int)),
+            pos: ExprPos::new(1, 1),
+        };
+        let res = sema.check_narrowing(&expr, &Type::Int, &Type::Char, ExprPos::new(1, 1));
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_user_declared_default_ctor_disqualifies_aggregate() {
+        let mut sema = Sema::new();
+        let layout = StructLayout {
+            is_class: false,
+            has_user_declared_constructors: true,
+            base_classes: vec![],
+            base_offsets: vec![],
+            fields: vec![],
+            size: 4,
+            align: 4,
+            has_vtable: false,
+            vtable_slots: vec![],
+            private_members: HashSet::new(),
+            is_abstract: false,
+            pure_virtuals: HashSet::new(),
+        };
+        sema.struct_layouts.insert("HasDefCtor".to_string(), layout);
+        assert!(!sema.is_cxx17_aggregate("HasDefCtor"));
+    }
+
+    #[test]
     fn test_scalar_excess_elements_rejected() {
         let mut sema = Sema::new();
         let mut elems = vec![
@@ -518,6 +581,7 @@ mod tests {
         // Register struct Foo with explicit constructor Foo(int)
         let layout = StructLayout {
             is_class: true,
+            has_user_declared_constructors: true,
             base_classes: vec![],
             base_offsets: vec![],
             fields: vec![],

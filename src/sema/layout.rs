@@ -84,9 +84,11 @@ impl Sema {
 
         let pure_virtuals = self.collect_pure_virtuals(input.base_classes, input.methods);
         let is_abstract = !pure_virtuals.is_empty();
+        let has_user_declared_constructors = input.methods.iter().any(|m| m.name == input.name);
 
         let layout = StructLayout {
             is_class: input.is_class,
+            has_user_declared_constructors,
             base_classes: input.base_classes.to_vec(),
             base_offsets: acc.base_offsets,
             fields: acc.struct_fields,

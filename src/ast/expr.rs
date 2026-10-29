@@ -156,7 +156,6 @@ pub enum Expr {
         elements: Vec<Expr>,
         pos: ExprPos,
     },
-    #[allow(dead_code)]
     TypedInitList {
         ty: Type,
         elements: Vec<Expr>,

@@ -44,6 +44,7 @@ pub struct StructField {
 #[derive(Debug, Clone)]
 pub struct StructLayout {
     pub is_class: bool,
+    pub has_user_declared_constructors: bool,
     pub base_classes: Vec<String>,
     pub base_offsets: Vec<(String, usize)>,
     pub fields: Vec<StructField>,
