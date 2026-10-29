@@ -4,3 +4,4 @@ Task 1: complete (commits 4388ac2..fdd95d6, tests: cargo test --lib → test res
 Task 2: complete (commits fdd95d6..a8abe4b, tests: cargo test --lib → test result: ok. 43 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s)
 Task 3: complete (commits a8abe4b..18ed20d, tests: cargo test --lib → test result: ok. 49 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s)
 Task 4: complete (commits 18ed20d..5fdb811, tests: cargo test --lib → test result: ok. 49 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s, cppwasm-testrunner 308 passed, 0 unexpected failures)
+Task 5: complete (commits 5fdb811..bca4279, tests: cargo test --lib → test result: ok. 49 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s, cppwasm-testrunner 308 passed, 0 unexpected failures)
