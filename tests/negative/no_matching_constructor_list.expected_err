@@ -1,0 +1,1 @@
+tests/negative/no_matching_constructor_list.cpp:6:10: error: no matching constructor for initialization of 'Foo'

@@ -129,7 +129,25 @@ impl<'a> Codegen<'a> {
         }
         if let Some(layout) = self.sema.struct_layouts.get(sname).cloned() {
             let mut field_idx = 0;
-            for item in list {
+            let mut elem_idx = 0;
+            if let Some(base_name) = layout.base_classes.first() {
+                if let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned() {
+                    let base_field_count = base_layout.fields.len();
+                    if elem_idx < list.len()
+                        && matches!(
+                            &list[elem_idx],
+                            Expr::InitializerList { .. } | Expr::TypedInitList { .. }
+                        )
+                    {
+                        let base_ty = Type::Struct(base_name.clone());
+                        self.compile_aggregate_local(&base_ty, &list[elem_idx], offset, ctx, code)?;
+                        elem_idx += 1;
+                        field_idx += base_field_count;
+                    }
+                }
+            }
+            while elem_idx < list.len() {
+                let item = &list[elem_idx];
                 if let Some(fld) = layout.fields.get(field_idx) {
                     let field_offset = offset
                         .checked_add(fld.offset as u32)
@@ -137,6 +155,7 @@ impl<'a> Codegen<'a> {
                     self.compile_aggregate_local(&fld.ty, item, field_offset, ctx, code)?;
                     field_idx += 1;
                 }
+                elem_idx += 1;
             }
             while field_idx < layout.fields.len() {
                 let fld = &layout.fields[field_idx];

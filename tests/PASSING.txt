@@ -136,6 +136,12 @@ classes_oop/statics_namespaces/namespaces_comprehensive
 classes_oop/statics_namespaces/references
 classes_oop/statics_namespaces/static_local_constructor_args
 classes_oop/statics_namespaces/static_members
+classes_oop/structs/brace_init_aggregates
+classes_oop/structs/brace_init_brace_elision
+classes_oop/structs/brace_init_classes
+classes_oop/structs/brace_init_dynamic_new
+classes_oop/structs/brace_init_scalars
+classes_oop/structs/brace_init_temporaries
 classes_oop/structs/initializer_lists
 classes_oop/structs/regress_struct_ref_assign
 classes_oop/structs/regress_struct_ref_subscript
@@ -224,6 +230,7 @@ mini_stl_variant/stream_edge_cases
 mini_stl_variant/stream_operator_overload
 mini_stl_variant/string_basic
 mini_stl_variant/string_comprehensive
+negative/aggregate_excess_elements
 negative/ambiguous_overload_call
 negative/ambiguous_using_directives
 negative/ambiguous_using_name
@@ -248,6 +255,9 @@ negative/diagnostic_in_header
 negative/diagnostic_user_after_include
 negative/duplicate_var
 negative/error_directive
+negative/explicit_ctor_arg
+negative/explicit_ctor_copy_list
+negative/explicit_ctor_return
 negative/func_arg_count_mismatch
 negative/function_base_to_derived_pointer
 negative/function_int_to_struct
@@ -268,7 +278,12 @@ negative/method_too_many_arguments
 negative/multiple_inheritance
 negative/multiple_inheritance_access
 negative/namespace_alias
+negative/narrowing_constant_overflow
+negative/narrowing_float_to_int
+negative/narrowing_signed_to_unsigned
 negative/nesting_depth_limit
+negative/new_array_excess_elements
+negative/no_matching_constructor_list
 negative/operator_arrow_cycle
 negative/operator_arrow_invalid
 negative/operator_arrow_non_pointer
@@ -281,6 +296,7 @@ negative/pure_virtual_instantiation
 negative/range_for_non_iterable
 negative/redefined_func
 negative/ref_qualifier_lvalue_mismatch
+negative/scalar_excess_elements
 negative/scoped_enum_call_arg
 negative/scoped_enum_implicit_conversion
 negative/scoped_enum_leak

@@ -1,0 +1,1 @@
+tests/negative/narrowing_constant_overflow.cpp:2:11: error: narrowing conversion of constant 300 from 'int' to 'char' inside braced-init-list

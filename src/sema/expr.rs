@@ -126,6 +126,19 @@ impl Sema {
         if *is_array {
             if let Some(s) = array_size {
                 self.analyze_expr(s)?;
+                if let Expr::IntLiteral(count, _) = &**s {
+                    if *count >= 0 && args.len() > *count as usize {
+                        return Err(CompileError::new(
+                            format!(
+                                "excess elements in array initializer: expected at most {}, have {}",
+                                count,
+                                args.len()
+                            ),
+                            pos.line,
+                            pos.col,
+                        ));
+                    }
+                }
             }
             for a in args.iter_mut() {
                 let a_ty = self.analyze_expr(a)?;

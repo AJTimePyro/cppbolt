@@ -1,0 +1,1 @@
+tests/negative/aggregate_excess_elements.cpp:7:12: error: too many initializers for aggregate 'Point'

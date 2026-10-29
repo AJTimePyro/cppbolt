@@ -1,0 +1,1 @@
+tests/negative/scalar_excess_elements.cpp:2:10: error: scalar initializer has multiple expressions

@@ -356,7 +356,29 @@ impl<'a> Codegen<'a> {
             write_u32(code, ctor_idx);
         } else if let Some(layout) = self.sema.struct_layouts.get(name).cloned() {
             let mut field_idx = 0;
-            for a in args {
+            let mut elem_idx = 0;
+            if let Some(base_name) = layout.base_classes.first() {
+                if let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned() {
+                    let base_field_count = base_layout.fields.len();
+                    if elem_idx < args.len()
+                        && matches!(
+                            &args[elem_idx],
+                            Expr::InitializerList { .. } | Expr::TypedInitList { .. }
+                        )
+                    {
+                        let sub_elements = match &args[elem_idx] {
+                            Expr::InitializerList { elements, .. }
+                            | Expr::TypedInitList { elements, .. } => elements.as_slice(),
+                            _ => &[],
+                        };
+                        self.compile_struct_value_ctor(base_name, temp_ptr_slot, sub_elements, ctx, code)?;
+                        elem_idx += 1;
+                        field_idx += base_field_count;
+                    }
+                }
+            }
+            while elem_idx < args.len() {
+                let a = &args[elem_idx];
                 if let Some(fld) = layout.fields.get(field_idx) {
                     code.push(OP_LOCAL_GET);
                     write_u32(code, ctx.fp_local);
@@ -369,6 +391,7 @@ impl<'a> Codegen<'a> {
                     self.emit_store(&fld.ty, fld.offset as u32, code);
                     field_idx += 1;
                 }
+                elem_idx += 1;
             }
             while field_idx < layout.fields.len() {
                 let fld = &layout.fields[field_idx];
