@@ -18,7 +18,11 @@ impl Parser {
 
             self.advance();
             let next_min = if right_assoc { prec } else { prec + 1 };
-            let rhs = self.parse_expr_prec(next_min)?;
+            let rhs = if op == BinaryOpChoice::Assign && self.peek() == &TokenKind::LBrace {
+                self.parse_initializer()?
+            } else {
+                self.parse_expr_prec(next_min)?
+            };
 
             lhs = match op {
                 BinaryOpChoice::Binary(bop) => Expr::Binary {
@@ -95,6 +99,7 @@ impl Parser {
     }
 }
 
+#[derive(PartialEq, Eq)]
 pub(super) enum BinaryOpChoice {
     Binary(BinaryOp),
     Assign,

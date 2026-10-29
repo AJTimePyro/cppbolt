@@ -5,6 +5,32 @@ impl Parser {
         if let Some(expr) = self.parse_unary_prefix()? {
             return Ok(expr);
         }
+        if self.is_type_start() && !matches!(self.peek(), TokenKind::LParen) {
+            let saved_pos = self.pos;
+            let start = self.current_pos();
+            if let Ok(ty) = self.parse_type() {
+                if self.peek() == &TokenKind::LBrace {
+                    self.advance();
+                    let mut elements = Vec::new();
+                    while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
+                        elements.push(self.parse_initializer()?);
+                        if self.peek() == &TokenKind::Comma {
+                            self.advance();
+                        } else {
+                            break;
+                        }
+                    }
+                    self.expect(TokenKind::RBrace)?;
+                    let init_expr = Expr::TypedInitList {
+                        ty,
+                        elements,
+                        pos: start,
+                    };
+                    return self.parse_postfix(init_expr, start);
+                }
+            }
+            self.pos = saved_pos;
+        }
         match self.peek() {
             TokenKind::KwNew => self.parse_new_expr(),
             TokenKind::KwDelete => self.parse_delete_expr(),
@@ -56,9 +82,18 @@ impl Parser {
             self.advance();
             let size = self.parse_expr()?;
             self.expect(TokenKind::RBracket)?;
+            let args = if self.peek() == &TokenKind::LBrace {
+                let mut init = self.parse_initializer()?;
+                match &mut init {
+                    Expr::InitializerList { elements, .. } => std::mem::take(elements),
+                    _ => vec![],
+                }
+            } else {
+                vec![]
+            };
             Ok(Expr::New {
                 ty,
-                args: vec![],
+                args,
                 is_array: true,
                 array_size: Some(Box::new(size)),
                 placement,
@@ -66,6 +101,19 @@ impl Parser {
         } else if self.peek() == &TokenKind::LParen {
             self.advance();
             let args = self.parse_paren_expr_list()?;
+            Ok(Expr::New {
+                ty,
+                args,
+                is_array: false,
+                array_size: None,
+                placement,
+            })
+        } else if self.peek() == &TokenKind::LBrace {
+            let mut init = self.parse_initializer()?;
+            let args = match &mut init {
+                Expr::InitializerList { elements, .. } => std::mem::take(elements),
+                _ => vec![],
+            };
             Ok(Expr::New {
                 ty,
                 args,

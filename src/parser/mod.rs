@@ -196,7 +196,11 @@ impl Parser {
     pub(super) fn parse_paren_expr_list(&mut self) -> Result<Vec<Expr>, CompileError> {
         let mut args = Vec::new();
         while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
-            args.push(self.parse_expr()?);
+            if self.peek() == &TokenKind::LBrace {
+                args.push(self.parse_initializer()?);
+            } else {
+                args.push(self.parse_expr()?);
+            }
             if self.peek() == &TokenKind::Comma {
                 self.advance();
             } else {
@@ -400,6 +404,31 @@ mod tests {
         };
         assert!(!err.to_string().contains("Expected type specifier"));
         assert!(err.to_string().contains("Unexpected token in expression"));
+        Ok(())
+    }
+
+    #[test]
+    fn parses_list_initialization_constructs() -> Result<(), Box<dyn std::error::Error>> {
+        let code = r#"
+            struct Point { int x; int y; };
+            struct Foo {
+                int m;
+                Foo() : m{10} {}
+            };
+            Point ret() { return {1, 2}; }
+            void call() {
+                auto p1 = Point{10, 20};
+                auto n = int{42};
+                Point p2;
+                p2 = {30, 40};
+                call_fn({1, 2});
+                Point* ptr = new Point{10, 20};
+                int* arr = new int[5]{1, 2};
+            }
+        "#;
+        let tokens = Lexer::new(code).tokenize()?;
+        let program = Parser::new(tokens).parse_program()?;
+        assert!(!program.declarations.is_empty());
         Ok(())
     }
 }

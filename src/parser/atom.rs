@@ -97,6 +97,28 @@ impl Parser {
                         pos: start,
                     };
                 }
+                TokenKind::LBrace => {
+                    if let Expr::Identifier(ref name) = expr {
+                        self.advance();
+                        let mut elements = Vec::new();
+                        while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
+                            elements.push(self.parse_initializer()?);
+                            if self.peek() == &TokenKind::Comma {
+                                self.advance();
+                            } else {
+                                break;
+                            }
+                        }
+                        self.expect(TokenKind::RBrace)?;
+                        expr = Expr::TypedInitList {
+                            ty: Type::Struct(name.clone()),
+                            elements,
+                            pos: start,
+                        };
+                    } else {
+                        break;
+                    }
+                }
                 TokenKind::LBracket => {
                     self.advance();
                     let index = self.parse_expr()?;

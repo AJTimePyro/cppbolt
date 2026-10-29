@@ -69,7 +69,9 @@ impl Parser {
 
     fn parse_return_stmt(&mut self, line: usize, col: usize) -> Result<Stmt, CompileError> {
         self.advance();
-        let expr = if self.peek() != &TokenKind::Semi {
+        let expr = if self.peek() == &TokenKind::LBrace {
+            Some(self.parse_initializer()?)
+        } else if self.peek() != &TokenKind::Semi {
             Some(self.parse_expr()?)
         } else {
             None
