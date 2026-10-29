@@ -230,9 +230,7 @@ impl Parser {
                         break;
                     }
                 }
-                TokenKind::Semi | TokenKind::Eof if depth > 0 => {
-                    return false;
-                }
+                TokenKind::Semi | TokenKind::Eof => return false,
                 _ => {}
             }
         }

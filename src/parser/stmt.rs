@@ -263,14 +263,11 @@ impl Parser {
                     args,
                     pos: ExprPos::new(line, col),
                 })),
-                // For every other type it stays a parenthesized list.
-                _ => {
-                    if args.len() == 1 && !matches!(ty.strip_const(), Type::Array(_, _)) {
-                        Ok(args.into_iter().next())
-                    } else {
-                        Ok(Some(Expr::InitializerList(args)))
-                    }
+                // Scalar types unpack a single expression; arrays stay an initializer list.
+                _ if args.len() == 1 && !matches!(ty.strip_const(), Type::Array(_, _)) => {
+                    Ok(args.into_iter().next())
                 }
+                _ => Ok(Some(Expr::InitializerList(args))),
             }
         } else if self.peek() == &TokenKind::LBrace {
             Ok(Some(self.parse_initializer()?))

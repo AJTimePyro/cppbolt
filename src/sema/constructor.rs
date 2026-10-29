@@ -92,66 +92,73 @@ impl Sema {
         let mut best: Option<FunctionSig> = None;
         let mut best_score = usize::MAX;
         for cand in &candidates {
-            let params = if cand.param_types.is_empty() {
-                &[][..]
-            } else {
-                &cand.param_types[1..]
-            };
-            let defaults = if cand.default_args.is_empty() {
-                &[][..]
-            } else {
-                &cand.default_args[1..]
-            };
-            if arg_types.len() > params.len() || defaults.len() < params.len() {
-                continue;
-            }
-            // Every omitted argument needs a default value.
-            if !defaults[arg_types.len()..].iter().all(|d| d.is_some()) {
-                continue;
-            }
-            let mut score = 0;
-            let mut fits = true;
-            for (index, arg_ty) in arg_types.iter().enumerate() {
-                let param = &params[index];
-                if is_copy_init {
-                    let is_copy_param = param.is_reference()
-                        && param.deref_type().map(|d| d.strip_all_const())
-                            == Some(arg_ty.strip_all_const());
-                    if !is_copy_param {
-                        fits = false;
-                        break;
-                    }
-                    score += 1;
-                    continue;
-                }
-                if param.strip_all_const() == arg_ty.strip_all_const() {
-                    continue;
-                }
-                if param.is_reference()
-                    && param.deref_type().map(|d| d.strip_all_const())
-                        == Some(arg_ty.strip_all_const())
-                {
-                    score += 1;
-                    continue;
-                }
-                if self.can_assign(param, arg_ty) {
-                    score += 2;
-                    continue;
-                }
-                fits = false;
-                break;
-            }
-            if !fits {
-                continue;
-            }
-            // Prefer the overload with the fewest defaulted arguments.
-            score += (params.len() - arg_types.len()) * 100;
-            if score < best_score {
+            if let Some(score) = self.score_constructor_candidate(cand, arg_types, is_copy_init)
+                && score < best_score
+            {
                 best_score = score;
                 best = Some(cand.clone());
             }
         }
         best
+    }
+
+    /// Evaluates how well a constructor candidate matches the given argument types.
+    /// Returns `None` if the candidate cannot accept the arguments.
+    fn score_constructor_candidate(
+        &self,
+        cand: &FunctionSig,
+        arg_types: &[Type],
+        is_copy_init: bool,
+    ) -> Option<usize> {
+        let params = if cand.param_types.is_empty() {
+            &[][..]
+        } else {
+            &cand.param_types[1..]
+        };
+        let defaults = if cand.default_args.is_empty() {
+            &[][..]
+        } else {
+            &cand.default_args[1..]
+        };
+        if arg_types.len() > params.len() || defaults.len() < params.len() {
+            return None;
+        }
+        // Every omitted argument needs a default value.
+        if !defaults[arg_types.len()..].iter().all(|d| d.is_some()) {
+            return None;
+        }
+        let mut score = 0;
+        for (index, arg_ty) in arg_types.iter().enumerate() {
+            let param = &params[index];
+            if is_copy_init {
+                let is_copy_param = param.is_reference()
+                    && param.deref_type().map(|d| d.strip_all_const())
+                        == Some(arg_ty.strip_all_const());
+                if !is_copy_param {
+                    return None;
+                }
+                score += 1;
+                continue;
+            }
+            if param.strip_all_const() == arg_ty.strip_all_const() {
+                continue;
+            }
+            if param.is_reference()
+                && param.deref_type().map(|d| d.strip_all_const())
+                    == Some(arg_ty.strip_all_const())
+            {
+                score += 1;
+                continue;
+            }
+            if self.can_assign(param, arg_ty) {
+                score += 2;
+                continue;
+            }
+            return None;
+        }
+        // Prefer the overload with the fewest defaulted arguments.
+        score += (params.len() - arg_types.len()) * 100;
+        Some(score)
     }
 
     /// Returns true when the arguments describe a copy initialization.

@@ -48,37 +48,38 @@ impl<'a> Codegen<'a> {
     /// argument with the given constness.
     pub fn find_copy_constructor(&self, class_name: &str, is_source_const: bool) -> Option<u32> {
         let short_name = class_name.split("::").last().unwrap_or(class_name);
-        let q1 = format!("{}::{}", class_name, short_name);
+        let q1 = format!("{class_name}::{short_name}");
         let q2 = format!(
-            "{}::{}",
-            QualifiedName::new(class_name).alternate(),
-            short_name
+            "{}::{short_name}",
+            QualifiedName::new(class_name).alternate()
         );
         let mut best_idx = None;
         let mut best_is_exact = false;
-        for qual_name in &[&q1, &q2] {
-            let Some(sigs) = self.sema.functions.get(*qual_name) else {
+        for qual_name in [&q1, &q2] {
+            let Some(sigs) = self.sema.functions.get(qual_name) else {
                 continue;
             };
             for sig in sigs {
-                if let Some(param_is_const) = copy_constructor_param_const(sig, class_name) {
-                    if is_source_const && !param_is_const {
-                        continue;
-                    }
-                    let idx = self.func_indices.get(&sig.mangled_name).copied().or_else(|| {
-                        self.func_indices
-                            .get(&format!("{}_{}", class_name, short_name))
-                            .copied()
-                    });
-                    if let Some(idx) = idx {
-                        if !is_source_const && !param_is_const {
-                            return Some(idx);
-                        }
-                        if best_idx.is_none() || (!best_is_exact && param_is_const == is_source_const) {
-                            best_idx = Some(idx);
-                            best_is_exact = param_is_const == is_source_const;
-                        }
-                    }
+                let Some(param_is_const) = copy_constructor_param_const(sig, class_name) else {
+                    continue;
+                };
+                if is_source_const && !param_is_const {
+                    continue;
+                }
+                let idx = self.func_indices.get(&sig.mangled_name).copied().or_else(|| {
+                    self.func_indices
+                        .get(&format!("{class_name}_{short_name}"))
+                        .copied()
+                });
+                let Some(idx) = idx else {
+                    continue;
+                };
+                if !is_source_const && !param_is_const {
+                    return Some(idx);
+                }
+                if best_idx.is_none() || (!best_is_exact && param_is_const == is_source_const) {
+                    best_idx = Some(idx);
+                    best_is_exact = param_is_const == is_source_const;
                 }
             }
         }
