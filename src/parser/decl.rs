@@ -183,32 +183,11 @@ impl Parser {
             name = self.qualify_name(name);
 
             if declarations.is_empty() && self.peek() == &TokenKind::LParen {
-                let is_definite_function =
-                    self.peek_ahead(1) == &TokenKind::RParen || self.has_function_tail_indicators();
-                if is_definite_function {
-                    let func = self.parse_function_tail(name, ty, start_tok.line, start_tok.col)?;
-                    return Ok(vec![Decl::Function(func)]);
+                let decl = self.parse_ambiguous_global_or_func(name, ty, &start_tok)?;
+                if matches!(decl, Decl::Function(_)) {
+                    return Ok(vec![decl]);
                 }
-
-                let saved_pos = self.pos;
-                match self.parse_function_tail(
-                    name.clone(),
-                    ty.clone(),
-                    start_tok.line,
-                    start_tok.col,
-                ) {
-                    Ok(func) => return Ok(vec![Decl::Function(func)]),
-                    Err(func_err) => {
-                        if self.nesting_exceeded.get() {
-                            return Err(func_err);
-                        }
-                        self.pos = saved_pos;
-                        let decl = self
-                            .parse_global_var(name, ty, &start_tok)
-                            .map_err(|_| func_err)?;
-                        declarations.push(decl);
-                    }
-                }
+                declarations.push(decl);
             } else {
                 declarations.push(self.parse_global_var(name, ty, &start_tok)?);
             }
@@ -220,6 +199,42 @@ impl Parser {
         }
         self.expect(TokenKind::Semi)?;
         Ok(declarations)
+    }
+
+    /// Parses a declarator when followed by `(`, deciding between a function
+    /// and a global variable with parenthesized initialization.
+    fn parse_ambiguous_global_or_func(
+        &mut self,
+        name: String,
+        ty: Type,
+        start_tok: &Token,
+    ) -> Result<Decl, CompileError> {
+        let is_definite_function =
+            self.peek_ahead(1) == &TokenKind::RParen || self.has_function_tail_indicators();
+        if is_definite_function {
+            let func = self.parse_function_tail(name, ty, start_tok.line, start_tok.col)?;
+            return Ok(Decl::Function(func));
+        }
+
+        let starts_with_expr = token_starts_expr(self.peek_ahead(1));
+        let saved_pos = self.pos;
+        match self.parse_function_tail(name.clone(), ty.clone(), start_tok.line, start_tok.col) {
+            Ok(func) => Ok(Decl::Function(func)),
+            Err(func_err) => {
+                if self.nesting_exceeded.get() {
+                    return Err(func_err);
+                }
+                self.pos = saved_pos;
+                self.parse_global_var(name, ty, start_tok)
+                    .map_err(|var_err| {
+                        if starts_with_expr || self.pos > saved_pos + 1 {
+                            var_err
+                        } else {
+                            func_err
+                        }
+                    })
+            }
+        }
     }
 
     /// Checks if the tokens following the matching closing parenthesis indicate
@@ -302,4 +317,21 @@ impl Parser {
             col: start_tok.col,
         })
     }
+}
+
+fn token_starts_expr(tok: &TokenKind) -> bool {
+    matches!(
+        tok,
+        TokenKind::IntLiteral(..)
+            | TokenKind::FloatLiteral(..)
+            | TokenKind::StringLiteral(_)
+            | TokenKind::CharLiteral(_)
+            | TokenKind::BoolLiteral(_)
+            | TokenKind::Plus
+            | TokenKind::Minus
+            | TokenKind::Star
+            | TokenKind::Amp
+            | TokenKind::Bang
+            | TokenKind::Tilde
+    )
 }

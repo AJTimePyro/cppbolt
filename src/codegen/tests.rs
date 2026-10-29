@@ -209,3 +209,69 @@ fn dereferencing_pointer_to_array_does_not_emit_scalar_load() {
     let load_count = code.iter().filter(|&&b| b == OP_I32_LOAD).count();
     assert_eq!(load_count, 1);
 }
+
+#[test]
+fn copy_constructor_lookup_ignores_pointer_parameters() {
+    let mut sema = Sema::new();
+    sema.register_function(FunctionSig {
+        name: "Buffer::Buffer".to_string(),
+        mangled_name: "Buffer_Buffer_P".to_string(),
+        return_type: Type::Void,
+        param_types: vec![
+            Type::Pointer(Box::new(Type::Struct("Buffer".to_string()))),
+            Type::Pointer(Box::new(Type::Const(Box::new(Type::Struct(
+                "Buffer".to_string(),
+            ))))),
+        ],
+        default_args: vec![None, None],
+        is_static: false,
+        is_explicit: false,
+        ref_qualifier: RefQualifier::None,
+    });
+
+    let mut codegen = Codegen::new(&sema);
+    codegen
+        .func_indices
+        .insert("Buffer_Buffer_P".to_string(), 30);
+
+    assert_eq!(codegen.find_copy_constructor("Buffer", false), None);
+    assert_eq!(codegen.find_copy_constructor("Buffer", true), None);
+    assert!(
+        codegen
+            .find_constructor_sig("Buffer", &[Type::Struct("Buffer".to_string())])
+            .is_none()
+    );
+}
+
+#[test]
+fn free_dereference_operator_lvalue_calls_operator() {
+    let mut sema = Sema::new();
+    sema.register_function(FunctionSig {
+        name: "operator*".to_string(),
+        mangled_name: "deref_iter".to_string(),
+        return_type: Type::Reference(Box::new(Type::Int)),
+        param_types: vec![Type::Struct("Iter".to_string())],
+        default_args: vec![None],
+        is_static: false,
+        is_explicit: false,
+        ref_qualifier: RefQualifier::None,
+    });
+    let mut codegen = Codegen::new(&sema);
+    codegen.func_indices.insert("deref_iter".to_string(), 42);
+    let mut ctx = context();
+    ctx.bind_local("it".to_string(), 16, Type::Struct("Iter".to_string()));
+
+    let deref = Expr::Unary {
+        op: UnaryOp::Deref,
+        expr: Box::new(Expr::Identifier("it".to_string())),
+        pos: ExprPos { line: 1, col: 1 },
+    };
+    assert!(codegen.is_struct_lvalue(&deref, &ctx));
+    let mut code = Vec::new();
+    assert!(
+        codegen
+            .compile_lvalue_addr(&deref, &mut ctx, &mut code)
+            .is_ok()
+    );
+    assert!(code.contains(&OP_CALL));
+}

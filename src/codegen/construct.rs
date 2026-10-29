@@ -248,7 +248,7 @@ impl<'a> Codegen<'a> {
 
 /// Returns `Some(is_const)` if `sig` is a copy constructor for `class_name`.
 fn copy_constructor_param_const(sig: &FunctionSig, class_name: &str) -> Option<bool> {
-    if sig.param_types.len() < 2 {
+    if sig.param_types.len() < 2 || !sig.param_types[1].is_reference() {
         return None;
     }
     let inner = sig.param_types[1].deref_type()?;

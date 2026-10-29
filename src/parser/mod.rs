@@ -390,4 +390,16 @@ mod tests {
         assert_eq!(args.len(), 1);
         Ok(())
     }
+
+    #[test]
+    fn global_var_syntax_error_reports_expression_error() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let tokens = Lexer::new("class Item {}; Item global_item(1 + );").tokenize()?;
+        let Err(err) = Parser::new(tokens).parse_program() else {
+            return Err("expected parse error".into());
+        };
+        assert!(!err.to_string().contains("Expected type specifier"));
+        assert!(err.to_string().contains("Unexpected token in expression"));
+        Ok(())
+    }
 }
