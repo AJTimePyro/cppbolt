@@ -43,9 +43,22 @@ impl<'a> Codegen<'a> {
     ) -> Result<(), CompileError> {
         code.push(OP_I32_CONST);
         write_i32(code, global.offset as i32);
-        let init_ty = self.get_expr_type(init_expr, ctx);
-        self.compile_expr(init_expr, ctx, code)?;
-        self.emit_conversion(&init_ty, global.ty, code);
+        match init_expr {
+            Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } => {
+                if elements.is_empty() {
+                    self.emit_zero_value(global.ty, code);
+                } else if elements.len() == 1 {
+                    let init_ty = self.get_expr_type(&elements[0], ctx);
+                    self.compile_expr(&elements[0], ctx, code)?;
+                    self.emit_conversion(&init_ty, global.ty, code);
+                }
+            }
+            _ => {
+                let init_ty = self.get_expr_type(init_expr, ctx);
+                self.compile_expr(init_expr, ctx, code)?;
+                self.emit_conversion(&init_ty, global.ty, code);
+            }
+        }
         self.emit_store(global.ty, 0, code);
         Ok(())
     }

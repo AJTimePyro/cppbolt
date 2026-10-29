@@ -117,6 +117,17 @@ impl<'a> Codegen<'a> {
                 }
                 code.push(OP_CALL);
                 write_u32(code, b_idx);
+            } else if let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned() {
+                for (j, a) in base_args.iter().enumerate() {
+                    if let Some(sub_fld) = base_layout.fields.get(j) {
+                        code.push(OP_LOCAL_GET);
+                        write_u32(code, 0); // this
+                        let a_ty = self.get_expr_type(a, ctx);
+                        self.compile_expr(a, ctx, code)?;
+                        self.emit_conversion(&a_ty, &sub_fld.ty, code);
+                        self.emit_store(&sub_fld.ty, (*base_offset + sub_fld.offset) as u32, code);
+                    }
+                }
             }
         }
         Ok(())
@@ -166,6 +177,19 @@ impl<'a> Codegen<'a> {
                     }
                     code.push(OP_CALL);
                     write_u32(code, ctor_idx);
+                } else if let Some(layout) = self.sema.struct_layouts.get(sname).cloned() {
+                    if let Some(args) = init_args {
+                        for (j, a) in args.iter().enumerate() {
+                            if let Some(sub_fld) = layout.fields.get(j) {
+                                code.push(OP_LOCAL_GET);
+                                write_u32(code, 0); // this
+                                let a_ty = self.get_expr_type(a, ctx);
+                                self.compile_expr(a, ctx, code)?;
+                                self.emit_conversion(&a_ty, &sub_fld.ty, code);
+                                self.emit_store(&sub_fld.ty, (fld.offset + sub_fld.offset) as u32, code);
+                            }
+                        }
+                    }
                 }
             } else if let Type::Array(elem_ty, count) = fld.ty.strip_const()
                 && let Type::Struct(sname) = elem_ty.strip_const()
