@@ -86,7 +86,9 @@ impl Sema {
                 Ok(target_type.clone())
             }
             Expr::SizeofType(_) | Expr::SizeofExpr(_) => Ok(Type::UnsignedInt),
-            Expr::InitializerList { .. } => self.analyze_initializer(expr),
+            Expr::InitializerList { .. } | Expr::TypedInitList { .. } => {
+                self.analyze_initializer(expr)
+            }
             Expr::Lambda { .. } => self.analyze_lambda(expr),
         }
     }
@@ -249,17 +251,21 @@ impl Sema {
     }
 
     pub(super) fn analyze_initializer(&mut self, expr: &mut Expr) -> Result<Type, CompileError> {
-        let Expr::InitializerList(list) = expr else {
-            return Err(crate::internal_error!(
-                self.current_line,
-                self.current_col,
-                "unexpected expression kind"
-            ));
+        let (list, ty) = match expr {
+            Expr::InitializerList { elements, .. } => (elements, Type::Void),
+            Expr::TypedInitList { ty, elements, .. } => (elements, ty.clone()),
+            _ => {
+                return Err(crate::internal_error!(
+                    self.current_line,
+                    self.current_col,
+                    "unexpected expression kind"
+                ));
+            }
         };
 
         for item in list {
             self.analyze_expr(item)?;
         }
-        Ok(Type::Void)
+        Ok(ty)
     }
 }

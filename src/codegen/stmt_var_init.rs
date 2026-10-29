@@ -11,18 +11,25 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        if let Expr::InitializerList(list) = init
-            && list.len() == 1
-            && !matches!(ty.strip_const(), Type::Struct(_) | Type::Array(_, _))
+        if let Expr::InitializerList { elements: list, .. }
+            | Expr::TypedInitList { elements: list, .. } = init
         {
-            return self.compile_aggregate_local(ty, &list[0], offset, ctx, code);
+            if list.len() == 1
+                && !matches!(ty.strip_const(), Type::Struct(_) | Type::Array(_, _))
+            {
+                return self.compile_aggregate_local(ty, &list[0], offset, ctx, code);
+            }
         }
 
         if let Type::Struct(sname) = ty.strip_const() {
             return self.compile_aggregate_struct(sname, init, offset, ctx, code);
         }
 
-        if let (Type::Array(elem_ty, _), Expr::InitializerList(list)) = (ty.strip_const(), init) {
+        if let (
+            Type::Array(elem_ty, _),
+            Expr::InitializerList { elements: list, .. }
+            | Expr::TypedInitList { elements: list, .. },
+        ) = (ty.strip_const(), init) {
             return self.compile_aggregate_array(elem_ty, list, offset, ctx, code);
         }
 
@@ -48,7 +55,9 @@ impl<'a> Codegen<'a> {
         {
             return self.compile_aggregate_struct_call(sname, args, offset, ctx, code);
         }
-        if let Expr::InitializerList(list) = init {
+        if let Expr::InitializerList { elements: list, .. }
+            | Expr::TypedInitList { elements: list, .. } = init
+        {
             return self.compile_aggregate_struct_list(sname, list, offset, ctx, code);
         }
         self.compile_aggregate_struct_value(sname, init, offset, ctx, code)

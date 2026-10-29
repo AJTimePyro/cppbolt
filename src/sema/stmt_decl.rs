@@ -50,10 +50,14 @@ impl Sema {
                 col,
             ));
         }
-        if let Type::Array(elem, 0) = ty.clone()
-            && let Some(Expr::InitializerList(list)) = init
-        {
-            *ty = Type::Array(elem, list.len());
+        if let Type::Array(elem, 0) = ty.clone() {
+            if let Some(
+                Expr::InitializerList { elements: list, .. }
+                | Expr::TypedInitList { elements: list, .. },
+            ) = init
+            {
+                *ty = Type::Array(elem, list.len());
+            }
         }
         if let Some(init_expr) = init {
             self.analyze_var_init(name, ty, init_expr, line, col)?;

@@ -267,7 +267,10 @@ impl Parser {
                 _ if args.len() == 1 && !matches!(ty.strip_const(), Type::Array(_, _)) => {
                     Ok(args.into_iter().next())
                 }
-                _ => Ok(Some(Expr::InitializerList(args))),
+                _ => Ok(Some(Expr::InitializerList {
+                    elements: args,
+                    pos: ExprPos::new(line, col),
+                })),
             }
         } else if self.peek() == &TokenKind::LBrace {
             Ok(Some(self.parse_initializer()?))
@@ -279,7 +282,7 @@ impl Parser {
     pub(super) fn parse_initializer(&mut self) -> Result<Expr, CompileError> {
         let _guard = self.enter_expression()?;
         if self.peek() == &TokenKind::LBrace {
-            self.advance();
+            let tok = self.advance().clone();
             let mut list = Vec::new();
             while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
                 list.push(self.parse_initializer()?);
@@ -290,7 +293,10 @@ impl Parser {
                 }
             }
             self.expect(TokenKind::RBrace)?;
-            Ok(Expr::InitializerList(list))
+            Ok(Expr::InitializerList {
+                elements: list,
+                pos: ExprPos::new(tok.line, tok.col),
+            })
         } else {
             self.parse_expr()
         }

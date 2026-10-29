@@ -152,7 +152,16 @@ pub enum Expr {
     },
     SizeofType(Type),
     SizeofExpr(Box<Expr>),
-    InitializerList(Vec<Expr>),
+    InitializerList {
+        elements: Vec<Expr>,
+        pos: ExprPos,
+    },
+    #[allow(dead_code)]
+    TypedInitList {
+        ty: Type,
+        elements: Vec<Expr>,
+        pos: ExprPos,
+    },
     New {
         ty: Type,
         args: Vec<Expr>,
@@ -228,7 +237,8 @@ fn take_expr_children(expr: &mut Expr, out: &mut Vec<Expr>) {
             take_box(then_expr, out);
             take_box(else_expr, out);
         }
-        Expr::InitializerList(list) => out.append(&mut std::mem::take(list)),
+        Expr::InitializerList { elements, .. } => out.append(elements),
+        Expr::TypedInitList { elements, .. } => out.append(elements),
         Expr::New {
             args,
             array_size,
@@ -276,3 +286,34 @@ impl Expr {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deep_typed_init_list_drops_without_overflow() {
+        let mut cur = Expr::IntLiteral(1, Type::Int);
+        for _ in 0..10_000 {
+            cur = Expr::TypedInitList {
+                ty: Type::Int,
+                elements: vec![cur],
+                pos: ExprPos::new(1, 1),
+            };
+        }
+        drop(cur);
+    }
+
+    #[test]
+    fn deep_initializer_list_drops_without_overflow() {
+        let mut cur = Expr::IntLiteral(1, Type::Int);
+        for _ in 0..10_000 {
+            cur = Expr::InitializerList {
+                elements: vec![cur],
+                pos: ExprPos::new(1, 1),
+            };
+        }
+        drop(cur);
+    }
+}
+

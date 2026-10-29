@@ -143,7 +143,8 @@ impl<'a> Codegen<'a> {
         let elem_size = u32::try_from(elem_ty.size_of(&self.sema.struct_sizes))
             .map_err(|_| crate::internal_error!(stmt.line, stmt.col, "array is too large"))?;
         let init_list = match init {
-            Some(Expr::InitializerList(list)) => Some(list.as_slice()),
+            Some(Expr::InitializerList { elements, .. })
+            | Some(Expr::TypedInitList { elements, .. }) => Some(elements.as_slice()),
             _ => None,
         };
         let mut scope_entries = Vec::new();
