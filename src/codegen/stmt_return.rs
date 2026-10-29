@@ -102,10 +102,9 @@ impl<'a> Codegen<'a> {
             code.push(OP_LOCAL_SET);
             write_u32(code, ctx.scratch1);
 
-            let copy_ctor_arg = vec![Type::Reference(Box::new(Type::Const(Box::new(
-                Type::Struct(sname.to_string()),
-            ))))];
-            if let Some(ctor_idx) = self.find_constructor(sname, &copy_ctor_arg) {
+            let expr_ty = self.get_expr_type(expr, ctx);
+            let is_const = expr_ty.strip_reference().is_const();
+            if let Some(ctor_idx) = self.find_copy_constructor(sname, is_const) {
                 code.push(OP_LOCAL_GET);
                 write_u32(code, ctx.ret_temp_i32);
                 code.push(OP_LOCAL_GET);

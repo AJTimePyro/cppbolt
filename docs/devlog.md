@@ -4,6 +4,48 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-10-29: Multi-Dimensional Array Decay, Global Parameterized Init, and Copy Constructor Resolution
+
+### Context & Motivation
+Following the implementation of C++17 lambda expressions and recursive `operator->` chaining, three key areas of the compiler exhibited edge-case defects:
+1. Multi-dimensional array pointer dereferencing: expressions like `*(*(matrix + 1) + 2)` mistakenly emitted scalar loads on intermediate array addresses rather than decaying to row base pointers.
+2. Namespace-scope global variables with parenthesized constructor initializers: declarations like `Item global_item(1);` triggered grammar conflicts with function prototypes, reporting syntax errors on valid constructor arguments.
+3. Overload resolution between conversion operators and copy constructors: user-defined conversion operators (`operator T()`) and pointer-parameter constructors were improperly classified as copy constructors during by-value argument and return lowering.
+Additionally, free `operator*` overloads were asymmetric between rvalue reading and lvalue assignment (`*it = 42;`), and parser error attribution during global variable declaration backtracking obscured argument syntax errors.
+
+### Work Executed
+1. **Multi-Dimensional Pointer Dereference & Array Decay**:
+   - In `src/codegen/expr_unary.rs:compile_unary_deref`, updated dereference emission to check whether the dereferenced element type is a `Type::Struct` or `Type::Array`. For array elements (such as dereferencing a pointer to an array `int (*)[3]`), the base address is retained on stack instead of emitting a scalar `i32.load`, allowing subsequent pointer indexing and dereferencing to compute proper linear memory offsets.
+2. **Global Variable Declarations with Constructor Arguments**:
+   - In `src/parser/decl.rs`, disambiguated namespace-scope declarators followed by `(` between function declarations and global variable initializers.
+   - Introduced `parse_ambiguous_global_or_func` with fast-path lookahead for unambiguous function tails (qualifiers, bodies, trailing returns) and speculative fallback for parenthesized argument expressions.
+   - Preserved global variable initialization lowering (`Decl::GlobalVar`) with constructor calls and registered destructors in reverse initialization order at program exit.
+3. **Copy Constructor Resolution & By-Value Lowering**:
+   - In `src/codegen/construct.rs`, introduced dedicated `find_copy_constructor` requiring the second parameter to be a reference (`sig.param_types[1].is_reference()`), preventing conversion operators (`operator T()`) and pointer constructors (`Foo(const Foo*)`) from matching copy initialization.
+   - In `src/codegen/call_args.rs`, `stmt_return.rs`, `stmt_var_init.rs`, and `expr_call.rs`, routed pass-by-value and return-by-value copies through explicit copy constructor lookup, falling back to memberwise byte copy when no copy constructor is defined.
+   - In `src/sema/constructor.rs`, refined overload candidate scoring to distinguish between exact copy constructors, converting constructors, and user-defined conversion operators.
+4. **Free `operator*` Lvalue Assignment**:
+   - In `src/codegen/lvalue.rs:compile_lvalue_addr` and `is_struct_lvalue`, added lookup for free `operator*` overloads returning references (`T& operator*(Iter)`). Assignments through free dereference operators (`*it = 42;`) now correctly evaluate the operator call and store into the returned reference address.
+5. **Backtracking Error Attribution & Modularization**:
+   - In `src/parser/decl.rs`, improved error reporting during parenthesized declarator backtracking. Argument token sequences that begin with expressions or fail during argument expression parsing report expression syntax errors rather than spurious function type specifier diagnostics.
+   - Modularized codegen unit tests into `src/codegen/tests.rs` to maintain compliance with codebase limits.
+
+### Verification
+- Added end-to-end regression test suites:
+  - `tests/c_basics/pointers_arrays/multidim_pointer_deref.cpp`: Multi-dimensional array pointer arithmetic, dereference assignment, and 3D tensor indexing.
+  - `tests/classes_oop/statics_namespaces/global_constructor_args.cpp`: Global parameterized class instances with multiple arguments and reverse destructor execution.
+  - `tests/classes_oop/operators/regress_user_conversion_param.cpp`: User conversion operators passed to scalar and object parameters.
+  - `tests/classes_oop/operators/regress_byval_param_conversion.cpp`: Pass-by-value and return-by-value of structs with conversion operators and custom copy constructors.
+- Added compiler unit tests:
+  - `codegen::tests::dereferencing_pointer_to_array_does_not_emit_scalar_load`
+  - `codegen::tests::copy_constructor_lookup_ignores_pointer_parameters`
+  - `codegen::tests::free_dereference_operator_lvalue_calls_operator`
+  - `parser::tests::global_var_syntax_error_reports_expression_error`
+- Full testrunner suite passing with 308 passing tests and 0 unexpected failures.
+- Verified all census limits (functions <= 80 lines) and clippy checks (`-D warnings`).
+
+---
+
 ## 2026-10-28: C++17 Lambda Expressions & Recursive operator-> Chaining
 
 ### Context & Motivation

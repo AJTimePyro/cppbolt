@@ -82,7 +82,7 @@ impl<'a> Codegen<'a> {
             return Ok(());
         }
         if self.sema.struct_layouts.contains_key(name) {
-            return self.compile_struct_value_call(name, args, arg_types, ctx, code);
+            return self.compile_struct_value_call(name, args, ctx, code);
         }
         if ctx.var_offsets.contains_key(name) || self.global_offsets.contains_key(name) {
             return self.compile_function_pointer_call(callee, args, ctx, code);
@@ -229,7 +229,6 @@ impl<'a> Codegen<'a> {
         &mut self,
         name: &str,
         args: &[Expr],
-        arg_types: &[Type],
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
@@ -265,18 +264,7 @@ impl<'a> Codegen<'a> {
             write_u32(code, 0);
         }
 
-        if let Some(ctor_idx) = self.find_constructor(name, arg_types) {
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.fp_local);
-            code.push(OP_I32_LOAD);
-            write_u32(code, 2);
-            write_u32(code, temp_ptr_slot); // this
-            for a in args {
-                self.compile_expr(a, ctx, code)?;
-            }
-            code.push(OP_CALL);
-            write_u32(code, ctor_idx);
-        }
+        self.compile_struct_value_ctor(name, temp_ptr_slot, args, ctx, code)?;
 
         // Save the temporary pointer in a frame slot so statement
         // cleanup can destroy and free it after the full expression.
@@ -299,6 +287,72 @@ impl<'a> Codegen<'a> {
         code.push(OP_I32_LOAD);
         write_u32(code, 2);
         write_u32(code, temp_ptr_slot);
+        Ok(())
+    }
+
+    fn compile_struct_value_ctor(
+        &mut self,
+        name: &str,
+        temp_ptr_slot: u32,
+        args: &[Expr],
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        let arg_types: Vec<Type> = args.iter().map(|a| self.get_expr_type(a, ctx)).collect();
+        let is_same_struct = match arg_types.first() {
+            Some(ty) => matches!(
+                ty.strip_const().strip_reference(),
+                Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(name))
+            ),
+            None => false,
+        };
+        if let [only] = args
+            && is_same_struct
+        {
+            let is_const = arg_types[0].strip_reference().is_const();
+            if let Some(ctor_idx) = self.find_copy_constructor(name, is_const) {
+                code.push(OP_LOCAL_GET);
+                write_u32(code, ctx.fp_local);
+                code.push(OP_I32_LOAD);
+                write_u32(code, 2);
+                write_u32(code, temp_ptr_slot); // this
+                self.compile_expr(only, ctx, code)?;
+                code.push(OP_CALL);
+                write_u32(code, ctor_idx);
+            } else {
+                let raw_size = self.sema.struct_layouts[name].size;
+                self.compile_expr(only, ctx, code)?;
+                code.push(OP_LOCAL_SET);
+                write_u32(code, ctx.scratch1);
+                super::raii::emit_struct_byte_copy(
+                    raw_size,
+                    0,
+                    |code| {
+                        code.push(OP_LOCAL_GET);
+                        write_u32(code, ctx.fp_local);
+                        code.push(OP_I32_LOAD);
+                        write_u32(code, 2);
+                        write_u32(code, temp_ptr_slot);
+                    },
+                    |code| {
+                        code.push(OP_LOCAL_GET);
+                        write_u32(code, ctx.scratch1);
+                    },
+                    code,
+                );
+            }
+        } else if let Some(ctor_idx) = self.find_constructor(name, &arg_types) {
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.fp_local);
+            code.push(OP_I32_LOAD);
+            write_u32(code, 2);
+            write_u32(code, temp_ptr_slot); // this
+            for a in args {
+                self.compile_expr(a, ctx, code)?;
+            }
+            code.push(OP_CALL);
+            write_u32(code, ctor_idx);
+        }
         Ok(())
     }
 

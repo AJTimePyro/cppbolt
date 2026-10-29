@@ -183,11 +183,15 @@ impl Parser {
             name = self.qualify_name(name);
 
             if declarations.is_empty() && self.peek() == &TokenKind::LParen {
-                let func = self.parse_function_tail(name, ty, start_tok.line, start_tok.col)?;
-                return Ok(vec![Decl::Function(func)]);
+                let decl = self.parse_ambiguous_global_or_func(name, ty, &start_tok)?;
+                if matches!(decl, Decl::Function(_)) {
+                    return Ok(vec![decl]);
+                }
+                declarations.push(decl);
+            } else {
+                declarations.push(self.parse_global_var(name, ty, &start_tok)?);
             }
 
-            declarations.push(self.parse_global_var(name, ty, &start_tok)?);
             if self.peek() != &TokenKind::Comma {
                 break;
             }
@@ -195,6 +199,80 @@ impl Parser {
         }
         self.expect(TokenKind::Semi)?;
         Ok(declarations)
+    }
+
+    /// Parses a declarator when followed by `(`, deciding between a function
+    /// and a global variable with parenthesized initialization.
+    fn parse_ambiguous_global_or_func(
+        &mut self,
+        name: String,
+        ty: Type,
+        start_tok: &Token,
+    ) -> Result<Decl, CompileError> {
+        let is_definite_function =
+            self.peek_ahead(1) == &TokenKind::RParen || self.has_function_tail_indicators();
+        if is_definite_function {
+            let func = self.parse_function_tail(name, ty, start_tok.line, start_tok.col)?;
+            return Ok(Decl::Function(func));
+        }
+
+        let starts_with_expr = token_starts_expr(self.peek_ahead(1));
+        let saved_pos = self.pos;
+        match self.parse_function_tail(name.clone(), ty.clone(), start_tok.line, start_tok.col) {
+            Ok(func) => Ok(Decl::Function(func)),
+            Err(func_err) => {
+                if self.nesting_exceeded.get() {
+                    return Err(func_err);
+                }
+                self.pos = saved_pos;
+                self.parse_global_var(name, ty, start_tok)
+                    .map_err(|var_err| {
+                        if starts_with_expr || self.pos > saved_pos + 1 {
+                            var_err
+                        } else {
+                            func_err
+                        }
+                    })
+            }
+        }
+    }
+
+    /// Checks if the tokens following the matching closing parenthesis indicate
+    /// a function declaration or definition (such as a body, qualifiers, or trailing return).
+    fn has_function_tail_indicators(&self) -> bool {
+        let mut depth = 0;
+        let mut rparen_idx = None;
+        for (i, tok) in self.tokens[self.pos..].iter().enumerate() {
+            match tok.kind {
+                TokenKind::LParen => depth += 1,
+                TokenKind::RParen => {
+                    depth -= 1;
+                    if depth == 0 {
+                        rparen_idx = Some(self.pos + i);
+                        break;
+                    }
+                }
+                TokenKind::Semi | TokenKind::Eof => return false,
+                _ => {}
+            }
+        }
+        let Some(idx) = rparen_idx else {
+            return false;
+        };
+        match self.tokens.get(idx + 1).map(|t| &t.kind) {
+            Some(
+                TokenKind::LBrace
+                | TokenKind::Colon
+                | TokenKind::KwConst
+                | TokenKind::KwOverride
+                | TokenKind::Amp
+                | TokenKind::AndAnd
+                | TokenKind::Arrow
+                | TokenKind::Assign,
+            ) => true,
+            Some(TokenKind::Ident(id)) => id == "noexcept",
+            _ => false,
+        }
     }
 
     /// Parses one global variable declarator. The caller consumes the `,` that
@@ -206,12 +284,7 @@ impl Parser {
         start_tok: &Token,
     ) -> Result<Decl, CompileError> {
         let final_ty = self.parse_array_suffix(ty)?;
-        let init = if self.peek() == &TokenKind::Assign {
-            self.advance();
-            Some(self.parse_initializer()?)
-        } else {
-            None
-        };
+        let init = self.parse_var_init(&final_ty, start_tok.line, start_tok.col)?;
         Ok(Decl::GlobalVar {
             name,
             ty: final_ty,
@@ -244,4 +317,21 @@ impl Parser {
             col: start_tok.col,
         })
     }
+}
+
+fn token_starts_expr(tok: &TokenKind) -> bool {
+    matches!(
+        tok,
+        TokenKind::IntLiteral(..)
+            | TokenKind::FloatLiteral(..)
+            | TokenKind::StringLiteral(_)
+            | TokenKind::CharLiteral(_)
+            | TokenKind::BoolLiteral(_)
+            | TokenKind::Plus
+            | TokenKind::Minus
+            | TokenKind::Star
+            | TokenKind::Amp
+            | TokenKind::Bang
+            | TokenKind::Tilde
+    )
 }

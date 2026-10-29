@@ -15,6 +15,9 @@ impl<'a> Codegen<'a> {
                 {
                     return sig.return_type.is_reference();
                 }
+                if let Some((_, sig)) = self.find_free_operator("operator*", &ty) {
+                    return sig.return_type.is_reference();
+                }
                 true
             }
             Expr::ArraySubscript { .. } => true,
@@ -59,6 +62,11 @@ impl<'a> Codegen<'a> {
                     self.compile_lvalue_addr(expr, ctx, code)?;
                     code.push(OP_CALL);
                     write_u32(code, m_idx);
+                    Ok(())
+                } else if let Some((f_idx, sig)) = self.find_free_operator("operator*", &ty) {
+                    self.compile_call_arg(expr, sig.param_types.first(), ctx, code)?;
+                    code.push(OP_CALL);
+                    write_u32(code, f_idx);
                     Ok(())
                 } else {
                     self.compile_expr(expr, ctx, code)

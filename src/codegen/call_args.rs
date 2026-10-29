@@ -160,10 +160,8 @@ impl<'a> Codegen<'a> {
             && self.is_struct_lvalue(a, ctx)
             && let Type::Struct(sname) = aty.strip_const().strip_reference()
         {
-            let copy_ctor_arg = vec![Type::Reference(Box::new(Type::Const(Box::new(
-                Type::Struct(sname.clone()),
-            ))))];
-            if let Some(ctor_idx) = self.find_constructor(sname, &copy_ctor_arg) {
+            let is_const = aty.strip_reference().is_const();
+            if let Some(ctor_idx) = self.find_copy_constructor(sname, is_const) {
                 self.compile_call_arg_byval_temp(a, sname, ctor_idx, ctx, code)?;
                 return Ok(());
             }

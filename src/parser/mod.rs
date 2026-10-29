@@ -372,4 +372,34 @@ mod tests {
         assert_eq!(*return_type, Some(Type::Int));
         Ok(())
     }
+
+    #[test]
+    fn parses_global_var_with_parenthesized_initializer() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let tokens = Lexer::new("class Item {}; Item global_item(1);").tokenize()?;
+        let program = Parser::new(tokens).parse_program()?;
+        let Some(Decl::GlobalVar { name, ty, init, .. }) = program.declarations.get(1) else {
+            return Err("expected global var declaration".into());
+        };
+        assert_eq!(name, "global_item");
+        assert_eq!(*ty, Type::Struct("Item".to_string()));
+        let Some(Expr::Call { callee, args, .. }) = init else {
+            return Err("expected constructor call init".into());
+        };
+        assert_eq!(**callee, Expr::Identifier("Item".to_string()));
+        assert_eq!(args.len(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn global_var_syntax_error_reports_expression_error() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let tokens = Lexer::new("class Item {}; Item global_item(1 + );").tokenize()?;
+        let Err(err) = Parser::new(tokens).parse_program() else {
+            return Err("expected parse error".into());
+        };
+        assert!(!err.to_string().contains("Expected type specifier"));
+        assert!(err.to_string().contains("Unexpected token in expression"));
+        Ok(())
+    }
 }

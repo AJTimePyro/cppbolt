@@ -135,11 +135,9 @@ impl<'a> Codegen<'a> {
             init_ty.strip_const().strip_reference(),
             Type::Struct(other) if other == sname
         ) {
-            let copy_ctor_arg = vec![Type::Reference(Box::new(Type::Const(Box::new(
-                Type::Struct(sname.to_string()),
-            ))))];
             if self.is_struct_lvalue(init, ctx) {
-                if let Some(ctor_idx) = self.find_constructor(sname, &copy_ctor_arg) {
+                let is_const = init_ty.strip_reference().is_const();
+                if let Some(ctor_idx) = self.find_copy_constructor(sname, is_const) {
                     self.emit_local_address(offset, ctx, code);
                     self.compile_lvalue_addr(init, ctx, code)?;
                     code.push(OP_CALL);
