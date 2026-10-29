@@ -1,0 +1,14 @@
+Item 1
+Item 10
+Item 20
+Pair 3 4
+Item 2
+main global_item: 1
+main local_item: 2
+main g_first: 10, g_second: 20
+main global_pair: 3 4
+~Item 2
+~Pair 3 4
+~Item 20
+~Item 10
+~Item 1

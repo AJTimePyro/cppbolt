@@ -183,8 +183,35 @@ impl Parser {
             name = self.qualify_name(name);
 
             if declarations.is_empty() && self.peek() == &TokenKind::LParen {
-                let func = self.parse_function_tail(name, ty, start_tok.line, start_tok.col)?;
-                return Ok(vec![Decl::Function(func)]);
+                let is_definite_function = self.peek_ahead(1) == &TokenKind::RParen
+                    || self.has_function_tail_indicators();
+                if is_definite_function {
+                    let func = self.parse_function_tail(name, ty, start_tok.line, start_tok.col)?;
+                    return Ok(vec![Decl::Function(func)]);
+                }
+
+                let saved_pos = self.pos;
+                match self.parse_function_tail(name.clone(), ty.clone(), start_tok.line, start_tok.col) {
+                    Ok(func) => return Ok(vec![Decl::Function(func)]),
+                    Err(func_err) => {
+                        if self.nesting_exceeded.get() {
+                            return Err(func_err);
+                        }
+                        self.pos = saved_pos;
+                        let var_decl = self.parse_global_var(name, ty, &start_tok);
+                        match var_decl {
+                            Ok(decl) => {
+                                declarations.push(decl);
+                            }
+                            Err(_) => return Err(func_err),
+                        }
+                        if self.peek() != &TokenKind::Comma {
+                            break;
+                        }
+                        self.advance();
+                        continue;
+                    }
+                }
             }
 
             declarations.push(self.parse_global_var(name, ty, &start_tok)?);
@@ -197,6 +224,47 @@ impl Parser {
         Ok(declarations)
     }
 
+    /// Checks if the tokens following the matching closing parenthesis indicate
+    /// a function declaration or definition (such as a body, qualifiers, or trailing return).
+    fn has_function_tail_indicators(&self) -> bool {
+        let mut depth = 0;
+        let mut rparen_idx = None;
+        for (i, tok) in self.tokens[self.pos..].iter().enumerate() {
+            match tok.kind {
+                TokenKind::LParen => depth += 1,
+                TokenKind::RParen => {
+                    depth -= 1;
+                    if depth == 0 {
+                        rparen_idx = Some(self.pos + i);
+                        break;
+                    }
+                }
+                TokenKind::Semi | TokenKind::Eof if depth > 0 => {
+                    return false;
+                }
+                _ => {}
+            }
+        }
+        let Some(idx) = rparen_idx else {
+            return false;
+        };
+        let after_idx = idx + 1;
+        match self.tokens.get(after_idx).map(|t| &t.kind) {
+            Some(
+                TokenKind::LBrace
+                | TokenKind::Colon
+                | TokenKind::KwConst
+                | TokenKind::KwOverride
+                | TokenKind::Amp
+                | TokenKind::AndAnd
+                | TokenKind::Arrow
+                | TokenKind::Assign,
+            ) => true,
+            Some(TokenKind::Ident(id)) if id == "noexcept" => true,
+            _ => false,
+        }
+    }
+
     /// Parses one global variable declarator. The caller consumes the `,` that
     /// separates declarators and the terminating `;`.
     fn parse_global_var(
@@ -206,12 +274,7 @@ impl Parser {
         start_tok: &Token,
     ) -> Result<Decl, CompileError> {
         let final_ty = self.parse_array_suffix(ty)?;
-        let init = if self.peek() == &TokenKind::Assign {
-            self.advance();
-            Some(self.parse_initializer()?)
-        } else {
-            None
-        };
+        let init = self.parse_var_init(&final_ty, start_tok.line, start_tok.col)?;
         Ok(Decl::GlobalVar {
             name,
             ty: final_ty,
