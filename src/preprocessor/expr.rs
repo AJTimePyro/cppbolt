@@ -16,7 +16,8 @@ impl Preprocessor<'_> {
         argument: &str,
         line_number: usize,
     ) -> Result<bool, CompileError> {
-        let replaced = replace_defined(argument, &self.macros);
+        let cleaned = super::lines::strip_comments(argument);
+        let replaced = replace_defined(&cleaned, &self.macros);
         let expanded = self.expand_line(&replaced);
         let value = IfExpr::new(&expanded, &self.depth, line_number).evaluate()?;
         Ok(value != 0)

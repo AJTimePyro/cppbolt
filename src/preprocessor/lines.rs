@@ -37,3 +37,34 @@ pub(super) fn split_directive(directive_line: &str) -> (&str, &str) {
         None => (trimmed, ""),
     }
 }
+
+/// Replaces C and C++ comments with single spaces according to translation phase 3.
+pub(super) fn strip_comments(input: &str) -> String {
+    let chars: Vec<char> = input.chars().collect();
+    let mut out = String::new();
+    let mut index = 0;
+    while index < chars.len() {
+        if chars[index] == '"' || chars[index] == '\'' {
+            index = super::macros::copy_quoted(&chars, index, chars[index], &mut out);
+            continue;
+        }
+        if chars[index] == '/' && chars.get(index + 1) == Some(&'/') {
+            break;
+        }
+        if chars[index] == '/' && chars.get(index + 1) == Some(&'*') {
+            index += 2;
+            while index < chars.len() {
+                if chars[index] == '*' && chars.get(index + 1) == Some(&'/') {
+                    index += 2;
+                    break;
+                }
+                index += 1;
+            }
+            out.push(' ');
+            continue;
+        }
+        out.push(chars[index]);
+        index += 1;
+    }
+    out
+}

@@ -448,4 +448,41 @@ mod tests {
         assert!(!program.declarations.is_empty());
         Ok(())
     }
+
+    #[test]
+    fn parses_integer_literal_types_per_cxx17_table_6() -> Result<(), Box<dyn std::error::Error>> {
+        let code = r#"
+            auto d1 = 42;
+            auto d2 = 2147483648;
+            auto h1 = 0x80000000;
+            auto u1 = 42u;
+            auto ull1 = 42ull;
+            auto l1 = 42l;
+            auto ul1 = 42ul;
+            auto hl1 = 0x80000000L;
+            auto dl1 = 2147483648L;
+        "#;
+        let tokens = Lexer::new(code).tokenize()?;
+        let program = Parser::new(tokens).parse_program()?;
+        let get_init_ty = |idx: usize| -> Option<Type> {
+            match &program.declarations[idx] {
+                Decl::GlobalVar {
+                    init: Some(Expr::IntLiteral(_, ty)),
+                    ..
+                } => Some(ty.clone()),
+                _ => None,
+            }
+        };
+
+        assert_eq!(get_init_ty(0), Some(Type::Int));
+        assert_eq!(get_init_ty(1), Some(Type::LongLong)); // decimal > i32::MAX promotes to long long
+        assert_eq!(get_init_ty(2), Some(Type::UnsignedInt)); // hex > i32::MAX promotes to unsigned int
+        assert_eq!(get_init_ty(3), Some(Type::UnsignedInt));
+        assert_eq!(get_init_ty(4), Some(Type::UnsignedLongLong));
+        assert_eq!(get_init_ty(5), Some(Type::Long));
+        assert_eq!(get_init_ty(6), Some(Type::UnsignedLong));
+        assert_eq!(get_init_ty(7), Some(Type::UnsignedLong)); // hex 'L' > i32::MAX promotes to unsigned long
+        assert_eq!(get_init_ty(8), Some(Type::LongLong)); // decimal 'L' > i32::MAX promotes to long long
+        Ok(())
+    }
 }

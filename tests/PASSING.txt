@@ -30,6 +30,7 @@ c_basics/pointers_arrays/range_for_array
 c_basics/pointers_arrays/regress_char_ptr_assign
 c_basics/preprocessor/line_continuation
 c_basics/preprocessor/macro_rescan
+c_basics/preprocessor/macro_token_paste_raw
 c_basics/preprocessor/preprocessor
 c_basics/preprocessor/preprocessor_macros
 c_basics/preprocessor/warning_directive
@@ -39,6 +40,7 @@ c_basics/types/booleans_chars
 c_basics/types/const_qualifiers
 c_basics/types/floats
 c_basics/types/long_long
+c_basics/types/numeric_literals
 c_basics/types/rounding_ties
 c_basics/types/sizeof_expr
 c_basics/types/ternary_mixed_types
@@ -268,6 +270,9 @@ negative/function_struct_to_int
 negative/function_too_few_arguments
 negative/function_too_many_arguments
 negative/include_cycle
+negative/invalid_binary_digit
+negative/invalid_digit_separator
+negative/invalid_octal_digit
 negative/lambda_const_capture_mutation
 negative/lambda_duplicate_default_capture
 negative/lambda_out_of_order_default_capture

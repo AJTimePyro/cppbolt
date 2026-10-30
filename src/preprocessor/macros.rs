@@ -1,6 +1,7 @@
 //! Object-like and function-like macro definition and expansion.
 
 use super::Preprocessor;
+use super::lines::strip_comments;
 use crate::diagnostics::CompileError;
 use std::collections::HashSet;
 
@@ -44,6 +45,8 @@ impl Preprocessor<'_> {
         rest: &str,
         line_number: usize,
     ) -> Result<(), CompileError> {
+        let cleaned = strip_comments(rest);
+        let rest = cleaned.trim();
         if rest.is_empty() {
             return Err(CompileError::new("Empty #define directive", line_number, 1));
         }
@@ -241,7 +244,8 @@ pub(super) fn extract_macro_args(
             ')' => {
                 depth -= 1;
                 if depth == 0 {
-                    let trimmed = current.trim();
+                    let cleaned = strip_comments(&current);
+                    let trimmed = cleaned.trim();
                     if !trimmed.is_empty() || !args.is_empty() {
                         args.push(trimmed.to_string());
                     }
@@ -250,7 +254,8 @@ pub(super) fn extract_macro_args(
                 current.push(c);
             }
             ',' if depth == 1 => {
-                args.push(current.trim().to_string());
+                let cleaned = strip_comments(&current);
+                args.push(cleaned.trim().to_string());
                 current.clear();
             }
             _ => current.push(c),
@@ -311,7 +316,27 @@ pub(super) fn substitute_body(
         }
         let ident: String = chars[start..index].iter().collect();
         if let Some(position) = params.iter().position(|param| param == &ident) {
-            result.push_str(&expanded_args[position]);
+            let mut probe_before = start;
+            while probe_before > 0 && chars[probe_before - 1].is_whitespace() {
+                probe_before -= 1;
+            }
+            let preceded_by_hash_hash = probe_before >= 2
+                && chars[probe_before - 1] == '#'
+                && chars[probe_before - 2] == '#';
+
+            let mut probe_after = index;
+            while probe_after < chars.len() && chars[probe_after].is_whitespace() {
+                probe_after += 1;
+            }
+            let followed_by_hash_hash = probe_after + 1 < chars.len()
+                && chars[probe_after] == '#'
+                && chars[probe_after + 1] == '#';
+
+            if preceded_by_hash_hash || followed_by_hash_hash {
+                result.push_str(&raw_args[position]);
+            } else {
+                result.push_str(&expanded_args[position]);
+            }
         } else {
             result.push_str(&ident);
         }
@@ -321,12 +346,22 @@ pub(super) fn substitute_body(
 }
 
 fn stringize(argument: &str) -> String {
+    let trimmed = argument.trim();
     let mut out = String::from("\"");
-    for c in argument.trim().chars() {
-        if c == '\\' || c == '"' {
-            out.push('\\');
+    let mut prev_is_space = false;
+    for c in trimmed.chars() {
+        if c.is_whitespace() {
+            if !prev_is_space {
+                out.push(' ');
+                prev_is_space = true;
+            }
+        } else {
+            prev_is_space = false;
+            if c == '\\' || c == '"' {
+                out.push('\\');
+            }
+            out.push(c);
         }
-        out.push(c);
     }
     out.push('"');
     out
@@ -339,20 +374,7 @@ fn apply_token_paste(text: &str) -> String {
     let mut index = 0;
     while index < chars.len() {
         if chars[index] == '"' || chars[index] == '\'' {
-            let quote = chars[index];
-            out.push(quote);
-            index += 1;
-            while index < chars.len() {
-                let c = chars[index];
-                out.push(c);
-                index += 1;
-                if c == '\\' && index < chars.len() {
-                    out.push(chars[index]);
-                    index += 1;
-                } else if c == quote {
-                    break;
-                }
-            }
+            index = copy_quoted(&chars, index, chars[index], &mut out);
             continue;
         }
         if chars[index] == '#' && chars.get(index + 1) == Some(&'#') {
@@ -416,6 +438,35 @@ mod tests {
     fn stringizes_and_pastes_tokens() -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(expand(&["STR(x) #x"], "STR(hello)")?, "\"hello\"");
         assert_eq!(expand(&["CAT(a,b) a ## b"], "CAT(foo,bar)")?, "foobar");
+        Ok(())
+    }
+
+    #[test]
+    fn raw_token_pasting_does_not_expand_operands() -> Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(expand(&["NUM 1", "CAT(a, b) a##b"], "CAT(NUM, 2)")?, "NUM2");
+        assert_eq!(
+            expand(
+                &["NUM 1", "CAT_RAW(a, b) a##b", "CAT_EXP(a, b) CAT_RAW(a, b)"],
+                "CAT_EXP(NUM, 2)"
+            )?,
+            "12"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn stringification_condenses_whitespace() -> Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(expand(&["STR(x) #x"], "STR( a   +   b )")?, "\"a + b\"");
+        Ok(())
+    }
+
+    #[test]
+    fn same_parameter_adjacent_and_non_adjacent_to_hash_hash()
+    -> Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(
+            expand(&["NUM 1", "M(x) x + x##x + x + #x"], "M(NUM)")?,
+            "1 + NUMNUM + 1 + \"NUM\""
+        );
         Ok(())
     }
 }
