@@ -1,6 +1,6 @@
 # Development Log
 
-Ongoing chronological record of major milestones, engineering refactors, and architectural evolutions in `cppwasm`.
+Ongoing chronological record of major milestones, engineering refactors, and architectural evolutions in `cppbolt`.
 
 ---
 

@@ -14,7 +14,7 @@ mod golden;
 #[path = "cppwasm-testrunner/oracle.rs"]
 mod oracle;
 
-use cppwasm::corpus::{self, FEATURES};
+use cppbolt::corpus::{self, FEATURES};
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};

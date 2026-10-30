@@ -6,7 +6,7 @@
 
 use super::Paths;
 use super::run::run_wasm;
-use cppwasm::corpus::{FEATURES, cpp_files, input_path, test_name};
+use cppbolt::corpus::{FEATURES, cpp_files, input_path, test_name};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};

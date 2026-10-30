@@ -6,7 +6,7 @@ The code generation stage lowers the typed AST and semantic symbol table directl
 
 ## 1. Role in the Pipeline
 
-1. **Direct AST-to-Wasm Lowering**: As established in [ADR 0002](../adr/0002-direct-wasm.md) and [Architecture](architecture.md), `cppwasm` does not translate AST nodes into an intermediate representation (IR) or execute bytecode optimization passes. It walks the typed AST and writes WebAssembly opcodes directly into byte buffers.
+1. **Direct AST-to-Wasm Lowering**: As established in [ADR 0002](../adr/0002-direct-wasm.md) and [Architecture](architecture.md), `cppbolt` does not translate AST nodes into an intermediate representation (IR) or execute bytecode optimization passes. It walks the typed AST and writes WebAssembly opcodes directly into byte buffers.
 2. **Function Frame Management**: Allocates checked local stack slots, emits prologue stack overflow checks, and coordinates RAII destructor calls before every function return point (`src/codegen/function_context.rs`).
 3. **Fixed-Width LEB128 Patching**: Because the final stack frame size is only known after traversing the entire function body, prologues and epilogues emit 5-byte fixed-width LEB128 placeholders that are patched in place after body lowering.
 4. **Binary Section Assembly**: Packs types, imports, functions, tables, memory, globals, exports, elements, code bodies, and data segments into the standard WebAssembly binary module format (`src/wasm/module.rs`).

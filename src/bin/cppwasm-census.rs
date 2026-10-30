@@ -6,7 +6,7 @@
 //! The `--tsv` option writes one record per function, so the census can be
 //! compared with another scanner record by record.
 
-use cppwasm::census::{Census, FunctionRecord, census};
+use cppbolt::census::{Census, FunctionRecord, census};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 

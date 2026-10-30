@@ -2,14 +2,14 @@
 // outcome.  It runs in its own Node process so that every case starts with a
 // fresh engine stack budget.
 //
-// Usage: node tests/wasm_stack_safety_case.js <cppwasm.wasm> <source.cpp>
+// Usage: node tests/wasm_stack_safety_case.js <cppbolt.wasm> <source.cpp>
 
 const fs = require("fs");
 
 const wasmPath = process.argv[2];
 const sourcePath = process.argv[3];
 if (!wasmPath || !sourcePath) {
-    console.error("usage: node tests/wasm_stack_safety_case.js <cppwasm.wasm> <source.cpp>");
+    console.error("usage: node tests/wasm_stack_safety_case.js <cppbolt.wasm> <source.cpp>");
     process.exit(2);
 }
 

@@ -1,6 +1,6 @@
 # Browser Integration & Host Interface
 
-`cppwasm` is designed to run both natively and inside modern WebAssembly environments (browsers and Node.js). To achieve complete independence from external runtimes like Emscripten, `cppwasm` defines two clear interfaces:
+`cppbolt` is designed to run both natively and inside modern WebAssembly environments (browsers and Node.js). To achieve complete independence from external runtimes like Emscripten, `cppbolt` defines two clear interfaces:
 
 1. **Compiler C ABI**: Exported functions that allow JavaScript host code to pass C++ source strings into the compiler WebAssembly instance and retrieve compiled WebAssembly binaries or error messages.
 2. **Execution Host Interface (`web/host.js`)**: Import functions required by compiled WebAssembly programs to perform console I/O, format numbers, and exit.
@@ -9,7 +9,7 @@
 
 ## 1. Compiler WebAssembly C ABI
 
-When built with `--target wasm32-unknown-unknown --lib`, `cppwasm` exports a low-level C ABI implemented in `src/ffi.rs`. Memory management is explicit: each compilation result is an independent boxed slice that must be allocated and released through matching functions.
+When built with `--target wasm32-unknown-unknown --lib`, `cppbolt` exports a low-level C ABI implemented in `src/ffi.rs`. Memory management is explicit: each compilation result is an independent boxed slice that must be allocated and released through matching functions.
 
 ### Exported Functions
 
@@ -27,7 +27,7 @@ When built with `--target wasm32-unknown-unknown --lib`, `cppwasm` exports a low
 
 ```javascript
 // Step 1: Instantiate the compiler WebAssembly module
-const compilerBytes = await fetch("pkg/cppwasm_bg.wasm").then(r => r.arrayBuffer());
+const compilerBytes = await fetch("pkg/cppbolt_bg.wasm").then(r => r.arrayBuffer());
 const { instance } = await WebAssembly.instantiate(compilerBytes, {});
 const wasm = instance.exports;
 
@@ -125,7 +125,7 @@ Compiling complex C++ programs with deep recursion can consume significant CPU c
 The playground supports URL query parameters so interactive code snippets can be shared:
 - `code`: URL-encoded C++ source code.
 - `run=1`: Automatically compiles and executes the program upon loading without requiring a button click.
-- `compiler`: Custom URL path to a `cppwasm_bg.wasm` compiler binary.
+- `compiler`: Custom URL path to a `cppbolt_bg.wasm` compiler binary.
 
 Example:
 ```text

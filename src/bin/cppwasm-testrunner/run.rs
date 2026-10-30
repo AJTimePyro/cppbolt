@@ -1,7 +1,7 @@
 //! Running the corpus tests and comparing their output.
 
 use super::*;
-use cppwasm::corpus::{compare_output, input_path, run_with_input};
+use cppbolt::corpus::{compare_output, input_path, run_with_input};
 use std::process::Command;
 
 fn ensure_feature_dir(paths: &Paths, feature: &str) -> Result<(), String> {

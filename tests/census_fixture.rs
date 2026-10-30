@@ -5,7 +5,7 @@
 //! The expected counts are the ones the independent scanner of the audit
 //! reports for the same fixture, so the two scanners can be compared.
 
-use cppwasm::census::census;
+use cppbolt::census::census;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -67,7 +67,7 @@ static DIRECTORIES: AtomicUsize = AtomicUsize::new(0);
 /// Writes the fixture into a directory and returns the census of it.
 ///
 /// Every test uses its own directory, so the tests can run in parallel.
-fn fixture_census() -> Result<cppwasm::census::Census, String> {
+fn fixture_census() -> Result<cppbolt::census::Census, String> {
     let unique = DIRECTORIES.fetch_add(1, Ordering::Relaxed);
     let root = std::env::temp_dir().join(format!("cppwasm-census-{}-{unique}", std::process::id()));
     let source = root.join("src");
@@ -79,7 +79,7 @@ fn fixture_census() -> Result<cppwasm::census::Census, String> {
 }
 
 /// The functions of the fixture, in the order the scanner finds them.
-fn fixture_functions() -> Result<Vec<cppwasm::census::FunctionRecord>, String> {
+fn fixture_functions() -> Result<Vec<cppbolt::census::FunctionRecord>, String> {
     Ok(fixture_census()?.functions)
 }
 

@@ -140,7 +140,7 @@ const exampleButton = document.getElementById("example");
 // the page, so the page works at the root of a site and in a subdirectory
 // of one, which is how GitHub Pages serves a project site.
 const parameters = new URLSearchParams(location.search);
-const compilerUrl = parameters.get("compiler") || "pkg/cppwasm_bg.wasm";
+const compilerUrl = parameters.get("compiler") || "pkg/cppbolt_bg.wasm";
 
 const EXAMPLES = [
     `#include <cstdio>

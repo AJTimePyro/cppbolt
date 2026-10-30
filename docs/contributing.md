@@ -1,6 +1,6 @@
 # Contributing Guide
 
-Thank you for contributing to `cppwasm`! This document outlines development workflows, code standards, how to add a language feature end-to-end, and the required pull request checklist.
+Thank you for contributing to `cppbolt`! This document outlines development workflows, code standards, how to add a language feature end-to-end, and the required pull request checklist.
 
 ---
 
@@ -63,7 +63,7 @@ python3 -m http.server --directory site 8000
 
 ## 3. Adding a New Language Feature End-to-End
 
-When adding a new C++ language feature or expression form to `cppwasm`, modifications typically flow through each stage of the compiler pipeline:
+When adding a new C++ language feature or expression form to `cppbolt`, modifications typically flow through each stage of the compiler pipeline:
 
 1. **Tokens (`src/lexer/`)**:
    - If the feature introduces new keywords or operators, add variants to `src/lexer/token.rs` and update lexer scanning in `src/lexer/mod.rs`.

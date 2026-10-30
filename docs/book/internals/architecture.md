@@ -1,6 +1,6 @@
 # Compiler Architecture
 
-`cppwasm` is organized as a single Cargo package that provides a core compiler library (`cppwasm`), a native CLI (`cppwasm-cli`), a corpus test runner (`cppwasm-testrunner`), and a code metrics scanner (`cppwasm-census`).
+`cppbolt` is organized as a single Cargo package that provides a core compiler library (`cppbolt`), a native CLI (`cppwasm-cli`), a corpus test runner (`cppwasm-testrunner`), and a code metrics scanner (`cppwasm-census`).
 
 The core library is entirely OS-agnostic and dependency-free: it performs no direct filesystem I/O, spawns no child processes, and requires no multi-threading runtime. Host environments supply include files through the `IncludeProvider` trait.
 
@@ -71,10 +71,10 @@ The compiler follows a direct, five-stage pipeline:
 
 ## 2. Direct AST-to-Wasm Lowering (No IR, No Optimizer)
 
-A fundamental architectural decision in `cppwasm` is the **complete absence of an Intermediate Representation (IR)** and an optimization pass (see [ADR 0002](../adr/0002-direct-wasm.md)).
+A fundamental architectural decision in `cppbolt` is the **complete absence of an Intermediate Representation (IR)** and an optimization pass (see [ADR 0002](../adr/0002-direct-wasm.md)).
 
 - **Traditional Compilers**: Typically translate `AST -> High-Level IR -> Low-Level IR (SSA / 3-Address Code) -> Machine Instructions`, running dozens of optimization passes in between.
-- **`cppwasm` Architecture**: Lowers the annotated Abstract Syntax Tree (`ast::Program`) and semantic state (`sema::Sema`) **directly into WebAssembly instruction bytes**.
+- **`cppbolt` Architecture**: Lowers the annotated Abstract Syntax Tree (`ast::Program`) and semantic state (`sema::Sema`) **directly into WebAssembly instruction bytes**.
 - **Why No IR?**
   - Keeps the compiler's own compiled WebAssembly payload extremely small (~244 KB gzipped).
   - Maximizes compilation throughput in browser Web Workers.
@@ -104,7 +104,7 @@ The repository contains a single unified Cargo package defined in `Cargo.toml`:
 
 | Target | Entry File | Responsibility |
 |---|---|---|
-| `cppwasm` (lib) | `src/lib.rs` | Core compiler pipeline, public Rust API, and C ABI entry points (`src/ffi.rs`) |
+| `cppbolt` (lib) | `src/lib.rs` | Core compiler pipeline, public Rust API, and C ABI entry points (`src/ffi.rs`) |
 | `cppwasm-cli` (bin) | `src/main.rs` | Native command-line interface with filesystem include support and 64 MiB execution thread |
 | `cppwasm-testrunner` (bin) | `src/bin/cppwasm-testrunner.rs` | Corpus test runner, variant verification, native oracle execution, and golden baseline check |
 | `cppwasm-census` (bin) | `src/bin/cppwasm-census.rs` | Code quality scanner enforcing function line count (<80 lines) and parameter limits (<5 params) |

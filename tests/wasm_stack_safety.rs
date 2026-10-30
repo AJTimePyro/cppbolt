@@ -19,7 +19,7 @@ const STATEMENT_LIMIT: usize = 1600;
 
 #[test]
 fn the_pinned_limits_match_the_compiler() {
-    let limits = cppwasm::nesting_limits();
+    let limits = cppbolt::nesting_limits();
     assert_eq!(limits.parentheses, PARENTHESIS_LIMIT);
     assert_eq!(limits.calls, CALL_LIMIT);
     assert_eq!(limits.statements, STATEMENT_LIMIT);
@@ -49,7 +49,7 @@ fn wasm_hosted_compiler_stays_within_stack_limits() -> Result<(), Box<dyn std::e
 
 /// Writes the per-construct nesting limits as JSON for the JavaScript check.
 fn write_limits(path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let limits = cppwasm::nesting_limits();
+    let limits = cppbolt::nesting_limits();
     let json = format!(
         "{{\"parentheses\": {}, \"calls\": {}, \"statements\": {}}}",
         limits.parentheses, limits.calls, limits.statements
@@ -64,7 +64,7 @@ fn ensure_wasm_compiler(root: &Path) -> Result<PathBuf, Box<dyn std::error::Erro
     let isolated = root.join("target/abi-wasm");
     // The release build is the one hosts use, and the one the nesting
     // limits are measured on.
-    let wasm = isolated.join("wasm32-unknown-unknown/release/cppwasm.wasm");
+    let wasm = isolated.join("wasm32-unknown-unknown/release/cppbolt.wasm");
     if wasm.exists() {
         return Ok(wasm);
     }

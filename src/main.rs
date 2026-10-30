@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use cppwasm::{IncludeProvider, ResolvedInclude, compile_with_provider};
+use cppbolt::{IncludeProvider, ResolvedInclude, compile_with_provider};
 use std::env;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -78,7 +78,7 @@ fn main() {
     };
 
     if options.dump_layouts {
-        match cppwasm::dump_record_layouts_with_provider(
+        match cppbolt::dump_record_layouts_with_provider(
             &source,
             &options.input_path,
             &options.includes,

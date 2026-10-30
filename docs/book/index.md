@@ -1,8 +1,8 @@
 # Introduction
 
-Welcome to the **cppwasm** documentation.
+Welcome to the **cppbolt** documentation.
 
-`cppwasm` is a dependency-free, correctness-oriented C++ subset compiler written from scratch in Rust. It compiles standard C++17 source code directly into WebAssembly (`.wasm`) binary format for instant execution in web browsers, Web Workers, Node.js, and headless test runners.
+`cppbolt` is a dependency-free, correctness-oriented C++ subset compiler written from scratch in Rust. It compiles standard C++17 source code directly into WebAssembly (`.wasm`) binary format for instant execution in web browsers, Web Workers, Node.js, and headless test runners.
 
 Try the compiler directly online in the [Browser Playground](https://ajtimepyro.is-a.dev/cpp-web-compiler/).
 

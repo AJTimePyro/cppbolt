@@ -4,7 +4,7 @@
 Accepted (reconstructed) <!-- TODO: confirm with author -->
 
 ## Context
-Programs in C++ frequently allocate and free dynamic memory via `malloc`/`free` and `new`/`delete` (`tests/classes_oop/memory_raii/new_delete.cpp`, `tests/memory_model/free_list_reuse.cpp`). Because `cppwasm` is dependency-free, it cannot link `dlmalloc` or external C standard libraries, but must emit its own allocator directly into the generated WebAssembly module (`src/runtime/allocator.rs`, commit `0b21628`).
+Programs in C++ frequently allocate and free dynamic memory via `malloc`/`free` and `new`/`delete` (`tests/classes_oop/memory_raii/new_delete.cpp`, `tests/memory_model/free_list_reuse.cpp`). Because `cppbolt` is dependency-free, it cannot link `dlmalloc` or external C standard libraries, but must emit its own allocator directly into the generated WebAssembly module (`src/runtime/allocator.rs`, commit `0b21628`).
 
 ## Options Considered
 - **Option 1: Bump allocator without `free` support**

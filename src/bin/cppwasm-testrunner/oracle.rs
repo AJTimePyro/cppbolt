@@ -2,7 +2,7 @@
 //! `clang++` and checks that their native output matches the recorded
 //! `.expected` file. Compilers that are not installed are skipped.
 
-use cppwasm::oracle;
+use cppbolt::oracle;
 use std::process::ExitCode;
 
 pub(super) fn run_oracle(filter: Option<&str>) -> ExitCode {

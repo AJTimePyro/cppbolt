@@ -18,7 +18,7 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-WASM = os.path.join(ROOT, "target/wasm32-unknown-unknown/release/cppwasm.wasm")
+WASM = os.path.join(ROOT, "target/wasm32-unknown-unknown/release/cppbolt.wasm")
 DOC = os.path.join(ROOT, "docs/architecture.md")
 
 # The size baseline the growth is measured against.

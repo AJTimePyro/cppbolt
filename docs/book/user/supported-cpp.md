@@ -1,6 +1,6 @@
 # Supported C++ Feature Matrix
 
-`cppwasm` implements a defined, correctness-oriented subset of C++17. Every supported feature is covered by automated corpus tests and pinned by cryptographic golden hashes. Features outside the subset are either explicitly rejected with clear diagnostics or tracked as planned future extensions.
+`cppbolt` implements a defined, correctness-oriented subset of C++17. Every supported feature is covered by automated corpus tests and pinned by cryptographic golden hashes. Features outside the subset are either explicitly rejected with clear diagnostics or tracked as planned future extensions.
 
 The baseline test status is tracked in `tests/PASSING.txt`. Run the test runner to verify status locally:
 

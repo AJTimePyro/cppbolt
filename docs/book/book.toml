@@ -1,9 +1,9 @@
 [book]
-authors = ["AJTimePyro", "The cppwasm Authors"]
+authors = ["AJTimePyro", "The cppbolt Authors"]
 language = "en"
 multilingual = false
 src = "."
-title = "cppwasm Documentation"
+title = "cppbolt Documentation"
 
 [output.html]
 default-theme = "rust"

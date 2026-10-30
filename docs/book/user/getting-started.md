@@ -1,12 +1,12 @@
-# Getting Started with cppwasm
+# Getting Started with cppbolt
 
-`cppwasm` is a dependency-free C++ to WebAssembly subset compiler written in Rust. It compiles a defined subset of C++17 directly to WebAssembly bytecode without requiring LLVM, Clang, or Emscripten.
+`cppbolt` is a dependency-free C++ to WebAssembly subset compiler written in Rust. It compiles a defined subset of C++17 directly to WebAssembly bytecode without requiring LLVM, Clang, or Emscripten.
 
 ---
 
 ## Prerequisites
 
-To build and run `cppwasm`, you will need:
+To build and run `cppbolt`, you will need:
 - **Rust Toolchain**: Stable Rust with the 2024 edition (`rustc` and `cargo`).
 - **WebAssembly Target** (for browser build): `rustup target add wasm32-unknown-unknown`.
 - **Node.js** (v18+ recommended) for running command-line WebAssembly tests.
@@ -64,7 +64,7 @@ Hello from WebAssembly C++!
 
 ## 3. Running the Test Suite
 
-`cppwasm` includes a corpus test runner that verifies language behavior, golden binary hashes, and error diagnostics:
+`cppbolt` includes a corpus test runner that verifies language behavior, golden binary hashes, and error diagnostics:
 
 ```sh
 # Run the testrunner against the release CLI binary
