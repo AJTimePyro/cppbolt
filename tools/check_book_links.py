@@ -19,7 +19,7 @@ def main() -> int:
     checked_internal = 0
     checked_repo = 0
 
-    repo_prefix = "https://github.com/AJTimePyro/cpp-web-compiler/blob/main/"
+    repo_prefix = "https://github.com/AJTimePyro/cppbolt/blob/main/"
 
     for root, _, files in os.walk(book_html_dir):
         for f in files:

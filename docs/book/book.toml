@@ -8,4 +8,4 @@ title = "cppbolt Documentation"
 [output.html]
 default-theme = "rust"
 preferred-dark-theme = "navy"
-git-repository-url = "https://github.com/AJTimePyro/cpp-web-compiler"
+git-repository-url = "https://github.com/AJTimePyro/cppbolt"
