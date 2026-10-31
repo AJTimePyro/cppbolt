@@ -96,8 +96,6 @@ jobs:
           gh release upload "$TAG" dist/cppbolt.wasm --clobber
 
       - name: Publish to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           cd dist/npm
 
