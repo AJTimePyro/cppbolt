@@ -64,7 +64,7 @@ fn clean_path(path: &Path) -> PathBuf {
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
-        eprintln!("Usage: cppwasm-cli [--dump-record-layouts] [-o <out.wasm>] <input.cpp>");
+        eprintln!("Usage: cppbolt-cli [--dump-record-layouts] [-o <out.wasm>] <input.cpp>");
         process::exit(1);
     }
     let options = parse_args(&args);
@@ -185,7 +185,7 @@ fn compile_source(source: &str, options: &CliOptions) -> Result<Vec<u8>, String>
     let includes = options.includes.clone();
     let max_memory_mb = options.max_memory_mb;
     match std::thread::Builder::new()
-        .name("cppwasm-compile".to_string())
+        .name("cppbolt-compile".to_string())
         .stack_size(64 * 1024 * 1024)
         .spawn(move || {
             compile_with_provider(&source, &input_path, max_memory_mb, &includes)

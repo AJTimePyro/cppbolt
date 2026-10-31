@@ -18,7 +18,7 @@ pub(super) enum Mode {
 }
 
 pub(super) fn run(mode: Mode, manifest: &Path, compiler: PathBuf) -> ExitCode {
-    let work = std::env::temp_dir().join(format!("cppwasm-golden-{}", std::process::id()));
+    let work = std::env::temp_dir().join(format!("cppbolt-golden-{}", std::process::id()));
     if let Err(error) = fs::create_dir_all(&work) {
         eprintln!("cannot create {}: {error}", work.display());
         return ExitCode::FAILURE;

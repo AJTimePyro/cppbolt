@@ -15,11 +15,11 @@ The compiler is correctness-focused and implements an explicit, predictable lang
 Build the release compiler and run the test suite:
 
 ```sh
-# Build the native CLI compiler (target/release/cppwasm-cli)
+# Build the native CLI compiler (target/release/cppbolt-cli)
 cargo build --release
 
 # Run the testrunner against the compiled CLI
-cargo run --bin cppwasm-testrunner -- target/release/cppwasm-cli
+cargo run --bin cppbolt-testrunner -- target/release/cppbolt-cli
 ```
 
 Compile a simple C++ program to WebAssembly:
@@ -34,7 +34,7 @@ int main() {
 }
 ' > hello.cpp
 
-target/release/cppwasm-cli hello.cpp -o hello.wasm
+target/release/cppbolt-cli hello.cpp -o hello.wasm
 ```
 
 ### 2. Try in the Browser (Playground)
@@ -83,10 +83,10 @@ Comprehensive project documentation is published via mdBook at [https://ajtimepy
 | Path | Responsibility |
 |---|---|
 | [`src/lib.rs`](src/lib.rs) | Core compiler pipeline (`preprocessor -> lexer -> parser -> sema -> codegen`) |
-| [`src/main.rs`](src/main.rs) | Native CLI front end (`cppwasm-cli`) with filesystem include resolution |
+| [`src/main.rs`](src/main.rs) | Native CLI front end (`cppbolt-cli`) with filesystem include resolution |
 | [`src/ffi.rs`](src/ffi.rs) | WebAssembly C ABI entry points for embedding in browser or Node.js |
-| [`src/bin/cppwasm-testrunner.rs`](src/bin/cppwasm-testrunner.rs) | Corpus test runner, golden baseline verification, and native oracle gates |
-| [`src/bin/cppwasm-census.rs`](src/bin/cppwasm-census.rs) | Code-quality scanner enforcing function length and parameter limits |
+| [`src/bin/cppbolt-testrunner.rs`](src/bin/cppbolt-testrunner.rs) | Corpus test runner, golden baseline verification, and native oracle gates |
+| [`src/bin/cppbolt-census.rs`](src/bin/cppbolt-census.rs) | Code-quality scanner enforcing function length and parameter limits |
 | [`stdlib/`](stdlib/) | Embedded standard library C++ headers (`<iostream>`, `<string>`, `<cstdio>`, etc.) |
 | [`web/`](web/) | Browser playground HTML, worker script, and JavaScript host environment (`host.js`) |
 | [`tests/`](tests/) | Compiler test suite (positive tests, negative error tests, runtime traps, variants) |

@@ -69,7 +69,7 @@ static DIRECTORIES: AtomicUsize = AtomicUsize::new(0);
 /// Every test uses its own directory, so the tests can run in parallel.
 fn fixture_census() -> Result<cppbolt::census::Census, String> {
     let unique = DIRECTORIES.fetch_add(1, Ordering::Relaxed);
-    let root = std::env::temp_dir().join(format!("cppwasm-census-{}-{unique}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("cppbolt-census-{}-{unique}", std::process::id()));
     let source = root.join("src");
     std::fs::create_dir_all(&source).map_err(|error| error.to_string())?;
     std::fs::write(source.join("fixture.rs"), FIXTURE).map_err(|error| error.to_string())?;

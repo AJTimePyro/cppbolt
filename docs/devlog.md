@@ -36,7 +36,7 @@ Work on this date addressed list initialization and several compiler edge cases 
 - Added negative tests in `tests/negative/` for narrowing conversions, explicit constructor rejection, and excess initializer counts.
 - Added regression tests for multi-dimensional pointer dereferencing, global constructor arguments, and conversion operator parameter passing.
 - 51 library tests pass (`cargo test --lib`).
-- 324 corpus tests pass without manifest violations (`cargo run --bin cppwasm-testrunner`).
+- 324 corpus tests pass without manifest violations (`cargo run --bin cppbolt-testrunner`).
 - Formatting and clippy clean.
 
 ---

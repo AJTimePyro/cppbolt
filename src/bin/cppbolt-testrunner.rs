@@ -3,15 +3,15 @@
 
 #![forbid(unsafe_code)]
 
-#[path = "cppwasm-testrunner/checks.rs"]
+#[path = "cppbolt-testrunner/checks.rs"]
 mod checks;
-#[path = "cppwasm-testrunner/run.rs"]
+#[path = "cppbolt-testrunner/run.rs"]
 mod run;
 
-#[path = "cppwasm-testrunner/golden.rs"]
+#[path = "cppbolt-testrunner/golden.rs"]
 mod golden;
 
-#[path = "cppwasm-testrunner/oracle.rs"]
+#[path = "cppbolt-testrunner/oracle.rs"]
 mod oracle;
 
 use cppbolt::corpus::{self, FEATURES};
@@ -71,13 +71,13 @@ fn run_golden_mode(
         golden::Mode::Check
     };
     let Some(manifest) = args.next() else {
-        eprintln!("Usage: cppwasm-testrunner --golden|--check-golden <manifest> [compiler]");
+        eprintln!("Usage: cppbolt-testrunner --golden|--check-golden <manifest> [compiler]");
         return Some(ExitCode::FAILURE);
     };
     let compiler = args
         .next()
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("target/release/cppwasm-cli"));
+        .unwrap_or_else(|| PathBuf::from("target/release/cppbolt-cli"));
     Some(golden::run(mode, Path::new(&manifest), compiler))
 }
 
@@ -96,10 +96,10 @@ fn main() -> ExitCode {
     }
     let compiler = first
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("target/release/cppwasm-cli"));
+        .unwrap_or_else(|| PathBuf::from("target/release/cppbolt-cli"));
     let filter = args.next();
 
-    let work = std::env::temp_dir().join(format!("cppwasm-corpus-{}", std::process::id()));
+    let work = std::env::temp_dir().join(format!("cppbolt-corpus-{}", std::process::id()));
     if let Err(error) = fs::create_dir_all(&work) {
         eprintln!("cannot create {}: {error}", work.display());
         return ExitCode::FAILURE;

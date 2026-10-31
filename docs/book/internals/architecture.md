@@ -1,6 +1,6 @@
 # Compiler Architecture
 
-`cppbolt` is organized as a single Cargo package that provides a core compiler library (`cppbolt`), a native CLI (`cppwasm-cli`), a corpus test runner (`cppwasm-testrunner`), and a code metrics scanner (`cppwasm-census`).
+`cppbolt` is organized as a single Cargo package that provides a core compiler library (`cppbolt`), a native CLI (`cppbolt-cli`), a corpus test runner (`cppbolt-testrunner`), and a code metrics scanner (`cppbolt-census`).
 
 The core library is entirely OS-agnostic and dependency-free: it performs no direct filesystem I/O, spawns no child processes, and requires no multi-threading runtime. Host environments supply include files through the `IncludeProvider` trait.
 
@@ -105,6 +105,6 @@ The repository contains a single unified Cargo package defined in `Cargo.toml`:
 | Target | Entry File | Responsibility |
 |---|---|---|
 | `cppbolt` (lib) | `src/lib.rs` | Core compiler pipeline, public Rust API, and C ABI entry points (`src/ffi.rs`) |
-| `cppwasm-cli` (bin) | `src/main.rs` | Native command-line interface with filesystem include support and 64 MiB execution thread |
-| `cppwasm-testrunner` (bin) | `src/bin/cppwasm-testrunner.rs` | Corpus test runner, variant verification, native oracle execution, and golden baseline check |
-| `cppwasm-census` (bin) | `src/bin/cppwasm-census.rs` | Code quality scanner enforcing function line count (<80 lines) and parameter limits (<5 params) |
+| `cppbolt-cli` (bin) | `src/main.rs` | Native command-line interface with filesystem include support and 64 MiB execution thread |
+| `cppbolt-testrunner` (bin) | `src/bin/cppbolt-testrunner.rs` | Corpus test runner, variant verification, native oracle execution, and golden baseline check |
+| `cppbolt-census` (bin) | `src/bin/cppbolt-census.rs` | Code quality scanner enforcing function line count (<80 lines) and parameter limits (<5 params) |

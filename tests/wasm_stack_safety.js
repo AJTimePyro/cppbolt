@@ -179,7 +179,7 @@ let counter = 0;
 // less room for the next one.  A fresh process per case measures the
 // compiler, not the state of the host.
 function compileOne(source) {
-    const file = path.join(os.tmpdir(), `cppwasm-stack-${process.pid}-${counter}.cpp`);
+    const file = path.join(os.tmpdir(), `cppbolt-stack-${process.pid}-${counter}.cpp`);
     counter += 1;
     fs.writeFileSync(file, source);
     try {

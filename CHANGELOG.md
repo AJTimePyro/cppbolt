@@ -9,6 +9,9 @@ This project does not yet have tagged semantic releases; all historical work is 
 
 ## [Unreleased]
 
+### Project Rename
+- Renamed the remaining legacy project-name references to `cppbolt`. The binaries are now `cppbolt-cli`, `cppbolt-testrunner`, and `cppbolt-census`, and the test runner's default compiler path is `target/release/cppbolt-cli`.
+
 ### List Initialization & Aggregates
 - Added support for braced list initialization across declarations, member initializers, return values, function arguments, assignments, and heap allocations.
 - Direct-list initialization allows explicit constructors; copy-list initialization rejects them.
@@ -31,7 +34,7 @@ This project does not yet have tagged semantic releases; all historical work is 
   - **Structured Bindings**: Added decomposition for aggregate structs (`auto [a, b] = p;`, `auto&`, `const auto&`) desugared into hidden bindings and member references.
   - **Global Initializer Reachability**: Updated dead-code elimination root collection to traverse function calls in global variable initializers.
   - **Exception Diagnostics**: Emitted explicit target diagnostic on encountering `throw` (`C++ exception handling ('throw') is not supported on this WebAssembly target`).
-- **Tests & Tooling**: Reorganized test directories into functional subdirectories (`control_flow`, `enums`, `functions`, `io_printf`, `misc`, `pointers_arrays`, `preprocessor`, `types`, `constructors_destructors`, `inheritance`, `memory_raii`, `methods`, `operators`, `statics_namespaces`, `structs`) and upgraded `cppwasm-testrunner` with recursive discovery and nested output path mirroring.
+- **Tests & Tooling**: Reorganized test directories into functional subdirectories (`control_flow`, `enums`, `functions`, `io_printf`, `misc`, `pointers_arrays`, `preprocessor`, `types`, `constructors_destructors`, `inheritance`, `memory_raii`, `methods`, `operators`, `statics_namespaces`, `structs`) and upgraded `cppbolt-testrunner` with recursive discovery and nested output path mirroring.
 
 ### Overloaded Operators: Postfix `++`/`--`, Arrow `->`, Dereference `*`, and Functor `()`
 - **Feature**: Implemented support for overloaded `operator*()`, `operator->`, `operator()`, and postfix `operator++(int)`/`operator--(int)`.
@@ -99,11 +102,11 @@ This project does not yet have tagged semantic releases; all historical work is 
 ### Modular Architecture & Function Right-Sizing
 - **Refactor**: Split oversized functions across the compiler to ensure no function exceeds 80 lines and no file exceeds 500 lines.
 - **Context Structs**: Grouped loose parameter lists into structured contexts (`CallSite`, `MemberAccess`, `NamedCall`, `SwitchSlots`, `CtorCall`).
-- **Census Scanner**: Added `cppwasm-census` tool to automatically check repository code metrics (lines per function, parameter counts, file sizes).
+- **Census Scanner**: Added `cppbolt-census` tool to automatically check repository code metrics (lines per function, parameter counts, file sizes).
 - **Module Tree**: Added integration test ensuring every `.rs` file in `src/` is reachable from the crate module tree.
 
 ### Test Harness, Variant Gates & Golden Baselines
-- **Harness**: Developed `cppwasm-testrunner` executing tests grouped by feature directories with expected output and error checks.
+- **Harness**: Developed `cppbolt-testrunner` executing tests grouped by feature directories with expected output and error checks.
 - **Golden Baseline**: Implemented `tests/golden.txt` cryptographic SHA-256 baseline pinning emitted WebAssembly modules and stdout across positive tests.
 - **Anti-Overfitting Variants**: Created `_variant` suites with structural divergence gates preventing trivial identifier-only copy-paste tests.
 - **Native Oracle**: Implemented native oracle gate compiling corpus tests through `g++` and `clang++` to guarantee standards conformance.

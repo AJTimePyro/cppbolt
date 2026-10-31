@@ -12,12 +12,12 @@ path = "src/lib.rs"
 crate-type = ["rlib", "cdylib"]
 
 [[bin]]
-name = "cppwasm-cli"
+name = "cppbolt-cli"
 path = "src/main.rs"
 
 [[bin]]
-name = "cppwasm-testrunner"
-path = "src/bin/cppwasm-testrunner.rs"
+name = "cppbolt-testrunner"
+path = "src/bin/cppbolt-testrunner.rs"
 
 [dependencies]
 

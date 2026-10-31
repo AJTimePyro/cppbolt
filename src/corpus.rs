@@ -128,7 +128,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .map_err(|error| format!("{error}"))?
             .as_nanos();
-        let temp = std::env::temp_dir().join(format!("cppwasm_corpus_test_{nonce}"));
+        let temp = std::env::temp_dir().join(format!("cppbolt_corpus_test_{nonce}"));
         let sub = temp.join("sub");
         fs::create_dir_all(&sub)?;
 

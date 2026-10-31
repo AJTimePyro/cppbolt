@@ -20,11 +20,11 @@ To build and run `cppbolt`, you will need:
 Clone the repository and build the release binary:
 
 ```sh
-# Build the native CLI compiler (target/release/cppwasm-cli)
+# Build the native CLI compiler (target/release/cppbolt-cli)
 cargo build --release
 ```
 
-The compiled binary will be placed at `target/release/cppwasm-cli`.
+The compiled binary will be placed at `target/release/cppbolt-cli`.
 
 ---
 
@@ -44,7 +44,7 @@ int main() {
 Compile it to WebAssembly using the CLI:
 
 ```sh
-target/release/cppwasm-cli hello.cpp -o hello.wasm
+target/release/cppbolt-cli hello.cpp -o hello.wasm
 ```
 
 ### Running the WebAssembly Module
@@ -68,7 +68,7 @@ Hello from WebAssembly C++!
 
 ```sh
 # Run the testrunner against the release CLI binary
-cargo run --bin cppwasm-testrunner -- target/release/cppwasm-cli
+cargo run --bin cppbolt-testrunner -- target/release/cppbolt-cli
 ```
 
 The test runner will discover all test groups, verify the manifest in `tests/PASSING.txt`, and check that all positive tests match their expected output.

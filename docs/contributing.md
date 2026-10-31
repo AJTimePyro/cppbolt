@@ -9,7 +9,7 @@ Thank you for contributing to `cppbolt`! This document outlines development work
 Building the project requires a standard Rust toolchain (2024 edition).
 
 ```sh
-# Build the native CLI compiler (target/release/cppwasm-cli)
+# Build the native CLI compiler (target/release/cppbolt-cli)
 cargo build --release
 
 # Run Rust unit and integration tests
@@ -25,14 +25,14 @@ cargo clippy --all-targets -- -D warnings
 ## 2. Running Tests & the Compiler
 
 ### Running the Corpus Runner
-All C++ test suites (positive tests, negative diagnostics, and runtime traps) are managed by `cppwasm-testrunner`:
+All C++ test suites (positive tests, negative diagnostics, and runtime traps) are managed by `cppbolt-testrunner`:
 
 ```sh
 # Run all discovered test groups
-cargo run --bin cppwasm-testrunner -- target/release/cppwasm-cli
+cargo run --bin cppbolt-testrunner -- target/release/cppbolt-cli
 
 # Run a specific feature group (e.g. c_basics)
-cargo run --bin cppwasm-testrunner -- target/release/cppwasm-cli c_basics
+cargo run --bin cppbolt-testrunner -- target/release/cppbolt-cli c_basics
 ```
 
 For full details on the test categories (variants, independent tests, golden hashes, native oracle gates, and census metrics), see the dedicated [Testing System Guide](internals/testing.md).
@@ -42,7 +42,7 @@ Compile a C++ source file using the native CLI:
 
 ```sh
 # Compile C++ source to a WebAssembly binary
-cargo run --release --bin cppwasm-cli -- path/to/sample.cpp -o output.wasm
+cargo run --release --bin cppbolt-cli -- path/to/sample.cpp -o output.wasm
 ```
 
 You can run the resulting `.wasm` binary in Node.js using the test runner shim:
@@ -85,7 +85,7 @@ When adding a new C++ language feature or expression form to `cppbolt`, modifica
    - If rejecting invalid syntax, add a negative test (`.cpp` and `.expected_err`) in `tests/negative/`.
    - Update `tests/PASSING.txt` and regenerate golden hashes if expected changes are approved:
      ```sh
-     cargo run --release --bin cppwasm-testrunner -- --golden tests/golden.txt target/release/cppwasm-cli
+     cargo run --release --bin cppbolt-testrunner -- --golden tests/golden.txt target/release/cppbolt-cli
      ```
 
 ---
@@ -94,7 +94,7 @@ When adding a new C++ language feature or expression form to `cppbolt`, modifica
 
 - **No Compiler Logic Modifications Without Tests**: Every supported behavior must have a positive corpus test. Every unsupported construct must produce a clean diagnostic, not a crash or panic.
 - **Panic-Free Policy**: Never use `unwrap()`, `expect()`, or `panic!()` on code paths that can process user input. Use `Result<T, CompileError>`.
-- **Function and File Size Limits**: Enforced by `src/bin/cppwasm-census.rs` and verified by `tests/census_fixture.rs`:
+- **Function and File Size Limits**: Enforced by `src/bin/cppbolt-census.rs` and verified by `tests/census_fixture.rs`:
   - No function may exceed 80 lines.
   - No function may take more than 5 parameters (excluding `self`).
   - No file in `src/` may exceed 500 lines.
@@ -108,11 +108,11 @@ When adding a new C++ language feature or expression form to `cppbolt`, modifica
 Before submitting a pull request, ensure all of the following items are complete:
 
 - [ ] **Tests Pass**: `cargo test --all-targets` exits 0.
-- [ ] **Corpus Runner Passes**: `cargo run --bin cppwasm-testrunner -- target/release/cppwasm-cli` reports 0 unexpected failures and 0 manifest violations.
+- [ ] **Corpus Runner Passes**: `cargo run --bin cppbolt-testrunner -- target/release/cppbolt-cli` reports 0 unexpected failures and 0 manifest violations.
 - [ ] **Code Quality Gates Pass**:
   - `cargo fmt --all -- --check`
   - `cargo clippy --all-targets -- -D warnings`
-  - `cargo run --release --bin cppwasm-census` reports 0 violations.
+  - `cargo run --release --bin cppbolt-census` reports 0 violations.
 - [ ] **Feature Matrix Updated**: New features or changed statuses are reflected in [Supported C++](user/supported-cpp.md) with links to test files.
 - [ ] **Documentation Updated**: Relevant mdBook chapters or doc comments (`///`, `//!`) updated.
 - [ ] **ADR Created (if applicable)**: An Architecture Decision Record was added to [`docs/adr/`](adr/template.md) if an architectural, memory model, or ABI decision was made.

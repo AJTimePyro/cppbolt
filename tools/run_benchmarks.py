@@ -45,7 +45,7 @@ def main():
 
         # 3. WebAssembly with our compiler
         wasm_file = "/tmp/bench.wasm"
-        subprocess.run(["target/release/cppwasm-cli", src, "-o", wasm_file], check=True)
+        subprocess.run(["target/release/cppbolt-cli", src, "-o", wasm_file], check=True)
         
         js_cmd = f"""
         const fs = require('fs');

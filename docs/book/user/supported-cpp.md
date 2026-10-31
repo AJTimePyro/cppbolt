@@ -5,7 +5,7 @@
 The baseline test status is tracked in `tests/PASSING.txt`. Run the test runner to verify status locally:
 
 ```sh
-cargo run --bin cppwasm-testrunner -- target/release/cppwasm-cli
+cargo run --bin cppbolt-testrunner -- target/release/cppbolt-cli
 ```
 
 ---
