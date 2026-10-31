@@ -1,8 +1,8 @@
-# cppwasm
+# CPPBolt
 
 A dependency-free C++ to WebAssembly subset compiler written in Rust.
 
-`cppwasm` compiles a defined subset of C++17 directly into WebAssembly (`.wasm`) binaries without relying on LLVM, Emscripten, or external native toolchains. It is built to run both natively as a CLI and in the browser (via a WebAssembly build of the compiler itself and a minimal JavaScript host runtime).
+`cppbolt` compiles a defined subset of C++17 directly into WebAssembly (`.wasm`) binaries without relying on LLVM, Emscripten, or external native toolchains. It is built to run both natively as a CLI and in the browser (via a WebAssembly build of the compiler itself and a minimal JavaScript host runtime).
 
 The compiler is correctness-focused and implements an explicit, predictable language subset. It avoids complex features like templates, standard containers and algorithms, exceptions, and RTTI, choosing deterministic compilation speed and small binary size.
 
@@ -15,11 +15,11 @@ The compiler is correctness-focused and implements an explicit, predictable lang
 Build the release compiler and run the test suite:
 
 ```sh
-# Build the native CLI compiler (target/release/cppwasm-cli)
+# Build the native CLI compiler (target/release/cppbolt-cli)
 cargo build --release
 
 # Run the testrunner against the compiled CLI
-cargo run --bin cppwasm-testrunner -- target/release/cppwasm-cli
+cargo run --bin cppbolt-testrunner -- target/release/cppbolt-cli
 ```
 
 Compile a simple C++ program to WebAssembly:
@@ -34,15 +34,14 @@ int main() {
 }
 ' > hello.cpp
 
-target/release/cppwasm-cli hello.cpp -o hello.wasm
+target/release/cppbolt-cli hello.cpp -o hello.wasm
 ```
 
 ### 2. Try in the Browser (Playground)
 
 You can try the compiler directly in your browser:
-- **Live Online Playground**: [https://ajtimepyro.is-a.dev/cpp-web-compiler/](https://ajtimepyro.is-a.dev/cpp-web-compiler/)
-- **Online Documentation**: [https://ajtimepyro.is-a.dev/cpp-web-compiler/book/](https://ajtimepyro.is-a.dev/cpp-web-compiler/book/)
-- **API Documentation**: [https://ajtimepyro.is-a.dev/cpp-web-compiler/api/](https://ajtimepyro.is-a.dev/cpp-web-compiler/api/)
+- **Live Online Playground**: [https://ajtimepyro.is-a.dev/cppbolt/](https://ajtimepyro.is-a.dev/cppbolt/)
+- **Online Documentation**: [https://ajtimepyro.is-a.dev/cppbolt/book/](https://ajtimepyro.is-a.dev/cppbolt/book/)
 
 To build and run the playground locally:
 
@@ -64,7 +63,7 @@ The browser playground runs the compiler in a dedicated Web Worker to ensure UI 
 
 ## Documentation
 
-Comprehensive project documentation is published via mdBook at [https://ajtimepyro.is-a.dev/cpp-web-compiler/book/](https://ajtimepyro.is-a.dev/cpp-web-compiler/book/):
+Comprehensive project documentation is published via mdBook at [https://ajtimepyro.is-a.dev/cppbolt/book/](https://ajtimepyro.is-a.dev/cppbolt/book/):
 
 - **[Getting Started](docs/book/user/getting-started.md)** — Guide to installing, building, and using the compiler.
 - **[Supported C++ Subset](docs/book/user/supported-cpp.md)** — Full feature matrix with test links and known limitations.
@@ -84,11 +83,15 @@ Comprehensive project documentation is published via mdBook at [https://ajtimepy
 | Path | Responsibility |
 |---|---|
 | [`src/lib.rs`](src/lib.rs) | Core compiler pipeline (`preprocessor -> lexer -> parser -> sema -> codegen`) |
-| [`src/main.rs`](src/main.rs) | Native CLI front end (`cppwasm-cli`) with filesystem include resolution |
+| [`src/main.rs`](src/main.rs) | Native CLI front end (`cppbolt-cli`) with filesystem include resolution |
 | [`src/ffi.rs`](src/ffi.rs) | WebAssembly C ABI entry points for embedding in browser or Node.js |
-| [`src/bin/cppwasm-testrunner.rs`](src/bin/cppwasm-testrunner.rs) | Corpus test runner, golden baseline verification, and native oracle gates |
-| [`src/bin/cppwasm-census.rs`](src/bin/cppwasm-census.rs) | Code-quality scanner enforcing function length and parameter limits |
+| [`src/bin/cppbolt-testrunner.rs`](src/bin/cppbolt-testrunner.rs) | Corpus test runner, golden baseline verification, and native oracle gates |
+| [`src/bin/cppbolt-census.rs`](src/bin/cppbolt-census.rs) | Code-quality scanner enforcing function length and parameter limits |
 | [`stdlib/`](stdlib/) | Embedded standard library C++ headers (`<iostream>`, `<string>`, `<cstdio>`, etc.) |
 | [`web/`](web/) | Browser playground HTML, worker script, and JavaScript host environment (`host.js`) |
 | [`tests/`](tests/) | Compiler test suite (positive tests, negative error tests, runtime traps, variants) |
 | [`docs/`](docs/) | mdBook documentation, ADRs, contributing guide, and devlog |
+
+## License
+
+cppbolt is licensed under the [Apache License 2.0](LICENSE).

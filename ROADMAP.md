@@ -1,8 +1,8 @@
 # Project Roadmap
 
-This roadmap outlines active priorities, medium-term enhancements, and planned language extensions for `cppwasm`. Items are tracked against the test suite and feature matrix in [Supported C++](docs/book/user/supported-cpp.md).
+This roadmap outlines active priorities, medium-term enhancements, and planned language extensions for `cppbolt`. Items are tracked against the test suite and feature matrix in [Supported C++](docs/book/user/supported-cpp.md).
 
-For current baseline results, see [`tests/PASSING.txt`](tests/PASSING.txt) and run the test runner (`cargo run --bin cppwasm-testrunner -- target/release/cppwasm-cli`).
+For current baseline results, see [`tests/PASSING.txt`](tests/PASSING.txt) and run the test runner (`cargo run --bin cppbolt-testrunner -- target/release/cppbolt-cli`).
 
 ---
 

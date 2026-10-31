@@ -1,11 +1,11 @@
 [book]
-authors = ["AJTimePyro", "The cppwasm Authors"]
+authors = ["AJTimePyro", "The cppbolt Authors"]
 language = "en"
 multilingual = false
 src = "."
-title = "cppwasm Documentation"
+title = "cppbolt Documentation"
 
 [output.html]
 default-theme = "rust"
 preferred-dark-theme = "navy"
-git-repository-url = "https://github.com/AJTimePyro/cpp-web-compiler"
+git-repository-url = "https://github.com/AJTimePyro/cppbolt"

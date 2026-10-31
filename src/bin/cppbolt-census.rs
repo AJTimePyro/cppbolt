@@ -1,12 +1,12 @@
 //! Prints the census of the Rust sources: the size of every function, the
 //! number of its parameters, and the size of every file.
 //!
-//! Usage: `cppwasm-census [root] [--tsv <path>]`
+//! Usage: `cppbolt-census [root] [--tsv <path>]`
 //!
 //! The `--tsv` option writes one record per function, so the census can be
 //! compared with another scanner record by record.
 
-use cppwasm::census::{Census, FunctionRecord, census};
+use cppbolt::census::{Census, FunctionRecord, census};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 

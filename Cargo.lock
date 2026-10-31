@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "cppwasm"
+name = "cppbolt"
 version = "0.1.0"

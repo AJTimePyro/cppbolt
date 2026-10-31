@@ -21,7 +21,7 @@ const STATEMENT_LIMIT: usize = 1600;
 
 #[test]
 fn the_pinned_limits_match_the_compiler() {
-    let limits = cppwasm::nesting_limits();
+    let limits = cppbolt::nesting_limits();
     assert_eq!(limits.calls, CALL_LIMIT);
     assert_eq!(limits.parentheses, PARENTHESIS_LIMIT);
     assert_eq!(limits.statements, STATEMENT_LIMIT);
@@ -30,7 +30,7 @@ fn the_pinned_limits_match_the_compiler() {
 fn compile_on_big_stack(source: String) -> Result<Vec<u8>, String> {
     let handle = thread::Builder::new()
         .stack_size(256 * 1024 * 1024)
-        .spawn(move || cppwasm::compile(&source).map_err(|error| error.message))
+        .spawn(move || cppbolt::compile(&source).map_err(|error| error.message))
         .map_err(|error| format!("cannot start test thread: {error}"))?;
     handle
         .join()

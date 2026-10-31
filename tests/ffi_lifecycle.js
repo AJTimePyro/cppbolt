@@ -1,13 +1,13 @@
 // Exercises the compiler's WebAssembly C ABI repeatedly to prove result
 // buffers and input buffers are both released and linear memory stays stable.
 //
-// Usage: node tests/ffi_lifecycle.js <cppwasm.wasm>
+// Usage: node tests/ffi_lifecycle.js <cppbolt.wasm>
 
 const fs = require("fs");
 
 const wasmPath = process.argv[2];
 if (!wasmPath) {
-    console.error("usage: node tests/ffi_lifecycle.js <cppwasm.wasm>");
+    console.error("usage: node tests/ffi_lifecycle.js <cppbolt.wasm>");
     process.exit(2);
 }
 

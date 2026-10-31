@@ -6,7 +6,7 @@
 //! other diagnostic must point at a line that exists in the file it names,
 //! which rules out a fabricated location.
 
-use cppwasm::{CompileError, IncludeProvider, ResolvedInclude, compile_with_provider};
+use cppbolt::{CompileError, IncludeProvider, ResolvedInclude, compile_with_provider};
 use std::fs;
 use std::path::{Path, PathBuf};
 

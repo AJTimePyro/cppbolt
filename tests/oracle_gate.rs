@@ -6,8 +6,8 @@
 //! as a test.  A machine without a native compiler cannot run the gate, and
 //! the test says so instead of passing silently.
 
-use cppwasm::corpus::FEATURES;
-use cppwasm::oracle;
+use cppbolt::corpus::FEATURES;
+use cppbolt::oracle;
 
 #[test]
 fn every_expected_file_matches_the_native_compilers() -> Result<(), Box<dyn std::error::Error>> {

@@ -1,23 +1,23 @@
 [package]
-name = "cppwasm"
+name = "cppbolt"
 version = "0.1.0"
 edition = "2024"
-repository = "https://github.com/AJTimePyro/cpp-web-compiler"
-homepage = "https://ajtimepyro.is-a.dev/cpp-web-compiler/"
-documentation = "https://ajtimepyro.is-a.dev/cpp-web-compiler/book/"
+repository = "https://github.com/AJTimePyro/cppbolt"
+homepage = "https://ajtimepyro.is-a.dev/cppbolt/"
+documentation = "https://ajtimepyro.is-a.dev/cppbolt/book/"
 
 [lib]
-name = "cppwasm"
+name = "cppbolt"
 path = "src/lib.rs"
 crate-type = ["rlib", "cdylib"]
 
 [[bin]]
-name = "cppwasm-cli"
+name = "cppbolt-cli"
 path = "src/main.rs"
 
 [[bin]]
-name = "cppwasm-testrunner"
-path = "src/bin/cppwasm-testrunner.rs"
+name = "cppbolt-testrunner"
+path = "src/bin/cppbolt-testrunner.rs"
 
 [dependencies]
 

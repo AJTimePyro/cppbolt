@@ -26,7 +26,7 @@ fn abi_lifecycle_keeps_memory_bounded() -> Result<(), Box<dyn std::error::Error>
 
 fn ensure_wasm_compiler(root: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let isolated = root.join("target/abi-wasm");
-    let wasm = isolated.join("wasm32-unknown-unknown/fast/cppwasm.wasm");
+    let wasm = isolated.join("wasm32-unknown-unknown/fast/cppbolt.wasm");
     if wasm.exists() {
         return Ok(wasm);
     }

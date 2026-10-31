@@ -1,0 +1,14 @@
+{
+  "name": "cppbolt",
+  "version": "0.1.0",
+  "description": "A C++ compiler targeting WebAssembly",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AJTimePyro/cppbolt.git"
+  },
+  "files": [
+    "wasm/cppbolt.wasm",
+    "README.md"
+  ]
+}

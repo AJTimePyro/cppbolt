@@ -1,6 +1,6 @@
 # Diagnostics & Compiler Errors
 
-All diagnostic messages in `cppwasm` are represented by the unified `CompileError` struct. Error formatting follows GCC and Clang conventions:
+All diagnostic messages in `cppbolt` are represented by the unified `CompileError` struct. Error formatting follows GCC and Clang conventions:
 
 ```text
 file.cpp:line:column: error: message

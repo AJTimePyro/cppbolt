@@ -1,12 +1,12 @@
-# Getting Started with cppwasm
+# Getting Started with cppbolt
 
-`cppwasm` is a dependency-free C++ to WebAssembly subset compiler written in Rust. It compiles a defined subset of C++17 directly to WebAssembly bytecode without requiring LLVM, Clang, or Emscripten.
+`cppbolt` is a dependency-free C++ to WebAssembly subset compiler written in Rust. It compiles a defined subset of C++17 directly to WebAssembly bytecode without requiring LLVM, Clang, or Emscripten.
 
 ---
 
 ## Prerequisites
 
-To build and run `cppwasm`, you will need:
+To build and run `cppbolt`, you will need:
 - **Rust Toolchain**: Stable Rust with the 2024 edition (`rustc` and `cargo`).
 - **WebAssembly Target** (for browser build): `rustup target add wasm32-unknown-unknown`.
 - **Node.js** (v18+ recommended) for running command-line WebAssembly tests.
@@ -20,11 +20,11 @@ To build and run `cppwasm`, you will need:
 Clone the repository and build the release binary:
 
 ```sh
-# Build the native CLI compiler (target/release/cppwasm-cli)
+# Build the native CLI compiler (target/release/cppbolt-cli)
 cargo build --release
 ```
 
-The compiled binary will be placed at `target/release/cppwasm-cli`.
+The compiled binary will be placed at `target/release/cppbolt-cli`.
 
 ---
 
@@ -44,7 +44,7 @@ int main() {
 Compile it to WebAssembly using the CLI:
 
 ```sh
-target/release/cppwasm-cli hello.cpp -o hello.wasm
+target/release/cppbolt-cli hello.cpp -o hello.wasm
 ```
 
 ### Running the WebAssembly Module
@@ -64,11 +64,11 @@ Hello from WebAssembly C++!
 
 ## 3. Running the Test Suite
 
-`cppwasm` includes a corpus test runner that verifies language behavior, golden binary hashes, and error diagnostics:
+`cppbolt` includes a corpus test runner that verifies language behavior, golden binary hashes, and error diagnostics:
 
 ```sh
 # Run the testrunner against the release CLI binary
-cargo run --bin cppwasm-testrunner -- target/release/cppwasm-cli
+cargo run --bin cppbolt-testrunner -- target/release/cppbolt-cli
 ```
 
 The test runner will discover all test groups, verify the manifest in `tests/PASSING.txt`, and check that all positive tests match their expected output.
@@ -77,7 +77,7 @@ The test runner will discover all test groups, verify the manifest in `tests/PAS
 
 ## 4. Running the Browser Playground Locally
 
-You can try the compiler directly in the live [Online Playground](https://ajtimepyro.is-a.dev/cpp-web-compiler/) without local installation, or build and run it locally:
+You can try the compiler directly in the live [Online Playground](https://ajtimepyro.is-a.dev/cppbolt/) without local installation, or build and run it locally:
 
 ```sh
 # 1. Build the compiler as a WebAssembly cdylib

@@ -2,7 +2,7 @@
 // the shared depth limit produces a diagnostic rather than a WebAssembly trap,
 // and that wide left-associative chains still compile.
 //
-// Usage: node tests/wasm_stack_safety.js <cppwasm.wasm> [limits.json]
+// Usage: node tests/wasm_stack_safety.js <cppbolt.wasm> [limits.json]
 //
 // The limits file holds the per-construct nesting limits of the compiler as
 // {"parentheses": N, "calls": N, "statements": N}; when it is given, the
@@ -13,7 +13,7 @@ const fs = require("fs");
 
 const wasmPath = process.argv[2];
 if (!wasmPath) {
-    console.error("usage: node tests/wasm_stack_safety.js <cppwasm.wasm> [limits.json]");
+    console.error("usage: node tests/wasm_stack_safety.js <cppbolt.wasm> [limits.json]");
     process.exit(2);
 }
 
@@ -179,7 +179,7 @@ let counter = 0;
 // less room for the next one.  A fresh process per case measures the
 // compiler, not the state of the host.
 function compileOne(source) {
-    const file = path.join(os.tmpdir(), `cppwasm-stack-${process.pid}-${counter}.cpp`);
+    const file = path.join(os.tmpdir(), `cppbolt-stack-${process.pid}-${counter}.cpp`);
     counter += 1;
     fs.writeFileSync(file, source);
     try {

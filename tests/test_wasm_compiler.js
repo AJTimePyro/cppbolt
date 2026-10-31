@@ -1,7 +1,7 @@
 const fs = require("fs");
 
 async function main() {
-    const compilerWasmBytes = fs.readFileSync("target/wasm32-unknown-unknown/release/cppwasm.wasm");
+    const compilerWasmBytes = fs.readFileSync("target/wasm32-unknown-unknown/release/cppbolt.wasm");
     const module = await WebAssembly.instantiate(compilerWasmBytes, {});
     const instance = module.instance;
 

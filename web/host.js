@@ -2,8 +2,8 @@
     if (typeof module === 'object' && module.exports) {
         module.exports = factory();
     } else {
-        root.CppWasmHost = factory();
-        root.createWasmImports = root.CppWasmHost.createWasmImports;
+        root.CppBoltHost = factory();
+        root.createWasmImports = root.CppBoltHost.createWasmImports;
     }
 }(typeof self !== 'undefined' ? self : this, function () {
 

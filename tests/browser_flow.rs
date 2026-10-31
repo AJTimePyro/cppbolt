@@ -90,7 +90,7 @@ int main() {
 /// Builds the WebAssembly build of the compiler and returns its path.
 fn wasm_compiler(root: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let isolated = root.join("target/abi-wasm");
-    let wasm = isolated.join("wasm32-unknown-unknown/release/cppwasm.wasm");
+    let wasm = isolated.join("wasm32-unknown-unknown/release/cppbolt.wasm");
     if wasm.exists() {
         return Ok(wasm);
     }

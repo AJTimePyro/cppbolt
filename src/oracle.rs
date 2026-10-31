@@ -48,7 +48,7 @@ pub fn run_oracle(groups: &[&str]) -> OracleReport {
         return report;
     }
 
-    let work = std::env::temp_dir().join(format!("cppwasm-oracle-{}", std::process::id()));
+    let work = std::env::temp_dir().join(format!("cppbolt-oracle-{}", std::process::id()));
     if fs::create_dir_all(&work).is_err() {
         report.mismatched += 1;
         report.failures.push(format!(

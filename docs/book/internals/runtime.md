@@ -1,12 +1,12 @@
 # Runtime & Embedded Standard Library
 
-`cppwasm` provides a self-contained runtime environment comprising an ILP32 linear memory layout, an in-module WebAssembly free-list allocator, an embedded `printf` formatting engine, and compile-time embedded standard library headers.
+`cppbolt` provides a self-contained runtime environment comprising an ILP32 linear memory layout, an in-module WebAssembly free-list allocator, an embedded `printf` formatting engine, and compile-time embedded standard library headers.
 
 ---
 
 ## 1. Linear Memory Model & ABI
 
-Programs compiled with `cppwasm` use 32-bit ILP32 addresses. Linear memory is partitioned into four distinct segments defined in `src/runtime/memory_layout.rs`:
+Programs compiled with `cppbolt` use 32-bit ILP32 addresses. Linear memory is partitioned into four distinct segments defined in `src/runtime/memory_layout.rs`:
 
 ```text
  +--------------------------+ 0x000000 (0)
