@@ -91,3 +91,7 @@ Comprehensive project documentation is published via mdBook at [https://ajtimepy
 | [`web/`](web/) | Browser playground HTML, worker script, and JavaScript host environment (`host.js`) |
 | [`tests/`](tests/) | Compiler test suite (positive tests, negative error tests, runtime traps, variants) |
 | [`docs/`](docs/) | mdBook documentation, ADRs, contributing guide, and devlog |
+
+## License
+
+cppbolt is licensed under the [Apache License 2.0](LICENSE).

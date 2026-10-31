@@ -120,3 +120,7 @@ The package does not include a host runtime. The repository's [`web/host.js`](ht
 
 - The compiler ABI is single-threaded and stores result state in one slot. Serialize calls and use one instance per worker.
 - Compilation is synchronous. In a browser, run it in a Web Worker to keep the UI responsive.
+
+## License
+
+Apache-2.0. See the [LICENSE](https://github.com/AJTimePyro/cppbolt/blob/main/LICENSE) file.
