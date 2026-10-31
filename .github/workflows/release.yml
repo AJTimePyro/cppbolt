@@ -1,0 +1,117 @@
+
+name: Release
+
+on:
+  release:
+    types: [published]
+
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag (for example v0.1.0)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || github.event.inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: release-wasm
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - name: Ensure npm version
+        run: npm install --global npm@latest
+
+      - name: Resolve and verify release version
+        id: version
+        env:
+          TAG: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+        run: |
+          version="${TAG#v}"
+          cargo_version="$(sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' Cargo.toml | head -n 1)"
+
+          if [ -z "$version" ]; then
+            echo "::error::No release tag provided"
+            exit 1
+          fi
+
+          if [ "$version" != "$cargo_version" ]; then
+            echo "::error::Tag '$TAG' does not match Cargo.toml version '$cargo_version'"
+            exit 1
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build WASM compiler
+        run: cargo build --release --target wasm32-unknown-unknown --lib
+
+      - name: Verify compiler ABI
+        run: |
+          node tests/ffi_lifecycle.js \
+            target/wasm32-unknown-unknown/release/cppbolt.wasm
+
+      - name: Assemble npm package
+        run: |
+          tools/build_npm_package.sh \
+            dist/npm \
+            "${{ steps.version.outputs.version }}"
+
+      - name: Verify staged npm package
+        run: tools/verify_npm_package.sh dist/npm
+
+      - name: Attach WASM to GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+        run: |
+          mkdir -p dist
+          cp target/wasm32-unknown-unknown/release/cppbolt.wasm dist/cppbolt.wasm
+          gh release upload "$TAG" dist/cppbolt.wasm --clobber
+
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          cd dist/npm
+
+          name="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "$name@$version is already published; skipping"
+          else
+            dist_tag=latest
+
+            case "$version" in
+              *-*) dist_tag=next ;;
+            esac
+
+            npm publish --provenance --access public --tag "$dist_tag"
+          fi
