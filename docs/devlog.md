@@ -4,6 +4,31 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-01: Template Core Implementation
+
+We implemented class and function templates with type parameters, single-phase name lookup, lazy member instantiation, and function template argument deduction.
+
+### Summary of Work
+
+1. Added template AST definitions in `src/ast/template.rs`, including `TemplateDecl`, `TemplateParam`, and `Type::TemplateInstance`.
+2. Implemented parsing for template declarations, template argument lists (`<T, U>`), and template-ids in `src/parser/template.rs`. Added diagnostics rejecting unsupported constructs: explicit specialization, explicit instantiation, template template parameters, variadic templates, and non-type template parameters.
+3. Created an AST substitution engine in `src/sema/template_subst.rs` that replaces type parameters with concrete types across expressions, statements, types, and struct or function declarations.
+4. Built the template registry in `src/sema/template_registry.rs`. Class template instantiation lays out struct fields, assigns canonical names, caches concrete specializations, and lowers member methods lazily when called.
+5. Implemented function template argument deduction in `src/sema/template_deduce.rs`. The engine deduces concrete types from call argument types, handles reference and const qualifiers, and verifies type consistency across multiple occurrences of parameters.
+6. Integrated function templates into overload resolution in `src/sema/expr_call.rs`. The compiler prefers exact matches, falls back to function templates when available, and respects defaulted arguments during candidate selection.
+7. Added positive regression tests covering class templates, function templates, multi-parameter templates, reference deduction, and distinct instantiations (`template_class_basic`, `template_func_basic`, `template_multi_param`, `template_pair`, `template_func_multi`, `template_lazy_member`, `template_multi_instance`, `template_deduce_ref`).
+8. Added negative tests verifying rejection of template recursion exceeding the 500 depth limit and deduction conflicts (`template_instantiation_depth.cpp`, `template_deduction_conflict.cpp`).
+
+### Verification Results
+
+- Unit and integration tests: 377 corpus tests on disk, 360 passed, 17 expected failures, 0 unexpected failures. All 107 negative tests passed.
+- Host oracle gate: matched native compiler behavior on all expected files (73.6s).
+- Golden baseline: updated to 263 entries in `tests/golden.txt`, all matching `target/debug/cppbolt-cli`.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
 ## 2026-11-01: Scalar Operations and Baseline Synchronization
 
 The test suite, clippy, census audit, and golden manifest are green across all targets.

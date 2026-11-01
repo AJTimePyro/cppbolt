@@ -47,7 +47,7 @@ cargo run --bin cppbolt-testrunner -- target/release/cppbolt-cli
 | **C++ Streams (`<iostream>`)** | **Done** | `std::cout`, `std::cin`, `std::getline`, custom stream operators | `tests/mini_stl/iostream_basic.cpp`, `tests/mini_stl/iostream_cin.cpp`, `tests/mini_stl/stream_operator_overload.cpp` |
 | **Standard String (`<string>`)** | **Done** | `std::string`, `.c_str()`, `.length()`, `.append()`, concatenation | `tests/mini_stl/string_basic.cpp`, `tests/mini_stl/string_comprehensive.cpp` |
 | **Math & Formatting** (`<cmath>`, `<iomanip>`) | **Done** | Math intrinsics, `std::abs` integer overloads for `long` and `long long`, `std::setprecision`, `std::fixed`, `std::setw` | `tests/mini_stl/cmath_basic.cpp`, `tests/c_basics/functions/std_abs_long.cpp`, `tests/mini_stl/iostream_precision_after_fixed.cpp` |
-| **Templates** (`template <typename T>`) | **Planned** | Lexed but not parsed; expected failures in test runner | `tests/templates_operators/template_class_basic.cpp`, `tests/templates_operators/template_func_basic.cpp` |
+| **Templates (Core)** (`template <typename T>`) | **Done** | Class templates, member function lazy instantiation, function templates with explicit arguments and type deduction | `tests/templates_operators/template_class_basic.cpp`, `tests/templates_operators/template_func_basic.cpp`, `tests/templates_operators/template_multi_param.cpp`, `tests/templates_operators/template_pair.cpp`, `tests/templates_operators/template_func_multi.cpp` |
 | **Standard Containers & Algorithms** (`vector`, `map`, `set`, `algorithm`) | **Planned** | Headers present in `stdlib/` but template instantiations fail | `tests/mini_stl/vector_basic.cpp`, `tests/mini_stl/map_basic.cpp`, `tests/mini_stl/algorithm_sort.cpp` |
 | **Range-Based `for` Loops** | **Done** | C++11 `for (decl : range)` over fixed-size arrays (1D and multi-dimensional) and classes with `.begin()`/`.end()`; supports `auto`, `const auto`, `auto&`, `const auto&` | `tests/c_basics/pointers_arrays/range_for_array.cpp`, `tests/mini_stl/range_for_string.cpp` |
 | **Overloaded Postfix `++` / `--`** | **Done** | Overloaded `operator++(int)` and `operator--(int)` distinguish postfix from prefix via dummy `int` parameter | `tests/classes_oop/operators/operator_postfix_incdec.cpp` |
@@ -87,6 +87,12 @@ cargo run --bin cppbolt-testrunner -- target/release/cppbolt-cli
   - Single-object `new T{...}` direct-initializes the heap object. Array `new T[n]{...}` initializes explicit elements and runs a WebAssembly loop to value-initialize omitted trailing elements up to `n`.
   - Initializer list constructors taking `std::initializer_list<T>` require template engine support and report an explicit diagnostic.
 - **Extended Casts (`reinterpret_cast`)**: Supports C++17 `reinterpret_cast<T>(expr)` between pointer types, pointer and integer types (matching the 32-bit ILP32 pointer width), and reference types (`reinterpret_cast<T&>(v)`). Does not invoke user-defined conversion operators or constructors. Scalar floating-point reinterpretations by value are rejected; bit patterns of floats can be inspected via pointer or reference reinterpretation (e.g. `*reinterpret_cast<uint32_t*>(&f)`).
+- **Template Core**:
+  - Class templates and function templates support type parameters (`template <typename T>`). Non-type parameters, template template parameters, variadic templates, and explicit specializations (`template <>`) are rejected with explicit diagnostics.
+  - Instantiation follows a single-phase lookup model (ADR 0010). The parser preserves template declarations as recipes, and semantic analysis resolves names and types during concrete specialization.
+  - Class template member methods are instantiated lazily upon first call or address reference. Unused member methods are neither typechecked nor emitted into WebAssembly.
+  - Function template call resolution deduces type arguments from value, reference, const-reference, and template instance arguments. Explicit template arguments (`func<int>(val)`) override deduction. When an exact non-template function overload exists, the compiler prefers it over a template specialization.
+  - Instantiation recursion is budgeted to 500 levels (`template instantiation depth exceeded (limit 500)`).
 
 ### 2. Nesting Limits per Construct
 
