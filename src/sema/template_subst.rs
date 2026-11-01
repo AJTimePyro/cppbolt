@@ -173,9 +173,11 @@ fn replace_whole_word(text: &str, word: &str, replacement: &str) -> String {
     let mut result = String::new();
     let mut remainder = text;
     while let Some(idx) = remainder.find(word) {
-        let before_ok = idx == 0
-            || (!remainder.as_bytes()[idx - 1].is_ascii_alphanumeric()
-                && remainder.as_bytes()[idx - 1] != b'_');
+        let not_qualified = !(idx >= 2 && &remainder.as_bytes()[idx - 2..idx] == b"::");
+        let before_ok = not_qualified
+            && (idx == 0
+                || (!remainder.as_bytes()[idx - 1].is_ascii_alphanumeric()
+                    && remainder.as_bytes()[idx - 1] != b'_'));
         let after_idx = idx + word.len();
         let after_ok = after_idx == remainder.len()
             || (!remainder.as_bytes()[after_idx].is_ascii_alphanumeric()
