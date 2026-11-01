@@ -90,8 +90,11 @@ cargo run --bin cppbolt-testrunner -- target/release/cppbolt-cli
 - **Template Core**:
   - Class templates and function templates support type parameters (`template <typename T>`). Non-type parameters, template template parameters, variadic templates, and explicit specializations (`template <>`) are rejected with explicit diagnostics.
   - Instantiation follows a single-phase lookup model (ADR 0010). The parser preserves template declarations as recipes, and semantic analysis resolves names and types during concrete specialization.
-  - Class template member methods are instantiated lazily upon first call or address reference. Unused member methods are neither typechecked nor emitted into WebAssembly.
-  - Function template call resolution deduces type arguments from value, reference, const-reference, and template instance arguments. Explicit template arguments (`func<int>(val)`) override deduction. When an exact non-template function overload exists, the compiler prefers it over a template specialization.
+  - Type resolution recursively unwraps pointers, references, const qualifiers, and arrays, instantiating concrete template layouts before calculating member access offsets.
+  - Non-template structs compute layouts after resolving template instance fields, ensuring accurate member offsets and struct sizes. Non-template functions accept and return template instance types.
+  - Class template member methods are instantiated lazily upon first call, address reference, or operator overload lookup (`operator[]`, unary operators). Unused member methods are neither typechecked nor emitted into WebAssembly.
+  - Non-virtual class template destructors instantiate eagerly alongside virtual methods, registering with destructor synthesis so scope exit cleanups run reliably.
+  - Function template call resolution deduces type arguments from value, reference, const-reference, top-level const pointers, and template instance arguments. Explicit template arguments (`func<int>(val)`, `func<Inner<int>>(val)`) override deduction and parse nested template types. Default argument expressions are appended when callers omit trailing parameters. When an exact non-template function overload exists, the compiler prefers it over a template specialization.
   - Instantiation recursion is budgeted to 500 levels (`template instantiation depth exceeded (limit 500)`).
 
 ### 2. Nesting Limits per Construct

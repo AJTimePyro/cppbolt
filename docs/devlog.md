@@ -4,6 +4,30 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-01: Template Integration Bugfixes and Lifecycle Lowering
+
+We addressed 10 code review findings across template type resolution, layout calculation, lazy operator lowering, RAII destructor lifecycles, and function argument deduction.
+
+### Summary of Work
+
+1. Made type resolution recursive across pointers, references, const qualifiers, and arrays in `src/sema/template_registry.rs`, ensuring concrete struct layouts are generated before field lookups. Added a cycle guard in `src/sema/lookup.rs` to prevent infinite alias looping.
+2. Resolved template instance types in struct fields before computing struct layouts in `src/sema/analyze.rs`, ensuring correct field offsets and total struct sizes. Resolved template types in non-template function parameters and return types during declaration registration and function analysis.
+3. Lowered lazy template operator methods (`operator[]`, unary operators) upon match in `src/sema/expr_ops.rs`. Eagerly instantiated non-virtual template class destructors in `src/sema/template_registry.rs` so destructor synthesis registers them for RAII scope cleanup generation.
+4. Filled default arguments on function template calls via `self.full_arguments(&sig, args)` in `src/sema/expr_call.rs`, preventing stack underflow in WebAssembly bytecode.
+5. Propagated known class templates into explicit template argument list parsing in `src/sema/template_deduce.rs` to support nested template types like `func<Inner<int>>(x)`.
+6. Stripped top-level const during pointer argument deduction in `src/sema/template_deduce.rs` to deduce `T` from `T* const`.
+7. Refined template name substitution in `src/sema/template_subst.rs` to prevent accidental replacement across scope qualifiers.
+8. Added positive regression tests covering pointer access, const-reference binding, struct template fields, non-template functions with template arguments, overloaded subscript operators, destructor scope cleanups, function default arguments, nested explicit types, and const pointer deduction (`template_ptr_const_ref.cpp`, `template_field_and_func.cpp`, `template_ops_dtor.cpp`, `template_default_arg_deduce.cpp`).
+
+### Verification Results
+
+- Unit and integration tests: 381 corpus tests on disk, 364 passed, 17 expected failures, 0 unexpected failures. All 107 negative tests passed.
+- Golden baseline: updated to 267 entries in `tests/golden.txt`, all matching `target/debug/cppbolt-cli`.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
 ## 2026-11-01: Template Core Implementation
 
 We implemented class and function templates with type parameters, single-phase name lookup, lazy member instantiation, and function template argument deduction.
