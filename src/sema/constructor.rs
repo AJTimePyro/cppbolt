@@ -93,7 +93,8 @@ impl Sema {
         let mut best: Option<FunctionSig> = None;
         let mut best_score = usize::MAX;
         for cand in &candidates {
-            if let Some(score) = self.score_constructor_candidate(cand, arg_types, args, is_copy_init)
+            if let Some(score) =
+                self.score_constructor_candidate(cand, arg_types, args, is_copy_init)
                 && score < best_score
             {
                 best_score = score;

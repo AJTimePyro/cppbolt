@@ -364,7 +364,11 @@ impl Lexer {
         let value: i64 = digits.parse().map_err(|_| {
             CompileError::new(format!("Invalid integer literal '{}'", text), line, col)
         })?;
-        Ok(Token::new(TokenKind::IntLiteral(value, text.clone()), line, col))
+        Ok(Token::new(
+            TokenKind::IntLiteral(value, text.clone()),
+            line,
+            col,
+        ))
     }
 
     fn read_exponent_prefix(&mut self, text: &mut String, digits: &mut String, c: char) {
@@ -393,7 +397,11 @@ impl Lexer {
         let value: f64 = digits.parse().map_err(|_| {
             CompileError::new(format!("Invalid float literal '{}'", text), line, col)
         })?;
-        Ok(Token::new(TokenKind::FloatLiteral(value, text.clone()), line, col))
+        Ok(Token::new(
+            TokenKind::FloatLiteral(value, text.clone()),
+            line,
+            col,
+        ))
     }
 }
 
