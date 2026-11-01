@@ -112,7 +112,22 @@ impl Sema {
                     args: vec![],
                     pos,
                 };
+                return Ok(target_type.clone());
             }
+        }
+        if kind == CastKind::Functional
+            && target_type.is_scalar()
+            && !self.can_assign_expr(target_type, &expr_ty, Some(expr))
+        {
+            return Err(CompileError::new(
+                format!(
+                    "cannot convert '{}' to '{}' in functional cast",
+                    expr_ty.to_c_type(),
+                    target_type.to_c_type()
+                ),
+                self.current_line,
+                self.current_col,
+            ));
         }
         Ok(target_type.clone())
     }

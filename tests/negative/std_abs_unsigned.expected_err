@@ -1,0 +1,1 @@
+tests/negative/std_abs_unsigned.cpp:4:12: error: call of overloaded 'abs(unsigned int)' is ambiguous

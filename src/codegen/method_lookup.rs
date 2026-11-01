@@ -102,17 +102,18 @@ impl<'a> Codegen<'a> {
             return None;
         }
         let short_cls = class_name.split("::").last().unwrap_or(class_name);
+        let canonical = format!("{}_~{}", class_name, short_cls);
+        let canonical_short = format!("{}_~{}", short_cls, short_cls);
         let dtor_name = format!("{}_{}", class_name, method_name);
         let dtor_name_short = format!("{}_{}", short_cls, method_name);
-        let idx = self
-            .func_indices
-            .get(&dtor_name)
-            .or_else(|| self.func_indices.get(&dtor_name_short))?;
+        let (idx, chosen) = [&canonical, &canonical_short, &dtor_name, &dtor_name_short]
+            .into_iter()
+            .find_map(|name| self.func_indices.get(name).map(|&idx| (idx, name.clone())))?;
         Some((
-            *idx,
+            idx,
             FunctionSig {
-                name: dtor_name.clone(),
-                mangled_name: dtor_name,
+                name: chosen.clone(),
+                mangled_name: chosen,
                 return_type: Type::Void,
                 param_types: vec![Type::Pointer(Box::new(Type::Struct(
                     class_name.to_string(),

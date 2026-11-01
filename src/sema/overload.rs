@@ -216,4 +216,74 @@ impl Sema {
             _ => false,
         }
     }
+
+    /// The outcome of the overload resolution of a call.
+    pub(super) fn select_candidate<'a>(
+        &self,
+        candidates: &'a [FunctionSig],
+        args: &[Expr],
+        arg_types: &[Type],
+    ) -> CandidateSelection<'a> {
+        let mut selection = CandidateSelection::default();
+        for cand in candidates {
+            let min_args = cand.default_args.iter().take_while(|d| d.is_none()).count();
+            let max_args = cand.param_types.len();
+            if args.len() < min_args || args.len() > max_args {
+                continue;
+            }
+            let score = match self.score_call_candidate(cand, arg_types, Some(args)) {
+                Ok(score) => score,
+                Err(failure) => {
+                    if selection.conversion_failure.is_none() {
+                        selection.conversion_failure = Some(failure);
+                    }
+                    continue;
+                }
+            };
+            if score < selection.best_score {
+                selection.best_score = score;
+                selection.best = Some((cand, self.full_arguments(cand, args)));
+                selection.ambiguous = false;
+                if score == 0 {
+                    break;
+                }
+            } else if score == selection.best_score
+                && let Some((best, _)) = selection.best
+                && best.param_types != cand.param_types
+            {
+                selection.ambiguous = true;
+            }
+        }
+        selection
+    }
+
+    /// The arguments of a call, with the default arguments filled in.
+    fn full_arguments(&self, cand: &FunctionSig, args: &[Expr]) -> Vec<Expr> {
+        let mut full = args.to_vec();
+        for index in args.len()..cand.param_types.len() {
+            if let Some(Some(default)) = cand.default_args.get(index) {
+                full.push(default.clone());
+            }
+        }
+        full
+    }
+}
+
+/// The outcome of the overload resolution of a call.
+pub(super) struct CandidateSelection<'a> {
+    pub(super) best: Option<(&'a FunctionSig, Vec<Expr>)>,
+    pub(super) best_score: usize,
+    pub(super) conversion_failure: Option<ConversionFailure>,
+    pub(super) ambiguous: bool,
+}
+
+impl Default for CandidateSelection<'_> {
+    fn default() -> Self {
+        Self {
+            best: None,
+            best_score: usize::MAX,
+            conversion_failure: None,
+            ambiguous: false,
+        }
+    }
 }

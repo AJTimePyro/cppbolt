@@ -4,6 +4,53 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-01: Scalar Operations and Baseline Synchronization
+
+The test suite, clippy, census audit, and golden manifest are green across all targets.
+
+### Summary of Work
+
+1. Synchronized golden baseline: reconciled 49 stale entries in `tests/golden.txt` initially, then added all newly passing tests, bringing the total to 255 verified entries.
+2. Added `std::abs(long)` and `std::abs(long long)` overloads in `stdlib/cmath`. Unsigned types now trigger ambiguity errors instead of silently promoting to float.
+3. Implemented functional casts and value initialization (`T()`, `Type(val)`) for scalar types and typedef aliases in the parser and sema.
+4. Added scalar pseudo-destructor support (`p->~T()`, `x.~T()`, `arr[i].~T()`). The compiler evaluates receiver expressions for side effects and treats the destructor call as a no-op.
+5. Resolved struct destructor calls through typedef aliases (`sp->~ClassT()`), checking that the alias resolves to the receiver class before calling the destructor.
+6. Corrected `classes_oop/lambdas/lambda_unary_plus` to compare pointer size against `sizeof(void*)`, allowing the test to pass both in 32-bit WebAssembly and under the 64-bit native oracle gate.
+
+### Verification Results
+
+- Unit and integration tests: 370 corpus tests on disk, 351 passed, 19 expected failures, 0 unexpected failures, 0 manifest violations.
+- Oracle gate: 544 matched, 2 runtime-trap tests skipped across g++ and clang++.
+- Golden manifest: 255 entries recorded in `tests/golden.txt`, all matching `target/release/cppbolt-cli`.
+- Census audit: 119 files scanned, 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
+## 2026-11-01: Baseline Snapshot and Scalar Prerequisite Probes
+
+### Context & Motivation
+We reconciled test runner manifests and probed compiler behavior on typedef stand-in types representing scalar type parameters (`typedef int T;`).
+
+### Work Executed
+1. Golden manifest reconciliation:
+   - Synchronized `tests/golden.txt` against commit 13051c384029eb2f4b05a4e958b8ca893234c23f.
+   - Resolved 49 stale entries that differed due to previous qualification conversions, numeric literals, and brace-initialization updates.
+   - Re-verified clean golden output across all 247 recorded test entries with `cargo run --bin cppbolt-testrunner -- --check-golden tests/golden.txt target/release/cppbolt-cli`.
+2. Scalar prerequisite probes:
+   - Value-initialization `T a = T();`: failed with `Undefined function 'T'`. The parser interprets `T()` as a function call instead of a scalar functional cast.
+   - Direct-initialization `T b(5);`: passed.
+   - Size evaluation and allocation `sizeof(T)` and `(T*)malloc(...)`: passed.
+   - Scalar placement new `new (buf) T(7);`: passed.
+   - Scalar pseudo-destructor `p->~T()`: failed with `Arrow member access on non-struct pointer`. Member access rejects non-struct pointers and lacks pseudo-destructor grammar.
+   - Class destructor call via typedef `sp->~ClassT()`: failed with `Method '~ClassT' not found in class 'S'`. Destructor lookup does not resolve typedef aliases to target class names.
+
+### Verification
+- Synchronized golden manifest passes: 247 entries matched, 19 uncompilable tests skipped.
+- Corpus test suite execution: 360 total tests on disk, 341 passed, 19 expected failures, 0 unexpected failures. All 94 negative tests passed.
+
+---
+
 ## 2026-11-01: Type Qualification, Pointer Conversions, and String Literal Semantics
 
 ### Context & Motivation

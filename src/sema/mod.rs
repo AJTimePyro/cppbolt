@@ -141,6 +141,7 @@ pub struct Sema {
     pub open_namespaces: Vec<String>,
     pub using_decls: HashMap<String, String>,
     pub namespace_aliases: HashMap<String, String>,
+    pub type_aliases: HashMap<String, Type>,
     /// Whether the analysis is inside the initializer of a variable.
     ///
     /// A constructor call in an initializer reports an initialization
@@ -182,6 +183,7 @@ impl Sema {
             open_namespaces: Vec::new(),
             using_decls: HashMap::new(),
             namespace_aliases: HashMap::new(),
+            type_aliases: HashMap::new(),
             in_initializer: false,
             depth: crate::depth::DepthCounters::new(),
         };

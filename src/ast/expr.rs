@@ -99,6 +99,7 @@ pub enum CastKind {
     Static,
     Reinterpret,
     CStyle,
+    Functional,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -292,6 +293,15 @@ impl Expr {
             Expr::Cast { target_type, .. } => target_type.is_reference(),
             _ => false,
         }
+    }
+}
+
+pub fn zero_literal_for_type(ty: &Type) -> Expr {
+    match ty.strip_const() {
+        Type::Bool => Expr::BoolLiteral(false),
+        Type::Float | Type::Double => Expr::FloatLiteral(0.0, ty.clone()),
+        Type::Char | Type::SignedChar | Type::UnsignedChar => Expr::CharLiteral('\0'),
+        _ => Expr::IntLiteral(0, ty.clone()),
     }
 }
 

@@ -8,5 +8,8 @@ pub mod stmt;
 pub mod types;
 
 pub use decl::{Decl, FunctionDecl, Param, Program, RefQualifier};
-pub use expr::{BinaryOp, CastKind, DefaultCapture, Expr, ExprPos, LambdaCapture, UnaryOp};
+pub use expr::{
+    BinaryOp, CastKind, DefaultCapture, Expr, ExprPos, LambdaCapture, UnaryOp,
+    zero_literal_for_type,
+};
 pub use stmt::{Stmt, StmtKind};

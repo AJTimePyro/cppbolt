@@ -1,0 +1,1 @@
+tests/negative/functional_cast_incompatible.cpp:5:5: error: cannot convert 'S' to 'int' in functional cast

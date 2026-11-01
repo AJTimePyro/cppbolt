@@ -1,0 +1,1 @@
+tests/negative/destructor_mismatched_typedef.cpp:10:5: error: No member named '~OtherAlias' in struct 'Item'

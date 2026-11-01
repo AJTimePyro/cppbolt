@@ -152,6 +152,31 @@ impl Parser {
         Ok(expr)
     }
 
+    pub(super) fn parse_functional_cast(
+        &mut self,
+        ty: Type,
+        start: ExprPos,
+    ) -> Result<Expr, CompileError> {
+        self.advance();
+        let mut args = self.parse_call_args()?;
+        let expr = if args.is_empty() {
+            zero_literal_for_type(&ty)
+        } else if args.len() == 1 {
+            Expr::Cast {
+                kind: CastKind::Functional,
+                target_type: ty,
+                expr: Box::new(args.swap_remove(0)),
+            }
+        } else {
+            return Err(CompileError::new(
+                "scalar functional cast requires 0 or 1 arguments",
+                start.line,
+                start.col,
+            ));
+        };
+        self.parse_postfix(expr, start)
+    }
+
     fn parse_call_args(&mut self) -> Result<Vec<Expr>, CompileError> {
         // One call costs one level of the call budget.
         let _guard = self.enter_call()?;

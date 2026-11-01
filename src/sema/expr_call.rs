@@ -41,6 +41,10 @@ impl Sema {
             if name == "printf" || name == "std::printf" || name.ends_with("::printf") {
                 return Ok(Type::Int);
             }
+            if let Some((ty, replacement)) = self.try_scalar_call(&name, args, *pos)? {
+                *expr = replacement;
+                return Ok(ty);
+            }
             if let Some(sname) = self.class_named(&name) {
                 match self.analyze_constructor_call(&sname, args, &arg_types, *pos)? {
                     ConstructorCall::Elided(inner) => {
@@ -165,11 +169,17 @@ impl Sema {
         } = &mut *callee
         {
             let obj_ty = self.analyze_expr(object.as_mut())?;
+            if let Some(ret) =
+                self.try_pseudo_destructor_call(&obj_ty, *is_arrow, member, args.len(), *pos)?
+            {
+                return Ok(Some(ret));
+            }
             let (struct_name, receiver_const) =
                 self.member_struct_name(&obj_ty, *is_arrow, *pos)?;
 
             if member.starts_with('~') {
-                return Ok(Some(Type::Void));
+                let ret = self.resolve_struct_destructor(&struct_name, member, *pos)?;
+                return Ok(Some(ret));
             }
             let receiver_is_lvalue = if *is_arrow {
                 true
@@ -419,78 +429,52 @@ impl Sema {
         ))
     }
 
-    /// The outcome of the overload resolution of a call.
-    fn select_candidate<'a>(
-        &self,
-        candidates: &'a [FunctionSig],
-        args: &[Expr],
-        arg_types: &[Type],
-    ) -> CandidateSelection<'a> {
-        let mut selection = CandidateSelection::default();
-        for cand in candidates {
-            let min_args = cand.default_args.iter().take_while(|d| d.is_none()).count();
-            let max_args = cand.param_types.len();
-            if args.len() < min_args || args.len() > max_args {
-                continue;
-            }
-            let score = match self.score_call_candidate(cand, arg_types, Some(args)) {
-                Ok(score) => score,
-                Err(failure) => {
-                    if selection.conversion_failure.is_none() {
-                        selection.conversion_failure = Some(failure);
-                    }
-                    continue;
-                }
-            };
-            if score < selection.best_score {
-                selection.best_score = score;
-                selection.best = Some((cand, self.full_arguments(cand, args)));
-                selection.ambiguous = false;
-                if score == 0 {
-                    break; // No candidate can score lower.
-                }
-            } else if score == selection.best_score
-                && let Some((best, _)) = selection.best
-                && best.param_types != cand.param_types
-            {
-                // Two overloads convert the arguments equally well.
-                selection.ambiguous = true;
-            }
+    fn try_scalar_call(
+        &mut self,
+        name: &str,
+        args: &mut [Expr],
+        pos: ExprPos,
+    ) -> Result<Option<(Type, Expr)>, CompileError> {
+        let ty = if let Some(alias_ty) = self.type_aliases.get(name) {
+            alias_ty.clone()
+        } else if let Some(scalar_ty) = Type::from_scalar_name(name) {
+            scalar_ty
+        } else {
+            return Ok(None);
+        };
+        if !ty.is_scalar() {
+            return Ok(None);
         }
-        selection
-    }
-
-    /// The arguments of a call, with the default arguments filled in.
-    fn full_arguments(&self, cand: &FunctionSig, args: &[Expr]) -> Vec<Expr> {
-        let mut full = args.to_vec();
-        for index in args.len()..cand.param_types.len() {
-            if let Some(Some(default)) = cand.default_args.get(index) {
-                full.push(default.clone());
+        if args.is_empty() {
+            Ok(Some((ty.clone(), zero_literal_for_type(&ty))))
+        } else if args.len() == 1 {
+            let mut arg = args[0].clone();
+            let arg_ty = self.analyze_expr(&mut arg)?;
+            if !self.can_assign_expr(&ty, &arg_ty, Some(&arg)) {
+                return Err(CompileError::new(
+                    format!(
+                        "cannot convert '{}' to '{}' in functional cast",
+                        arg_ty.to_c_type(),
+                        ty.to_c_type()
+                    ),
+                    pos.line,
+                    pos.col,
+                ));
             }
-        }
-        full
-    }
-}
-
-/// The outcome of the overload resolution of a call.
-struct CandidateSelection<'a> {
-    /// The best candidate and its arguments.
-    best: Option<(&'a FunctionSig, Vec<Expr>)>,
-    /// The conversion cost of the best candidate.
-    best_score: usize,
-    /// The first argument that does not convert to its parameter.
-    conversion_failure: Option<ConversionFailure>,
-    /// Whether two candidates convert the arguments equally well.
-    ambiguous: bool,
-}
-
-impl Default for CandidateSelection<'_> {
-    fn default() -> Self {
-        Self {
-            best: None,
-            best_score: usize::MAX,
-            conversion_failure: None,
-            ambiguous: false,
+            Ok(Some((
+                ty.clone(),
+                Expr::Cast {
+                    kind: CastKind::Functional,
+                    target_type: ty,
+                    expr: Box::new(arg),
+                },
+            )))
+        } else {
+            Err(CompileError::new(
+                "scalar functional cast requires 0 or 1 arguments",
+                pos.line,
+                pos.col,
+            ))
         }
     }
 }

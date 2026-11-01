@@ -10,6 +10,7 @@ c_basics/functions/functions_call
 c_basics/functions/functions_default_args
 c_basics/functions/functions_overload
 c_basics/functions/overload_resolution
+c_basics/functions/std_abs_long
 c_basics/functions/using_declaration_precedence
 c_basics/io_printf/hello_world
 c_basics/io_printf/printf_conversions
@@ -42,11 +43,13 @@ c_basics/types/floats
 c_basics/types/long_long
 c_basics/types/numeric_literals
 c_basics/types/pointer_conversions
+c_basics/types/pseudo_destructor_scalar
 c_basics/types/reinterpret_cast
 c_basics/types/rounding_ties
 c_basics/types/sizeof_expr
 c_basics/types/ternary_mixed_types
 c_basics/types/unsigned_wrap
+c_basics/types/value_init_scalar
 c_basics_variant/control_flow/control_if_else
 c_basics_variant/control_flow/control_loops
 c_basics_variant/control_flow/control_switch
@@ -55,6 +58,7 @@ c_basics_variant/functions/functions_call
 c_basics_variant/functions/functions_default_args
 c_basics_variant/functions/functions_overload
 c_basics_variant/functions/overload_resolution
+c_basics_variant/functions/std_abs_long
 c_basics_variant/functions/using_declaration_precedence
 c_basics_variant/io_printf/hello_world
 c_basics_variant/io_printf/printf_conversions
@@ -73,13 +77,16 @@ c_basics_variant/types/booleans_chars
 c_basics_variant/types/const_qualifiers
 c_basics_variant/types/floats
 c_basics_variant/types/long_long
+c_basics_variant/types/pseudo_destructor_scalar
 c_basics_variant/types/rounding_ties
 c_basics_variant/types/sizeof_expr
 c_basics_variant/types/ternary_mixed_types
 c_basics_variant/types/unsigned_wrap
+c_basics_variant/types/value_init_scalar
 classes_oop/constructors_destructors/copy_semantics
 classes_oop/constructors_destructors/ctor_default_argument
 classes_oop/constructors_destructors/delegating_constructor
+classes_oop/constructors_destructors/destructor_via_typedef
 classes_oop/constructors_destructors/explicit_dtor
 classes_oop/constructors_destructors/implicit_copy_member_objects
 classes_oop/constructors_destructors/member_default_argument
@@ -154,6 +161,7 @@ classes_oop/structs/struct_basic
 classes_oop/structs/structured_bindings
 classes_oop_variant/constructors_destructors/copy_semantics
 classes_oop_variant/constructors_destructors/ctor_default_argument
+classes_oop_variant/constructors_destructors/destructor_via_typedef
 classes_oop_variant/constructors_destructors/explicit_dtor
 classes_oop_variant/constructors_destructors/implicit_copy_member_objects
 classes_oop_variant/constructors_destructors/member_objects_order
@@ -256,6 +264,7 @@ negative/delegating_constructor_not_found
 negative/contextual_bool_reject_bool
 negative/contextual_bool_reject_int
 negative/dereference_non_pointer
+negative/destructor_mismatched_typedef
 negative/diagnostic_in_header
 negative/diagnostic_user_after_include
 negative/duplicate_var
@@ -264,6 +273,7 @@ negative/explicit_ctor_arg
 negative/explicit_ctor_copy_list
 negative/explicit_ctor_return
 negative/func_arg_count_mismatch
+negative/functional_cast_incompatible
 negative/function_base_to_derived_pointer
 negative/function_int_to_struct
 negative/function_pointer_element_mismatch
@@ -308,6 +318,8 @@ negative/pointer_conversion_string_literal_nonconst
 negative/pointer_conversion_void_ptr
 negative/pointer_plus_pointer
 negative/private_access
+negative/pseudo_destructor_arguments
+negative/pseudo_destructor_type_mismatch
 negative/pure_virtual_instantiation
 negative/range_for_non_iterable
 negative/redefined_func
@@ -317,6 +329,7 @@ negative/scalar_excess_elements
 negative/scoped_enum_call_arg
 negative/scoped_enum_implicit_conversion
 negative/scoped_enum_leak
+negative/std_abs_unsigned
 negative/stray_endif
 negative/subscript_non_array
 negative/structured_binding_count_mismatch

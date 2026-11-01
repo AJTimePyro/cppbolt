@@ -340,6 +340,9 @@ impl<'a> Codegen<'a> {
         is_arrow: &bool,
         ctx: &FunctionContext,
     ) -> Type {
+        if member.starts_with('~') {
+            return Type::Void;
+        }
         let obj_ty = self.get_expr_type_raw(object, ctx);
         let receiver_const = crate::sema::receiver_is_const_type(&obj_ty);
         let receiver_is_lvalue = *is_arrow || obj_ty.is_reference() || object.is_lvalue();
