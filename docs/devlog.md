@@ -4,6 +4,30 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-01: Milestone 0 Baseline Snapshot and Scalar Prerequisite Probes
+
+### Context & Motivation
+Milestone 0 establishes the regression baseline for template instantiation and std::vector support. Before implementing template parameter substitution, we reconciled test runner manifests and probed compiler behavior on typedef stand-in types representing scalar type parameters (`typedef int T;`).
+
+### Work Executed
+1. Golden manifest reconciliation:
+   - Synchronized `tests/golden.txt` against commit 13051c384029eb2f4b05a4e958b8ca893234c23f.
+   - Resolved 49 stale entries that differed due to previous qualification conversions, numeric literals, and brace-initialization updates.
+   - Re-verified clean golden output across all 247 recorded test entries with `cargo run --bin cppbolt-testrunner -- --check-golden tests/golden.txt target/release/cppbolt-cli`.
+2. Scalar prerequisite probes:
+   - Value-initialization `T a = T();`: failed with `Undefined function 'T'`. The parser interprets `T()` as a function call instead of a scalar functional cast.
+   - Direct-initialization `T b(5);`: passed.
+   - Size evaluation and allocation `sizeof(T)` and `(T*)malloc(...)`: passed.
+   - Scalar placement new `new (buf) T(7);`: passed.
+   - Scalar pseudo-destructor `p->~T()`: failed with `Arrow member access on non-struct pointer`. Member access rejects non-struct pointers and lacks pseudo-destructor grammar.
+   - Class destructor call via typedef `sp->~ClassT()`: failed with `Method '~ClassT' not found in class 'S'`. Destructor lookup does not resolve typedef aliases to target class names.
+
+### Verification
+- Synchronized golden manifest passes: 247 entries matched, 19 uncompilable tests skipped.
+- Corpus test suite execution: 360 total tests on disk, 341 passed, 19 expected failures, 0 unexpected failures. All 94 negative tests passed.
+
+---
+
 ## 2026-11-01: Type Qualification, Pointer Conversions, and String Literal Semantics
 
 ### Context & Motivation
