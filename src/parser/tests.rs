@@ -24,8 +24,8 @@ pub(super) fn accepts_ternary_colons_inside_for_loops() {
 }
 
 #[test]
-pub(super) fn multi_dimensional_array_dimensions_wrap_inside_out(
-) -> Result<(), Box<dyn std::error::Error>> {
+pub(super) fn multi_dimensional_array_dimensions_wrap_inside_out()
+-> Result<(), Box<dyn std::error::Error>> {
     let tokens = Lexer::new("int matrix[2][3];").tokenize()?;
     let program = Parser::new(tokens).parse_program()?;
     assert!(matches!(program.declarations[0], Decl::GlobalVar { .. }));
@@ -87,10 +87,9 @@ pub(super) fn test_parse_namespace_alias() -> Result<(), Box<dyn std::error::Err
 
 #[test]
 pub(super) fn parses_lambda_expression() -> Result<(), Box<dyn std::error::Error>> {
-    let tokens = Lexer::new(
-        "void f() { auto g = [x, &y](int a) mutable -> int { return x + y + a; }; }",
-    )
-    .tokenize()?;
+    let tokens =
+        Lexer::new("void f() { auto g = [x, &y](int a) mutable -> int { return x + y + a; }; }")
+            .tokenize()?;
     let program = Parser::new(tokens).parse_program()?;
     let Some(Decl::Function(func)) = program.declarations.first() else {
         return Err("expected function declaration".into());
@@ -219,7 +218,11 @@ fn test_parse_reinterpret_cast() -> Result<(), Box<dyn std::error::Error>> {
     let code = "int* p; char* c = reinterpret_cast<char*>(p);";
     let tokens = Lexer::new(code).tokenize()?;
     let program = Parser::new(tokens).parse_program()?;
-    let Some(Decl::GlobalVar { init: Some(init_expr), .. }) = program.declarations.get(1) else {
+    let Some(Decl::GlobalVar {
+        init: Some(init_expr),
+        ..
+    }) = program.declarations.get(1)
+    else {
         return Err("expected second global var with init".into());
     };
     assert!(matches!(

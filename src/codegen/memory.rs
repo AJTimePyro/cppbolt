@@ -55,12 +55,7 @@ impl<'a> Codegen<'a> {
     }
 
     /// Emits a bit-preserving reinterpret conversion between ILP32 scalars/pointers.
-    pub(super) fn emit_reinterpret_conversion(
-        &self,
-        from: &Type,
-        to: &Type,
-        code: &mut Vec<u8>,
-    ) {
+    pub(super) fn emit_reinterpret_conversion(&self, from: &Type, to: &Type, code: &mut Vec<u8>) {
         let from_wasm = from.to_wasm_type();
         let to_wasm = to.to_wasm_type();
         if from_wasm == to_wasm {

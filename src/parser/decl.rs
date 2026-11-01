@@ -84,7 +84,8 @@ impl Parser {
                 raw_target
             };
             let canonical = self.resolve_namespace_alias(&target);
-            self.namespace_aliases.insert(qualified_alias.clone(), canonical.clone());
+            self.namespace_aliases
+                .insert(qualified_alias.clone(), canonical.clone());
             self.known_namespaces.insert(qualified_alias.clone());
             declarations.push(Decl::NamespaceAlias {
                 alias: qualified_alias,

@@ -277,7 +277,8 @@ fn free_dereference_operator_lvalue_calls_operator() {
 }
 
 #[test]
-fn test_codegen_reinterpret_cast_pointer_to_int_and_back() -> Result<(), Box<dyn std::error::Error>> {
+fn test_codegen_reinterpret_cast_pointer_to_int_and_back() -> Result<(), Box<dyn std::error::Error>>
+{
     let code = r#"
         int main() {
             int val = 0x1234;
@@ -304,8 +305,16 @@ fn test_codegen_reinterpret_cast_reference_lvalue() {
         expr: Box::new(Expr::Identifier("x".to_string())),
     };
     let mut code = Vec::new();
-    assert!(codegen.compile_lvalue_addr(&cast, &mut ctx, &mut code).is_ok());
+    assert!(
+        codegen
+            .compile_lvalue_addr(&cast, &mut ctx, &mut code)
+            .is_ok()
+    );
     let mut expected = Vec::new();
-    assert!(codegen.compile_lvalue_addr(&Expr::Identifier("x".to_string()), &mut ctx, &mut expected).is_ok());
+    assert!(
+        codegen
+            .compile_lvalue_addr(&Expr::Identifier("x".to_string()), &mut ctx, &mut expected)
+            .is_ok()
+    );
     assert_eq!(code, expected);
 }

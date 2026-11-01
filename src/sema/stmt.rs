@@ -185,7 +185,12 @@ impl Sema {
     fn analyze_simple_stmt(&mut self, kind: &mut StmtKind) -> Result<bool, CompileError> {
         match kind {
             StmtKind::NamespaceAlias { alias, target } => {
-                self.record_local_namespace_alias(alias, target, self.current_line, self.current_col)?;
+                self.record_local_namespace_alias(
+                    alias,
+                    target,
+                    self.current_line,
+                    self.current_col,
+                )?;
             }
             StmtKind::UsingNamespace(ns) => {
                 let resolved = self.resolve_alias_in_qualified_name(ns);

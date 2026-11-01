@@ -27,7 +27,10 @@ fn test_reinterpret_cast_rejects_float_to_int() -> Result<(), Box<dyn std::error
     let mut program = parser.parse_program()?;
     let mut sema = Sema::new();
     let res = sema.analyze_program(&mut program);
-    assert!(res.is_err(), "reinterpret_cast between float and int must be rejected");
+    assert!(
+        res.is_err(),
+        "reinterpret_cast between float and int must be rejected"
+    );
     Ok(())
 }
 
@@ -42,7 +45,10 @@ fn test_reinterpret_cast_bypasses_conversion_operator() -> Result<(), Box<dyn st
     let mut program = parser.parse_program()?;
     let mut sema = Sema::new();
     let res = sema.analyze_program(&mut program);
-    assert!(res.is_err(), "reinterpret_cast cannot invoke user conversion operator on class");
+    assert!(
+        res.is_err(),
+        "reinterpret_cast cannot invoke user conversion operator on class"
+    );
     Ok(())
 }
 
@@ -54,7 +60,10 @@ fn test_reinterpret_cast_reference_rejects_rvalue() -> Result<(), Box<dyn std::e
     let mut program = parser.parse_program()?;
     let mut sema = Sema::new();
     let res = sema.analyze_program(&mut program);
-    assert!(res.is_err(), "reinterpret_cast to reference must reject rvalue");
+    assert!(
+        res.is_err(),
+        "reinterpret_cast to reference must reject rvalue"
+    );
     Ok(())
 }
 
@@ -66,7 +75,11 @@ fn test_reinterpret_cast_reference_accepts_float() -> Result<(), Box<dyn std::er
     let mut program = parser.parse_program()?;
     let mut sema = Sema::new();
     let res = sema.analyze_program(&mut program);
-    assert!(res.is_ok(), "reinterpret_cast to reference must accept float lvalues: {:?}", res.err());
+    assert!(
+        res.is_ok(),
+        "reinterpret_cast to reference must accept float lvalues: {:?}",
+        res.err()
+    );
     Ok(())
 }
 
@@ -104,7 +117,10 @@ fn test_block_scope_conflicting_alias_rejected() -> Result<(), Box<dyn std::erro
     let mut program = parser.parse_program()?;
     let mut sema = Sema::new();
     let res = sema.analyze_program(&mut program);
-    assert!(res.is_err(), "conflicting alias in block scope must be rejected");
+    assert!(
+        res.is_err(),
+        "conflicting alias in block scope must be rejected"
+    );
     Ok(())
 }
 
@@ -124,6 +140,9 @@ fn test_block_scope_namespace_alias_does_not_leak() -> Result<(), Box<dyn std::e
     let mut program = parser.parse_program()?;
     let mut sema = Sema::new();
     let res = sema.analyze_program(&mut program);
-    assert!(res.is_err(), "block-scoped alias must not leak outside its scope");
+    assert!(
+        res.is_err(),
+        "block-scoped alias must not leak outside its scope"
+    );
     Ok(())
 }
