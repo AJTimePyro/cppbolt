@@ -32,7 +32,11 @@ impl Sema {
             arg_types.push(self.analyze_expr(a)?);
         }
 
-        if let Expr::Identifier(raw_name) = &**callee {
+        if let Expr::Identifier(raw_name) = &mut **callee {
+            let resolved = self.resolve_alias_in_qualified_name(raw_name);
+            if resolved != *raw_name {
+                *raw_name = resolved;
+            }
             let name = raw_name.strip_prefix("::").unwrap_or(raw_name).to_string();
             if name == "printf" || name == "std::printf" || name.ends_with("::printf") {
                 return Ok(Type::Int);
@@ -53,7 +57,11 @@ impl Sema {
             return Ok(return_type);
         }
 
-        if let Expr::Identifier(raw_name) = &**callee {
+        if let Expr::Identifier(raw_name) = &mut **callee {
+            let resolved = self.resolve_alias_in_qualified_name(raw_name);
+            if resolved != *raw_name {
+                *raw_name = resolved;
+            }
             let name = raw_name.strip_prefix("::").unwrap_or(raw_name).to_string();
             self.check_ambiguous_name(&name)?;
             let var_ty = self.lookup_var(&name).map(|v| v.ty.clone());

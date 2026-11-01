@@ -18,6 +18,8 @@ mod stmt;
 mod stmt_decl;
 mod stmt_range_for;
 mod stmt_structured_binding;
+#[cfg(test)]
+mod tests;
 
 pub use init::InitContext;
 pub(crate) use layout::RecordLayout;
@@ -114,6 +116,7 @@ pub struct VarSymbol {
 
 pub struct Scope {
     pub vars: HashMap<String, VarSymbol>,
+    pub namespace_aliases: HashMap<String, String>,
 }
 
 pub struct Sema {
@@ -137,6 +140,7 @@ pub struct Sema {
     pub current_func_name: Option<String>,
     pub open_namespaces: Vec<String>,
     pub using_decls: HashMap<String, String>,
+    pub namespace_aliases: HashMap<String, String>,
     /// Whether the analysis is inside the initializer of a variable.
     ///
     /// A constructor call in an initializer reports an initialization
@@ -177,6 +181,7 @@ impl Sema {
             current_func_name: None,
             open_namespaces: Vec::new(),
             using_decls: HashMap::new(),
+            namespace_aliases: HashMap::new(),
             in_initializer: false,
             depth: crate::depth::DepthCounters::new(),
         };
@@ -265,6 +270,7 @@ impl Sema {
     pub fn enter_scope(&mut self) {
         self.scopes.push(Scope {
             vars: HashMap::new(),
+            namespace_aliases: HashMap::new(),
         });
     }
 
@@ -295,6 +301,8 @@ impl Sema {
                 curr = ns;
             }
         }
+        let resolved = self.resolve_alias_in_qualified_name(name);
+        let name = resolved.as_str();
         if let Some(var) = self.global_vars.get(name) {
             return Some(var);
         }
@@ -314,5 +322,84 @@ impl Sema {
             }
         }
         None
+    }
+
+    pub fn record_local_namespace_alias(
+        &mut self,
+        alias: &str,
+        target: &str,
+        line: usize,
+        col: usize,
+    ) -> Result<(), CompileError> {
+        let canonical = self.resolve_alias_in_qualified_name(target);
+        let table = match self.scopes.last_mut() {
+            Some(scope) => &mut scope.namespace_aliases,
+            None => &mut self.namespace_aliases,
+        };
+        if let Some(existing) = table.get(alias)
+            && existing != &canonical
+        {
+            return Err(CompileError::new(
+                format!("redefinition of namespace alias '{}'", alias),
+                line,
+                col,
+            ));
+        }
+        table.insert(alias.to_string(), canonical);
+        Ok(())
+    }
+
+    pub fn lookup_namespace_alias(&self, name: &str) -> Option<&String> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(target) = scope.namespace_aliases.get(name) {
+                return Some(target);
+            }
+        }
+        if let Some(target) = self.namespace_aliases.get(name) {
+            return Some(target);
+        }
+        if let Some(func) = &self.current_func_name {
+            let mut curr = func.as_str();
+            while let Some((ns, _)) = curr.rsplit_once("::") {
+                let qualified = format!("{}::{}", ns, name);
+                if let Some(target) = self.namespace_aliases.get(&qualified) {
+                    return Some(target);
+                }
+                curr = ns;
+            }
+        }
+        for ns in &self.open_namespaces {
+            let qualified = format!("{}::{}", ns, name);
+            if let Some(target) = self.namespace_aliases.get(&qualified) {
+                return Some(target);
+            }
+        }
+        None
+    }
+
+    /// Resolves leading namespace aliases in `name` to the canonical namespace.
+    pub fn resolve_alias_in_qualified_name(&self, name: &str) -> String {
+        let mut current = name.to_string();
+        for _ in 0..16 {
+            let mut matched = false;
+            let parts: Vec<&str> = current.split("::").collect();
+            for i in (1..parts.len()).rev() {
+                let prefix = parts[..i].join("::");
+                if let Some(target) = self.lookup_namespace_alias(&prefix) {
+                    let suffix = parts[i..].join("::");
+                    current = format!("{}::{}", target, suffix);
+                    matched = true;
+                    break;
+                }
+            }
+            if !matched && let Some(target) = self.lookup_namespace_alias(&current) {
+                current = target.clone();
+                matched = true;
+            }
+            if !matched {
+                break;
+            }
+        }
+        current
     }
 }

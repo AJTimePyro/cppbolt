@@ -60,6 +60,7 @@ pub enum TokenKind {
     KwTypedef,
     KwNullptr,
     KwStaticCast,
+    KwReinterpretCast,
     KwConstexpr,
     KwDecltype,
     KwExplicit,
@@ -183,6 +184,8 @@ impl TokenKind {
             TokenKind::KwDecltype => Some("'decltype'"),
             TokenKind::KwExplicit => Some("'explicit'"),
             TokenKind::KwFriend => Some("'friend'"),
+            TokenKind::KwStaticCast => Some("'static_cast'"),
+            TokenKind::KwReinterpretCast => Some("'reinterpret_cast'"),
             _ => None,
         }
     }

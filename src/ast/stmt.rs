@@ -19,6 +19,10 @@ pub enum StmtKind {
     Compound(Vec<Stmt>),
     UsingNamespace(String),
     UsingDecl(String),
+    NamespaceAlias {
+        alias: String,
+        target: String,
+    },
     VarDecl {
         name: String,
         ty: Type,

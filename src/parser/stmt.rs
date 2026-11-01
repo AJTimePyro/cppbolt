@@ -41,15 +41,44 @@ impl Parser {
             TokenKind::KwReturn => self.parse_return_stmt(line, col),
             TokenKind::KwThrow => self.parse_throw_stmt(line, col),
             TokenKind::KwStatic => self.parse_static_stmt(),
+            TokenKind::KwNamespace => self.parse_local_namespace_alias(line, col),
             _ => self.parse_expr_or_decl_stmt(line, col),
         }
+    }
+
+    fn parse_local_namespace_alias(
+        &mut self,
+        line: usize,
+        col: usize,
+    ) -> Result<Stmt, CompileError> {
+        self.advance();
+        let alias = match self.advance().kind.clone() {
+            TokenKind::Ident(id) => id,
+            _ => {
+                return Err(CompileError::new(
+                    "Expected namespace alias name",
+                    line,
+                    col,
+                ));
+            }
+        };
+        self.expect(TokenKind::Assign)?;
+        let target = self.parse_qualified_name()?;
+        self.expect(TokenKind::Semi)?;
+        self.namespace_aliases.insert(alias.clone(), target.clone());
+        Ok(Stmt::new(
+            StmtKind::NamespaceAlias { alias, target },
+            line,
+            col,
+        ))
     }
 
     fn parse_using_stmt(&mut self, line: usize, col: usize) -> Result<Stmt, CompileError> {
         self.advance();
         if self.peek() == &TokenKind::KwNamespace {
             self.advance();
-            let ns = self.parse_qualified_name()?;
+            let raw_ns = self.parse_qualified_name()?;
+            let ns = self.resolve_namespace_alias(&raw_ns);
             self.expect(TokenKind::Semi)?;
             self.open_namespaces.push(ns.clone());
             Ok(Stmt::new(StmtKind::UsingNamespace(ns), line, col))
@@ -129,11 +158,13 @@ impl Parser {
         let _guard = self.enter_block()?;
         let tok = self.current().clone();
         self.expect(TokenKind::LBrace)?;
+        let prev_aliases = self.namespace_aliases.clone();
         let mut stmts = Vec::new();
         while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
             stmts.push(self.parse_stmt()?);
         }
         self.expect(TokenKind::RBrace)?;
+        self.namespace_aliases = prev_aliases;
         Ok(Stmt::new(StmtKind::Compound(stmts), tok.line, tok.col))
     }
 

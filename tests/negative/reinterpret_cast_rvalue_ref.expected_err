@@ -1,0 +1,1 @@
+tests/negative/reinterpret_cast_rvalue_ref.cpp:2:5: error: reinterpret_cast to reference type requires an lvalue operand

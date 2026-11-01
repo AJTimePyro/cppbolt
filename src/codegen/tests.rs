@@ -275,3 +275,46 @@ fn free_dereference_operator_lvalue_calls_operator() {
     );
     assert!(code.contains(&OP_CALL));
 }
+
+#[test]
+fn test_codegen_reinterpret_cast_pointer_to_int_and_back() -> Result<(), Box<dyn std::error::Error>>
+{
+    let code = r#"
+        int main() {
+            int val = 0x1234;
+            int* ptr = &val;
+            unsigned int addr = reinterpret_cast<unsigned int>(ptr);
+            int* ptr2 = reinterpret_cast<int*>(addr);
+            return (*ptr2 == 0x1234) ? 0 : 1;
+        }
+    "#;
+    let wasm = crate::compile(code)?;
+    assert!(!wasm.is_empty());
+    Ok(())
+}
+
+#[test]
+fn test_codegen_reinterpret_cast_reference_lvalue() {
+    let sema = Sema::new();
+    let mut codegen = Codegen::new(&sema);
+    let mut ctx = context();
+    ctx.bind_local("x".to_string(), 8, Type::Int);
+    let cast = Expr::Cast {
+        kind: CastKind::Reinterpret,
+        target_type: Type::Reference(Box::new(Type::Int)),
+        expr: Box::new(Expr::Identifier("x".to_string())),
+    };
+    let mut code = Vec::new();
+    assert!(
+        codegen
+            .compile_lvalue_addr(&cast, &mut ctx, &mut code)
+            .is_ok()
+    );
+    let mut expected = Vec::new();
+    assert!(
+        codegen
+            .compile_lvalue_addr(&Expr::Identifier("x".to_string()), &mut ctx, &mut expected)
+            .is_ok()
+    );
+    assert_eq!(code, expected);
+}

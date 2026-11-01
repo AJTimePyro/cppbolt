@@ -9,6 +9,20 @@ This project does not yet have tagged semantic releases; all historical work is 
 
 ## [Unreleased]
 
+### Extended Casts (`reinterpret_cast`)
+- Added C++17 `reinterpret_cast<T>(expr)` support across scalar integers, pointers, and reference types under the ILP32 data model.
+- Disallowed scalar floating-point conversions and user-defined conversion operators in `reinterpret_cast`.
+- Implemented bit-preserving WebAssembly lowering for pointer-to-pointer, integer-to-pointer, and pointer-to-integer casts.
+- Added end-to-end tests in `tests/c_basics/types/reinterpret_cast.cpp`.
+- Completed all features in Roadmap Section 2 (Language Feature Expansion).
+
+### Namespace Aliases
+- Supported C++17 namespace alias declarations (`namespace NewName = OriginalName;`) at file, namespace, and block scopes.
+- Implemented transitive resolution of namespace aliases across types, functions, variables, and `using namespace` directives.
+- Diagnosed invalid alias redefinitions in semantic analysis.
+- Added test coverage in `tests/classes_oop/statics_namespaces/namespace_aliases.cpp` and updated `tests/negative/namespace_alias.cpp`.
+
+
 ### Type Qualification, Pointer Conversions & String Literal Semantics
 - Rejected arbitrary integer-to-pointer conversions, allowing only null pointer constants (`0`, `0u`, and `nullptr`).
 - Rejected zero-valued variables and `false` as pointer initializers.

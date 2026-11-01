@@ -64,36 +64,85 @@ impl Sema {
             Expr::ArraySubscript { .. } => self.analyze_subscript(expr),
             Expr::MemberAccess { .. } => self.analyze_member(expr),
             Expr::Ternary { .. } => self.analyze_ternary(expr),
-            Expr::Cast { target_type, expr } => {
-                let expr_ty = self.analyze_expr(expr)?;
-                if let Type::Struct(sname) = expr_ty.strip_reference().strip_const() {
-                    let conv_name = format!("operator {}", target_type.to_c_type());
-                    let is_const = expr_ty.strip_reference().is_const();
-                    if let Some(_sig) =
-                        self.find_method_in_class_for_receiver(sname, &conv_name, is_const)
-                    {
-                        let old_expr = (**expr).clone();
-                        let pos = ExprPos::new(self.current_line, self.current_col);
-                        **expr = Expr::Call {
-                            callee: Box::new(Expr::MemberAccess {
-                                object: Box::new(old_expr),
-                                member: conv_name,
-                                is_arrow: false,
-                                pos,
-                            }),
-                            args: vec![],
-                            pos,
-                        };
-                    }
-                }
-                Ok(target_type.clone())
-            }
+            Expr::Cast {
+                kind,
+                target_type,
+                expr,
+            } => self.analyze_cast(*kind, target_type, expr),
             Expr::SizeofType(_) | Expr::SizeofExpr(_) => Ok(Type::UnsignedInt),
             Expr::InitializerList { .. } | Expr::TypedInitList { .. } => {
                 self.analyze_initializer(expr)
             }
             Expr::Lambda { .. } => self.analyze_lambda(expr),
         }
+    }
+
+    fn analyze_cast(
+        &mut self,
+        kind: CastKind,
+        target_type: &Type,
+        expr: &mut Expr,
+    ) -> Result<Type, CompileError> {
+        let expr_ty = self.analyze_expr(expr)?;
+        if kind == CastKind::Reinterpret {
+            if target_type.is_reference() && !expr.is_lvalue() {
+                return Err(CompileError::new(
+                    "reinterpret_cast to reference type requires an lvalue operand",
+                    self.current_line,
+                    self.current_col,
+                ));
+            }
+            self.validate_reinterpret_cast(&expr_ty, target_type)?;
+            return Ok(target_type.clone());
+        }
+        if let Type::Struct(sname) = expr_ty.strip_reference().strip_const() {
+            let conv_name = format!("operator {}", target_type.to_c_type());
+            let is_const = expr_ty.strip_reference().is_const();
+            if let Some(_sig) = self.find_method_in_class_for_receiver(sname, &conv_name, is_const)
+            {
+                let old_expr = expr.clone();
+                let pos = ExprPos::new(self.current_line, self.current_col);
+                *expr = Expr::Call {
+                    callee: Box::new(Expr::MemberAccess {
+                        object: Box::new(old_expr),
+                        member: conv_name,
+                        is_arrow: false,
+                        pos,
+                    }),
+                    args: vec![],
+                    pos,
+                };
+            }
+        }
+        Ok(target_type.clone())
+    }
+
+    fn validate_reinterpret_cast(&self, src: &Type, target: &Type) -> Result<(), CompileError> {
+        let clean_src = src.strip_const().strip_reference();
+        let clean_tgt = target.strip_const().strip_reference();
+        let is_ref = target.is_reference() || src.is_reference();
+        let invalid_float = !is_ref
+            && (matches!(clean_src, Type::Float | Type::Double)
+                || matches!(clean_tgt, Type::Float | Type::Double));
+        let invalid_struct = !is_ref
+            && (matches!(clean_src, Type::Struct(_)) || matches!(clean_tgt, Type::Struct(_)));
+        let valid = (clean_src.is_pointer() || clean_src == &Type::Nullptr)
+            && (clean_tgt.is_pointer() || clean_tgt.is_integer())
+            || clean_src.is_integer() && clean_tgt.is_pointer()
+            || target.is_reference();
+
+        if invalid_float || invalid_struct || !valid {
+            return Err(CompileError::new(
+                format!(
+                    "reinterpret_cast from '{}' to '{}' is not allowed",
+                    src.to_c_type(),
+                    target.to_c_type()
+                ),
+                self.current_line,
+                self.current_col,
+            ));
+        }
+        Ok(())
     }
 
     pub(super) fn analyze_new(&mut self, expr: &mut Expr) -> Result<Type, CompileError> {
@@ -198,6 +247,10 @@ impl Sema {
                 "unexpected expression kind"
             ));
         };
+        let resolved = self.resolve_alias_in_qualified_name(name);
+        if resolved != *name {
+            *name = resolved;
+        }
 
         if let Some(global_name) = name.strip_prefix("::") {
             return self.analyze_global_identifier(name, global_name);

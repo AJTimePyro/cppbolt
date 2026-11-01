@@ -54,6 +54,20 @@ impl<'a> Codegen<'a> {
         }
     }
 
+    /// Emits a bit-preserving reinterpret conversion between ILP32 scalars/pointers.
+    pub(super) fn emit_reinterpret_conversion(&self, from: &Type, to: &Type, code: &mut Vec<u8>) {
+        let from_wasm = from.to_wasm_type();
+        let to_wasm = to.to_wasm_type();
+        if from_wasm == to_wasm {
+            return;
+        }
+        if from_wasm == Some(WasmType::I32) && to_wasm == Some(WasmType::I64) {
+            code.push(OP_I64_EXTEND_I32_U);
+        } else if from_wasm == Some(WasmType::I64) && to_wasm == Some(WasmType::I32) {
+            code.push(OP_I32_WRAP_I64);
+        }
+    }
+
     /// Emits a representation conversion and then normalizes narrow integers.
     ///
     /// All sub-word integer types live in `i32` locals, so a cast must

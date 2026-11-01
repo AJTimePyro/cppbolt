@@ -42,6 +42,7 @@ c_basics/types/floats
 c_basics/types/long_long
 c_basics/types/numeric_literals
 c_basics/types/pointer_conversions
+c_basics/types/reinterpret_cast
 c_basics/types/rounding_ties
 c_basics/types/sizeof_expr
 c_basics/types/ternary_mixed_types
@@ -136,6 +137,7 @@ classes_oop/statics_namespaces/global_constructor_args
 classes_oop/statics_namespaces/global_static_objects
 classes_oop/statics_namespaces/implicit_conversions_valid
 classes_oop/statics_namespaces/namespaces_comprehensive
+classes_oop/statics_namespaces/namespace_aliases
 classes_oop/statics_namespaces/references
 classes_oop/statics_namespaces/static_local_constructor_args
 classes_oop/statics_namespaces/static_members
@@ -284,6 +286,7 @@ negative/method_too_many_arguments
 negative/multiple_inheritance
 negative/multiple_inheritance_access
 negative/namespace_alias
+negative/namespace_alias_block_redefinition
 negative/narrowing_constant_overflow
 negative/narrowing_float_to_int
 negative/narrowing_signed_to_unsigned
@@ -308,6 +311,7 @@ negative/private_access
 negative/pure_virtual_instantiation
 negative/range_for_non_iterable
 negative/redefined_func
+negative/reinterpret_cast_rvalue_ref
 negative/ref_qualifier_lvalue_mismatch
 negative/scalar_excess_elements
 negative/scoped_enum_call_arg

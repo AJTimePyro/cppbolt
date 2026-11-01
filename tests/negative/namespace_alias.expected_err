@@ -1,1 +1,1 @@
-tests/negative/namespace_alias.cpp:5:17: error: namespace aliases are not supported
+tests/negative/namespace_alias.cpp:10:11: error: redefinition of namespace alias 'alias'

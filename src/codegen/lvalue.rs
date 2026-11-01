@@ -86,6 +86,9 @@ impl<'a> Codegen<'a> {
             | Expr::Binary { .. }
             | Expr::Unary { .. }
             | Expr::CompoundAssign { .. } => self.compile_lvalue_value(expr, ctx, code),
+            Expr::Cast {
+                target_type, expr, ..
+            } if target_type.is_reference() => self.compile_lvalue_addr(expr, ctx, code),
             _ => self.compile_lvalue_temporary(expr, ctx, code),
         }
     }

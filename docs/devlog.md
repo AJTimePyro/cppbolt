@@ -158,3 +158,48 @@ Following completion of the initial compiler subset, work focused on adding high
 ### Verification
 - Added test coverage in `tests/c_basics/pointers_arrays/range_for_array.cpp`, `tests/mini_stl/range_for_string.cpp`, `tests/classes_oop/memory_raii/range_for_raii.cpp`, and `tests/negative/range_for_non_iterable.cpp`.
 - Verified automated mdBook, `cargo doc`, and playground builds in CI.
+
+---
+
+## 2026-11-01: C++17 Namespace Aliases
+
+### Context & Motivation
+Section 2 of the roadmap tracked namespace aliases (`namespace NewName = OriginalName;`), which were rejected upfront by the parser unsupported validator.
+
+### Work Executed
+1. Removed the parser rejection rule for namespace aliases.
+2. Added `Decl::NamespaceAlias` and `StmtKind::NamespaceAlias` to AST definitions.
+3. Parsed namespace alias declarations at global, namespace, and block scopes.
+4. Added transitive alias resolution in `Parser` and `Sema` across types, functions, variables, and `using namespace` directives.
+5. Diagnosed invalid alias redefinitions in semantic analysis.
+
+### Verification
+- Added test coverage in `tests/classes_oop/statics_namespaces/namespace_aliases.cpp`.
+- Updated negative test coverage in `tests/negative/namespace_alias.cpp`.
+- Verified clean suite with 338 passing tests in `cppbolt-testrunner`.
+
+---
+
+## 2026-11-01: C++17 Extended Casts (reinterpret_cast)
+
+### Context & Motivation
+Section 2 of the roadmap tracked `reinterpret_cast` across scalar and pointer types within the ILP32 model. Previously, only `static_cast` and C-style casts were recognized, while `reinterpret_cast` was rejected at parse time.
+
+### Work Executed
+1. Added `TokenKind::KwReinterpretCast` to the lexer and parser.
+2. Introduced `CastKind` (`Static`, `Reinterpret`, `CStyle`) and unified cast expressions into `Expr::Cast { kind, target_type, expr }`.
+3. Extended the parser to handle `reinterpret_cast<Type>(expr)` with template bracket matching.
+4. Implemented semantic validation for `reinterpret_cast` in `src/sema/expr.rs`:
+   - Allowed conversions between integer types and pointer types without loss under 32-bit ILP32 semantics.
+   - Allowed conversions between arbitrary pointer types.
+   - Handled lvalue reference reinterpretations (`reinterpret_cast<T&>(expr)`).
+   - Rejected scalar floating-point value conversions (direct float-to-int or float-to-pointer casts) per C++17 rules.
+   - Bypassed user-defined conversion operators (`operator T()`) and constructors.
+5. Implemented WebAssembly code generation lowering in `src/codegen/expr.rs` and `src/codegen/memory.rs`, generating bit-preserving no-ops or width adjustments (wrapping or extending for 64-bit integers).
+6. Documented all additions and marked Roadmap Section 2 complete.
+
+### Verification
+- Added end-to-end integration tests in `tests/c_basics/types/reinterpret_cast.cpp`.
+- Added unit tests across lexer, parser, sema, and codegen in `src/`.
+- Verified clean suite with 339 passing tests in `cppbolt-testrunner`.
+- Verified zero warnings with `cargo clippy` and satisfied all census constraints.

@@ -298,7 +298,8 @@ impl Parser {
                 res
             }
             TokenKind::ColonColon | TokenKind::Ident(_) => {
-                let id = self.parse_qualified_name()?;
+                let raw_id = self.parse_qualified_name()?;
+                let id = self.resolve_namespace_alias(&raw_id);
                 if id == "size_t" {
                     Type::UnsignedInt
                 } else if id == "ptrdiff_t" {

@@ -128,6 +128,7 @@ impl Sema {
             | StmtKind::Empty
             | StmtKind::UsingNamespace(_)
             | StmtKind::UsingDecl(_)
+            | StmtKind::NamespaceAlias { .. }
             | StmtKind::Expr(_) => {}
             StmtKind::Return(expr_opt) => {
                 self.analyze_return(expr_opt, stmt.line, stmt.col)?;
@@ -183,12 +184,22 @@ impl Sema {
     /// Returns true when the statement was handled here.
     fn analyze_simple_stmt(&mut self, kind: &mut StmtKind) -> Result<bool, CompileError> {
         match kind {
+            StmtKind::NamespaceAlias { alias, target } => {
+                self.record_local_namespace_alias(
+                    alias,
+                    target,
+                    self.current_line,
+                    self.current_col,
+                )?;
+            }
             StmtKind::UsingNamespace(ns) => {
-                self.open_namespaces.push(ns.clone());
+                let resolved = self.resolve_alias_in_qualified_name(ns);
+                self.open_namespaces.push(resolved);
             }
             StmtKind::UsingDecl(name) => {
-                let short = name.split("::").last().unwrap_or(name).to_string();
-                self.using_decls.insert(short, name.clone());
+                let resolved = self.resolve_alias_in_qualified_name(name);
+                let short = resolved.split("::").last().unwrap_or(&resolved).to_string();
+                self.using_decls.insert(short, resolved);
             }
             StmtKind::Expr(expr) => {
                 self.analyze_expr(expr)?;

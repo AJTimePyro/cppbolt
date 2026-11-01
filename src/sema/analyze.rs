@@ -201,11 +201,21 @@ impl Sema {
         for decl in &program.declarations {
             match decl {
                 Decl::UsingNamespace(ns) => {
-                    self.open_namespaces.push(ns.clone());
+                    let resolved = self.resolve_alias_in_qualified_name(ns);
+                    self.open_namespaces.push(resolved);
                 }
                 Decl::UsingDecl(name) => {
-                    let short_name = name.split("::").last().unwrap_or(name).to_string();
-                    self.using_decls.insert(short_name, name.clone());
+                    let resolved = self.resolve_alias_in_qualified_name(name);
+                    let short_name = resolved.split("::").last().unwrap_or(&resolved).to_string();
+                    self.using_decls.insert(short_name, resolved);
+                }
+                Decl::NamespaceAlias {
+                    alias,
+                    target,
+                    line,
+                    col,
+                } => {
+                    self.record_local_namespace_alias(alias, target, *line, *col)?;
                 }
                 Decl::Function(f) => {
                     let mangled = self.mangle_name(&f.name, &f.params);
