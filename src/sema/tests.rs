@@ -18,3 +18,30 @@ fn test_sema_namespace_alias_resolution() -> Result<(), Box<dyn std::error::Erro
     sema.analyze_program(&mut program)?;
     Ok(())
 }
+
+#[test]
+fn test_reinterpret_cast_rejects_float_to_int() -> Result<(), Box<dyn std::error::Error>> {
+    let code = "int x = reinterpret_cast<int>(3.14f);";
+    let tokens = Lexer::new(code).tokenize()?;
+    let mut parser = Parser::new(tokens);
+    let mut program = parser.parse_program()?;
+    let mut sema = Sema::new();
+    let res = sema.analyze_program(&mut program);
+    assert!(res.is_err(), "reinterpret_cast between float and int must be rejected");
+    Ok(())
+}
+
+#[test]
+fn test_reinterpret_cast_bypasses_conversion_operator() -> Result<(), Box<dyn std::error::Error>> {
+    let code = r#"
+        struct Foo { operator int*() const { return nullptr; } };
+        void test() { Foo f; int* p = reinterpret_cast<int*>(f); }
+    "#;
+    let tokens = Lexer::new(code).tokenize()?;
+    let mut parser = Parser::new(tokens);
+    let mut program = parser.parse_program()?;
+    let mut sema = Sema::new();
+    let res = sema.analyze_program(&mut program);
+    assert!(res.is_err(), "reinterpret_cast cannot invoke user conversion operator on class");
+    Ok(())
+}

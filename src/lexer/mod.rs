@@ -347,6 +347,7 @@ fn classify_word(word: &str) -> TokenKind {
         "typedef" => TokenKind::KwTypedef,
         "nullptr" => TokenKind::KwNullptr,
         "static_cast" => TokenKind::KwStaticCast,
+        "reinterpret_cast" => TokenKind::KwReinterpretCast,
         "constexpr" => TokenKind::KwConstexpr,
         "decltype" => TokenKind::KwDecltype,
         "explicit" => TokenKind::KwExplicit,
@@ -378,6 +379,14 @@ mod tests {
         assert_eq!((spans[5].line, spans[5].col, spans[5].len), (2, 1, 1));
         assert_eq!((spans[6].line, spans[6].col, spans[6].len), (2, 2, 2));
         assert_eq!(tokens[6].kind, TokenKind::PlusPlus);
+        Ok(())
+    }
+
+    #[test]
+    fn test_lex_reinterpret_cast() -> Result<(), Box<dyn std::error::Error>> {
+        let mut lexer = Lexer::new("reinterpret_cast<int*>(ptr)");
+        let tokens = lexer.tokenize()?;
+        assert_eq!(tokens[0].kind, TokenKind::KwReinterpretCast);
         Ok(())
     }
 }

@@ -1,0 +1,4 @@
+byte: 4
+roundtrip: 1
+unrelated_struct: 42
+ref_cast: 4

@@ -275,3 +275,19 @@ fn free_dereference_operator_lvalue_calls_operator() {
     );
     assert!(code.contains(&OP_CALL));
 }
+
+#[test]
+fn test_codegen_reinterpret_cast_pointer_to_int_and_back() -> Result<(), Box<dyn std::error::Error>> {
+    let code = r#"
+        int main() {
+            int val = 0x1234;
+            int* ptr = &val;
+            unsigned int addr = reinterpret_cast<unsigned int>(ptr);
+            int* ptr2 = reinterpret_cast<int*>(addr);
+            return (*ptr2 == 0x1234) ? 0 : 1;
+        }
+    "#;
+    let wasm = crate::compile(code)?;
+    assert!(!wasm.is_empty());
+    Ok(())
+}

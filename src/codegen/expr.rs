@@ -51,18 +51,11 @@ impl<'a> Codegen<'a> {
                 }
             }
             Expr::Ternary { .. } => self.compile_ternary(expr, ctx, code)?,
-            Expr::Cast { target_type, expr } => {
-                let src_ty = self.get_expr_type(expr, ctx);
-                self.compile_expr(expr, ctx, code)?;
-                if target_type == &Type::Void {
-                    if src_ty != Type::Void {
-                        code.push(OP_DROP);
-                    }
-                    return Ok(());
-                }
-
-                self.emit_conversion(&src_ty, target_type, code);
-            }
+            Expr::Cast {
+                kind,
+                target_type,
+                expr,
+            } => self.compile_cast(*kind, target_type, expr, ctx, code)?,
             Expr::TypedInitList { ty, elements, .. } => {
                 self.compile_typed_init_list(ty, elements, ctx, code)?;
             }
@@ -76,6 +69,32 @@ impl<'a> Codegen<'a> {
             }
             _ => {}
         }
+        Ok(())
+    }
+
+    fn compile_cast(
+        &mut self,
+        kind: CastKind,
+        target_type: &Type,
+        expr: &Expr,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        let src_ty = self.get_expr_type(expr, ctx);
+        self.compile_expr(expr, ctx, code)?;
+        if target_type == &Type::Void {
+            if src_ty != Type::Void {
+                code.push(OP_DROP);
+            }
+            return Ok(());
+        }
+
+        if kind == CastKind::Reinterpret {
+            self.emit_reinterpret_conversion(&src_ty, target_type, code);
+            return Ok(());
+        }
+
+        self.emit_conversion(&src_ty, target_type, code);
         Ok(())
     }
 

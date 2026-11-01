@@ -21,6 +21,7 @@ impl Parser {
             TokenKind::KwNew => self.parse_new_expr(),
             TokenKind::KwDelete => self.parse_delete_expr(),
             TokenKind::KwStaticCast => self.parse_static_cast_expr(),
+            TokenKind::KwReinterpretCast => self.parse_reinterpret_cast_expr(),
             TokenKind::KwSizeof => self.parse_sizeof_expr(),
             TokenKind::LParen => self.parse_parenthesized_expr(),
             _ => {
@@ -135,6 +136,22 @@ impl Parser {
         let expr = self.parse_expr()?;
         self.expect(TokenKind::RParen)?;
         Ok(Expr::Cast {
+            kind: CastKind::Static,
+            target_type,
+            expr: Box::new(expr),
+        })
+    }
+
+    fn parse_reinterpret_cast_expr(&mut self) -> Result<Expr, CompileError> {
+        self.advance();
+        self.expect(TokenKind::Lt)?;
+        let target_type = self.parse_type()?;
+        self.expect(TokenKind::Gt)?;
+        self.expect(TokenKind::LParen)?;
+        let expr = self.parse_expr()?;
+        self.expect(TokenKind::RParen)?;
+        Ok(Expr::Cast {
+            kind: CastKind::Reinterpret,
             target_type,
             expr: Box::new(expr),
         })
@@ -166,6 +183,7 @@ impl Parser {
                 self.expect(TokenKind::RParen)?;
                 let expr = self.parse_prefix()?;
                 Ok(Expr::Cast {
+                    kind: CastKind::CStyle,
                     target_type: ty,
                     expr: Box::new(expr),
                 })

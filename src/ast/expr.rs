@@ -94,6 +94,13 @@ pub enum UnaryOp {
     PostDec,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CastKind {
+    Static,
+    Reinterpret,
+    CStyle,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     IntLiteral(i64, Type),
@@ -147,6 +154,7 @@ pub enum Expr {
         else_expr: Box<Expr>,
     },
     Cast {
+        kind: CastKind,
         target_type: Type,
         expr: Box<Expr>,
     },

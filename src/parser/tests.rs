@@ -213,3 +213,22 @@ fn parses_integer_literal_types_per_cxx17_table_6() -> Result<(), Box<dyn std::e
     assert_eq!(get_init_ty(8), Some(Type::LongLong));
     Ok(())
 }
+
+#[test]
+fn test_parse_reinterpret_cast() -> Result<(), Box<dyn std::error::Error>> {
+    let code = "int* p; char* c = reinterpret_cast<char*>(p);";
+    let tokens = Lexer::new(code).tokenize()?;
+    let program = Parser::new(tokens).parse_program()?;
+    let Some(Decl::GlobalVar { init: Some(init_expr), .. }) = program.declarations.get(1) else {
+        return Err("expected second global var with init".into());
+    };
+    assert!(matches!(
+        init_expr,
+        Expr::Cast {
+            kind: CastKind::Reinterpret,
+            target_type: Type::Pointer(_),
+            ..
+        }
+    ));
+    Ok(())
+}
