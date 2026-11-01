@@ -86,6 +86,12 @@ impl<'a> Preprocessor<'a> {
                     .output_lines
                     .push(SourceLine::empty(file, line_number));
             }
+            "undef" => {
+                self.handle_undef(argument, line_number)?;
+                state
+                    .output_lines
+                    .push(SourceLine::empty(file, line_number));
+            }
             "pragma" => {
                 self.handle_pragma(argument, state.current_file);
                 state
@@ -121,6 +127,19 @@ impl<'a> Preprocessor<'a> {
                 .output_lines
                 .push(SourceLine::empty(file, line_number)),
         }
+        Ok(())
+    }
+
+    fn handle_undef(&mut self, argument: &str, line_number: usize) -> Result<(), CompileError> {
+        let name = argument.split_whitespace().next().unwrap_or("");
+        if !macros::is_valid_ident(name) {
+            return Err(CompileError::new(
+                format!("Invalid macro name in #undef '{}'", name),
+                line_number,
+                1,
+            ));
+        }
+        self.macros.remove(name);
         Ok(())
     }
 }

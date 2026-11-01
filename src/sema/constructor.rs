@@ -45,7 +45,7 @@ impl Sema {
             return Ok(ConstructorCall::Elided(inner));
         }
         // The arguments must match a constructor of the class.
-        match self.find_constructor_for(class_name, arg_types) {
+        match self.find_constructor_for(class_name, arg_types, Some(args)) {
             Some(sig) => {
                 // A constructor call may leave out arguments that have
                 // default values.
@@ -69,6 +69,7 @@ impl Sema {
         &self,
         class_name: &str,
         arg_types: &[Type],
+        args: Option<&[Expr]>,
     ) -> Option<FunctionSig> {
         let short = class_name.split("::").last().unwrap_or(class_name);
         let alternate = QualifiedName::new(class_name).alternate();
@@ -92,7 +93,8 @@ impl Sema {
         let mut best: Option<FunctionSig> = None;
         let mut best_score = usize::MAX;
         for cand in &candidates {
-            if let Some(score) = self.score_constructor_candidate(cand, arg_types, is_copy_init)
+            if let Some(score) =
+                self.score_constructor_candidate(cand, arg_types, args, is_copy_init)
                 && score < best_score
             {
                 best_score = score;
@@ -108,6 +110,7 @@ impl Sema {
         &self,
         cand: &FunctionSig,
         arg_types: &[Type],
+        args: Option<&[Expr]>,
         is_copy_init: bool,
     ) -> Option<usize> {
         let params = if cand.param_types.is_empty() {
@@ -140,13 +143,24 @@ impl Sema {
                 score += 1;
                 continue;
             }
-            if param.strip_all_const() == arg_ty.strip_all_const() {
+            if param.strip_const() == arg_ty.strip_const() {
+                continue;
+            }
+            if self.check_pointer_conversion(param, arg_ty) {
+                score += 1;
                 continue;
             }
             if param.is_reference()
                 && param.deref_type().map(|d| d.strip_all_const()) == Some(arg_ty.strip_all_const())
             {
                 score += 1;
+                continue;
+            }
+            let is_null_ptr_const = args
+                .and_then(|a| a.get(index))
+                .is_some_and(Sema::is_null_pointer_constant);
+            if param.decay_array().is_pointer() && is_null_ptr_const {
+                score += 2;
                 continue;
             }
             if self.can_assign(param, arg_ty) {

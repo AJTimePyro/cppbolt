@@ -1,0 +1,1 @@
+tests/negative/invalid_digit_separator.cpp:2:13: error: Invalid digit separator

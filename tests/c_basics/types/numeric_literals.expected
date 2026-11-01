@@ -1,0 +1,8 @@
+oct: 493 63 0
+bin: 10 15
+hex_sep: 3735928559
+dec_sep: 1000000
+oct_sep: 493
+bin_sep: 165
+float_sep: 3.141592
+exp_sep: 1.0e+10

@@ -1,0 +1,1 @@
+tests/negative/invalid_binary_digit.cpp:2:13: error: Invalid digit '2' in binary literal

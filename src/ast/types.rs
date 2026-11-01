@@ -12,6 +12,7 @@ pub enum WasmType {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
     Void,
+    Nullptr,
     Bool,
     Char,
     SignedChar,
@@ -193,6 +194,7 @@ impl Type {
     pub fn size_of(&self, struct_sizes: &HashMap<String, usize>) -> usize {
         match self.strip_const() {
             Type::Void | Type::Auto => 0,
+            Type::Nullptr => 4,
             Type::Bool | Type::Char | Type::SignedChar | Type::UnsignedChar => 1,
             Type::Short | Type::UnsignedShort => 2,
             Type::Int | Type::UnsignedInt | Type::Long | Type::UnsignedLong | Type::Enum(_) => 4,
@@ -214,6 +216,7 @@ impl Type {
     pub fn align_of(&self, struct_aligns: &HashMap<String, usize>) -> usize {
         match self.strip_const() {
             Type::Void | Type::Auto => 1,
+            Type::Nullptr => 4,
             Type::Bool | Type::Char | Type::SignedChar | Type::UnsignedChar => 1,
             Type::Short | Type::UnsignedShort => 2,
             Type::Int | Type::UnsignedInt | Type::Long | Type::UnsignedLong | Type::Enum(_) => 4,
@@ -235,6 +238,7 @@ impl Type {
     pub fn to_wasm_type(&self) -> Option<WasmType> {
         match self.strip_const() {
             Type::Void | Type::Auto => None,
+            Type::Nullptr => Some(WasmType::I32),
             Type::Bool
             | Type::Char
             | Type::SignedChar
@@ -260,6 +264,7 @@ impl Type {
         match self {
             Type::Const(inner) => format!("const {}", inner.to_c_type()),
             Type::Void => "void".to_string(),
+            Type::Nullptr => "decltype(nullptr)".to_string(),
             Type::Auto => "auto".to_string(),
             Type::Bool => "bool".to_string(),
             Type::Char => "char".to_string(),

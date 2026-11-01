@@ -1,0 +1,1 @@
+tests/negative/pointer_conversion_string_literal_nonconst.cpp:2:5: error: cannot initialize variable 'p' of type char * with const char[6]

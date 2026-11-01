@@ -1,0 +1,1 @@
+tests/negative/pointer_conversion_discard_const.cpp:4:5: error: cannot initialize variable 'q' of type int * with const int *

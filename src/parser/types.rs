@@ -287,13 +287,15 @@ impl Parser {
             TokenKind::KwDecltype => {
                 self.advance();
                 self.expect(TokenKind::LParen)?;
-                if self.peek() == &TokenKind::KwNullptr {
+                let res = if self.peek() == &TokenKind::KwNullptr {
                     self.advance();
+                    Type::Nullptr
                 } else {
                     let _ = self.parse_expr()?;
-                }
+                    Type::Pointer(Box::new(Type::Void))
+                };
                 self.expect(TokenKind::RParen)?;
-                Type::Pointer(Box::new(Type::Void))
+                res
             }
             TokenKind::ColonColon | TokenKind::Ident(_) => {
                 let id = self.parse_qualified_name()?;

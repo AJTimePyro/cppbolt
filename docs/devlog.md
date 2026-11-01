@@ -4,6 +4,63 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-01: Type Qualification, Pointer Conversions, and String Literal Semantics
+
+### Context & Motivation
+Work on this date addressed C++17 pointer conversion semantics, qualification conversions, and string literals:
+1. The compiler allowed arbitrary integers and variables to convert to pointers instead of restricting null pointer constants to literal zero and `nullptr`.
+2. `nullptr` was represented internally as `void*`, collapsing `std::nullptr_t` type identity and distorting overload ranking.
+3. Multi-level pointer qualification conversions did not enforce C++17 rules, incorrectly allowing `int**` to convert to `const int**`.
+4. String literals were typed as pointers rather than `const char[N]`, causing incorrect `sizeof` results and permitting assignment to `char*`.
+5. Implicit conversion from `void*` to typed pointers was accepted without an explicit `static_cast`.
+
+### Work Executed
+1. `nullptr` type identity:
+   - Added `Type::Nullptr` (mangled `Dn`) for `nullptr`, `std::nullptr_t`, and `decltype(nullptr)`, with implicit conversions to pointers and `bool`.
+   - Mapped `KwNullptr` and `nullptr_t` tokens to `Type::Nullptr` across lexer and parser.
+2. Pointer qualification and null pointer constants:
+   - Implemented null pointer constant validation in `src/sema/assign.rs`, accepting only literal zeroes (`0`, `0u`) and `nullptr`.
+   - Implemented `check_pointer_conversion` in `src/sema/assign.rs` for multi-level qualification conversions, requiring `const` on all preceding levels when introducing `const` at an inner level.
+   - Allowed object-pointer-to-`void*` conversion; rejected implicit `void*`-to-typed-pointer conversions.
+   - Updated overload resolution (`score_arguments`) and constructor ranking (`score_constructor_candidate`) to score qualification conversions and null pointer constant conversions.
+3. String literal semantics:
+   - Represented string literals as `Type::Array(Type::Char(const), len + 1)` in `src/sema/expr.rs` and codegen.
+   - Preserved array typing through `sizeof` (`sizeof("hello") == 6`) and decayed to `const char*` for call arguments and pointer assignments.
+   - Rejected assignments of string literals to mutable `char*`.
+
+### Verification
+- Added positive tests in `tests/c_basics/types/pointer_conversions.cpp` for null pointer constants, `nullptr`, multi-level qualification, `void*`, and string literals.
+- Added 7 negative diagnostic tests in `tests/negative/`.
+- 69 library and binary tests pass (`cargo test --lib --bins`).
+- 337 corpus tests pass without regressions (`cargo run --bin cppbolt-testrunner`).
+- Census metrics and clippy pass with zero warnings.
+
+---
+
+## 2026-10-30: C++17 Numeric Literals, Macro Undef, and Raw Token Pasting
+
+### Context & Motivation
+Work on this date expanded literal syntax and fixed macro token pasting:
+1. The lexer did not support binary literals (`0b1010`), digit separators (`1'000'000`), or octal digit checks.
+2. The preprocessor could not undefine macros (`#undef`).
+3. Macro token pasting (`##`) expanded operand macros before pasting instead of concatenating raw argument tokens.
+
+### Work Executed
+1. Numeric literals:
+   - Parsed binary literals with `0b` and `0B` prefixes.
+   - Supported single-quote digit separators, rejecting consecutive quotes or quotes at literal boundaries.
+   - Rejected digits `8` and `9` in octal literals.
+2. Preprocessor directives and macro expansion:
+   - Added the `#undef` directive in `src/preprocessor/directive_line.rs`.
+   - Updated `src/preprocessor/macros.rs` to paste raw tokens directly on `##` without prior expansion.
+
+### Verification
+- Added positive tests in `tests/c_basics/types/numeric_literals.cpp` and `tests/c_basics/preprocessor/macro_token_paste_raw.cpp`.
+- Added negative diagnostic tests in `tests/negative/` for invalid binary digits, misplaced digit separators, and invalid octal digits.
+- Formatting and clippy clean.
+
+---
+
 ## 2026-10-29: List Initialization, Array Decay, and Constructor Resolution
 
 ### Context & Motivation

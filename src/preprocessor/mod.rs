@@ -391,6 +391,50 @@ mod tests {
     }
 
     #[test]
+    fn handles_undef_directive() -> Result<(), Box<dyn std::error::Error>> {
+        let mut preprocessor = Preprocessor::new();
+        let source = preprocessor.process(
+            "#define FEATURE 1\n#undef FEATURE\n#ifdef FEATURE\nint bad = 1;\n#else\nint good = 1;\n#endif\n#undef NOT_DEFINED\n",
+        )?;
+        assert!(source.contains("int good = 1;"));
+        assert!(!source.contains("int bad = 1;"));
+        Ok(())
+    }
+
+    #[test]
+    fn strips_comments_in_macro_definitions() -> Result<(), Box<dyn std::error::Error>> {
+        let mut preprocessor = Preprocessor::new();
+        let source = preprocessor.process(
+            "#define OFFSET /* base */ 16\n#define VAL 42 // end of line\n#if OFFSET == 16\nint x = VAL;\n#endif\n",
+        )?;
+        assert!(source.contains("int x = 42;"));
+        Ok(())
+    }
+
+    #[test]
+    fn comment_stripping_preserves_token_separation_and_literals()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut preprocessor = Preprocessor::new();
+        let source = preprocessor.process(
+            r#"
+#define STR(s) s
+#define TOK_SEP a/*comment*/b
+#define LITERALS "// not a comment /* still string */ \" escaped"
+#define CHAR_LIT '/'
+const char* s = STR(LITERALS);
+char c = STR(CHAR_LIT);
+int x = STR(TOK_SEP);
+"#,
+        )?;
+        assert!(
+            source.contains(r#"const char* s = "// not a comment /* still string */ \" escaped";"#)
+        );
+        assert!(source.contains("char c = '/';"));
+        assert!(source.contains("int x = a b;")); // Preserves token separation: 'a b', not 'ab'
+        Ok(())
+    }
+
+    #[test]
     fn expands_macros_in_include_directives() -> Result<(), Box<dyn std::error::Error>> {
         let mut preprocessor = Preprocessor::new();
         let source = preprocessor.process("#define HEADER <cstdio>\n#include HEADER\n")?;

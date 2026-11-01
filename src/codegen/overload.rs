@@ -20,10 +20,15 @@ impl<'a> Codegen<'a> {
         for (p, a) in params.iter().zip(arg_types) {
             let p_decay = p.decay_array();
             let a_decay = a.decay_array();
-            if p_decay.strip_all_const() == a_decay.strip_all_const() {
+            let p_is_ptr = p_decay.is_pointer();
+            if p_decay.strip_const() == a_decay.strip_const() {
                 if p_decay != a_decay {
                     score += 1;
                 }
+            } else if self.sema.check_pointer_conversion(&p_decay, &a_decay) {
+                score += 1;
+            } else if p_is_ptr && (a.is_integer() || *a == Type::Nullptr) {
+                score += 20;
             } else if p.is_reference()
                 && p.deref_type().map(|d| d.strip_all_const()) == Some(a_decay.strip_all_const())
             {

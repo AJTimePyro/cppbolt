@@ -9,6 +9,23 @@ This project does not yet have tagged semantic releases; all historical work is 
 
 ## [Unreleased]
 
+### Type Qualification, Pointer Conversions & String Literal Semantics
+- Rejected arbitrary integer-to-pointer conversions, allowing only null pointer constants (`0`, `0u`, and `nullptr`).
+- Rejected zero-valued variables and `false` as pointer initializers.
+- Added `Type::Nullptr` for `nullptr`, `std::nullptr_t`, and `decltype(nullptr)` with Itanium mangling `Dn`, supporting implicit conversions to pointers and `bool`.
+- Enforced C++17 multi-level qualification conversions (`int**` converts to `const int* const*`, while `int**` to `const int**` and dropping `const` qualifiers fail).
+- Allowed implicit object-pointer-to-`void*` conversion; required explicit `static_cast` for `void*` to typed pointers.
+- Typed string literals as `const char[N]` with null terminators (`sizeof("hello") == 6`), decaying to `const char*` and rejecting assignment to `char*`.
+- Scored qualification conversions and null pointer constant conversions in function overload and constructor resolution.
+- Added test coverage in `tests/c_basics/types/pointer_conversions.cpp` and 7 negative tests in `tests/negative/`.
+
+### C++17 Numeric Literals, Undef Directive & Raw Token Pasting
+- Added binary integer literals (`0b`, `0B`) and single-quote digit separators (`1'000'000`, `0b1010'0101`).
+- Rejected non-octal digits (`8`, `9`) in octal literals.
+- Added preprocessor `#undef` directive.
+- Implemented raw macro token pasting (`##`) without expanding argument tokens first.
+- Added test coverage in `tests/c_basics/types/numeric_literals.cpp`, `tests/c_basics/preprocessor/macro_token_paste_raw.cpp`, and 3 negative tests in `tests/negative/`.
+
 ### Project Rename
 - Renamed the remaining legacy project-name references to `cppbolt`. The binaries are now `cppbolt-cli`, `cppbolt-testrunner`, and `cppbolt-census`, and the test runner's default compiler path is `target/release/cppbolt-cli`.
 

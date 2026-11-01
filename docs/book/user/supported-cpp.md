@@ -14,8 +14,9 @@ cargo run --bin cppbolt-testrunner -- target/release/cppbolt-cli
 
 | Feature | Status | Notes | Test |
 |---|---|---|---|
-| **Scalar Types** (`int`, `long long`, `short`, `char`, `float`, `double`, `bool`) | **Done** | ILP32 32-bit data model; unsigned overflow wrapping | `tests/c_basics/types/arithmetic.cpp`, `tests/c_basics/types/long_long.cpp`, `tests/c_basics/types/floats.cpp` |
-| **Pointers & Pointer Arithmetic** | **Done** | 32-bit Wasm `i32` addresses; array decay | `tests/c_basics/pointers_arrays/pointers_arrays.cpp` |
+| **Scalar Types** (`int`, `long long`, `short`, `char`, `float`, `double`, `bool`) | **Done** | ILP32 32-bit data model; unsigned overflow wrapping; binary literals (`0b`), octal, and single-quote digit separators (`'`) | `tests/c_basics/types/arithmetic.cpp`, `tests/c_basics/types/numeric_literals.cpp`, `tests/c_basics/types/long_long.cpp`, `tests/c_basics/types/floats.cpp` |
+| **Pointers & Conversions** | **Done** | 32-bit Wasm `i32` addresses; array decay; `nullptr` (`std::nullptr_t`); C++17 null pointer constants (`0`, `0u`); multi-level `const` qualification rules; implicit object pointer to `void*`; explicit `static_cast` for `void*` to typed pointer | `tests/c_basics/pointers_arrays/pointers_arrays.cpp`, `tests/c_basics/types/pointer_conversions.cpp` |
+| **String Literals** | **Done** | Typed as `const char[N]` with trailing null terminator (`sizeof("hello") == 6`); decay to `const char*`; immutable (rejected for `char*`) | `tests/c_basics/types/pointer_conversions.cpp` |
 | **Function Pointers** | **Done** | Indirect calls via WebAssembly function table; comparator callbacks | `tests/classes_oop/methods/function_pointer_comparator.cpp` |
 | **Multi-Dimensional Arrays** | **Done** | Nested dimensions wrap inside-out; contiguous row-major layout; pointer-to-array decay | `tests/c_basics/pointers_arrays/multidim_arrays.cpp`, `tests/c_basics/pointers_arrays/multidim_pointer_deref.cpp` |
 | **Lvalue References (`T&`)** | **Done** | Reference binding, parameters, reference return values | `tests/classes_oop/statics_namespaces/references.cpp`, `tests/classes_oop/methods/member_reference_return.cpp` |
@@ -41,7 +42,7 @@ cargo run --bin cppbolt-testrunner -- target/release/cppbolt-cli
 | **Namespaces** | **Done** | Nested namespaces, `using namespace`, qualified lookups | `tests/classes_oop/statics_namespaces/namespaces_comprehensive.cpp` |
 | **Operator Overloading (Binary & Compound)** | **Done** | `+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `<<`, `>>`, `&`, `^`, `\|`, `=`, `+=`, `-=`, `*=` | `tests/templates_operators/op_overload_binary.cpp`, `tests/classes_oop/operators/chained_compound_assign.cpp` |
 | **Operator Overloading (Prefix & Subscript)** | **Done** | Unary `+`, `-`, `!`, `~`, prefix `++`/`--`, subscript `[]`, `operator bool()` | `tests/templates_operators/op_overload_unary.cpp`, `tests/templates_operators/op_overload_subscript.cpp`, `tests/classes_oop/operators/contextual_bool_comprehensive.cpp` |
-| **Preprocessor** | **Done** | `#define` (function/object, `#`, `##`), `#include`, `#if`/`#elif`, `#error`, `#warning`, `\` | `tests/c_basics/preprocessor/preprocessor.cpp`, `tests/c_basics/preprocessor/macro_rescan.cpp`, `tests/c_basics/preprocessor/warning_directive.cpp` |
+| **Preprocessor** | **Done** | `#define` (function/object, `#`, raw `##`), `#undef`, `#include`, `#if`/`#elif`, `#error`, `#warning`, `\` | `tests/c_basics/preprocessor/preprocessor.cpp`, `tests/c_basics/preprocessor/macro_rescan.cpp`, `tests/c_basics/preprocessor/macro_token_paste_raw.cpp`, `tests/c_basics/preprocessor/warning_directive.cpp` |
 | **C Standard I/O (`<cstdio>`)** | **Done** | `printf` (all conversions `%d`, `%i`, `%u`, `%o`, `%x`, `%X`, `%c`, `%s`, `%e`, `%E`, `%f`, `%g`, `%G`), `sprintf`, `snprintf`, `puts` | `tests/c_basics/io_printf/printf_conversions.cpp`, `tests/c_basics/io_printf/printf_table.cpp`, `tests/mini_stl/cstdio_basic.cpp` |
 | **C++ Streams (`<iostream>`)** | **Done** | `std::cout`, `std::cin`, `std::getline`, custom stream operators | `tests/mini_stl/iostream_basic.cpp`, `tests/mini_stl/iostream_cin.cpp`, `tests/mini_stl/stream_operator_overload.cpp` |
 | **Standard String (`<string>`)** | **Done** | `std::string`, `.c_str()`, `.length()`, `.append()`, concatenation | `tests/mini_stl/string_basic.cpp`, `tests/mini_stl/string_comprehensive.cpp` |
@@ -64,7 +65,11 @@ cargo run --bin cppbolt-testrunner -- target/release/cppbolt-cli
 
 ### 1. Language Semantics & Edge Cases
 - **Copy Elision**: Prvalue initialization is elided as guaranteed by C++17 (`T x = T(1);`). However, return of named local variables requires running the copy constructor.
-- **Null Pointer Constant Tracking**: An integer literal `0` is accepted where a pointer is expected, but general constant-expression null pointer evaluation is not tracked.
+- **Null Pointer Constants & Pointer Conversions**:
+  - Integer literal zeroes (`0`, `0u`) and `nullptr` (`std::nullptr_t`, `decltype(nullptr)`) qualify as null pointer constants. Zero-valued variables, non-zero integers, and `false` are rejected.
+  - Qualification conversions require every subsequent indirection level to be `const` when adding `const` to an intermediate level (`int**` converts to `const int* const*`, but not `const int**`).
+  - Object pointers convert implicitly to `void*`; converting `void*` to a typed pointer requires `static_cast<T*>`.
+- **String Literal Semantics**: String literals have type `const char[N]` with a null terminator (`sizeof("hello") == 6`). They decay to `const char*` for call arguments and pointer assignments, and cannot bind to `char*`.
 - **Multiple and Virtual Inheritance**: Explicitly rejected at parse time:
   - Second base specifier yields: `multiple inheritance is not supported`
   - `virtual` base specifier yields: `virtual inheritance is not supported`

@@ -222,7 +222,7 @@ impl Sema {
             let elem = &mut init_elements[0];
             let elem_ty = self.analyze_expr(elem)?;
             self.check_narrowing(elem, &elem_ty, target, pos)?;
-            if !self.can_assign(target, &elem_ty) {
+            if !self.can_assign_expr(target, &elem_ty, Some(elem)) {
                 return Err(CompileError::new(
                     format!(
                         "cannot initialize scalar of type '{}' with expression of type '{}'",
@@ -267,7 +267,7 @@ impl Sema {
             } else {
                 let elem_actual_ty = self.analyze_expr(elem)?;
                 self.check_narrowing(elem, &elem_actual_ty, elem_ty, pos)?;
-                if !self.can_assign(elem_ty, &elem_actual_ty) {
+                if !self.can_assign_expr(elem_ty, &elem_actual_ty, Some(elem)) {
                     return Err(CompileError::new(
                         format!(
                             "cannot initialize array element of type '{}' with expression of type '{}'",
@@ -348,7 +348,7 @@ impl Sema {
             } else {
                 let elem_ty = self.analyze_expr(elem)?;
                 self.check_narrowing(elem, &elem_ty, &fld.ty, pos)?;
-                if !self.can_assign(&fld.ty, &elem_ty) {
+                if !self.can_assign_expr(&fld.ty, &elem_ty, Some(elem)) {
                     return Err(CompileError::new(
                         format!(
                             "cannot initialize field '{}' of type '{}' with expression of type '{}'",
@@ -386,7 +386,7 @@ impl Sema {
     ) -> Result<Type, CompileError> {
         if init_elements.is_empty() {
             let empty_args: Vec<Type> = Vec::new();
-            if let Some(sig) = self.find_constructor_for(sname, &empty_args) {
+            if let Some(sig) = self.find_constructor_for(sname, &empty_args, None) {
                 if sig.is_explicit && context.is_copy_list() {
                     return Err(CompileError::new(
                         format!(
@@ -411,7 +411,7 @@ impl Sema {
             arg_types.push(self.analyze_expr(elem)?);
         }
 
-        let Some(sig) = self.find_constructor_for(sname, &arg_types) else {
+        let Some(sig) = self.find_constructor_for(sname, &arg_types, Some(init_elements)) else {
             return Err(CompileError::new(
                 format!("no matching constructor for initialization of '{}'", sname),
                 pos.line,

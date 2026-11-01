@@ -1,0 +1,1 @@
+tests/negative/pointer_conversion_void_ptr.cpp:4:5: error: cannot initialize variable 'p' of type int * with void *

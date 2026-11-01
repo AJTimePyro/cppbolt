@@ -347,7 +347,7 @@ impl Sema {
         self.check_and_complete_var_type(ty, init, line, col)?;
         if let Some(init_expr) = init {
             let init_ty = self.analyze_expr(init_expr)?;
-            if !self.can_assign(ty, &init_ty) {
+            if !self.can_assign_expr(ty, &init_ty, Some(init_expr)) {
                 return Err(CompileError::new(
                     format!(
                         "Type mismatch in global '{}': cannot assign {} to {}",

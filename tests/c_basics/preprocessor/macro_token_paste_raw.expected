@@ -1,0 +1,5 @@
+PREFIXSUFFIX=10
+itemval=20
+STR=a + b
+RESCAN=42
+UNDEF_OK

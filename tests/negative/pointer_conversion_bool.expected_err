@@ -1,0 +1,1 @@
+tests/negative/pointer_conversion_bool.cpp:2:5: error: cannot initialize variable 'p' of type int * with bool

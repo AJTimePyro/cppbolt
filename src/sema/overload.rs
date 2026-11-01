@@ -62,8 +62,9 @@ impl Sema {
         &self,
         cand: &FunctionSig,
         arg_types: &[Type],
+        args: Option<&[Expr]>,
     ) -> Result<usize, ConversionFailure> {
-        self.score_arguments(&cand.param_types, arg_types)
+        self.score_arguments(&cand.param_types, arg_types, args)
     }
 
     /// Scores the arguments against the parameters of a signature.
@@ -75,6 +76,7 @@ impl Sema {
         &self,
         params: &[Type],
         arg_types: &[Type],
+        args: Option<&[Expr]>,
     ) -> Result<usize, ConversionFailure> {
         let mut score = 0;
         for (i, arg_ty) in arg_types.iter().enumerate() {
@@ -89,14 +91,20 @@ impl Sema {
             let a_decay = arg_ty.decay_array();
             let p_base = p_decay.strip_const();
             let a_base = a_decay.strip_const();
+            let is_null_ptr_const = args
+                .and_then(|a| a.get(i))
+                .is_some_and(Sema::is_null_pointer_constant);
             if p_base == a_base {
                 // Exact matches add no conversion penalty.
-            } else if p.is_reference()
-                && p.deref_type().map(|d| d.strip_const()) == Some(arg_ty.strip_const())
+            } else if self.check_pointer_conversion(&p_decay, &a_decay)
+                || (p.is_reference()
+                    && p.deref_type().map(|d| d.strip_const()) == Some(arg_ty.strip_const()))
             {
                 score += 1;
             } else if self.is_promotion(arg_ty, p) {
                 score += 2;
+            } else if p_decay.is_pointer() && is_null_ptr_const {
+                score += 3;
             } else if self.can_assign(p, arg_ty) {
                 if self.is_user_conversion(p, arg_ty) {
                     // A converting constructor is worse than a standard

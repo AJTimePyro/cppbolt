@@ -185,10 +185,10 @@ impl Sema {
             ) {
                 // The arguments must match one of the overloads of the method.
                 self.check_member_arguments(
-                    &struct_name,
-                    member,
+                    (&struct_name, member),
                     (receiver_const, receiver_is_lvalue),
                     arg_types,
+                    Some(args),
                     *pos,
                 )?;
                 // A member call may leave out arguments that have default
@@ -234,12 +234,13 @@ impl Sema {
     /// arguments start at the second one.
     fn check_member_arguments(
         &self,
-        class_name: &str,
-        member: &str,
+        target: (&str, &str),
         receiver: (bool, bool),
         arg_types: &[Type],
+        args: Option<&[Expr]>,
         pos: ExprPos,
     ) -> Result<(), CompileError> {
+        let (class_name, member) = target;
         let (receiver_const, receiver_is_lvalue) = receiver;
         let overloads = self.find_method_overloads_in_class(class_name, member, receiver_const);
         if overloads.is_empty() {
@@ -250,7 +251,7 @@ impl Sema {
         let mut best: Option<&FunctionSig> = None;
         let mut ambiguous = false;
         for sig in &overloads {
-            match self.score_member_sig(sig, receiver_const, receiver_is_lvalue, arg_types) {
+            match self.score_member_sig(sig, receiver_const, receiver_is_lvalue, arg_types, args) {
                 Some(Ok(score)) => {
                     if score < best_score {
                         best_score = score;
@@ -300,6 +301,7 @@ impl Sema {
         receiver_const: bool,
         receiver_is_lvalue: bool,
         arg_types: &[Type],
+        args: Option<&[Expr]>,
     ) -> Option<Result<usize, ConversionFailure>> {
         if receiver_is_lvalue && sig.ref_qualifier == RefQualifier::RValue {
             return None;
@@ -324,7 +326,7 @@ impl Sema {
         if arg_types.len() < min_args || arg_types.len() > params.len() {
             return None;
         }
-        Some(self.score_arguments(params, arg_types).map(|score| {
+        Some(self.score_arguments(params, arg_types, args).map(|score| {
             let const_bonus =
                 usize::from(!receiver_const && crate::sema::sig_receiver_is_const(sig));
             let ref_bonus = match (receiver_is_lvalue, sig.ref_qualifier) {
@@ -423,7 +425,7 @@ impl Sema {
             if args.len() < min_args || args.len() > max_args {
                 continue;
             }
-            let score = match self.score_call_candidate(cand, arg_types) {
+            let score = match self.score_call_candidate(cand, arg_types, Some(args)) {
                 Ok(score) => score,
                 Err(failure) => {
                     if selection.conversion_failure.is_none() {

@@ -11,7 +11,7 @@ The semantic analysis stage validates the Abstract Syntax Tree, computes record 
 3. **Vtable Layout & Hierarchy Analysis**: Analyzes single and linear inheritance hierarchies, computes base subobject offsets, identifies pure virtual methods (`= 0`), and assigns vtable function pointer slots in base-prefix order.
 4. **Implicit Method Synthesis**: Synthesizes default constructors, copy constructors, and destructors for structs that do not define them explicitly (`src/sema/constructor.rs`).
 5. **Overload Resolution Ranking**: Implements standard overload ranking rules to pick the best function or constructor candidate and detect ambiguous calls (`src/sema/overload.rs`).
-6. **Type Inference & Checking**: Annotates expression nodes with resolved concrete types, validates assignments, usual arithmetic conversions, and C++17 copy elision rules.
+6. **Type Inference, Conversions & Qualification**: Annotates expression nodes with resolved concrete types, validates assignments, arithmetic conversions, multi-level pointer `const` qualification rules, null pointer constant conversions (`0`, `0u`, `nullptr`), and C++17 copy elision rules.
 7. **AST Desugaring**: Lowers high-level syntax nodes (such as range-based `for` loops in `src/sema/stmt_range_for.rs`) into standard scoped primitives, synthesizing pointer and iterator bounds while preserving RAII and loop control flow.
 8. **Closure Synthesis & Lambda Desugaring**: Synthesizes unique anonymous closure structs (`__lambda_N`) for C++17 lambda expressions (`src/sema/expr_lambda.rs`), generating fields for captures, constructor initialization, `operator()` call signatures, return type deduction, and static `__invoke` trampoline methods for implicit conversion to C function pointers.
 9. **Recursive `operator->` Resolution**: Resolves chained member-arrow accesses recursively until a raw pointer is reached, enforcing cycle detection and receiver `const` propagation (`src/sema/expr_member.rs`).
@@ -55,7 +55,7 @@ When a call expression matches multiple candidates, `src/sema/overload.rs` score
 1. **Exact Match**: Argument type equals parameter type (or identical enum/primitive).
 2. **Reference Binding**: Binding an lvalue to `T&` or `const T&`.
 3. **Promotion**: Numeric promotion (`char`/`short` -> `int`, `float` -> `double`).
-4. **Standard Conversion**: Derived-to-base pointer conversion, array decay, pointer-to-void, or numeric widening/narrowing.
+4. **Standard Conversion**: Derived-to-base pointer conversion, array decay, pointer qualification conversion (`T*` -> `const T*`), null pointer constant conversion (`0` / `nullptr` -> pointer / `bool`), pointer-to-void, or numeric widening/narrowing.
 5. **User-Defined Conversion**: Implicit single-argument converting constructor.
 
 ### Ambiguity Detection

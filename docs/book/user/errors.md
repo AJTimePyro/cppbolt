@@ -268,9 +268,49 @@ The following catalog lists diagnostics emitted by the compiler, paired with rea
   }
   ```
 
+#### `cannot initialize variable '<name>' of type <target> with <source>`
+- **Cause**: Initializing a typed variable with an incompatible expression, such as assigning a non-zero integer or `bool` to a pointer, discarding `const` qualifiers, violating multi-level pointer qualification rules, or assigning a string literal to a non-const `char*`.
+- **Trigger** (`tests/negative/pointer_conversion_int_nonzero.cpp`):
+  ```cpp
+  int main() {
+      int* p = 42; // error: cannot initialize variable 'p' of type int * with int
+      return 0;
+  }
+  ```
+
 ---
 
 ### Preprocessor & Lexical Errors (`ErrorKind::Lexical`)
+
+#### `Invalid digit '<digit>' in binary literal`
+- **Cause**: Non-binary digit in a binary integer literal (`0b...`).
+- **Trigger** (`tests/negative/invalid_binary_digit.cpp`):
+  ```cpp
+  int main() {
+      int x = 0b102; // error: Invalid digit '2' in binary literal
+      return x;
+  }
+  ```
+
+#### `Invalid digit separator`
+- **Cause**: Consecutive digit separators or quotes at literal boundaries.
+- **Trigger** (`tests/negative/invalid_digit_separator.cpp`):
+  ```cpp
+  int main() {
+      int x = 1''000; // error: Invalid digit separator
+      return x;
+  }
+  ```
+
+#### `Invalid digit '<digit>' in octal literal`
+- **Cause**: Non-octal digit (`8` or `9`) in a zero-prefixed octal literal.
+- **Trigger** (`tests/negative/invalid_octal_digit.cpp`):
+  ```cpp
+  int main() {
+      int x = 088; // error: Invalid digit '8' in octal literal
+      return x;
+  }
+  ```
 
 #### `include cycle detected: '<path>'`
 - **Cause**: Cyclic `#include` inclusion chain detected by the preprocessor.

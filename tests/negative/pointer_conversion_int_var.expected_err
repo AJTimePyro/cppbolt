@@ -1,0 +1,1 @@
+tests/negative/pointer_conversion_int_var.cpp:3:5: error: cannot initialize variable 'p' of type int * with int

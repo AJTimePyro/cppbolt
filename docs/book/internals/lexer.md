@@ -6,7 +6,7 @@ The lexer scans preprocessed C++ source text into a linear stream of strongly ty
 
 ## 1. Role in the Pipeline
 
-1. **Tokenization**: Classifies source text into keywords, identifiers, numeric literals (decimal, hexadecimal, octal, floating-point), string literals, character literals, and punctuation/operators.
+1. **Tokenization**: Classifies source text into keywords, identifiers, numeric literals (decimal, hexadecimal, binary `0b`, octal, floating-point with optional single-quote digit separators), string literals, character literals, and punctuation/operators.
 2. **Escape Decoding**: Decodes standard C escape sequences in string and character literals (`\n`, `\t`, `\r`, `\\`, `\'`, `\"`, `\0`, and hexadecimal/octal escapes) via `src/lexer/literals.rs`.
 3. **Span Attachment**: Measures the exact line, column, and character length of every token, producing a `Span` used throughout the parser and semantic analyzer for accurate error reporting.
 
@@ -38,7 +38,7 @@ The lexer scans preprocessed C++ source text into a linear stream of strongly ty
 
 The lexer produces `CompileError` with `ErrorKind::Lexical`:
 - **Unterminated String or Character Literals**: Emits error if newline or EOF is encountered before the closing quote.
-- **Invalid Number Formats**: Rejects malformed numeric literals (e.g. invalid exponent syntax or invalid octal digits).
+- **Invalid Number Formats**: Rejects malformed numeric literals (e.g. invalid exponent syntax, invalid binary or octal digits, or misplaced digit separators).
 - **Unrecognized Characters**: Emits an error pointing to the unknown character.
 
 ---
