@@ -198,6 +198,10 @@ impl Sema {
                 "unexpected expression kind"
             ));
         };
+        let resolved = self.resolve_alias_in_qualified_name(name);
+        if resolved != *name {
+            *name = resolved;
+        }
 
         if let Some(global_name) = name.strip_prefix("::") {
             return self.analyze_global_identifier(name, global_name);

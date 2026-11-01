@@ -18,6 +18,8 @@ mod stmt;
 mod stmt_decl;
 mod stmt_range_for;
 mod stmt_structured_binding;
+#[cfg(test)]
+mod tests;
 
 pub use init::InitContext;
 pub(crate) use layout::RecordLayout;
@@ -137,6 +139,7 @@ pub struct Sema {
     pub current_func_name: Option<String>,
     pub open_namespaces: Vec<String>,
     pub using_decls: HashMap<String, String>,
+    pub namespace_aliases: HashMap<String, String>,
     /// Whether the analysis is inside the initializer of a variable.
     ///
     /// A constructor call in an initializer reports an initialization
@@ -177,6 +180,7 @@ impl Sema {
             current_func_name: None,
             open_namespaces: Vec::new(),
             using_decls: HashMap::new(),
+            namespace_aliases: HashMap::new(),
             in_initializer: false,
             depth: crate::depth::DepthCounters::new(),
         };
@@ -295,6 +299,8 @@ impl Sema {
                 curr = ns;
             }
         }
+        let resolved = self.resolve_alias_in_qualified_name(name);
+        let name = resolved.as_str();
         if let Some(var) = self.global_vars.get(name) {
             return Some(var);
         }
@@ -314,5 +320,23 @@ impl Sema {
             }
         }
         None
+    }
+
+    /// Resolves leading namespace aliases in `name` to the canonical namespace.
+    pub fn resolve_alias_in_qualified_name(&self, name: &str) -> String {
+        let mut current = name.to_string();
+        for _ in 0..16 {
+            if let Some((prefix, suffix)) = current.split_once("::") {
+                if let Some(target) = self.namespace_aliases.get(prefix) {
+                    current = format!("{}::{}", target, suffix);
+                    continue;
+                }
+            } else if let Some(target) = self.namespace_aliases.get(&current) {
+                current = target.clone();
+                continue;
+            }
+            break;
+        }
+        current
     }
 }

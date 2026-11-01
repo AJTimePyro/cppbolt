@@ -62,9 +62,31 @@ pub enum Decl {
     },
     UsingNamespace(String),
     UsingDecl(String),
+    NamespaceAlias {
+        alias: String,
+        target: String,
+        line: usize,
+        col: usize,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
     pub declarations: Vec<Decl>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_namespace_alias_decl_ast() {
+        let decl = Decl::NamespaceAlias {
+            alias: "fs".to_string(),
+            target: "std::filesystem".to_string(),
+            line: 1,
+            col: 1,
+        };
+        assert!(matches!(decl, Decl::NamespaceAlias { .. }));
+    }
 }

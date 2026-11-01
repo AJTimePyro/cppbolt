@@ -2,32 +2,10 @@ use super::*;
 
 impl Parser {
     pub fn validate_supported_features(&self) -> Result<(), CompileError> {
-        if let Some(error) = self.reject_namespace_aliases() {
-            return Err(error);
-        }
         if let Some(error) = self.reject_const_overloading() {
             return Err(error);
         }
         Ok(())
-    }
-
-    fn reject_namespace_aliases(&self) -> Option<CompileError> {
-        for window in self.tokens.windows(3) {
-            if matches!(window[0].kind, TokenKind::KwNamespace)
-                && matches!(window[1].kind, TokenKind::Ident(_))
-                && matches!(window[2].kind, TokenKind::Assign)
-            {
-                return Some(
-                    CompileError::new(
-                        "namespace aliases are not supported",
-                        window[2].line,
-                        window[2].col,
-                    )
-                    .with_kind(ErrorKind::Unsupported),
-                );
-            }
-        }
-        None
     }
 
     fn reject_const_overloading(&self) -> Option<CompileError> {

@@ -56,6 +56,8 @@ impl Parser {
             self.expect(TokenKind::RBrace)?;
             return Ok(());
         }
+        let line = self.current().line;
+        let col = self.current().col;
         let ns_name = match self.advance().kind.clone() {
             TokenKind::Ident(id) => id,
             _ => {
@@ -66,6 +68,19 @@ impl Parser {
                 ));
             }
         };
+        if self.peek() == &TokenKind::Assign {
+            self.advance();
+            let target = self.parse_qualified_name()?;
+            self.expect(TokenKind::Semi)?;
+            self.namespace_aliases.insert(ns_name.clone(), target.clone());
+            declarations.push(Decl::NamespaceAlias {
+                alias: ns_name,
+                target,
+                line,
+                col,
+            });
+            return Ok(());
+        }
         self.expect(TokenKind::LBrace)?;
         self.current_namespace.push(ns_name);
         while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
@@ -80,7 +95,8 @@ impl Parser {
         self.advance();
         if self.peek() == &TokenKind::KwNamespace {
             self.advance();
-            let ns = self.parse_qualified_name()?;
+            let raw_ns = self.parse_qualified_name()?;
+            let ns = self.resolve_namespace_alias(&raw_ns);
             self.expect(TokenKind::Semi)?;
             self.open_namespaces.push(ns.clone());
             declarations.push(Decl::UsingNamespace(ns));
