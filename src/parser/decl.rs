@@ -11,6 +11,10 @@ impl Parser {
             return Ok(());
         }
 
+        if self.peek() == &TokenKind::KwTemplate {
+            return self.parse_template_decl(declarations);
+        }
+
         if self.peek() == &TokenKind::KwNamespace {
             return self.parse_namespace_decl(declarations);
         }

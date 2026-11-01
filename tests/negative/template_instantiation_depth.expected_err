@@ -1,0 +1,1 @@
+tests/negative/template_instantiation_depth.cpp:7:5: error: template instantiation depth exceeded (limit: 500)

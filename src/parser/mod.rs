@@ -19,6 +19,7 @@ mod expr_lambda;
 mod prefix;
 mod stmt;
 mod structs;
+mod template;
 mod types;
 mod unsupported;
 
@@ -31,6 +32,8 @@ pub struct Parser {
     pos: usize,
     known_types: HashSet<String>,
     known_enums: HashSet<String>,
+    pub known_templates: HashSet<String>,
+    pub active_type_params: Vec<HashSet<String>>,
     pub type_aliases: HashMap<String, Type>,
     pub current_namespace: Vec<String>,
     pub open_namespaces: Vec<String>,
@@ -56,6 +59,8 @@ impl Parser {
         known_types.insert("auto".to_string());
         known_types.insert("size_t".to_string());
         let known_enums = HashSet::new();
+        let known_templates = HashSet::new();
+        let active_type_params = Vec::new();
         let mut type_aliases = HashMap::new();
         type_aliases.insert("nullptr_t".to_string(), Type::Nullptr);
         type_aliases.insert("std::nullptr_t".to_string(), Type::Nullptr);
@@ -82,6 +87,8 @@ impl Parser {
             pos: 0,
             known_types,
             known_enums,
+            known_templates,
+            active_type_params,
             type_aliases,
             current_namespace: Vec::new(),
             open_namespaces: Vec::new(),
@@ -320,6 +327,17 @@ impl Parser {
             }
         }
         Ok(id)
+    }
+
+    pub fn is_active_type_param(&self, name: &str) -> bool {
+        self.active_type_params.iter().any(|s| s.contains(name))
+    }
+
+    pub fn is_known_template(&self, name: &str) -> bool {
+        self.known_templates.contains(name)
+            || self
+                .known_templates
+                .contains(QualifiedName::new(name).plain())
     }
 
     pub fn parse_program(&mut self) -> Result<Program, CompileError> {

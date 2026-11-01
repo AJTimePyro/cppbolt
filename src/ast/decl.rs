@@ -1,5 +1,6 @@
 use super::expr::Expr;
 use super::stmt::Stmt;
+use super::template::TemplateDecl;
 use super::types::Type;
 use std::collections::HashMap;
 
@@ -35,6 +36,7 @@ pub struct FunctionDecl {
     pub col: usize,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Decl {
     Function(FunctionDecl),
@@ -69,6 +71,7 @@ pub enum Decl {
         line: usize,
         col: usize,
     },
+    Template(TemplateDecl),
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -11,9 +11,9 @@ impl Sema {
         Ok(())
     }
 
-    fn register_types(&mut self, program: &Program) -> Result<(), CompileError> {
+    fn register_types(&mut self, program: &mut Program) -> Result<(), CompileError> {
         self.type_aliases = program.type_aliases.clone();
-        for decl in &program.declarations {
+        for decl in &mut program.declarations {
             match decl {
                 Decl::EnumDecl {
                     name,
@@ -44,6 +44,9 @@ impl Sema {
                     col,
                     ..
                 } => {
+                    for (_, fty) in fields.iter_mut() {
+                        self.resolve_and_instantiate_type(fty, *line, *col)?;
+                    }
                     self.compute_struct_layout(RecordLayout {
                         name: name.as_str(),
                         is_class: *is_class,
@@ -55,6 +58,14 @@ impl Sema {
                         col: *col,
                     })?;
                 }
+                Decl::Template(t) => match &t.kind {
+                    TemplateKind::Class(c) => {
+                        self.register_class_template(c.clone(), t.params.clone());
+                    }
+                    TemplateKind::Function(f) => {
+                        self.register_function_template((**f).clone(), t.params.clone());
+                    }
+                },
                 _ => {}
             }
         }
@@ -197,9 +208,9 @@ impl Sema {
         (any_ctor, default_ctor)
     }
 
-    fn register_declarations(&mut self, program: &Program) -> Result<(), CompileError> {
+    fn register_declarations(&mut self, program: &mut Program) -> Result<(), CompileError> {
         let mut defined_functions = std::collections::HashSet::new();
-        for decl in &program.declarations {
+        for decl in &mut program.declarations {
             match decl {
                 Decl::UsingNamespace(ns) => {
                     let resolved = self.resolve_alias_in_qualified_name(ns);
@@ -219,6 +230,10 @@ impl Sema {
                     self.record_local_namespace_alias(alias, target, *line, *col)?;
                 }
                 Decl::Function(f) => {
+                    self.resolve_and_instantiate_type(&mut f.return_type, f.line, f.col)?;
+                    for p in &mut f.params {
+                        self.resolve_and_instantiate_type(&mut p.ty, f.line, f.col)?;
+                    }
                     let mangled = self.mangle_name(&f.name, &f.params);
                     if f.body.is_some() && !defined_functions.insert(mangled.clone()) {
                         return Err(CompileError::new(
@@ -355,6 +370,7 @@ impl Sema {
     ) -> Result<(), CompileError> {
         self.current_line = line;
         self.current_col = col;
+        self.resolve_and_instantiate_type(ty, line, col)?;
         self.check_and_complete_var_type(ty, init, line, col)?;
         if let Some(init_expr) = init {
             let init_ty = self.analyze_expr(init_expr)?;

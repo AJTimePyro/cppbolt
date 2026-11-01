@@ -34,6 +34,11 @@ pub enum Type {
     Array(Box<Type>, usize),
     Struct(String),
     Enum(String),
+    TypeParam(String),
+    TemplateInstance {
+        name: String,
+        args: Vec<Type>,
+    },
     Function {
         return_type: Box<Type>,
         param_types: Vec<Type>,
@@ -104,6 +109,10 @@ impl Type {
             Type::Pointer(inner) => Type::Pointer(Box::new(inner.strip_all_const())),
             Type::Reference(inner) => Type::Reference(Box::new(inner.strip_all_const())),
             Type::Array(inner, size) => Type::Array(Box::new(inner.strip_all_const()), *size),
+            Type::TemplateInstance { name, args } => Type::TemplateInstance {
+                name: name.clone(),
+                args: args.iter().map(|a| a.strip_all_const()).collect(),
+            },
             other => other.clone(),
         }
     }
@@ -254,6 +263,11 @@ impl Type {
                 .or_else(|| struct_sizes.get(QualifiedName::new(name).plain()))
                 .or_else(|| struct_sizes.get(QualifiedName::new(name).std_name().as_ref()))
                 .unwrap_or(&4),
+            Type::TemplateInstance { name, .. } => *struct_sizes
+                .get(name)
+                .or_else(|| struct_sizes.get(QualifiedName::new(name).plain()))
+                .unwrap_or(&4),
+            Type::TypeParam(_) => 4,
             Type::Function { .. } => 4,
             Type::Const(_) => unreachable!(),
         }
@@ -276,6 +290,11 @@ impl Type {
                 .or_else(|| struct_aligns.get(QualifiedName::new(name).plain()))
                 .or_else(|| struct_aligns.get(QualifiedName::new(name).std_name().as_ref()))
                 .unwrap_or(&4),
+            Type::TemplateInstance { name, .. } => *struct_aligns
+                .get(name)
+                .or_else(|| struct_aligns.get(QualifiedName::new(name).plain()))
+                .unwrap_or(&4),
+            Type::TypeParam(_) => 4,
             Type::Function { .. } => 4,
             Type::Const(_) => unreachable!(),
         }
@@ -301,7 +320,11 @@ impl Type {
             Type::LongLong | Type::UnsignedLongLong => Some(WasmType::I64),
             Type::Float => Some(WasmType::F32),
             Type::Double => Some(WasmType::F64),
-            Type::Array(_, _) | Type::Struct(_) | Type::Function { .. } => Some(WasmType::I32),
+            Type::Array(_, _)
+            | Type::Struct(_)
+            | Type::TemplateInstance { .. }
+            | Type::TypeParam(_)
+            | Type::Function { .. } => Some(WasmType::I32),
             Type::Const(_) => unreachable!(),
         }
     }
@@ -329,6 +352,15 @@ impl Type {
             Type::Pointer(inner) => format!("{} *", inner.to_c_type()),
             Type::Reference(inner) => format!("{} &", inner.to_c_type()),
             Type::Array(inner, n) => format!("{}[{}]", inner.to_c_type(), n),
+            Type::TypeParam(name) => name.clone(),
+            Type::TemplateInstance { name, args } => {
+                let formatted = args
+                    .iter()
+                    .map(|a| a.to_c_type())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{}<{}>", name, formatted)
+            }
             Type::Struct(name) | Type::Enum(name) => match name.as_str() {
                 "istream" | "ostream" | "ios_base" | "string" => format!("std::{}", name),
                 _ => name.clone(),

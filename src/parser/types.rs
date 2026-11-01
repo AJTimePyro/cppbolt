@@ -38,6 +38,8 @@ impl Parser {
                             || sub == "istream"
                             || self.known_types.contains(sub)
                             || self.known_types.contains(&full)
+                            || self.known_templates.contains(sub)
+                            || self.known_templates.contains(&full)
                             || self.type_aliases.contains_key(sub)
                             || self.type_aliases.contains_key(&full)
                     } else {
@@ -48,6 +50,8 @@ impl Parser {
                         || id == "size_t"
                         || id == "ptrdiff_t"
                         || self.known_types.contains(id)
+                        || self.is_known_template(id)
+                        || self.is_active_type_param(id)
                         || self.type_aliases.contains_key(id)
                 }
             }
@@ -300,7 +304,14 @@ impl Parser {
             TokenKind::ColonColon | TokenKind::Ident(_) => {
                 let raw_id = self.parse_qualified_name()?;
                 let id = self.resolve_namespace_alias(&raw_id);
-                if id == "size_t" {
+                if self.is_active_type_param(&id) {
+                    Type::TypeParam(id)
+                } else if self.is_known_template(&id) && self.peek() == &TokenKind::Lt {
+                    let args = self.parse_template_args()?;
+                    Type::TemplateInstance { name: id, args }
+                } else if self.is_known_template(&id) {
+                    Type::Struct(id)
+                } else if id == "size_t" {
                     Type::UnsignedInt
                 } else if id == "ptrdiff_t" {
                     Type::Int

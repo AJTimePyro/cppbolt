@@ -32,6 +32,7 @@
 - [ADR 0007: Free-List Allocator](adr/0007-free-list-allocator.md)
 - [ADR 0008: String Representation](adr/0008-string-representation.md)
 - [ADR 0009: C ABI and JS Interop](adr/0009-c-abi-and-js-interop.md)
+- [ADR 0010: Template Instantiation Model](adr/0010-template-instantiation-model.md)
 
 # Development
 

@@ -5,6 +5,7 @@
 pub mod decl;
 pub mod expr;
 pub mod stmt;
+pub mod template;
 pub mod types;
 
 pub use decl::{Decl, FunctionDecl, Param, Program, RefQualifier};
@@ -13,3 +14,4 @@ pub use expr::{
     zero_literal_for_type,
 };
 pub use stmt::{Stmt, StmtKind};
+pub use template::{TemplateClass, TemplateDecl, TemplateKind, TemplateParam};
