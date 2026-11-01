@@ -18,6 +18,7 @@ mod stmt;
 mod stmt_decl;
 mod stmt_range_for;
 mod stmt_structured_binding;
+pub mod template_deduce;
 mod template_registry;
 pub mod template_subst;
 #[cfg(test)]
@@ -157,6 +158,7 @@ pub struct Sema {
     pub class_templates: HashMap<String, (TemplateClass, Vec<TemplateParam>)>,
     pub function_templates: HashMap<String, (FunctionDecl, Vec<TemplateParam>)>,
     pub instantiated_classes: HashSet<String>,
+    pub instantiated_functions: HashSet<String>,
     pub pending_template_methods: HashMap<String, (String, FunctionDecl)>,
     pub instantiation_depth: usize,
     pub instantiation_stack: Vec<String>,
@@ -189,6 +191,7 @@ impl Sema {
             class_templates: HashMap::new(),
             function_templates: HashMap::new(),
             instantiated_classes: HashSet::new(),
+            instantiated_functions: HashSet::new(),
             pending_template_methods: HashMap::new(),
             instantiation_depth: 0,
             instantiation_stack: Vec::new(),

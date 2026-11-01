@@ -20,6 +20,12 @@ pub fn substitute_type(
             if let Some((_, target_ty)) = injected_class.filter(|(c, _)| *c == name) {
                 return target_ty.clone();
             }
+            if let Some(target) = mapping.get(name) {
+                return target.clone();
+            }
+            if name.contains('<') {
+                return Type::Struct(substitute_template_name(name, mapping));
+            }
             ty.clone()
         }
         Type::TemplateInstance { name, args } => {
@@ -68,7 +74,7 @@ pub fn substitute_expr(
     match expr {
         Expr::Call { callee, args, .. } => {
             if let Expr::Identifier(name) = &mut **callee {
-                substitute_callee_identifier(name, injected_class);
+                substitute_callee_identifier(name, mapping, injected_class);
             }
             substitute_expr(callee, mapping, injected_class);
             for arg in args {
@@ -135,10 +141,56 @@ pub fn substitute_expr(
 }
 
 #[allow(dead_code)]
-fn substitute_callee_identifier(name: &mut String, injected_class: Option<(&str, &Type)>) {
+fn substitute_callee_identifier(
+    name: &mut String,
+    mapping: &HashMap<String, Type>,
+    injected_class: Option<(&str, &Type)>,
+) {
     if let Some((_, target_ty)) = injected_class.filter(|(c, _)| *c == name.as_str()) {
         *name = target_ty.to_c_type();
+    } else if name.contains('<') {
+        *name = substitute_template_name(name, mapping);
     }
+}
+
+pub fn substitute_template_name(name: &str, mapping: &HashMap<String, Type>) -> String {
+    let Some(open) = name.find('<') else {
+        return name.to_string();
+    };
+    if !name.ends_with('>') {
+        return name.to_string();
+    }
+    let base = &name[..open];
+    let inside = &name[open + 1..name.len() - 1];
+    let mut result = inside.to_string();
+    for (param, ty) in mapping {
+        result = replace_whole_word(&result, param, &ty.to_c_type());
+    }
+    format!("{}<{}>", base, result)
+}
+
+fn replace_whole_word(text: &str, word: &str, replacement: &str) -> String {
+    let mut result = String::new();
+    let mut remainder = text;
+    while let Some(idx) = remainder.find(word) {
+        let before_ok = idx == 0
+            || (!remainder.as_bytes()[idx - 1].is_ascii_alphanumeric()
+                && remainder.as_bytes()[idx - 1] != b'_');
+        let after_idx = idx + word.len();
+        let after_ok = after_idx == remainder.len()
+            || (!remainder.as_bytes()[after_idx].is_ascii_alphanumeric()
+                && remainder.as_bytes()[after_idx] != b'_');
+        if before_ok && after_ok {
+            result.push_str(&remainder[..idx]);
+            result.push_str(replacement);
+            remainder = &remainder[after_idx..];
+        } else {
+            result.push_str(&remainder[..after_idx]);
+            remainder = &remainder[after_idx..];
+        }
+    }
+    result.push_str(remainder);
+    result
 }
 
 pub fn substitute_stmt(

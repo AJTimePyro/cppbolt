@@ -45,7 +45,7 @@ impl Sema {
                 *expr = replacement;
                 return Ok(ty);
             }
-            if let Some(sname) = self.class_named(&name) {
+            if let Some(sname) = self.class_named(&name, pos.line, pos.col) {
                 match self.analyze_constructor_call(&sname, args, &arg_types, *pos)? {
                     ConstructorCall::Elided(inner) => {
                         *expr = inner;
@@ -331,16 +331,8 @@ impl Sema {
         {
             return None;
         }
-        let params = if sig.param_types.is_empty() {
-            &[][..]
-        } else {
-            &sig.param_types[1..]
-        };
-        let defaults = if sig.default_args.is_empty() {
-            &[][..]
-        } else {
-            &sig.default_args[1..]
-        };
+        let params = sig.param_types.get(1..).unwrap_or(&[]);
+        let defaults = sig.default_args.get(1..).unwrap_or(&[]);
         let min_args = defaults.iter().take_while(|d| d.is_none()).count();
         if arg_types.len() < min_args || arg_types.len() > params.len() {
             return None;
@@ -391,30 +383,36 @@ impl Sema {
         callee: &mut Expr,
         pos: ExprPos,
     ) -> Result<Type, CompileError> {
-        // Overload resolution: exact matches score best, followed by
-        // reference binding, arithmetic conversions, and user conversions.
-        let Some(candidates) = self.find_call_candidates(name, arg_types) else {
+        let candidates = self.find_call_candidates(name, arg_types);
+        let selection = candidates
+            .as_ref()
+            .map(|c| self.select_candidate(c, args, arg_types));
+
+        if let Some(sel) = &selection
+            && !sel.ambiguous
+            && let Some((cand, _)) = &sel.best
+            && cand.param_types == arg_types
+        {
+            return self.apply_call_candidate(cand, args, arg_types, callee, pos);
+        }
+
+        if let Some(sig) = self.try_resolve_function_template_call(name, arg_types, args, pos)? {
+            return self.apply_call_candidate(&sig, args, arg_types, callee, pos);
+        }
+
+        let (Some(candidates), Some(selection)) = (&candidates, selection) else {
             return Err(CompileError::new(
                 format!("Undefined function '{}'", name),
                 pos.line,
                 pos.col,
             ));
         };
-        let selection = self.select_candidate(&candidates, args, arg_types);
         if selection.ambiguous {
             return Err(self.ambiguous_call(name, arg_types, pos));
         }
-        if let Some((cand, mut full_args)) = selection.best {
-            self.convert_call_args(&mut full_args, &cand.param_types, arg_types, pos)?;
-            let mangled = cand.mangled_name.clone();
-            let ret_type = cand.return_type.clone();
-            self.instantiate_pending_method(&mangled)?;
-            *callee = Expr::Identifier(mangled);
-            *args = full_args;
-            return Ok(ret_type);
+        if let Some((cand, _)) = &selection.best {
+            return self.apply_call_candidate(cand, args, arg_types, callee, pos);
         }
-        // The arguments fit an overload, but one of them does not convert to
-        // its parameter.
         if let Some(failure) = selection.conversion_failure {
             return Err(self.no_matching_conversion(name, &failure, pos));
         }
@@ -429,6 +427,24 @@ impl Sema {
             pos.line,
             pos.col,
         ))
+    }
+
+    fn apply_call_candidate(
+        &mut self,
+        cand: &FunctionSig,
+        args: &mut Vec<Expr>,
+        arg_types: &[Type],
+        callee: &mut Expr,
+        pos: ExprPos,
+    ) -> Result<Type, CompileError> {
+        let mut full_args = args.clone();
+        self.convert_call_args(&mut full_args, &cand.param_types, arg_types, pos)?;
+        let mangled = cand.mangled_name.clone();
+        let ret_type = cand.return_type.clone();
+        self.instantiate_pending_method(&mangled)?;
+        *callee = Expr::Identifier(mangled);
+        *args = full_args;
+        Ok(ret_type)
     }
 
     fn try_scalar_call(

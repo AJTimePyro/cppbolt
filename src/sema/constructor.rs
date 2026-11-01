@@ -2,6 +2,7 @@
 //! arguments, the default arguments, and the copy initialization of an object
 //! of the class.
 
+use super::template_deduce::{parse_types_list, split_template_call_name};
 use super::*;
 
 /// The outcome of a call that names a class.
@@ -14,9 +15,15 @@ pub(super) enum ConstructorCall {
 
 impl Sema {
     /// The class a name refers to, if the name names one.
-    pub(super) fn class_named(&self, name: &str) -> Option<String> {
+    pub(super) fn class_named(&mut self, name: &str, line: usize, col: usize) -> Option<String> {
         if self.struct_layouts.contains_key(name) {
             return Some(name.to_string());
+        }
+        if let Some((base, args_str)) = split_template_call_name(name)
+            && let Ok(args) = parse_types_list(args_str)
+            && let Ok(inst_name) = self.instantiate_class_template(base, &args, line, col)
+        {
+            return Some(inst_name);
         }
         let alias = QualifiedName::new(name).alternate();
         if self.struct_layouts.contains_key(alias.as_ref()) {

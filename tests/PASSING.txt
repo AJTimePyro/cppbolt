@@ -336,6 +336,7 @@ negative/structured_binding_count_mismatch
 negative/switch_case_non_constant
 negative/syntax_error
 negative/template_alias
+negative/template_deduction_conflict
 negative/template_explicit_instantiation
 negative/template_explicit_specialization
 negative/template_instantiation_depth
@@ -360,5 +361,8 @@ templates_operators/op_overload_chain
 templates_operators/op_overload_subscript
 templates_operators/op_overload_unary
 templates_operators/template_class_basic
+templates_operators/template_func_basic
+templates_operators/template_func_multi
 templates_operators/template_lazy_member
 templates_operators/template_multi_param
+templates_operators/template_pair

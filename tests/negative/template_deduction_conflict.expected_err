@@ -1,0 +1,1 @@
+tests/negative/template_deduction_conflict.cpp:7:5: error: template argument deduction conflict for 'T': deduced 'int' and 'double'
