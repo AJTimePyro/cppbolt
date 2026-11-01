@@ -65,36 +65,13 @@ impl Sema {
                 for arg in args.iter_mut() {
                     self.resolve_and_instantiate_type(arg, line, col)?;
                 }
-                let canonical_args = args
-                    .iter()
-                    .map(|a| a.to_c_type())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                let plain_name = QualifiedName::new(name).plain();
-                let inst_name = format!("{}<{}>", plain_name, canonical_args);
-                if !self.instantiated_classes.contains(&inst_name) {
-                    self.instantiate_class_template(name, args, line, col)?;
-                }
+                let inst_name = self.instantiate_class_template(name, args, line, col)?;
                 *ty = Type::Struct(inst_name);
             }
-            Type::Const(inner) => {
-                self.resolve_and_instantiate_type(inner, line, col)?;
-            }
-            Type::Pointer(inner) | Type::Reference(inner) => {
-                if let Type::TemplateInstance { name, args } = &mut **inner {
-                    for arg in args.iter_mut() {
-                        self.resolve_and_instantiate_type(arg, line, col)?;
-                    }
-                    let canonical_args = args
-                        .iter()
-                        .map(|a| a.to_c_type())
-                        .collect::<Vec<_>>()
-                        .join(", ");
-                    let plain_name = QualifiedName::new(name).plain();
-                    **inner = Type::Struct(format!("{}<{}>", plain_name, canonical_args));
-                }
-            }
-            Type::Array(inner, _) => {
+            Type::Pointer(inner)
+            | Type::Reference(inner)
+            | Type::Const(inner)
+            | Type::Array(inner, _) => {
                 self.resolve_and_instantiate_type(inner, line, col)?;
             }
             _ => {}

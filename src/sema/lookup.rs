@@ -30,7 +30,9 @@ impl Sema {
                     return Some(fld);
                 }
             }
-        } else if let Some(alias) = QualifiedName::new(class_name).implicit_alias() {
+        } else if !QualifiedName::new(class_name).in_std()
+            && let Some(alias) = QualifiedName::new(class_name).implicit_alias()
+        {
             return self.find_field_in_class(alias.as_ref(), field_name);
         }
         None

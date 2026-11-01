@@ -16,11 +16,8 @@ impl Sema {
                 ));
             }
         }
-        if func.return_type == Type::Auto {
-            self.current_func_return_type = None;
-        } else {
-            self.current_func_return_type = Some(func.return_type.clone());
-        }
+        self.current_func_return_type =
+            (func.return_type != Type::Auto).then(|| func.return_type.clone());
         self.current_func_name = Some(func.name.clone());
         let prev_func_const = self.current_func_is_const;
         self.current_func_is_const = func.is_const;
@@ -28,7 +25,8 @@ impl Sema {
         self.enter_scope();
 
         let mut param_offset = 0;
-        for param in &func.params {
+        for param in &mut func.params {
+            self.resolve_and_instantiate_type(&mut param.ty, func.line, func.col)?;
             param_offset += 4;
             let sym = VarSymbol {
                 name: param.name.clone(),
