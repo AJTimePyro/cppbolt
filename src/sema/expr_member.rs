@@ -219,4 +219,44 @@ impl Sema {
 
         Ok(Some(Type::Void))
     }
+
+    pub(super) fn resolve_struct_destructor(
+        &self,
+        struct_name: &str,
+        member: &mut String,
+        pos: ExprPos,
+    ) -> Result<Type, CompileError> {
+        let name = &member[1..];
+        let raw = name.strip_prefix("::").unwrap_or(name);
+        let short_struct = struct_name.rsplit("::").next().unwrap_or(struct_name);
+        let is_valid = if raw == struct_name
+            || struct_name.ends_with(&format!("::{}", raw))
+            || raw == short_struct
+        {
+            true
+        } else if let Some(target_ty) = self.type_aliases.get(raw) {
+            let clean = target_ty.strip_reference().strip_const();
+            if let Type::Struct(s) = clean {
+                let short_s = s.rsplit("::").next().unwrap_or(s);
+                s == struct_name
+                    || struct_name.ends_with(&format!("::{}", s))
+                    || short_s == short_struct
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        if !is_valid {
+            return Err(CompileError::new(
+                format!("No member named '{}' in struct '{}'", member, struct_name),
+                pos.line,
+                pos.col,
+            ));
+        }
+
+        *member = format!("~{}", struct_name);
+        Ok(Type::Void)
+    }
 }

@@ -178,7 +178,8 @@ impl Sema {
                 self.member_struct_name(&obj_ty, *is_arrow, *pos)?;
 
             if member.starts_with('~') {
-                return Ok(Some(Type::Void));
+                let ret = self.resolve_struct_destructor(&struct_name, member, *pos)?;
+                return Ok(Some(ret));
             }
             let receiver_is_lvalue = if *is_arrow {
                 true
