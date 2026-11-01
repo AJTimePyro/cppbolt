@@ -121,40 +121,18 @@ impl Sema {
     fn validate_reinterpret_cast(&self, src: &Type, target: &Type) -> Result<(), CompileError> {
         let clean_src = src.strip_const().strip_reference();
         let clean_tgt = target.strip_const().strip_reference();
-        if !target.is_reference()
-            && !src.is_reference()
+        let is_ref = target.is_reference() || src.is_reference();
+        let invalid_float = !is_ref
             && (matches!(clean_src, Type::Float | Type::Double)
-                || matches!(clean_tgt, Type::Float | Type::Double))
-        {
-            return Err(CompileError::new(
-                format!(
-                    "reinterpret_cast from '{}' to '{}' is not allowed",
-                    src.to_c_type(),
-                    target.to_c_type()
-                ),
-                self.current_line,
-                self.current_col,
-            ));
-        }
-        if (matches!(clean_src, Type::Struct(_)) || matches!(clean_tgt, Type::Struct(_)))
-            && !target.is_reference()
-            && !src.is_reference()
-        {
-            return Err(CompileError::new(
-                format!(
-                    "reinterpret_cast from '{}' to '{}' is not allowed",
-                    src.to_c_type(),
-                    target.to_c_type()
-                ),
-                self.current_line,
-                self.current_col,
-            ));
-        }
+                || matches!(clean_tgt, Type::Float | Type::Double));
+        let invalid_struct = !is_ref
+            && (matches!(clean_src, Type::Struct(_)) || matches!(clean_tgt, Type::Struct(_)));
         let valid = (clean_src.is_pointer() || clean_src == &Type::Nullptr)
             && (clean_tgt.is_pointer() || clean_tgt.is_integer())
             || clean_src.is_integer() && clean_tgt.is_pointer()
             || target.is_reference();
-        if !valid {
+
+        if invalid_float || invalid_struct || !valid {
             return Err(CompileError::new(
                 format!(
                     "reinterpret_cast from '{}' to '{}' is not allowed",

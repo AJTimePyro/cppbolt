@@ -332,29 +332,20 @@ impl Sema {
         col: usize,
     ) -> Result<(), CompileError> {
         let canonical = self.resolve_alias_in_qualified_name(target);
-        if let Some(scope) = self.scopes.last_mut() {
-            if let Some(existing) = scope.namespace_aliases.get(alias)
-                && existing != &canonical
-            {
-                return Err(CompileError::new(
-                    format!("redefinition of namespace alias '{}'", alias),
-                    line,
-                    col,
-                ));
-            }
-            scope.namespace_aliases.insert(alias.to_string(), canonical);
-        } else {
-            if let Some(existing) = self.namespace_aliases.get(alias)
-                && existing != &canonical
-            {
-                return Err(CompileError::new(
-                    format!("redefinition of namespace alias '{}'", alias),
-                    line,
-                    col,
-                ));
-            }
-            self.namespace_aliases.insert(alias.to_string(), canonical);
+        let table = match self.scopes.last_mut() {
+            Some(scope) => &mut scope.namespace_aliases,
+            None => &mut self.namespace_aliases,
+        };
+        if let Some(existing) = table.get(alias)
+            && existing != &canonical
+        {
+            return Err(CompileError::new(
+                format!("redefinition of namespace alias '{}'", alias),
+                line,
+                col,
+            ));
         }
+        table.insert(alias.to_string(), canonical);
         Ok(())
     }
 

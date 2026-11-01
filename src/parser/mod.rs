@@ -229,7 +229,7 @@ impl Parser {
         Ok((list, pos))
     }
 
-    /// Resolves any leading namespace alias in `name` to its canonical target.
+    /// Resolves namespace aliases in `name` to the canonical target.
     pub fn resolve_namespace_alias(&self, name: &str) -> String {
         let mut current = name.to_string();
         for _ in 0..16 {
