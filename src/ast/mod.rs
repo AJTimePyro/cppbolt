@@ -9,7 +9,7 @@ pub mod types;
 
 pub use decl::{Decl, FunctionDecl, Param, Program, RefQualifier};
 pub use expr::{
-    zero_literal_for_type, BinaryOp, CastKind, DefaultCapture, Expr, ExprPos, LambdaCapture,
-    UnaryOp,
+    BinaryOp, CastKind, DefaultCapture, Expr, ExprPos, LambdaCapture, UnaryOp,
+    zero_literal_for_type,
 };
 pub use stmt::{Stmt, StmtKind};

@@ -115,7 +115,10 @@ impl Sema {
                 return Ok(target_type.clone());
             }
         }
-        if kind == CastKind::Functional && target_type.is_scalar() && !self.can_assign_expr(target_type, &expr_ty, Some(expr)) {
+        if kind == CastKind::Functional
+            && target_type.is_scalar()
+            && !self.can_assign_expr(target_type, &expr_ty, Some(expr))
+        {
             return Err(CompileError::new(
                 format!(
                     "cannot convert '{}' to '{}' in functional cast",

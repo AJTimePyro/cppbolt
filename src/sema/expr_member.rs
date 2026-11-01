@@ -211,7 +211,10 @@ impl Sema {
 
         if !is_matching {
             return Err(CompileError::new(
-                format!("the type of the object does not match the destructor name '~{}'", name),
+                format!(
+                    "the type of the object does not match the destructor name '~{}'",
+                    name
+                ),
                 pos.line,
                 pos.col,
             ));

@@ -106,14 +106,9 @@ impl<'a> Codegen<'a> {
         let canonical_short = format!("{}_~{}", short_cls, short_cls);
         let dtor_name = format!("{}_{}", class_name, method_name);
         let dtor_name_short = format!("{}_{}", short_cls, method_name);
-        let (idx, chosen) = [
-            &canonical,
-            &canonical_short,
-            &dtor_name,
-            &dtor_name_short,
-        ]
-        .into_iter()
-        .find_map(|name| self.func_indices.get(name).map(|&idx| (idx, name.clone())))?;
+        let (idx, chosen) = [&canonical, &canonical_short, &dtor_name, &dtor_name_short]
+            .into_iter()
+            .find_map(|name| self.func_indices.get(name).map(|&idx| (idx, name.clone())))?;
         Some((
             idx,
             FunctionSig {
