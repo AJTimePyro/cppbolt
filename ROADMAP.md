@@ -27,7 +27,7 @@ These features build naturally on existing language constructs without requiring
   - Overloaded dereference `operator*()`.
   - Overloaded function call `operator()` (functors).
 - [x] **Namespace Aliases**: Parse and resolve `namespace NewName = OriginalName;` declarations at file, namespace, and block scopes with chained and qualified lookup resolution.
-- [ ] **Extended Casts**: Support `reinterpret_cast` across scalar and pointer types within the ILP32 model.
+- [x] **Extended Casts**: Support `reinterpret_cast` across scalar and pointer types within the ILP32 model.
 
 ---
 
