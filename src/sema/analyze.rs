@@ -12,6 +12,7 @@ impl Sema {
     }
 
     fn register_types(&mut self, program: &Program) -> Result<(), CompileError> {
+        self.type_aliases = program.type_aliases.clone();
         for decl in &program.declarations {
             match decl {
                 Decl::EnumDecl {

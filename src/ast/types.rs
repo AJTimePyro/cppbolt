@@ -45,6 +45,52 @@ impl Type {
         matches!(self, Type::Const(_))
     }
 
+    pub fn is_scalar(&self) -> bool {
+        matches!(
+            self.strip_const(),
+            Type::Bool
+                | Type::Char
+                | Type::SignedChar
+                | Type::UnsignedChar
+                | Type::Short
+                | Type::UnsignedShort
+                | Type::Int
+                | Type::UnsignedInt
+                | Type::Long
+                | Type::UnsignedLong
+                | Type::LongLong
+                | Type::UnsignedLongLong
+                | Type::Float
+                | Type::Double
+                | Type::Nullptr
+                | Type::Pointer(_)
+                | Type::Enum(_)
+        )
+    }
+
+    pub fn from_scalar_name(name: &str) -> Option<Type> {
+        match name {
+            "bool" => Some(Type::Bool),
+            "char" => Some(Type::Char),
+            "signed char" => Some(Type::SignedChar),
+            "unsigned char" => Some(Type::UnsignedChar),
+            "short" => Some(Type::Short),
+            "unsigned short" => Some(Type::UnsignedShort),
+            "int" => Some(Type::Int),
+            "unsigned int" | "unsigned" => Some(Type::UnsignedInt),
+            "long" => Some(Type::Long),
+            "unsigned long" => Some(Type::UnsignedLong),
+            "long long" => Some(Type::LongLong),
+            "unsigned long long" => Some(Type::UnsignedLongLong),
+            "float" => Some(Type::Float),
+            "double" => Some(Type::Double),
+            "size_t" | "std::size_t" => Some(Type::UnsignedInt),
+            "ptrdiff_t" | "std::ptrdiff_t" => Some(Type::Int),
+            "nullptr_t" | "std::nullptr_t" => Some(Type::Nullptr),
+            _ => None,
+        }
+    }
+
     pub fn strip_const(&self) -> &Type {
         match self {
             Type::Const(inner) => inner.strip_const(),

@@ -8,12 +8,15 @@ impl Parser {
         if self.is_type_start() && !matches!(self.peek(), TokenKind::LParen) {
             let saved_pos = self.pos;
             let start = self.current_pos();
-            if let Ok(ty) = self.parse_type()
-                && self.peek() == &TokenKind::LBrace
-            {
-                let (elements, pos) = self.parse_brace_expr_list()?;
-                let init_expr = Expr::TypedInitList { ty, elements, pos };
-                return self.parse_postfix(init_expr, start);
+            if let Ok(ty) = self.parse_type() {
+                if self.peek() == &TokenKind::LBrace {
+                    let (elements, pos) = self.parse_brace_expr_list()?;
+                    let init_expr = Expr::TypedInitList { ty, elements, pos };
+                    return self.parse_postfix(init_expr, start);
+                }
+                if self.peek() == &TokenKind::LParen && ty.is_scalar() {
+                    return self.parse_functional_cast(ty, start);
+                }
             }
             self.pos = saved_pos;
         }

@@ -1,6 +1,7 @@
 use super::expr::Expr;
 use super::stmt::Stmt;
 use super::types::Type;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Param {
@@ -73,6 +74,7 @@ pub enum Decl {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
     pub declarations: Vec<Decl>,
+    pub type_aliases: HashMap<String, Type>,
 }
 
 #[cfg(test)]

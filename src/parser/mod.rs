@@ -327,7 +327,10 @@ impl Parser {
         while self.peek() != &TokenKind::Eof {
             self.parse_declaration(&mut declarations)?;
         }
-        Ok(Program { declarations })
+        Ok(Program {
+            declarations,
+            type_aliases: self.type_aliases.clone(),
+        })
     }
 }
 

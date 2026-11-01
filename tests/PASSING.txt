@@ -48,6 +48,7 @@ c_basics/types/rounding_ties
 c_basics/types/sizeof_expr
 c_basics/types/ternary_mixed_types
 c_basics/types/unsigned_wrap
+c_basics/types/value_init_scalar
 c_basics_variant/control_flow/control_if_else
 c_basics_variant/control_flow/control_loops
 c_basics_variant/control_flow/control_switch
@@ -79,6 +80,7 @@ c_basics_variant/types/rounding_ties
 c_basics_variant/types/sizeof_expr
 c_basics_variant/types/ternary_mixed_types
 c_basics_variant/types/unsigned_wrap
+c_basics_variant/types/value_init_scalar
 classes_oop/constructors_destructors/copy_semantics
 classes_oop/constructors_destructors/ctor_default_argument
 classes_oop/constructors_destructors/delegating_constructor
