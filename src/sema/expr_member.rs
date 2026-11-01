@@ -229,18 +229,13 @@ impl Sema {
         let name = &member[1..];
         let raw = name.strip_prefix("::").unwrap_or(name);
         let short_struct = struct_name.rsplit("::").next().unwrap_or(struct_name);
-        let is_valid = if raw == struct_name
-            || struct_name.ends_with(&format!("::{}", raw))
-            || raw == short_struct
-        {
+        let is_valid = if raw == struct_name || raw == short_struct {
             true
         } else if let Some(target_ty) = self.type_aliases.get(raw) {
             let clean = target_ty.strip_reference().strip_const();
             if let Type::Struct(s) = clean {
                 let short_s = s.rsplit("::").next().unwrap_or(s);
-                s == struct_name
-                    || struct_name.ends_with(&format!("::{}", s))
-                    || short_s == short_struct
+                s == struct_name || short_s == short_struct
             } else {
                 false
             }
