@@ -292,7 +292,7 @@ impl Parser {
                 // A parenthesized initializer of a class type is a
                 // constructor call, not an initializer list.
                 Type::Struct(_) | Type::TemplateInstance { .. } => Ok(Some(Expr::Call {
-                    callee: Box::new(Expr::Identifier(ty.to_c_type())),
+                    callee: Box::new(Expr::Identifier(ty.strip_const().to_c_type())),
                     args,
                     pos: ExprPos::new(line, col),
                 })),

@@ -356,12 +356,8 @@ impl Sema {
         pos: ExprPos,
     ) -> Result<(), CompileError> {
         for ((arg, param_ty), arg_ty) in args.iter_mut().zip(param_types).zip(arg_types) {
-            if let Expr::InitializerList {
-                elements,
-                pos: a_pos,
-            } = arg
-            {
-                self.resolve_list_init(param_ty, elements, InitContext::CopyListInitArg, *a_pos)?;
+            if let Expr::InitializerList { elements, pos: p } = arg {
+                self.resolve_list_init(param_ty, elements, InitContext::CopyListInitArg, *p)?;
             } else if let Type::Struct(sname) = arg_ty.strip_reference().strip_const() {
                 let param_clean = param_ty.strip_reference().strip_const();
                 if !matches!(param_clean, Type::Struct(p) if p == sname) {
@@ -390,14 +386,21 @@ impl Sema {
 
         if let Some(sel) = &selection
             && !sel.ambiguous
-            && let Some((cand, _)) = &sel.best
+            && let Some((cand, full_args)) = &sel.best
             && cand.param_types == arg_types
         {
-            return self.apply_call_candidate(cand, args, arg_types, callee, pos);
+            return self.apply_call_candidate(
+                cand,
+                full_args.clone(),
+                args,
+                arg_types,
+                (callee, pos),
+            );
         }
 
         if let Some(sig) = self.try_resolve_function_template_call(name, arg_types, args, pos)? {
-            return self.apply_call_candidate(&sig, args, arg_types, callee, pos);
+            let full_args = args.clone();
+            return self.apply_call_candidate(&sig, full_args, args, arg_types, (callee, pos));
         }
 
         let (Some(candidates), Some(selection)) = (&candidates, selection) else {
@@ -410,8 +413,8 @@ impl Sema {
         if selection.ambiguous {
             return Err(self.ambiguous_call(name, arg_types, pos));
         }
-        if let Some((cand, _)) = &selection.best {
-            return self.apply_call_candidate(cand, args, arg_types, callee, pos);
+        if let Some((cand, full_args)) = selection.best {
+            return self.apply_call_candidate(cand, full_args, args, arg_types, (callee, pos));
         }
         if let Some(failure) = selection.conversion_failure {
             return Err(self.no_matching_conversion(name, &failure, pos));
@@ -432,12 +435,12 @@ impl Sema {
     fn apply_call_candidate(
         &mut self,
         cand: &FunctionSig,
+        mut full_args: Vec<Expr>,
         args: &mut Vec<Expr>,
         arg_types: &[Type],
-        callee: &mut Expr,
-        pos: ExprPos,
+        target: (&mut Expr, ExprPos),
     ) -> Result<Type, CompileError> {
-        let mut full_args = args.clone();
+        let (callee, pos) = target;
         self.convert_call_args(&mut full_args, &cand.param_types, arg_types, pos)?;
         let mangled = cand.mangled_name.clone();
         let ret_type = cand.return_type.clone();
@@ -463,36 +466,34 @@ impl Sema {
         if !ty.is_scalar() {
             return Ok(None);
         }
-        if args.is_empty() {
-            Ok(Some((ty.clone(), zero_literal_for_type(&ty))))
-        } else if args.len() == 1 {
-            let mut arg = args[0].clone();
-            let arg_ty = self.analyze_expr(&mut arg)?;
-            if !self.can_assign_expr(&ty, &arg_ty, Some(&arg)) {
-                return Err(CompileError::new(
-                    format!(
-                        "cannot convert '{}' to '{}' in functional cast",
-                        arg_ty.to_c_type(),
-                        ty.to_c_type()
-                    ),
-                    pos.line,
-                    pos.col,
-                ));
-            }
-            Ok(Some((
-                ty.clone(),
-                Expr::Cast {
-                    kind: CastKind::Functional,
-                    target_type: ty,
-                    expr: Box::new(arg),
-                },
-            )))
-        } else {
-            Err(CompileError::new(
+        if args.len() > 1 {
+            return Err(CompileError::new(
                 "scalar functional cast requires 0 or 1 arguments",
                 pos.line,
                 pos.col,
-            ))
+            ));
         }
+        if args.is_empty() {
+            return Ok(Some((ty.clone(), zero_literal_for_type(&ty))));
+        }
+        let mut arg = args[0].clone();
+        let arg_ty = self.analyze_expr(&mut arg)?;
+        if !self.can_assign_expr(&ty, &arg_ty, Some(&arg)) {
+            return Err(CompileError::new(
+                format!(
+                    "cannot convert '{}' to '{}' in functional cast",
+                    arg_ty.to_c_type(),
+                    ty.to_c_type()
+                ),
+                pos.line,
+                pos.col,
+            ));
+        }
+        let cast = Expr::Cast {
+            kind: CastKind::Functional,
+            target_type: ty.clone(),
+            expr: Box::new(arg),
+        };
+        Ok(Some((ty, cast)))
     }
 }
