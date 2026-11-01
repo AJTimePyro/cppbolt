@@ -1,5 +1,6 @@
 use super::expr::Expr;
 use super::stmt::Stmt;
+use super::template::TemplateDecl;
 use super::types::Type;
 use std::collections::HashMap;
 
@@ -69,6 +70,7 @@ pub enum Decl {
         line: usize,
         col: usize,
     },
+    Template(TemplateDecl),
 }
 
 #[derive(Debug, Clone, PartialEq)]
