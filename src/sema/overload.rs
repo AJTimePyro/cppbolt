@@ -258,7 +258,7 @@ impl Sema {
     }
 
     /// The arguments of a call, with the default arguments filled in.
-    fn full_arguments(&self, cand: &FunctionSig, args: &[Expr]) -> Vec<Expr> {
+    pub(super) fn full_arguments(&self, cand: &FunctionSig, args: &[Expr]) -> Vec<Expr> {
         let mut full = args.to_vec();
         for index in args.len()..cand.param_types.len() {
             if let Some(Some(default)) = cand.default_args.get(index) {

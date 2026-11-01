@@ -18,10 +18,13 @@ pub fn split_template_call_name(name: &str) -> Option<(&str, &str)> {
 }
 
 /// Parses a comma-separated list of types using the compiler's lexer and parser.
-pub fn parse_types_list(s: &str) -> Result<Vec<Type>, CompileError> {
+pub fn parse_types_list(s: &str, known_templates: &[String]) -> Result<Vec<Type>, CompileError> {
     let mut lexer = crate::lexer::Lexer::new(s);
     let tokens = lexer.tokenize()?;
     let mut parser = crate::parser::Parser::new(tokens);
+    for t in known_templates {
+        parser.register_template_name(t);
+    }
     let mut types = Vec::new();
     while parser.peek() != &TokenKind::Eof {
         types.push(parser.parse_type()?);
@@ -139,7 +142,7 @@ fn deduce_type(
             deduce_type(inner, arg_ty.strip_const(), deduced, is_lvalue, pos)?;
         }
         Type::Pointer(inner) => {
-            if let Type::Pointer(arg_inner) = arg_ty.strip_reference() {
+            if let Type::Pointer(arg_inner) = arg_ty.strip_reference().strip_const() {
                 deduce_type(inner, arg_inner, deduced, true, pos)?;
             }
         }
@@ -172,7 +175,7 @@ fn deduce_template_instance(
     } else if let Type::Struct(sname) = clean_arg
         && let Some((s_base, s_args_str)) = split_template_call_name(sname)
         && s_base == name
-        && let Ok(s_args) = parse_types_list(s_args_str)
+        && let Ok(s_args) = parse_types_list(s_args_str, &[name.to_string()])
         && args.len() == s_args.len()
     {
         for (p_arg, a_arg) in args.iter().zip(s_args.iter()) {
@@ -189,7 +192,7 @@ fn record_deduced(
     pos: ExprPos,
 ) -> Result<(), CompileError> {
     if let Some(existing) = deduced.get(name) {
-        if existing != &deduced_arg {
+        if existing != &deduced_arg && existing.to_c_type() != deduced_arg.to_c_type() {
             return Err(CompileError::new(
                 format!(
                     "template argument deduction conflict for '{}': deduced '{}' and '{}'",

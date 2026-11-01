@@ -19,11 +19,13 @@ impl Sema {
         if self.struct_layouts.contains_key(name) {
             return Some(name.to_string());
         }
-        if let Some((base, args_str)) = split_template_call_name(name)
-            && let Ok(args) = parse_types_list(args_str)
-            && let Ok(inst_name) = self.instantiate_class_template(base, &args, line, col)
-        {
-            return Some(inst_name);
+        if let Some((base, args_str)) = split_template_call_name(name) {
+            let known: Vec<String> = self.class_templates.keys().cloned().collect();
+            if let Ok(args) = parse_types_list(args_str, &known)
+                && let Ok(inst_name) = self.instantiate_class_template(base, &args, line, col)
+            {
+                return Some(inst_name);
+            }
         }
         let alias = QualifiedName::new(name).alternate();
         if self.struct_layouts.contains_key(alias.as_ref()) {

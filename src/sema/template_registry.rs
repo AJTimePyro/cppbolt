@@ -298,7 +298,11 @@ impl Sema {
             if let Some((template_decl, template_params)) =
                 self.function_templates.get(base).cloned()
             {
-                let explicit_args = parse_types_list(args_str)?;
+                let known: Vec<String> = self.class_templates.keys().cloned().collect();
+                let mut explicit_args = parse_types_list(args_str, &known)?;
+                for arg in explicit_args.iter_mut() {
+                    self.resolve_and_instantiate_type(arg, pos.line, pos.col)?;
+                }
                 let mapping = deduce_template_arguments(
                     &template_params,
                     &template_decl,

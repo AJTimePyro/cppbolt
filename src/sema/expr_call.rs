@@ -399,7 +399,7 @@ impl Sema {
         }
 
         if let Some(sig) = self.try_resolve_function_template_call(name, arg_types, args, pos)? {
-            let full_args = args.clone();
+            let full_args = self.full_arguments(&sig, args);
             return self.apply_call_candidate(&sig, full_args, args, arg_types, (callee, pos));
         }
 
