@@ -169,6 +169,11 @@ impl Sema {
         } = &mut *callee
         {
             let obj_ty = self.analyze_expr(object.as_mut())?;
+            if let Some(ret) =
+                self.try_pseudo_destructor_call(&obj_ty, *is_arrow, member, args.len(), *pos)?
+            {
+                return Ok(Some(ret));
+            }
             let (struct_name, receiver_const) =
                 self.member_struct_name(&obj_ty, *is_arrow, *pos)?;
 

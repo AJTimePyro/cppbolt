@@ -43,6 +43,7 @@ c_basics/types/floats
 c_basics/types/long_long
 c_basics/types/numeric_literals
 c_basics/types/pointer_conversions
+c_basics/types/pseudo_destructor_scalar
 c_basics/types/reinterpret_cast
 c_basics/types/rounding_ties
 c_basics/types/sizeof_expr
@@ -76,6 +77,7 @@ c_basics_variant/types/booleans_chars
 c_basics_variant/types/const_qualifiers
 c_basics_variant/types/floats
 c_basics_variant/types/long_long
+c_basics_variant/types/pseudo_destructor_scalar
 c_basics_variant/types/rounding_ties
 c_basics_variant/types/sizeof_expr
 c_basics_variant/types/ternary_mixed_types

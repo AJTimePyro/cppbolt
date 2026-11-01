@@ -166,4 +166,57 @@ impl Sema {
             ));
         }
     }
+
+    pub(super) fn try_pseudo_destructor_call(
+        &self,
+        obj_ty: &Type,
+        is_arrow: bool,
+        member: &str,
+        arg_count: usize,
+        pos: ExprPos,
+    ) -> Result<Option<Type>, CompileError> {
+        let Some(raw_name) = member.strip_prefix('~') else {
+            return Ok(None);
+        };
+        let clean = obj_ty.strip_reference().strip_const();
+        let target_ty = if is_arrow {
+            match clean {
+                Type::Pointer(inner) => inner.strip_reference().strip_const(),
+                _ => return Ok(None),
+            }
+        } else {
+            clean
+        };
+
+        if !target_ty.is_scalar() {
+            return Ok(None);
+        }
+
+        if arg_count > 0 {
+            return Err(CompileError::new(
+                "arguments to destructor are not allowed",
+                pos.line,
+                pos.col,
+            ));
+        }
+
+        let name = raw_name.strip_prefix("::").unwrap_or(raw_name);
+        let is_matching = if let Some(alias_ty) = self.type_aliases.get(name) {
+            alias_ty.strip_reference().strip_const() == target_ty
+        } else if let Some(scalar_ty) = Type::from_scalar_name(name) {
+            &scalar_ty == target_ty
+        } else {
+            false
+        };
+
+        if !is_matching {
+            return Err(CompileError::new(
+                format!("the type of the object does not match the destructor name '~{}'", name),
+                pos.line,
+                pos.col,
+            ));
+        }
+
+        Ok(Some(Type::Void))
+    }
 }

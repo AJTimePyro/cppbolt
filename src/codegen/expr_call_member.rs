@@ -17,6 +17,9 @@ impl<'a> Codegen<'a> {
             member,
             is_arrow,
         } = access;
+        if self.try_compile_pseudo_destructor(&access, ctx, code)? {
+            return Ok(());
+        }
         let arg_types: Vec<Type> = args.iter().map(|a| self.get_expr_type(a, ctx)).collect();
         let obj_ty = self.get_expr_type_raw(object, ctx);
         let receiver_const = crate::sema::receiver_is_const_type(&obj_ty);
@@ -60,6 +63,37 @@ impl<'a> Codegen<'a> {
             ));
         }
         Ok(())
+    }
+
+    fn try_compile_pseudo_destructor(
+        &mut self,
+        access: &MemberAccess<'_>,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<bool, CompileError> {
+        if !access.member.starts_with('~') {
+            return Ok(false);
+        }
+        let obj_ty = self.get_expr_type_raw(access.object, ctx);
+        let clean = obj_ty.strip_reference().strip_const();
+        let target_is_scalar = if access.is_arrow {
+            if let Type::Pointer(inner) = clean {
+                inner.strip_reference().strip_const().is_scalar()
+            } else {
+                false
+            }
+        } else {
+            clean.is_scalar()
+        };
+        if target_is_scalar {
+            let ty = self.get_expr_type(access.object, ctx);
+            self.compile_expr(access.object, ctx, code)?;
+            if ty != Type::Void {
+                code.push(OP_DROP);
+            }
+            return Ok(true);
+        }
+        Ok(false)
     }
 
     /// Returns the name of the class the receiver belongs to.
