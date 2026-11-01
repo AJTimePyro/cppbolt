@@ -13,45 +13,30 @@ use crate::ast::types::Type;
 use crate::name::QualifiedName;
 use std::collections::HashMap;
 
+fn insert_template_aliases<T: Clone>(map: &mut HashMap<String, T>, name: String, item: T) {
+    if let Some(short) = name.split("::").last() {
+        map.insert(short.to_string(), item.clone());
+    }
+    let qualified = QualifiedName::new(&name);
+    if qualified.is_global() {
+        map.insert(qualified.std_name().into_owned(), item.clone());
+    } else if qualified.in_std() {
+        map.insert(qualified.plain().to_string(), item.clone());
+    }
+    map.insert(name, item);
+}
+
 impl Sema {
     pub fn register_class_template(&mut self, decl: TemplateClass, params: Vec<TemplateParam>) {
-        let name = decl.name.clone();
-        self.class_templates
-            .insert(name.clone(), (decl.clone(), params.clone()));
-        if let Some(short) = name.split("::").last() {
-            self.class_templates
-                .insert(short.to_string(), (decl.clone(), params.clone()));
-        }
-        let qualified = QualifiedName::new(&name);
-        if qualified.is_global() {
-            self.class_templates.insert(
-                qualified.std_name().into_owned(),
-                (decl.clone(), params.clone()),
-            );
-        } else if qualified.in_std() {
-            self.class_templates
-                .insert(qualified.plain().to_string(), (decl, params));
-        }
+        insert_template_aliases(&mut self.class_templates, decl.name.clone(), (decl, params));
     }
 
     pub fn register_function_template(&mut self, decl: FunctionDecl, params: Vec<TemplateParam>) {
-        let name = decl.name.clone();
-        self.function_templates
-            .insert(name.clone(), (decl.clone(), params.clone()));
-        if let Some(short) = name.split("::").last() {
-            self.function_templates
-                .insert(short.to_string(), (decl.clone(), params.clone()));
-        }
-        let qualified = QualifiedName::new(&name);
-        if qualified.is_global() {
-            self.function_templates.insert(
-                qualified.std_name().into_owned(),
-                (decl.clone(), params.clone()),
-            );
-        } else if qualified.in_std() {
-            self.function_templates
-                .insert(qualified.plain().to_string(), (decl, params));
-        }
+        insert_template_aliases(
+            &mut self.function_templates,
+            decl.name.clone(),
+            (decl, params),
+        );
     }
 
     pub fn resolve_and_instantiate_type(
@@ -294,43 +279,29 @@ impl Sema {
         args: &[Expr],
         pos: ExprPos,
     ) -> Result<Option<FunctionSig>, CompileError> {
-        if let Some((base, args_str)) = split_template_call_name(name) {
-            if let Some((template_decl, template_params)) =
-                self.function_templates.get(base).cloned()
-            {
+        let (tmpl_name, explicit_args) =
+            if let Some((base, args_str)) = split_template_call_name(name) {
                 let known: Vec<String> = self.class_templates.keys().cloned().collect();
                 let mut explicit_args = parse_types_list(args_str, &known)?;
                 for arg in explicit_args.iter_mut() {
                     self.resolve_and_instantiate_type(arg, pos.line, pos.col)?;
                 }
-                let mapping = deduce_template_arguments(
-                    &template_params,
-                    &template_decl,
-                    &explicit_args,
-                    (arg_types, args),
-                    pos,
-                )?;
-                let sig = self.instantiate_function_template(
-                    base,
-                    &mapping,
-                    &template_params,
-                    &template_decl,
-                    pos,
-                )?;
-                return Ok(Some(sig));
-            }
-        } else if let Some((template_decl, template_params)) =
-            self.function_templates.get(name).cloned()
+                (base, explicit_args)
+            } else {
+                (name, Vec::new())
+            };
+
+        if let Some((template_decl, template_params)) =
+            self.function_templates.get(tmpl_name).cloned()
         {
             let mapping = deduce_template_arguments(
                 &template_params,
                 &template_decl,
-                &[],
+                &explicit_args,
                 (arg_types, args),
                 pos,
             )?;
             let sig = self.instantiate_function_template(
-                name,
                 &mapping,
                 &template_params,
                 &template_decl,
@@ -343,7 +314,6 @@ impl Sema {
 
     pub fn instantiate_function_template(
         &mut self,
-        _template_name: &str,
         mapping: &HashMap<String, Type>,
         template_params: &[TemplateParam],
         template_decl: &FunctionDecl,

@@ -8,7 +8,6 @@ use crate::ast::template::TemplateClass;
 use crate::ast::types::Type;
 use std::collections::HashMap;
 
-#[allow(dead_code)]
 pub fn substitute_type(
     ty: &Type,
     mapping: &HashMap<String, Type>,
@@ -65,7 +64,6 @@ pub fn substitute_type(
     }
 }
 
-#[allow(dead_code)]
 pub fn substitute_expr(
     expr: &mut Expr,
     mapping: &HashMap<String, Type>,
@@ -140,7 +138,6 @@ pub fn substitute_expr(
     }
 }
 
-#[allow(dead_code)]
 fn substitute_callee_identifier(
     name: &mut String,
     mapping: &HashMap<String, Type>,
@@ -173,23 +170,19 @@ fn replace_whole_word(text: &str, word: &str, replacement: &str) -> String {
     let mut result = String::new();
     let mut remainder = text;
     while let Some(idx) = remainder.find(word) {
-        let not_qualified = !(idx >= 2 && &remainder.as_bytes()[idx - 2..idx] == b"::");
-        let before_ok = not_qualified
-            && (idx == 0
-                || (!remainder.as_bytes()[idx - 1].is_ascii_alphanumeric()
-                    && remainder.as_bytes()[idx - 1] != b'_'));
+        let bytes = remainder.as_bytes();
+        let not_qualified = !(idx >= 2 && &bytes[idx - 2..idx] == b"::");
+        let is_ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+        let before_ok = not_qualified && (idx == 0 || !is_ident(bytes[idx - 1]));
         let after_idx = idx + word.len();
-        let after_ok = after_idx == remainder.len()
-            || (!remainder.as_bytes()[after_idx].is_ascii_alphanumeric()
-                && remainder.as_bytes()[after_idx] != b'_');
+        let after_ok = after_idx == bytes.len() || !is_ident(bytes[after_idx]);
         if before_ok && after_ok {
             result.push_str(&remainder[..idx]);
             result.push_str(replacement);
-            remainder = &remainder[after_idx..];
         } else {
             result.push_str(&remainder[..after_idx]);
-            remainder = &remainder[after_idx..];
         }
+        remainder = &remainder[after_idx..];
     }
     result.push_str(remainder);
     result
@@ -260,7 +253,6 @@ pub fn substitute_stmt(
     }
 }
 
-#[allow(dead_code)]
 pub fn substitute_function(
     func: &FunctionDecl,
     mapping: &HashMap<String, Type>,
@@ -332,7 +324,6 @@ pub fn substitute_function(
     }
 }
 
-#[allow(dead_code)]
 pub fn substitute_struct(
     template_class: &TemplateClass,
     mapping: &HashMap<String, Type>,
