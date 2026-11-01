@@ -2,3 +2,6 @@ byte: 4
 roundtrip: 1
 unrelated_struct: 42
 ref_cast: 4
+mutated_ref: 32
+direct_assign: 1
+float_bits: 1

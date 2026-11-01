@@ -85,6 +85,13 @@ impl Sema {
     ) -> Result<Type, CompileError> {
         let expr_ty = self.analyze_expr(expr)?;
         if kind == CastKind::Reinterpret {
+            if target_type.is_reference() && !expr.is_lvalue() {
+                return Err(CompileError::new(
+                    "reinterpret_cast to reference type requires an lvalue operand",
+                    self.current_line,
+                    self.current_col,
+                ));
+            }
             self.validate_reinterpret_cast(&expr_ty, target_type)?;
             return Ok(target_type.clone());
         }
@@ -114,8 +121,10 @@ impl Sema {
     fn validate_reinterpret_cast(&self, src: &Type, target: &Type) -> Result<(), CompileError> {
         let clean_src = src.strip_const().strip_reference();
         let clean_tgt = target.strip_const().strip_reference();
-        if matches!(clean_src, Type::Float | Type::Double)
-            || matches!(clean_tgt, Type::Float | Type::Double)
+        if !target.is_reference()
+            && !src.is_reference()
+            && (matches!(clean_src, Type::Float | Type::Double)
+                || matches!(clean_tgt, Type::Float | Type::Double))
         {
             return Err(CompileError::new(
                 format!(

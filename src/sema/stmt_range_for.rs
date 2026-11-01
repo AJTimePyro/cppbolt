@@ -9,16 +9,7 @@ struct RangeForParts {
 }
 
 fn is_lvalue_expr(expr: &Expr) -> bool {
-    match expr {
-        Expr::Identifier(_) | Expr::ArraySubscript { .. } => true,
-        Expr::MemberAccess {
-            object, is_arrow, ..
-        } => *is_arrow || is_lvalue_expr(object),
-        Expr::Unary {
-            op: UnaryOp::Deref, ..
-        } => true,
-        _ => false,
-    }
+    expr.is_lvalue()
 }
 
 fn make_var_decl(name: String, ty: Type, init: Option<Expr>, pos: ExprPos) -> Stmt {

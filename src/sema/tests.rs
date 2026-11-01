@@ -45,3 +45,27 @@ fn test_reinterpret_cast_bypasses_conversion_operator() -> Result<(), Box<dyn st
     assert!(res.is_err(), "reinterpret_cast cannot invoke user conversion operator on class");
     Ok(())
 }
+
+#[test]
+fn test_reinterpret_cast_reference_rejects_rvalue() -> Result<(), Box<dyn std::error::Error>> {
+    let code = "void test() { int& r = reinterpret_cast<int&>(42); }";
+    let tokens = Lexer::new(code).tokenize()?;
+    let mut parser = Parser::new(tokens);
+    let mut program = parser.parse_program()?;
+    let mut sema = Sema::new();
+    let res = sema.analyze_program(&mut program);
+    assert!(res.is_err(), "reinterpret_cast to reference must reject rvalue");
+    Ok(())
+}
+
+#[test]
+fn test_reinterpret_cast_reference_accepts_float() -> Result<(), Box<dyn std::error::Error>> {
+    let code = "void test() { float f = 1.0f; int& r = reinterpret_cast<int&>(f); }";
+    let tokens = Lexer::new(code).tokenize()?;
+    let mut parser = Parser::new(tokens);
+    let mut program = parser.parse_program()?;
+    let mut sema = Sema::new();
+    let res = sema.analyze_program(&mut program);
+    assert!(res.is_ok(), "reinterpret_cast to reference must accept float lvalues: {:?}", res.err());
+    Ok(())
+}

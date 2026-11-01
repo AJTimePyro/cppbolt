@@ -310,6 +310,7 @@ negative/private_access
 negative/pure_virtual_instantiation
 negative/range_for_non_iterable
 negative/redefined_func
+negative/reinterpret_cast_rvalue_ref
 negative/ref_qualifier_lvalue_mismatch
 negative/scalar_excess_elements
 negative/scoped_enum_call_arg

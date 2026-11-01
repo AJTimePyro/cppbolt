@@ -81,6 +81,15 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let src_ty = self.get_expr_type(expr, ctx);
+        if target_type.is_reference() {
+            self.compile_lvalue_addr(expr, ctx, code)?;
+            let value_ty = target_type.strip_const().strip_reference();
+            if !matches!(value_ty, Type::Struct(_) | Type::Array(_, _)) {
+                self.emit_load(value_ty, 0, code);
+            }
+            return Ok(());
+        }
+
         self.compile_expr(expr, ctx, code)?;
         if target_type == &Type::Void {
             if src_ty != Type::Void {

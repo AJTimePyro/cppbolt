@@ -20,5 +20,15 @@ int main() {
     char& cr = reinterpret_cast<char&>(x);
     std::printf("ref_cast: %d\n", (int)cr);
 
+    cr = 0x20;
+    std::printf("mutated_ref: %d\n", (int)(x & 0xff));
+
+    reinterpret_cast<int&>(x) = 0x11223344;
+    std::printf("direct_assign: %d\n", x == 0x11223344 ? 1 : 0);
+
+    float f = 1.0f;
+    int& fi = reinterpret_cast<int&>(f);
+    std::printf("float_bits: %d\n", fi == 0x3f800000 ? 1 : 0);
+
     return 0;
 }
