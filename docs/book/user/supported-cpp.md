@@ -89,13 +89,13 @@ cargo run --bin cppbolt-testrunner -- target/release/cppbolt-cli
 - **Extended Casts (`reinterpret_cast`)**: Supports C++17 `reinterpret_cast<T>(expr)` between pointer types, pointer and integer types (matching the 32-bit ILP32 pointer width), and reference types (`reinterpret_cast<T&>(v)`). Does not invoke user-defined conversion operators or constructors. Scalar floating-point reinterpretations by value are rejected; bit patterns of floats can be inspected via pointer or reference reinterpretation (e.g. `*reinterpret_cast<uint32_t*>(&f)`).
 - **Template Core**:
   - Class templates and function templates support type parameters (`template <typename T>`). Non-type parameters, template template parameters, variadic templates, and explicit specializations (`template <>`) are rejected with explicit diagnostics.
-  - Instantiation follows a single-phase lookup model (ADR 0010). The parser preserves template declarations as recipes, and semantic analysis resolves names and types during concrete specialization.
-  - Type resolution recursively unwraps pointers, references, const qualifiers, and arrays, instantiating concrete template layouts before calculating member access offsets.
-  - Non-template structs compute layouts after resolving template instance fields, ensuring accurate member offsets and struct sizes. Non-template functions accept and return template instance types.
-  - Class template member methods are instantiated lazily upon first call, address reference, or operator overload lookup (`operator[]`, unary operators). Unused member methods are neither typechecked nor emitted into WebAssembly.
-  - Non-virtual class template destructors instantiate eagerly alongside virtual methods, registering with destructor synthesis so scope exit cleanups run reliably.
-  - Function template call resolution deduces type arguments from value, reference, const-reference, top-level const pointers, and template instance arguments. Explicit template arguments (`func<int>(val)`, `func<Inner<int>>(val)`) override deduction and parse nested template types. Default argument expressions are appended when callers omit trailing parameters. When an exact non-template function overload exists, the compiler prefers it over a template specialization.
-  - Instantiation recursion is budgeted to 500 levels (`template instantiation depth exceeded (limit 500)`).
+  - Instantiation follows a single-phase lookup model (ADR 0010). The parser preserves template declarations in the AST (`TemplateDecl`), and semantic analysis resolves names and types during concrete specialization.
+  - Type resolution recursively unwraps pointers, references, const qualifiers, and arrays, generating concrete struct layouts before calculating member access offsets.
+  - Non-template structs compute layouts after resolving template fields, giving fields valid offsets and sizes. Non-template functions accept and return template instance types.
+  - Class template member methods instantiate lazily on first call, address-of reference, or operator overload lookup (`operator[]`, unary operators). Unused member methods are neither typechecked nor emitted into WebAssembly.
+  - Non-virtual class template destructors instantiate eagerly alongside virtual methods so synthesized cleanup logic can drop values on scope exit.
+  - Function template overload resolution deduces type arguments from values, references, const references, top-level const pointers, and template instance arguments. Explicit template arguments (`func<int>(val)`, `func<Inner<int>>(val)`) override deduction and parse nested template types. Default argument expressions fill omitted trailing parameters. Exact non-template function overloads take precedence over template specializations.
+  - Instantiation recursion is limited to 500 levels (`template instantiation depth exceeded (limit: 500)`).
 
 ### 2. Nesting Limits per Construct
 

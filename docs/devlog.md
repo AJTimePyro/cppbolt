@@ -6,18 +6,18 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ## 2026-11-01: Template Integration Bugfixes and Lifecycle Lowering
 
-We addressed 10 code review findings across template type resolution, layout calculation, lazy operator lowering, RAII destructor lifecycles, and function argument deduction.
+Resolved edge cases across template type resolution, field layout calculation, lazy operator lowering, RAII destructor lifecycles, and function argument deduction.
 
 ### Summary of Work
 
-1. Made type resolution recursive across pointers, references, const qualifiers, and arrays in `src/sema/template_registry.rs`, ensuring concrete struct layouts are generated before field lookups. Added a cycle guard in `src/sema/lookup.rs` to prevent infinite alias looping.
-2. Resolved template instance types in struct fields before computing struct layouts in `src/sema/analyze.rs`, ensuring correct field offsets and total struct sizes. Resolved template types in non-template function parameters and return types during declaration registration and function analysis.
-3. Lowered lazy template operator methods (`operator[]`, unary operators) upon match in `src/sema/expr_ops.rs`. Eagerly instantiated non-virtual template class destructors in `src/sema/template_registry.rs` so destructor synthesis registers them for RAII scope cleanup generation.
-4. Filled default arguments on function template calls via `self.full_arguments(&sig, args)` in `src/sema/expr_call.rs`, preventing stack underflow in WebAssembly bytecode.
-5. Propagated known class templates into explicit template argument list parsing in `src/sema/template_deduce.rs` to support nested template types like `func<Inner<int>>(x)`.
+1. Made type resolution recursive across pointers, references, const qualifiers, and arrays in `src/sema/template_registry.rs`, generating concrete struct layouts before field lookup. Added a cycle guard in `src/sema/lookup.rs` to stop infinite alias looping.
+2. Resolved template instance types in struct fields before computing struct layouts in `src/sema/analyze.rs`, setting correct field offsets and total struct sizes. Resolved template types in non-template function parameters and return types during declaration registration and function analysis.
+3. Lowered lazy template operator methods (`operator[]`, unary operators) upon match in `src/sema/expr_ops.rs`. Eagerly instantiated non-virtual template class destructors in `src/sema/template_registry.rs` so destructor synthesis registers cleanup calls on scope exit.
+4. Filled default arguments on function template calls via `self.full_arguments(&sig, args)` in `src/sema/expr_call.rs`, providing all required stack values in WebAssembly bytecode.
+5. Passed known class templates into explicit template argument list parsing in `src/sema/template_deduce.rs` to support nested types like `func<Inner<int>>(x)`.
 6. Stripped top-level const during pointer argument deduction in `src/sema/template_deduce.rs` to deduce `T` from `T* const`.
 7. Refined template name substitution in `src/sema/template_subst.rs` to prevent accidental replacement across scope qualifiers.
-8. Added positive regression tests covering pointer access, const-reference binding, struct template fields, non-template functions with template arguments, overloaded subscript operators, destructor scope cleanups, function default arguments, nested explicit types, and const pointer deduction (`template_ptr_const_ref.cpp`, `template_field_and_func.cpp`, `template_ops_dtor.cpp`, `template_default_arg_deduce.cpp`).
+8. Added regression tests for pointer access, const-reference binding, struct template fields, non-template functions with template arguments, overloaded subscript operators, destructor scope cleanups, function default arguments, nested explicit types, and const pointer deduction (`template_ptr_const_ref.cpp`, `template_field_and_func.cpp`, `template_ops_dtor.cpp`, `template_default_arg_deduce.cpp`).
 
 ### Verification Results
 
@@ -36,9 +36,9 @@ We implemented class and function templates with type parameters, single-phase n
 
 1. Added template AST definitions in `src/ast/template.rs`, including `TemplateDecl`, `TemplateParam`, and `Type::TemplateInstance`.
 2. Implemented parsing for template declarations, template argument lists (`<T, U>`), and template-ids in `src/parser/template.rs`. Added diagnostics rejecting unsupported constructs: explicit specialization, explicit instantiation, template template parameters, variadic templates, and non-type template parameters.
-3. Created an AST substitution engine in `src/sema/template_subst.rs` that replaces type parameters with concrete types across expressions, statements, types, and struct or function declarations.
-4. Built the template registry in `src/sema/template_registry.rs`. Class template instantiation lays out struct fields, assigns canonical names, caches concrete specializations, and lowers member methods lazily when called.
-5. Implemented function template argument deduction in `src/sema/template_deduce.rs`. The engine deduces concrete types from call argument types, handles reference and const qualifiers, and verifies type consistency across multiple occurrences of parameters.
+3. Implemented AST substitution in `src/sema/template_subst.rs`, replacing type parameters with concrete types across expressions, statements, types, and declarations.
+4. Implemented template registry in `src/sema/template_registry.rs` to lay out struct fields, assign canonical specialization names, cache instantiated declarations, and lower member methods lazily on call.
+5. Implemented function template argument deduction in `src/sema/template_deduce.rs`, deducing concrete types from call argument types, handling reference and const qualifiers, and checking type consistency across repeated parameters.
 6. Integrated function templates into overload resolution in `src/sema/expr_call.rs`. The compiler prefers exact matches, falls back to function templates when available, and respects defaulted arguments during candidate selection.
 7. Added positive regression tests covering class templates, function templates, multi-parameter templates, reference deduction, and distinct instantiations (`template_class_basic`, `template_func_basic`, `template_multi_param`, `template_pair`, `template_func_multi`, `template_lazy_member`, `template_multi_instance`, `template_deduce_ref`).
 8. Added negative tests verifying rejection of template recursion exceeding the 500 depth limit and deduction conflicts (`template_instantiation_depth.cpp`, `template_deduction_conflict.cpp`).
