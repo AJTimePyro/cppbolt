@@ -55,6 +55,14 @@ impl Sema {
                         col: *col,
                     })?;
                 }
+                Decl::Template(t) => match &t.kind {
+                    TemplateKind::Class(c) => {
+                        self.register_class_template(c.clone(), t.params.clone());
+                    }
+                    TemplateKind::Function(f) => {
+                        self.register_function_template((**f).clone(), t.params.clone());
+                    }
+                },
                 _ => {}
             }
         }
@@ -355,6 +363,7 @@ impl Sema {
     ) -> Result<(), CompileError> {
         self.current_line = line;
         self.current_col = col;
+        self.resolve_and_instantiate_type(ty, line, col)?;
         self.check_and_complete_var_type(ty, init, line, col)?;
         if let Some(init_expr) = init {
             let init_ty = self.analyze_expr(init_expr)?;

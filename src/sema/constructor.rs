@@ -50,6 +50,7 @@ impl Sema {
                 // A constructor call may leave out arguments that have
                 // default values.
                 self.fill_constructor_defaults(&sig, args)?;
+                self.instantiate_pending_method(&sig.mangled_name)?;
             }
             None => {
                 if !self.is_copy_initialization(class_name, arg_types) {

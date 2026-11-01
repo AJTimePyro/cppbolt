@@ -213,6 +213,7 @@ impl Sema {
                 // values.
                 self.fill_member_defaults(&sig, args)?;
                 self.convert_call_args(args, &sig.param_types[1..], arg_types, *pos)?;
+                self.instantiate_pending_method(&sig.mangled_name)?;
                 return Ok(Some(sig.return_type.clone()));
             } else {
                 return Err(CompileError::new(
@@ -407,6 +408,7 @@ impl Sema {
             self.convert_call_args(&mut full_args, &cand.param_types, arg_types, pos)?;
             let mangled = cand.mangled_name.clone();
             let ret_type = cand.return_type.clone();
+            self.instantiate_pending_method(&mangled)?;
             *callee = Expr::Identifier(mangled);
             *args = full_args;
             return Ok(ret_type);

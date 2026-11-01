@@ -338,6 +338,7 @@ negative/syntax_error
 negative/template_alias
 negative/template_explicit_instantiation
 negative/template_explicit_specialization
+negative/template_instantiation_depth
 negative/template_nontype_param
 negative/template_template_param
 negative/template_variadic
@@ -358,3 +359,6 @@ templates_operators/op_overload_binary
 templates_operators/op_overload_chain
 templates_operators/op_overload_subscript
 templates_operators/op_overload_unary
+templates_operators/template_class_basic
+templates_operators/template_lazy_member
+templates_operators/template_multi_param

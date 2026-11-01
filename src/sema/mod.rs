@@ -18,6 +18,7 @@ mod stmt;
 mod stmt_decl;
 mod stmt_range_for;
 mod stmt_structured_binding;
+mod template_registry;
 pub mod template_subst;
 #[cfg(test)]
 mod tests;
@@ -153,6 +154,12 @@ pub struct Sema {
     pub lambda_counter: usize,
     pub synthesized_decls: Vec<Decl>,
     pub current_func_is_const: bool,
+    pub class_templates: HashMap<String, (TemplateClass, Vec<TemplateParam>)>,
+    pub function_templates: HashMap<String, (FunctionDecl, Vec<TemplateParam>)>,
+    pub instantiated_classes: HashSet<String>,
+    pub pending_template_methods: HashMap<String, (String, FunctionDecl)>,
+    pub instantiation_depth: usize,
+    pub instantiation_stack: Vec<String>,
     depth: crate::depth::DepthCounters,
 }
 
@@ -179,6 +186,12 @@ impl Sema {
             lambda_counter: 0,
             synthesized_decls: Vec::new(),
             current_func_is_const: false,
+            class_templates: HashMap::new(),
+            function_templates: HashMap::new(),
+            instantiated_classes: HashSet::new(),
+            pending_template_methods: HashMap::new(),
+            instantiation_depth: 0,
+            instantiation_stack: Vec::new(),
             current_class: None,
             current_func_name: None,
             open_namespaces: Vec::new(),

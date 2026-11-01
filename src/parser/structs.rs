@@ -4,6 +4,9 @@ impl Parser {
     pub(super) fn parse_struct(&mut self) -> Result<Decl, CompileError> {
         let start = self.current().clone();
         let (name, is_class) = self.parse_struct_name()?;
+        if !self.active_type_params.is_empty() {
+            self.register_template_name(&name);
+        }
 
         if self.peek() == &TokenKind::Semi {
             self.advance();

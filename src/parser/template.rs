@@ -194,7 +194,7 @@ impl Parser {
         Ok(template_decls)
     }
 
-    fn register_template_name(&mut self, name: &str) {
+    pub(super) fn register_template_name(&mut self, name: &str) {
         self.known_templates.insert(name.to_string());
         if let Some(short) = name.split("::").last() {
             self.known_templates.insert(short.to_string());

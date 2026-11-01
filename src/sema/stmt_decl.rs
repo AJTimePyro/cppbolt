@@ -31,6 +31,7 @@ impl Sema {
         } = decl;
         self.current_line = line;
         self.current_col = col;
+        self.resolve_and_instantiate_type(ty, line, col)?;
         if let Type::Struct(sname) = ty.strip_const()
             && let Some(layout) = self.struct_layouts.get(sname)
             && layout.is_abstract
