@@ -158,3 +158,22 @@ Following completion of the initial compiler subset, work focused on adding high
 ### Verification
 - Added test coverage in `tests/c_basics/pointers_arrays/range_for_array.cpp`, `tests/mini_stl/range_for_string.cpp`, `tests/classes_oop/memory_raii/range_for_raii.cpp`, and `tests/negative/range_for_non_iterable.cpp`.
 - Verified automated mdBook, `cargo doc`, and playground builds in CI.
+
+---
+
+## 2026-11-01: C++17 Namespace Aliases
+
+### Context & Motivation
+Section 2 of the roadmap tracked namespace aliases (`namespace NewName = OriginalName;`), which were rejected upfront by the parser unsupported validator.
+
+### Work Executed
+1. Removed the parser rejection rule for namespace aliases.
+2. Added `Decl::NamespaceAlias` and `StmtKind::NamespaceAlias` to AST definitions.
+3. Parsed namespace alias declarations at global, namespace, and block scopes.
+4. Added transitive alias resolution in `Parser` and `Sema` across types, functions, variables, and `using namespace` directives.
+5. Diagnosed invalid alias redefinitions in semantic analysis.
+
+### Verification
+- Added test coverage in `tests/classes_oop/statics_namespaces/namespace_aliases.cpp`.
+- Updated negative test coverage in `tests/negative/namespace_alias.cpp`.
+- Verified clean suite with 338 passing tests in `cppbolt-testrunner`.
