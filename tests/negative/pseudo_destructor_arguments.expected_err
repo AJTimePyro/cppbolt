@@ -1,0 +1,1 @@
+tests/negative/pseudo_destructor_arguments.cpp:6:5: error: arguments to destructor are not allowed

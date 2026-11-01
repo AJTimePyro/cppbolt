@@ -273,6 +273,7 @@ negative/explicit_ctor_arg
 negative/explicit_ctor_copy_list
 negative/explicit_ctor_return
 negative/func_arg_count_mismatch
+negative/functional_cast_incompatible
 negative/function_base_to_derived_pointer
 negative/function_int_to_struct
 negative/function_pointer_element_mismatch
@@ -317,6 +318,8 @@ negative/pointer_conversion_string_literal_nonconst
 negative/pointer_conversion_void_ptr
 negative/pointer_plus_pointer
 negative/private_access
+negative/pseudo_destructor_arguments
+negative/pseudo_destructor_type_mismatch
 negative/pure_virtual_instantiation
 negative/range_for_non_iterable
 negative/redefined_func

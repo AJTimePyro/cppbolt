@@ -449,7 +449,18 @@ impl Sema {
             Ok(Some((ty.clone(), zero_literal_for_type(&ty))))
         } else if args.len() == 1 {
             let mut arg = args[0].clone();
-            self.analyze_expr(&mut arg)?;
+            let arg_ty = self.analyze_expr(&mut arg)?;
+            if !self.can_assign_expr(&ty, &arg_ty, Some(&arg)) {
+                return Err(CompileError::new(
+                    format!(
+                        "cannot convert '{}' to '{}' in functional cast",
+                        arg_ty.to_c_type(),
+                        ty.to_c_type()
+                    ),
+                    pos.line,
+                    pos.col,
+                ));
+            }
             Ok(Some((
                 ty.clone(),
                 Expr::Cast {

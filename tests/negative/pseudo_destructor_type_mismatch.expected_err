@@ -1,0 +1,1 @@
+tests/negative/pseudo_destructor_type_mismatch.cpp:6:5: error: the type of the object does not match the destructor name '~D'
