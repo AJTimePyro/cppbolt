@@ -18,6 +18,7 @@ mod stmt;
 mod stmt_decl;
 mod stmt_range_for;
 mod stmt_structured_binding;
+pub mod template_subst;
 #[cfg(test)]
 mod tests;
 
