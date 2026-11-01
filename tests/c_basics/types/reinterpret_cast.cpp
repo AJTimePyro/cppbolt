@@ -8,7 +8,7 @@ int main() {
     char* cp = reinterpret_cast<char*>(&x);
     std::printf("byte: %d\n", (int)*cp);
 
-    unsigned int addr = reinterpret_cast<unsigned int>(&x);
+    unsigned long long addr = reinterpret_cast<unsigned long long>(&x);
     int* p2 = reinterpret_cast<int*>(addr);
     std::printf("roundtrip: %d\n", *p2 == 0x01020304 ? 1 : 0);
 
