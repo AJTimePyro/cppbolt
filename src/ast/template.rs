@@ -23,7 +23,7 @@ pub struct TemplateClass {
 #[derive(Debug, Clone, PartialEq)]
 pub enum TemplateKind {
     Class(TemplateClass),
-    Function(FunctionDecl),
+    Function(Box<FunctionDecl>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

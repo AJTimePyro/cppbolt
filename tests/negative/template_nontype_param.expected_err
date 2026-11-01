@@ -1,0 +1,1 @@
+tests/negative/template_nontype_param.cpp:1:11: error: non-type template parameters are not supported yet

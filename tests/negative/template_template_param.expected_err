@@ -1,0 +1,1 @@
+tests/negative/template_template_param.cpp:1:11: error: template template parameters are not supported yet

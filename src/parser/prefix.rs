@@ -14,8 +14,20 @@ impl Parser {
                     let init_expr = Expr::TypedInitList { ty, elements, pos };
                     return self.parse_postfix(init_expr, start);
                 }
-                if self.peek() == &TokenKind::LParen && ty.is_scalar() {
-                    return self.parse_functional_cast(ty, start);
+                if self.peek() == &TokenKind::LParen {
+                    if ty.is_scalar() {
+                        return self.parse_functional_cast(ty, start);
+                    }
+                    if matches!(ty, Type::Struct(_) | Type::TemplateInstance { .. }) {
+                        self.advance();
+                        let args = self.parse_call_args()?;
+                        let call = Expr::Call {
+                            callee: Box::new(Expr::Identifier(ty.to_c_type())),
+                            args,
+                            pos: start,
+                        };
+                        return self.parse_postfix(call, start);
+                    }
                 }
             }
             self.pos = saved_pos;

@@ -1,0 +1,1 @@
+tests/negative/template_explicit_instantiation.cpp:6:1: error: explicit template instantiation is not supported yet

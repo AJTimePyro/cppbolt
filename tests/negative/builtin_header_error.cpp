@@ -1,7 +1,6 @@
-// The compiler does not support templates, so a built-in header that uses
-// them fails while it is being compiled.  The diagnostic must name the
-// header and the line inside it, not the file that included it.
-#include <initializer_list>
+// The diagnostic must name the built-in header and the line inside it,
+// not the file that included it.
+#include <utility>
 
 int main() {
     return 0;

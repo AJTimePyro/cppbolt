@@ -335,6 +335,12 @@ negative/subscript_non_array
 negative/structured_binding_count_mismatch
 negative/switch_case_non_constant
 negative/syntax_error
+negative/template_alias
+negative/template_explicit_instantiation
+negative/template_explicit_specialization
+negative/template_nontype_param
+negative/template_template_param
+negative/template_variadic
 negative/throw_unsupported
 negative/type_mismatch
 negative/unary_plus_invalid_struct

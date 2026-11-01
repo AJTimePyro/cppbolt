@@ -45,6 +45,15 @@ impl Parser {
                 if let Some(stripped) = id.strip_prefix("std::") {
                     id = stripped.to_string();
                 }
+                if self.is_known_template(&id) && self.peek() == &TokenKind::Lt {
+                    let args = self.parse_template_args()?;
+                    let formatted = args
+                        .iter()
+                        .map(|a| a.to_c_type())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    id = format!("{}<{}>", id, formatted);
+                }
                 Ok(Expr::Identifier(id))
             }
             TokenKind::KwThrow => {
@@ -177,7 +186,7 @@ impl Parser {
         self.parse_postfix(expr, start)
     }
 
-    fn parse_call_args(&mut self) -> Result<Vec<Expr>, CompileError> {
+    pub(super) fn parse_call_args(&mut self) -> Result<Vec<Expr>, CompileError> {
         // One call costs one level of the call budget.
         let _guard = self.enter_call()?;
         self.parse_paren_expr_list()

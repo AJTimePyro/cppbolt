@@ -36,6 +36,7 @@ pub struct FunctionDecl {
     pub col: usize,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Decl {
     Function(FunctionDecl),
