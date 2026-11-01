@@ -8,7 +8,7 @@ The preprocessor is the entry stage of the compilation pipeline, implemented in 
 
 1. **Backslash-Newline Splicing**: Splices lines ending in `\` with subsequent lines prior to tokenization.
 2. **Include Directive Processing**: Resolves `#include <...>` and `#include "..."` using an `IncludeProvider` abstraction without performing direct filesystem operations in the core library.
-3. **Macro Expansion**: Expands object-like and function-like `#define` macros using standard painted-blue hide sets, macro argument expansion, token concatenation (`##`), stringification (`#`), and recursive replacement rescanning.
+3. **Macro Expansion & Undefinition**: Expands object-like and function-like `#define` macros using standard painted-blue hide sets, macro argument expansion, raw token concatenation (`##`), stringification (`#`), and recursive replacement rescanning. Removes macro definitions on `#undef`.
 4. **Conditional Compilation**: Parses and evaluates constant integer expressions in `#if`, `#elif`, `#ifdef`, `#ifndef`, `#else`, and `#endif` blocks, including `defined(NAME)` queries.
 5. **Origin Line Tracking**: Records structured line origin mappings (`PreprocessedSource`) so subsequent compiler errors from included headers accurately report the header file path and original line number.
 

@@ -37,6 +37,30 @@ Work on this date addressed C++17 pointer conversion semantics, qualification co
 
 ---
 
+## 2026-10-30: C++17 Numeric Literals, Macro Undef, and Raw Token Pasting
+
+### Context & Motivation
+Work on this date expanded literal syntax and fixed macro token pasting:
+1. The lexer did not support binary literals (`0b1010`), digit separators (`1'000'000`), or octal digit checks.
+2. The preprocessor could not undefine macros (`#undef`).
+3. Macro token pasting (`##`) expanded operand macros before pasting instead of concatenating raw argument tokens.
+
+### Work Executed
+1. Numeric literals:
+   - Parsed binary literals with `0b` and `0B` prefixes.
+   - Supported single-quote digit separators, rejecting consecutive quotes or quotes at literal boundaries.
+   - Rejected digits `8` and `9` in octal literals.
+2. Preprocessor directives and macro expansion:
+   - Added the `#undef` directive in `src/preprocessor/directive_line.rs`.
+   - Updated `src/preprocessor/macros.rs` to paste raw tokens directly on `##` without prior expansion.
+
+### Verification
+- Added positive tests in `tests/c_basics/types/numeric_literals.cpp` and `tests/c_basics/preprocessor/macro_token_paste_raw.cpp`.
+- Added negative diagnostic tests in `tests/negative/` for invalid binary digits, misplaced digit separators, and invalid octal digits.
+- Formatting and clippy clean.
+
+---
+
 ## 2026-10-29: List Initialization, Array Decay, and Constructor Resolution
 
 ### Context & Motivation

@@ -19,6 +19,13 @@ This project does not yet have tagged semantic releases; all historical work is 
 - Scored qualification conversions and null pointer constant conversions in function overload and constructor resolution.
 - Added test coverage in `tests/c_basics/types/pointer_conversions.cpp` and 7 negative tests in `tests/negative/`.
 
+### C++17 Numeric Literals, Undef Directive & Raw Token Pasting
+- Added binary integer literals (`0b`, `0B`) and single-quote digit separators (`1'000'000`, `0b1010'0101`).
+- Rejected non-octal digits (`8`, `9`) in octal literals.
+- Added preprocessor `#undef` directive.
+- Implemented raw macro token pasting (`##`) without expanding argument tokens first.
+- Added test coverage in `tests/c_basics/types/numeric_literals.cpp`, `tests/c_basics/preprocessor/macro_token_paste_raw.cpp`, and 3 negative tests in `tests/negative/`.
+
 ### Project Rename
 - Renamed the remaining legacy project-name references to `cppbolt`. The binaries are now `cppbolt-cli`, `cppbolt-testrunner`, and `cppbolt-census`, and the test runner's default compiler path is `target/release/cppbolt-cli`.
 

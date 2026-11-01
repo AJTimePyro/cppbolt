@@ -282,6 +282,36 @@ The following catalog lists diagnostics emitted by the compiler, paired with rea
 
 ### Preprocessor & Lexical Errors (`ErrorKind::Lexical`)
 
+#### `Invalid digit '<digit>' in binary literal`
+- **Cause**: Non-binary digit in a binary integer literal (`0b...`).
+- **Trigger** (`tests/negative/invalid_binary_digit.cpp`):
+  ```cpp
+  int main() {
+      int x = 0b102; // error: Invalid digit '2' in binary literal
+      return x;
+  }
+  ```
+
+#### `Invalid digit separator`
+- **Cause**: Consecutive digit separators or quotes at literal boundaries.
+- **Trigger** (`tests/negative/invalid_digit_separator.cpp`):
+  ```cpp
+  int main() {
+      int x = 1''000; // error: Invalid digit separator
+      return x;
+  }
+  ```
+
+#### `Invalid digit '<digit>' in octal literal`
+- **Cause**: Non-octal digit (`8` or `9`) in a zero-prefixed octal literal.
+- **Trigger** (`tests/negative/invalid_octal_digit.cpp`):
+  ```cpp
+  int main() {
+      int x = 088; // error: Invalid digit '8' in octal literal
+      return x;
+  }
+  ```
+
 #### `include cycle detected: '<path>'`
 - **Cause**: Cyclic `#include` inclusion chain detected by the preprocessor.
 - **Trigger** (`tests/negative/include_cycle.cpp`):
