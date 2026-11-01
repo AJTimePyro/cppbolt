@@ -10,6 +10,7 @@ c_basics/functions/functions_call
 c_basics/functions/functions_default_args
 c_basics/functions/functions_overload
 c_basics/functions/overload_resolution
+c_basics/functions/std_abs_long
 c_basics/functions/using_declaration_precedence
 c_basics/io_printf/hello_world
 c_basics/io_printf/printf_conversions
@@ -55,6 +56,7 @@ c_basics_variant/functions/functions_call
 c_basics_variant/functions/functions_default_args
 c_basics_variant/functions/functions_overload
 c_basics_variant/functions/overload_resolution
+c_basics_variant/functions/std_abs_long
 c_basics_variant/functions/using_declaration_precedence
 c_basics_variant/io_printf/hello_world
 c_basics_variant/io_printf/printf_conversions
@@ -317,6 +319,7 @@ negative/scalar_excess_elements
 negative/scoped_enum_call_arg
 negative/scoped_enum_implicit_conversion
 negative/scoped_enum_leak
+negative/std_abs_unsigned
 negative/stray_endif
 negative/subscript_non_array
 negative/structured_binding_count_mismatch

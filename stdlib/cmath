@@ -18,6 +18,12 @@ namespace std {
     inline int abs(int n) {
         return n < 0 ? -n : n;
     }
+    inline long abs(long n) {
+        return n < 0 ? -n : n;
+    }
+    inline long long abs(long long n) {
+        return n < 0 ? -n : n;
+    }
     inline double abs(double d) {
         return ::fabs(d);
     }
