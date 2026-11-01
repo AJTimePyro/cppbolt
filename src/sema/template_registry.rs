@@ -226,7 +226,7 @@ impl Sema {
     ) -> Result<(), CompileError> {
         for mut m in all_methods {
             self.register_struct_method(inst_name, &m);
-            if m.is_virtual {
+            if m.is_virtual || m.name.starts_with('~') {
                 let prev_class = self.current_class.take();
                 self.current_class = Some(inst_name.to_string());
                 let mut vmethod = m.clone();

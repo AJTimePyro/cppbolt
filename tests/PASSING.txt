@@ -368,5 +368,6 @@ templates_operators/template_func_multi
 templates_operators/template_lazy_member
 templates_operators/template_multi_instance
 templates_operators/template_multi_param
+templates_operators/template_ops_dtor
 templates_operators/template_pair
 templates_operators/template_ptr_const_ref

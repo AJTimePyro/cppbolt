@@ -15,6 +15,7 @@ impl Sema {
             if let Type::Struct(sname) = clean_lty
                 && let Some(sig) = self.find_method_in_class(sname, op_str)
             {
+                let _ = self.instantiate_pending_method(&sig.mangled_name);
                 return sig.return_type.strip_reference().clone();
             }
             let op_cands = self.find_call_candidates(op_str, &[lty.clone(), rty.clone()]);
@@ -23,32 +24,29 @@ impl Sema {
             }
         }
 
-        if let Type::Struct(sname) = lty.strip_reference().strip_const()
-            && !matches!(rty.strip_reference().strip_const(), Type::Struct(_))
+        let (l_clean, r_clean) = (
+            lty.strip_reference().strip_const(),
+            rty.strip_reference().strip_const(),
+        );
+        if let Type::Struct(s) = l_clean
+            && !matches!(r_clean, Type::Struct(_))
+            && let Some(sig) = self.find_conversion_to(s, r_clean, lty.strip_reference().is_const())
         {
-            let is_const = lty.strip_reference().is_const();
-            if let Some(sig) =
-                self.find_conversion_to(sname, rty.strip_reference().strip_const(), is_const)
-            {
-                let conv_ty = sig.return_type.strip_reference().clone();
-                return self.binary_result_type(op, &conv_ty, rty);
-            }
+            let conv = sig.return_type.strip_reference().clone();
+            return self.binary_result_type(op, &conv, rty);
         }
-        if let Type::Struct(sname) = rty.strip_reference().strip_const()
-            && !matches!(lty.strip_reference().strip_const(), Type::Struct(_))
+        if let Type::Struct(s) = r_clean
+            && !matches!(l_clean, Type::Struct(_))
+            && let Some(sig) = self.find_conversion_to(s, l_clean, rty.strip_reference().is_const())
         {
-            let is_const = rty.strip_reference().is_const();
-            if let Some(sig) =
-                self.find_conversion_to(sname, lty.strip_reference().strip_const(), is_const)
-            {
-                let conv_ty = sig.return_type.strip_reference().clone();
-                return self.binary_result_type(op, lty, &conv_ty);
-            }
+            let conv = sig.return_type.strip_reference().clone();
+            return self.binary_result_type(op, lty, &conv);
         }
 
         match op {
-            BinaryOp::LogicalAnd | BinaryOp::LogicalOr => Type::Bool,
-            BinaryOp::Eq
+            BinaryOp::LogicalAnd
+            | BinaryOp::LogicalOr
+            | BinaryOp::Eq
             | BinaryOp::Ne
             | BinaryOp::Lt
             | BinaryOp::Le
@@ -73,13 +71,13 @@ impl Sema {
     }
 
     pub(super) fn analyze_binary(&mut self, expr: &mut Expr) -> Result<Type, CompileError> {
-        let Expr::Binary { .. } = expr else {
+        if !matches!(expr, Expr::Binary { .. }) {
             return Err(crate::internal_error!(
                 self.current_line,
                 self.current_col,
                 "unexpected expression kind"
             ));
-        };
+        }
 
         // Take the left-associative spine apart so a chain of `n` operators
         // needs one stack frame, not `n`.
@@ -202,6 +200,7 @@ impl Sema {
                 if let Some(inner) = ty.deref_type() {
                     Ok(inner.clone())
                 } else if let Some(sig) = self.find_unary_operator(UnaryOp::Deref, &ty) {
+                    self.instantiate_pending_method(&sig.mangled_name)?;
                     Ok(sig.return_type)
                 } else {
                     Err(CompileError::new(
@@ -219,6 +218,7 @@ impl Sema {
                 }
                 // A class operand may name an overloaded `operator&`.
                 if let Some(sig) = self.find_unary_operator(UnaryOp::AddrOf, &ty) {
+                    self.instantiate_pending_method(&sig.mangled_name)?;
                     return Ok(sig.return_type);
                 }
                 Ok(Type::Pointer(Box::new(ty)))
@@ -226,6 +226,7 @@ impl Sema {
             UnaryOp::BitNot | UnaryOp::Neg | UnaryOp::Plus => {
                 // A class operand may name an overloaded operator.
                 if let Some(sig) = self.find_unary_operator(*op, &ty) {
+                    self.instantiate_pending_method(&sig.mangled_name)?;
                     return Ok(sig.return_type);
                 }
                 if *op == UnaryOp::Plus
@@ -258,8 +259,11 @@ impl Sema {
         pos: ExprPos,
     ) -> Result<Type, CompileError> {
         if let Type::Struct(sname) = ty.strip_const() {
-            let is_inc = matches!(op, UnaryOp::PreInc | UnaryOp::PostInc);
-            let m_name = if is_inc { "operator++" } else { "operator--" };
+            let m_name = if matches!(op, UnaryOp::PreInc | UnaryOp::PostInc) {
+                "operator++"
+            } else {
+                "operator--"
+            };
             let count = if matches!(op, UnaryOp::PreInc | UnaryOp::PreDec) {
                 1
             } else {
@@ -379,15 +383,12 @@ impl Sema {
             }
         }
         if !self.can_assign_expr(&target_ty, &value_ty, Some(value)) {
-            return Err(CompileError::new(
-                format!(
-                    "Type mismatch in assignment: cannot assign {} to {}",
-                    value_ty.to_c_type(),
-                    target_ty.to_c_type()
-                ),
-                pos.line,
-                pos.col,
-            ));
+            let msg = format!(
+                "Type mismatch in assignment: cannot assign {} to {}",
+                value_ty.to_c_type(),
+                target_ty.to_c_type()
+            );
+            return Err(CompileError::new(msg, pos.line, pos.col));
         }
         Ok(target_ty)
     }
@@ -436,16 +437,15 @@ impl Sema {
             && let Some(sig) =
                 self.find_method_in_class_for_receiver(sname, "operator[]", receiver_const)
         {
+            self.instantiate_pending_method(&sig.mangled_name)?;
             return Ok(sig.return_type.strip_reference().clone());
         }
         if let Some(inner) = clean_ty.deref_type() {
             Ok(inner.strip_reference().clone())
         } else {
+            let ty_name = arr_ty.to_c_type();
             Err(CompileError::new(
-                format!(
-                    "Subscripted value is not an array or pointer: {}",
-                    arr_ty.to_c_type()
-                ),
+                format!("Subscripted value is not an array or pointer: {ty_name}"),
                 pos.line,
                 pos.col,
             ))
@@ -482,16 +482,11 @@ impl Sema {
             Expr::Identifier(_) | Expr::MemberAccess { .. } | Expr::ArraySubscript { .. } => true,
             Expr::Unary {
                 op: UnaryOp::Deref,
-                expr,
+                expr: inner,
                 ..
             } => {
-                let mut inner = (**expr).clone();
-                if let Ok(inner_ty) = self.analyze_expr(&mut inner)
-                    && matches!(inner_ty.strip_reference().strip_const(), Type::Struct(_))
-                {
-                    return false;
-                }
-                true
+                let mut e = (**inner).clone();
+                !matches!(self.analyze_expr(&mut e), Ok(t) if matches!(t.strip_reference().strip_const(), Type::Struct(_)))
             }
             Expr::CompoundAssign { target, .. } => self.is_assignable_target(target, ty),
             _ => false,
