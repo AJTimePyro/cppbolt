@@ -4,10 +4,33 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
-## 2026-11-01: Milestone 0 Baseline Snapshot and Scalar Prerequisite Probes
+## 2026-11-01: Scalar Operations and Baseline Synchronization
+
+The test suite, clippy, census audit, and golden manifest are green across all targets.
+
+### Summary of Work
+
+1. Synchronized golden baseline: reconciled 49 stale entries in `tests/golden.txt` initially, then added all newly passing tests, bringing the total to 255 verified entries.
+2. Added `std::abs(long)` and `std::abs(long long)` overloads in `stdlib/cmath`. Unsigned types now trigger ambiguity errors instead of silently promoting to float.
+3. Implemented functional casts and value initialization (`T()`, `Type(val)`) for scalar types and typedef aliases in the parser and sema.
+4. Added scalar pseudo-destructor support (`p->~T()`, `x.~T()`, `arr[i].~T()`). The compiler evaluates receiver expressions for side effects and treats the destructor call as a no-op.
+5. Resolved struct destructor calls through typedef aliases (`sp->~ClassT()`), checking that the alias resolves to the receiver class before calling the destructor.
+6. Corrected `classes_oop/lambdas/lambda_unary_plus` to compare pointer size against `sizeof(void*)`, allowing the test to pass both in 32-bit WebAssembly and under the 64-bit native oracle gate.
+
+### Verification Results
+
+- Unit and integration tests: 370 corpus tests on disk, 351 passed, 19 expected failures, 0 unexpected failures, 0 manifest violations.
+- Oracle gate: 544 matched, 2 runtime-trap tests skipped across g++ and clang++.
+- Golden manifest: 255 entries recorded in `tests/golden.txt`, all matching `target/release/cppbolt-cli`.
+- Census audit: 119 files scanned, 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
+## 2026-11-01: Baseline Snapshot and Scalar Prerequisite Probes
 
 ### Context & Motivation
-Milestone 0 establishes the regression baseline for template instantiation and std::vector support. Before implementing template parameter substitution, we reconciled test runner manifests and probed compiler behavior on typedef stand-in types representing scalar type parameters (`typedef int T;`).
+We reconciled test runner manifests and probed compiler behavior on typedef stand-in types representing scalar type parameters (`typedef int T;`).
 
 ### Work Executed
 1. Golden manifest reconciliation:
