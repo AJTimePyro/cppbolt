@@ -268,6 +268,16 @@ The following catalog lists diagnostics emitted by the compiler, paired with rea
   }
   ```
 
+#### `cannot initialize variable '<name>' of type <target> with <source>`
+- **Cause**: Initializing a typed variable with an incompatible expression, such as assigning a non-zero integer or `bool` to a pointer, discarding `const` qualifiers, violating multi-level pointer qualification rules, or assigning a string literal to a non-const `char*`.
+- **Trigger** (`tests/negative/pointer_conversion_int_nonzero.cpp`):
+  ```cpp
+  int main() {
+      int* p = 42; // error: cannot initialize variable 'p' of type int * with int
+      return 0;
+  }
+  ```
+
 ---
 
 ### Preprocessor & Lexical Errors (`ErrorKind::Lexical`)

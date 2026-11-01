@@ -5,55 +5,7 @@ impl Parser {
         let tok = self.advance().clone();
         match tok.kind {
             TokenKind::IntLiteral(val, raw) => {
-                let lower = raw.to_lowercase();
-                let has_u = lower.contains('u');
-                let has_ll = lower.contains("ll");
-                let has_l = !has_ll && lower.contains('l');
-
-                let is_non_decimal = raw.starts_with("0x")
-                    || raw.starts_with("0X")
-                    || raw.starts_with("0b")
-                    || raw.starts_with("0B")
-                    || (raw.starts_with('0') && raw.len() > 1 && !raw.contains('.'));
-
-                // C++17 Table 6: Types of integer literals in ILP32 model.
-                let ty = if has_u && has_ll {
-                    Type::UnsignedLongLong
-                } else if has_ll {
-                    if is_non_decimal && val < 0 {
-                        Type::UnsignedLongLong
-                    } else {
-                        Type::LongLong
-                    }
-                } else if has_u && has_l {
-                    if val > u32::MAX as i64 || val < 0 {
-                        Type::UnsignedLongLong
-                    } else {
-                        Type::UnsignedLong
-                    }
-                } else if has_l {
-                    if val >= 0 && val <= i32::MAX as i64 {
-                        Type::Long
-                    } else if is_non_decimal && (val >= 0 && val <= u32::MAX as i64) {
-                        Type::UnsignedLong
-                    } else {
-                        Type::LongLong
-                    }
-                } else if has_u {
-                    if val >= 0 && val <= u32::MAX as i64 {
-                        Type::UnsignedInt
-                    } else {
-                        Type::UnsignedLongLong
-                    }
-                } else if val >= 0 && val <= i32::MAX as i64 {
-                    Type::Int
-                } else if is_non_decimal && (val >= 0 && val <= u32::MAX as i64) {
-                    // In C++17 Table 6, non-decimal literals exceeding int range promote to unsigned int.
-                    Type::UnsignedInt
-                } else {
-                    // Decimal literals exceeding int range CANNOT be unsigned int; they promote to long long.
-                    Type::LongLong
-                };
+                let ty = int_literal_type(val, &raw);
                 Ok(Expr::IntLiteral(val, ty))
             }
             TokenKind::FloatLiteral(val, raw) => {
@@ -65,7 +17,7 @@ impl Parser {
                 Ok(Expr::FloatLiteral(val, ty))
             }
             TokenKind::KwThis => Ok(Expr::This),
-            TokenKind::KwNullptr => Ok(Expr::IntLiteral(0, Type::Pointer(Box::new(Type::Void)))),
+            TokenKind::KwNullptr => Ok(Expr::IntLiteral(0, Type::Nullptr)),
             TokenKind::BoolLiteral(val) => Ok(Expr::BoolLiteral(val)),
             TokenKind::CharLiteral(val) => Ok(Expr::CharLiteral(val)),
             TokenKind::StringLiteral(val) => Ok(Expr::StringLiteral(val)),
@@ -227,5 +179,54 @@ impl Parser {
                 )),
             }
         }
+    }
+}
+
+fn int_literal_type(val: i64, raw: &str) -> Type {
+    let lower = raw.to_lowercase();
+    let has_u = lower.contains('u');
+    let has_ll = lower.contains("ll");
+    let has_l = !has_ll && lower.contains('l');
+
+    let is_non_decimal = raw.starts_with("0x")
+        || raw.starts_with("0X")
+        || raw.starts_with("0b")
+        || raw.starts_with("0B")
+        || (raw.starts_with('0') && raw.len() > 1 && !raw.contains('.'));
+
+    if has_u && has_ll {
+        Type::UnsignedLongLong
+    } else if has_ll {
+        if is_non_decimal && val < 0 {
+            Type::UnsignedLongLong
+        } else {
+            Type::LongLong
+        }
+    } else if has_u && has_l {
+        if val > u32::MAX as i64 || val < 0 {
+            Type::UnsignedLongLong
+        } else {
+            Type::UnsignedLong
+        }
+    } else if has_l {
+        if val >= 0 && val <= i32::MAX as i64 {
+            Type::Long
+        } else if is_non_decimal && (val >= 0 && val <= u32::MAX as i64) {
+            Type::UnsignedLong
+        } else {
+            Type::LongLong
+        }
+    } else if has_u {
+        if val >= 0 && val <= u32::MAX as i64 {
+            Type::UnsignedInt
+        } else {
+            Type::UnsignedLongLong
+        }
+    } else if val >= 0 && val <= i32::MAX as i64 {
+        Type::Int
+    } else if is_non_decimal && (val >= 0 && val <= u32::MAX as i64) {
+        Type::UnsignedInt
+    } else {
+        Type::LongLong
     }
 }

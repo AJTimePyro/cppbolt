@@ -378,7 +378,7 @@ impl Sema {
                 value_ty = target_ty.clone();
             }
         }
-        if !self.can_assign(&target_ty, &value_ty) {
+        if !self.can_assign_expr(&target_ty, &value_ty, Some(value)) {
             return Err(CompileError::new(
                 format!(
                     "Type mismatch in assignment: cannot assign {} to {}",

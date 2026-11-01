@@ -23,7 +23,9 @@ impl<'a> Codegen<'a> {
             Expr::FloatLiteral(_, ty) => ty.clone(),
             Expr::BoolLiteral(_) => Type::Bool,
             Expr::CharLiteral(_) => Type::Char,
-            Expr::StringLiteral(_) => Type::Pointer(Box::new(Type::Char)),
+            Expr::StringLiteral(s) => {
+                Type::Array(Box::new(Type::Const(Box::new(Type::Char))), s.len() + 1)
+            }
             Expr::This => {
                 if let Some(cls) = &ctx.current_class {
                     Type::Pointer(Box::new(Type::Struct(cls.clone())))

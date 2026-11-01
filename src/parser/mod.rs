@@ -55,10 +55,10 @@ impl Parser {
         known_types.insert("size_t".to_string());
         let known_enums = HashSet::new();
         let mut type_aliases = HashMap::new();
-        type_aliases.insert("nullptr_t".to_string(), Type::Pointer(Box::new(Type::Void)));
+        type_aliases.insert("nullptr_t".to_string(), Type::Nullptr);
         type_aliases.insert(
             "std::nullptr_t".to_string(),
-            Type::Pointer(Box::new(Type::Void)),
+            Type::Nullptr,
         );
         type_aliases.insert("ptrdiff_t".to_string(), Type::Int);
         type_aliases.insert("std::ptrdiff_t".to_string(), Type::Int);

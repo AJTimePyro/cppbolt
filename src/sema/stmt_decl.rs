@@ -132,11 +132,11 @@ impl Sema {
             }
         }
         if *ty == Type::Auto {
-            *ty = init_ty.strip_reference().clone();
+            *ty = init_ty.strip_reference().decay_array();
         } else if let Type::Const(inner) = ty
             && **inner == Type::Auto
         {
-            *ty = Type::Const(Box::new(init_ty.strip_reference().clone()));
+            *ty = Type::Const(Box::new(init_ty.strip_reference().decay_array()));
         } else if let Type::Pointer(inner) = ty
             && **inner == Type::Auto
         {
@@ -157,7 +157,7 @@ impl Sema {
                 ))));
             }
         }
-        if !is_list_init && !self.can_assign(ty, &init_ty) {
+        if !is_list_init && !self.can_assign_expr(ty, &init_ty, Some(init_expr)) {
             return Err(CompileError::new(
                 format!(
                     "cannot initialize variable '{}' of type {} with {}",

@@ -1,0 +1,8 @@
+p to const q: 123
+multi-level allowed: 123
+bool from nullptr: 0
+static_cast: 123
+str: hello, sizeof: 6
+decay: hello
+auto ptr decay: 1
+ot: 10, 30

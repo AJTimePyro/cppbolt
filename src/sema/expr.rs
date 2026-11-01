@@ -30,7 +30,10 @@ impl Sema {
             Expr::FloatLiteral(_, ty) => Ok(ty.clone()),
             Expr::BoolLiteral(_) => Ok(Type::Bool),
             Expr::CharLiteral(_) => Ok(Type::Char),
-            Expr::StringLiteral(_) => Ok(Type::Pointer(Box::new(Type::Char))),
+            Expr::StringLiteral(s) => Ok(Type::Array(
+                Box::new(Type::Const(Box::new(Type::Char))),
+                s.len() + 1,
+            )),
             Expr::This => {
                 if let Some(cls) = &self.current_class {
                     let struct_ty = if self.current_func_is_const {

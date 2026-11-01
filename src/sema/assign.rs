@@ -1,11 +1,31 @@
 use super::*;
 
 impl Sema {
+    pub fn is_null_pointer_constant(expr: &Expr) -> bool {
+        match expr {
+            Expr::IntLiteral(0, ty) => ty.is_integer() || matches!(ty, Type::Nullptr),
+            _ => false,
+        }
+    }
+
     pub fn can_assign(&self, target: &Type, value: &Type) -> bool {
+        self.can_assign_expr(target, value, None)
+    }
+
+    pub fn can_assign_expr(&self, target: &Type, value: &Type, expr: Option<&Expr>) -> bool {
         let target = strip_assign_type(target);
         let value = strip_assign_type(value);
         if target == value {
             return true;
+        }
+        if matches!(target.strip_const(), Type::Nullptr)
+            && let Some(e) = expr
+            && Self::is_null_pointer_constant(e)
+        {
+            return true;
+        }
+        if matches!(value.strip_const(), Type::Nullptr) {
+            return target.strip_const().is_pointer() || matches!(target.strip_const(), Type::Bool);
         }
         if let Type::Enum(ename) = value
             && self.scoped_enums.contains(ename)
@@ -35,7 +55,7 @@ impl Sema {
         {
             return true;
         }
-        if self.pointer_assignable(target, value) {
+        if self.pointer_assignable(target, value, expr) {
             return true;
         }
         if let (Type::Reference(t_in), Type::Reference(v_in)) = (target, value)
@@ -46,7 +66,7 @@ impl Sema {
             return true;
         }
         if let Type::Reference(inner) = target {
-            return self.can_assign(inner, value);
+            return self.can_assign_expr(inner, value, expr);
         }
         false
     }
@@ -141,31 +161,62 @@ impl Sema {
         false
     }
 
-    fn pointer_assignable(&self, target: &Type, value: &Type) -> bool {
-        let Type::Pointer(t_elem) = target else {
+    fn pointer_assignable(&self, target: &Type, value: &Type, expr: Option<&Expr>) -> bool {
+        if !target.strip_const().is_pointer() {
             return false;
-        };
-        if value.is_integer() {
-            // Accept integers as potential null pointers; this subset does
-            // not track the constant-expression rule here.
+        }
+        if let Some(e) = expr
+            && Self::is_null_pointer_constant(e)
+        {
             return true;
         }
-        if let Type::Pointer(v_elem) = value {
-            if t_elem.strip_const() == &Type::Void || v_elem.strip_const() == &Type::Void {
-                return true;
+        if matches!(value.strip_const(), Type::Nullptr) {
+            return true;
+        }
+        let target_decay = target.strip_const().decay_array();
+        let value_decay = value.strip_const().decay_array();
+        self.check_pointer_conversion(&target_decay, &value_decay)
+    }
+
+    pub fn check_pointer_conversion(&self, target: &Type, value: &Type) -> bool {
+        let (levels_to, base_to) = decompose_pointer(target);
+        let (levels_from, base_from) = decompose_pointer(value);
+
+        if levels_to.is_empty() || levels_from.is_empty() {
+            return false;
+        }
+
+        if levels_to.len() == 1 && base_to == &Type::Void {
+            let from_pointee_const = levels_from[0];
+            let to_pointee_const = levels_to[0];
+            if from_pointee_const && !to_pointee_const {
+                return false;
             }
-            if t_elem.strip_const() == v_elem.strip_const() {
-                return true;
+            return true;
+        }
+
+        if levels_to.len() != levels_from.len() {
+            return false;
+        }
+
+        let n = levels_to.len();
+        for i in 0..n {
+            let c_from = levels_from[i];
+            let c_to = levels_to[i];
+            if c_from && !c_to {
+                return false;
             }
-            if let (Type::Struct(base), Type::Struct(derived)) =
-                (t_elem.strip_const(), v_elem.strip_const())
-                && self.is_subclass(derived, base)
-            {
-                return true;
+            if c_to && !c_from && levels_to[..i].iter().any(|&c| !c) {
+                return false;
             }
         }
-        if let Type::Array(v_elem, _) = value
-            && (t_elem.strip_const() == &Type::Void || t_elem.strip_const() == v_elem.strip_const())
+
+        if base_to == base_from {
+            return true;
+        }
+        if n == 1
+            && let (Type::Struct(base), Type::Struct(derived)) = (base_to, base_from)
+            && self.is_subclass(derived, base)
         {
             return true;
         }
@@ -235,4 +286,13 @@ fn strip_assign_type(ty: &Type) -> &Type {
     } else {
         ty
     }
+}
+
+fn decompose_pointer(mut ty: &Type) -> (Vec<bool>, &Type) {
+    let mut levels = Vec::new();
+    while let Type::Pointer(inner) = ty.strip_const() {
+        levels.push(inner.is_const());
+        ty = inner.strip_const();
+    }
+    (levels, ty)
 }

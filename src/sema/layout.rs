@@ -407,6 +407,7 @@ impl Sema {
                 Type::Float => s.push('f'),
                 Type::Double => s.push('d'),
                 Type::Void => s.push('v'),
+                Type::Nullptr => s.push_str("Dn"),
                 Type::Pointer(inner) => s.push_str(&format!("P{:?}", inner)),
                 Type::Reference(inner) => s.push_str(&format!("R{:?}", inner)),
                 Type::Struct(name) => s.push_str(&format!("S{}", name)),

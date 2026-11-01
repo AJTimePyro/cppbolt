@@ -359,7 +359,7 @@ impl Sema {
                             ret_ty = expected.clone();
                         }
                     }
-                    if !self.can_assign(expected, &ret_ty) {
+                    if !self.can_assign_expr(expected, &ret_ty, Some(expr)) {
                         return Err(CompileError::new(
                             format!(
                                 "Return type mismatch: expected {}, found {}",

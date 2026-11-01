@@ -37,7 +37,7 @@ The parser transforms the flat token stream into a structured Abstract Syntax Tr
   - `TypedInitList { ty, elements, pos }`: Explicitly-typed temporary and direct-list expressions `Type{ a, b, c }`.
   - Every `Expr` variant carries an `ExprPos` (`line`, `col`) recording the position of its leading token.
 - `ast::types::Type`: Representation of types:
-  - `Int`, `LongLong`, `Short`, `Char`, `Float`, `Double`, `Bool`, `Void`.
+  - `Int`, `LongLong`, `Short`, `Char`, `Float`, `Double`, `Bool`, `Void`, `Nullptr` (`decltype(nullptr)`).
   - `Pointer(Box<Type>, bool /* is_const */)`, `Reference(Box<Type>)`, `Array(Box<Type>, usize)`.
   - `Struct(String)`, `Enum(String)`, `FunctionPointer { ret, params }`.
 

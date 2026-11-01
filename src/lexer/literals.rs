@@ -330,18 +330,9 @@ impl Lexer {
                     ));
                 }
                 is_float = true;
-                text.push(c);
-                digits_clean.push(c);
-                self.advance();
+                self.read_exponent_prefix(&mut text, &mut digits_clean, c);
                 has_digits = false;
                 last_was_sep = false;
-                if let Some(sign) = self.peek()
-                    && (sign == '+' || sign == '-')
-                {
-                    text.push(sign);
-                    digits_clean.push(sign);
-                    self.advance();
-                }
             } else {
                 break;
             }
@@ -356,37 +347,53 @@ impl Lexer {
         }
 
         if is_float {
-            if matches!(self.peek(), Some('f' | 'F' | 'l' | 'L')) {
-                text.extend(self.advance());
-            }
-            let value: f64 = digits_clean.parse().map_err(|_| {
-                CompileError::new(
-                    format!("Invalid float literal '{}'", text),
-                    start_line,
-                    start_col,
-                )
-            })?;
-            return Ok(Token::new(
-                TokenKind::FloatLiteral(value, text),
-                start_line,
-                start_col,
-            ));
+            return self.finish_float_literal(&mut text, &digits_clean, start_line, start_col);
         }
 
-        self.read_integer_suffixes(&mut text);
+        self.finish_int_literal(&mut text, &digits_clean, start_line, start_col)
+    }
 
-        let value: i64 = digits_clean.parse().map_err(|_| {
-            CompileError::new(
-                format!("Invalid integer literal '{}'", text),
-                start_line,
-                start_col,
-            )
+    fn finish_int_literal(
+        &mut self,
+        text: &mut String,
+        digits: &str,
+        line: usize,
+        col: usize,
+    ) -> Result<Token, CompileError> {
+        self.read_integer_suffixes(text);
+        let value: i64 = digits.parse().map_err(|_| {
+            CompileError::new(format!("Invalid integer literal '{}'", text), line, col)
         })?;
-        Ok(Token::new(
-            TokenKind::IntLiteral(value, text),
-            start_line,
-            start_col,
-        ))
+        Ok(Token::new(TokenKind::IntLiteral(value, text.clone()), line, col))
+    }
+
+    fn read_exponent_prefix(&mut self, text: &mut String, digits: &mut String, c: char) {
+        text.push(c);
+        digits.push(c);
+        self.advance();
+        if let Some(sign) = self.peek()
+            && (sign == '+' || sign == '-')
+        {
+            text.push(sign);
+            digits.push(sign);
+            self.advance();
+        }
+    }
+
+    fn finish_float_literal(
+        &mut self,
+        text: &mut String,
+        digits: &str,
+        line: usize,
+        col: usize,
+    ) -> Result<Token, CompileError> {
+        if matches!(self.peek(), Some('f' | 'F' | 'l' | 'L')) {
+            text.extend(self.advance());
+        }
+        let value: f64 = digits.parse().map_err(|_| {
+            CompileError::new(format!("Invalid float literal '{}'", text), line, col)
+        })?;
+        Ok(Token::new(TokenKind::FloatLiteral(value, text.clone()), line, col))
     }
 }
 

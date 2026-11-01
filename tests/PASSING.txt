@@ -41,6 +41,7 @@ c_basics/types/const_qualifiers
 c_basics/types/floats
 c_basics/types/long_long
 c_basics/types/numeric_literals
+c_basics/types/pointer_conversions
 c_basics/types/rounding_ties
 c_basics/types/sizeof_expr
 c_basics/types/ternary_mixed_types
@@ -295,6 +296,13 @@ negative/operator_arrow_non_pointer
 negative/operator_arrow_self_cycle
 negative/operator_deref_assign_rvalue
 negative/operator_incdec_invalid
+negative/pointer_conversion_bool
+negative/pointer_conversion_discard_const
+negative/pointer_conversion_int_nonzero
+negative/pointer_conversion_int_var
+negative/pointer_conversion_multilevel_const
+negative/pointer_conversion_string_literal_nonconst
+negative/pointer_conversion_void_ptr
 negative/pointer_plus_pointer
 negative/private_access
 negative/pure_virtual_instantiation
