@@ -35,6 +35,7 @@ pub struct Parser {
     pub current_namespace: Vec<String>,
     pub open_namespaces: Vec<String>,
     pub namespace_aliases: HashMap<String, String>,
+    pub known_namespaces: HashSet<String>,
     nesting: DepthCounters,
     nesting_exceeded: Cell<bool>,
 }
@@ -85,6 +86,7 @@ impl Parser {
             current_namespace: Vec::new(),
             open_namespaces: Vec::new(),
             namespace_aliases: HashMap::new(),
+            known_namespaces: HashSet::new(),
             nesting: DepthCounters::new(),
             nesting_exceeded: Cell::new(false),
         }
@@ -231,18 +233,39 @@ impl Parser {
     pub fn resolve_namespace_alias(&self, name: &str) -> String {
         let mut current = name.to_string();
         for _ in 0..16 {
-            if let Some((prefix, suffix)) = current.split_once("::") {
-                if let Some(target) = self.namespace_aliases.get(prefix) {
+            let mut matched = false;
+            let parts: Vec<&str> = current.split("::").collect();
+            for i in (1..parts.len()).rev() {
+                let prefix = parts[..i].join("::");
+                if let Some(target) = self.lookup_parser_namespace_alias(&prefix) {
+                    let suffix = parts[i..].join("::");
                     current = format!("{}::{}", target, suffix);
-                    continue;
+                    matched = true;
+                    break;
                 }
-            } else if let Some(target) = self.namespace_aliases.get(&current) {
-                current = target.clone();
-                continue;
             }
-            break;
+            if !matched && let Some(target) = self.lookup_parser_namespace_alias(&current) {
+                current = target.clone();
+                matched = true;
+            }
+            if !matched {
+                break;
+            }
         }
         current
+    }
+
+    fn lookup_parser_namespace_alias(&self, name: &str) -> Option<&String> {
+        if let Some(target) = self.namespace_aliases.get(name) {
+            return Some(target);
+        }
+        if !self.current_namespace.is_empty() {
+            let qualified = format!("{}::{}", self.current_namespace.join("::"), name);
+            if let Some(target) = self.namespace_aliases.get(&qualified) {
+                return Some(target);
+            }
+        }
+        None
     }
 
     /// Prefixes `name` with the enclosing namespace when it is not already qualified.

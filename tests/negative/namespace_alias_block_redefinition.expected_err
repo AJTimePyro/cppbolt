@@ -1,0 +1,1 @@
+tests/negative/namespace_alias_block_redefinition.cpp:5:5: error: redefinition of namespace alias 'Local'

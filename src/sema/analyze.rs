@@ -215,17 +215,7 @@ impl Sema {
                     line,
                     col,
                 } => {
-                    let canonical = self.resolve_alias_in_qualified_name(target);
-                    if let Some(existing) = self.namespace_aliases.get(alias)
-                        && existing != &canonical
-                    {
-                        return Err(CompileError::new(
-                            format!("redefinition of namespace alias '{}'", alias),
-                            *line,
-                            *col,
-                        ));
-                    }
-                    self.namespace_aliases.insert(alias.clone(), canonical);
+                    self.record_local_namespace_alias(alias, target, *line, *col)?;
                 }
                 Decl::Function(f) => {
                     let mangled = self.mangle_name(&f.name, &f.params);

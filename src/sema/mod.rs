@@ -116,6 +116,7 @@ pub struct VarSymbol {
 
 pub struct Scope {
     pub vars: HashMap<String, VarSymbol>,
+    pub namespace_aliases: HashMap<String, String>,
 }
 
 pub struct Sema {
@@ -269,6 +270,7 @@ impl Sema {
     pub fn enter_scope(&mut self) {
         self.scopes.push(Scope {
             vars: HashMap::new(),
+            namespace_aliases: HashMap::new(),
         });
     }
 
@@ -322,20 +324,90 @@ impl Sema {
         None
     }
 
+    pub fn record_local_namespace_alias(
+        &mut self,
+        alias: &str,
+        target: &str,
+        line: usize,
+        col: usize,
+    ) -> Result<(), CompileError> {
+        let canonical = self.resolve_alias_in_qualified_name(target);
+        if let Some(scope) = self.scopes.last_mut() {
+            if let Some(existing) = scope.namespace_aliases.get(alias)
+                && existing != &canonical
+            {
+                return Err(CompileError::new(
+                    format!("redefinition of namespace alias '{}'", alias),
+                    line,
+                    col,
+                ));
+            }
+            scope.namespace_aliases.insert(alias.to_string(), canonical);
+        } else {
+            if let Some(existing) = self.namespace_aliases.get(alias)
+                && existing != &canonical
+            {
+                return Err(CompileError::new(
+                    format!("redefinition of namespace alias '{}'", alias),
+                    line,
+                    col,
+                ));
+            }
+            self.namespace_aliases.insert(alias.to_string(), canonical);
+        }
+        Ok(())
+    }
+
+    pub fn lookup_namespace_alias(&self, name: &str) -> Option<&String> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(target) = scope.namespace_aliases.get(name) {
+                return Some(target);
+            }
+        }
+        if let Some(target) = self.namespace_aliases.get(name) {
+            return Some(target);
+        }
+        if let Some(func) = &self.current_func_name {
+            let mut curr = func.as_str();
+            while let Some((ns, _)) = curr.rsplit_once("::") {
+                let qualified = format!("{}::{}", ns, name);
+                if let Some(target) = self.namespace_aliases.get(&qualified) {
+                    return Some(target);
+                }
+                curr = ns;
+            }
+        }
+        for ns in &self.open_namespaces {
+            let qualified = format!("{}::{}", ns, name);
+            if let Some(target) = self.namespace_aliases.get(&qualified) {
+                return Some(target);
+            }
+        }
+        None
+    }
+
     /// Resolves leading namespace aliases in `name` to the canonical namespace.
     pub fn resolve_alias_in_qualified_name(&self, name: &str) -> String {
         let mut current = name.to_string();
         for _ in 0..16 {
-            if let Some((prefix, suffix)) = current.split_once("::") {
-                if let Some(target) = self.namespace_aliases.get(prefix) {
+            let mut matched = false;
+            let parts: Vec<&str> = current.split("::").collect();
+            for i in (1..parts.len()).rev() {
+                let prefix = parts[..i].join("::");
+                if let Some(target) = self.lookup_namespace_alias(&prefix) {
+                    let suffix = parts[i..].join("::");
                     current = format!("{}::{}", target, suffix);
-                    continue;
+                    matched = true;
+                    break;
                 }
-            } else if let Some(target) = self.namespace_aliases.get(&current) {
-                current = target.clone();
-                continue;
             }
-            break;
+            if !matched && let Some(target) = self.lookup_namespace_alias(&current) {
+                current = target.clone();
+                matched = true;
+            }
+            if !matched {
+                break;
+            }
         }
         current
     }

@@ -69,3 +69,61 @@ fn test_reinterpret_cast_reference_accepts_float() -> Result<(), Box<dyn std::er
     assert!(res.is_ok(), "reinterpret_cast to reference must accept float lvalues: {:?}", res.err());
     Ok(())
 }
+
+#[test]
+fn test_nested_namespace_alias() -> Result<(), Box<dyn std::error::Error>> {
+    let code = r#"
+        namespace Outer {
+            namespace Real { int val = 100; }
+            namespace Inner = Real;
+        }
+        int test1() {
+            return Outer::Inner::val;
+        }
+    "#;
+    let tokens = Lexer::new(code).tokenize()?;
+    let mut parser = Parser::new(tokens);
+    let mut program = parser.parse_program()?;
+    let mut sema = Sema::new();
+    sema.analyze_program(&mut program)?;
+    Ok(())
+}
+
+#[test]
+fn test_block_scope_conflicting_alias_rejected() -> Result<(), Box<dyn std::error::Error>> {
+    let code = r#"
+        namespace N1 { int a = 1; }
+        namespace N2 { int a = 2; }
+        void test() {
+            namespace Local = N1;
+            namespace Local = N2;
+        }
+    "#;
+    let tokens = Lexer::new(code).tokenize()?;
+    let mut parser = Parser::new(tokens);
+    let mut program = parser.parse_program()?;
+    let mut sema = Sema::new();
+    let res = sema.analyze_program(&mut program);
+    assert!(res.is_err(), "conflicting alias in block scope must be rejected");
+    Ok(())
+}
+
+#[test]
+fn test_block_scope_namespace_alias_does_not_leak() -> Result<(), Box<dyn std::error::Error>> {
+    let code = r#"
+        namespace N { int a = 1; }
+        void test() {
+            {
+                namespace Local = N;
+            }
+            int x = Local::a;
+        }
+    "#;
+    let tokens = Lexer::new(code).tokenize()?;
+    let mut parser = Parser::new(tokens);
+    let mut program = parser.parse_program()?;
+    let mut sema = Sema::new();
+    let res = sema.analyze_program(&mut program);
+    assert!(res.is_err(), "block-scoped alias must not leak outside its scope");
+    Ok(())
+}

@@ -286,6 +286,7 @@ negative/method_too_many_arguments
 negative/multiple_inheritance
 negative/multiple_inheritance_access
 negative/namespace_alias
+negative/namespace_alias_block_redefinition
 negative/narrowing_constant_overflow
 negative/narrowing_float_to_int
 negative/narrowing_signed_to_unsigned

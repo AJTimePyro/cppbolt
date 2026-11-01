@@ -158,11 +158,13 @@ impl Parser {
         let _guard = self.enter_block()?;
         let tok = self.current().clone();
         self.expect(TokenKind::LBrace)?;
+        let prev_aliases = self.namespace_aliases.clone();
         let mut stmts = Vec::new();
         while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
             stmts.push(self.parse_stmt()?);
         }
         self.expect(TokenKind::RBrace)?;
+        self.namespace_aliases = prev_aliases;
         Ok(Stmt::new(StmtKind::Compound(stmts), tok.line, tok.col))
     }
 

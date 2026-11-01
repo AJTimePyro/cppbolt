@@ -70,18 +70,33 @@ impl Parser {
         };
         if self.peek() == &TokenKind::Assign {
             self.advance();
-            let target = self.parse_qualified_name()?;
+            let raw_target = self.parse_qualified_name()?;
             self.expect(TokenKind::Semi)?;
-            self.namespace_aliases.insert(ns_name.clone(), target.clone());
+            let qualified_alias = self.qualify_name(ns_name);
+            let target = if !self.current_namespace.is_empty() {
+                let candidate = self.qualify_name(raw_target.clone());
+                if self.known_namespaces.contains(&candidate) {
+                    candidate
+                } else {
+                    raw_target
+                }
+            } else {
+                raw_target
+            };
+            let canonical = self.resolve_namespace_alias(&target);
+            self.namespace_aliases.insert(qualified_alias.clone(), canonical.clone());
+            self.known_namespaces.insert(qualified_alias.clone());
             declarations.push(Decl::NamespaceAlias {
-                alias: ns_name,
-                target,
+                alias: qualified_alias,
+                target: canonical,
                 line,
                 col,
             });
             return Ok(());
         }
         self.expect(TokenKind::LBrace)?;
+        let full_ns = self.qualify_name(ns_name.clone());
+        self.known_namespaces.insert(full_ns);
         self.current_namespace.push(ns_name);
         while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
             self.parse_declaration(declarations)?;
