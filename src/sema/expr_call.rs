@@ -89,8 +89,8 @@ impl Sema {
         pos: ExprPos,
     ) -> Result<Option<Type>, CompileError> {
         let plain = QualifiedName::new(sname).plain();
-        let has_member_template = self.member_templates.contains_key(sname)
-            || self.member_templates.contains_key(plain);
+        let has_member_template = self.has_functor_template(sname)
+            || self.has_functor_template(plain);
         if self.find_method_in_class(sname, "operator()").is_some() || has_member_template {
             *callee = Expr::MemberAccess {
                 object: Box::new(callee.clone()),
@@ -101,6 +101,12 @@ impl Sema {
             return self.analyze_member_callee(callee, args, arg_types);
         }
         Ok(None)
+    }
+
+    fn has_functor_template(&self, sname: &str) -> bool {
+        self.member_templates
+            .get(sname)
+            .is_some_and(|templates| templates.iter().any(|m| m.name == "operator()"))
     }
 
     /// Rewrites a call to a method of the current class into a member access.

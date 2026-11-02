@@ -299,9 +299,11 @@ pub fn substitute_function(
     let mut remaining_template_params = Vec::new();
     let mut active_mapping = mapping.clone();
     for p in &func.template_params {
-        if !mapping.contains_key(&p.name) {
+        if injected_class.is_some() {
             remaining_template_params.push(p.clone());
             active_mapping.remove(&p.name);
+        } else if !mapping.contains_key(&p.name) {
+            remaining_template_params.push(p.clone());
         }
     }
     let mapping = &active_mapping;
@@ -480,13 +482,7 @@ mod tests {
         };
 
         let subst = substitute_struct(&tclass, &mapping, "Holder<int>", 1, 1);
-        let Decl::StructDecl {
-            name,
-            fields,
-            methods,
-            ..
-        } = subst
-        else {
+        let Decl::StructDecl { name, fields, methods, .. } = subst else {
             unreachable!("expected StructDecl");
         };
         assert_eq!(name, "Holder<int>");

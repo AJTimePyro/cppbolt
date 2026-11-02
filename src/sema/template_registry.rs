@@ -38,7 +38,14 @@ impl Sema {
         let item = (decl, params);
         for key in [name, short, std_name, plain] {
             let list = self.function_templates.entry(key).or_default();
-            if !list.iter().any(|(d, _)| d.params.len() == item.0.params.len()) {
+            if let Some((existing_decl, _)) = list.iter_mut().find(|(d, _)| {
+                d.params.len() == item.0.params.len()
+                    && d.params.iter().zip(&item.0.params).all(|(p1, p2)| p1.ty == p2.ty)
+            }) {
+                if existing_decl.body.is_none() && item.0.body.is_some() {
+                    existing_decl.body = item.0.body.clone();
+                }
+            } else {
                 list.push(item.clone());
             }
         }
@@ -64,7 +71,13 @@ impl Sema {
                 if let Some(existing) = template_class
                     .methods
                     .iter_mut()
-                    .find(|m| m.name == short_method && m.params.len() == func.params.len())
+                    .find(|m| {
+                        m.name == short_method
+                            && m.params.len() == func.params.len()
+                            && m.is_const == func.is_const
+                            && m.body.is_none()
+                            && m.params.iter().zip(&func.params).all(|(p1, p2)| p1.ty == p2.ty)
+                    })
                 {
                     existing.body = func.body.clone();
                     if !func.ctor_initializers.is_empty() {
@@ -253,6 +266,8 @@ impl Sema {
         for (_, fty) in fields.iter_mut() {
             self.resolve_and_instantiate_type(fty, line, col)?;
         }
+
+        self.synthesize_instantiation_lifecycle(inst_name, base_classes, fields, methods);
 
         self.compute_struct_layout(RecordLayout {
             name: inst_name,
