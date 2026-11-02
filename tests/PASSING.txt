@@ -361,6 +361,7 @@ templates_operators/op_overload_chain
 templates_operators/op_overload_subscript
 templates_operators/op_overload_unary
 templates_operators/template_class_basic
+templates_operators/template_class_methods
 templates_operators/template_deduce_ref
 templates_operators/template_default_arg_deduce
 templates_operators/template_field_and_func
@@ -372,3 +373,4 @@ templates_operators/template_multi_param
 templates_operators/template_ops_dtor
 templates_operators/template_pair
 templates_operators/template_ptr_const_ref
+templates_operators_variant/template_class_methods_variant

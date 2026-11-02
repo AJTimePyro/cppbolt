@@ -63,7 +63,11 @@ impl Sema {
                         self.register_class_template(c.clone(), t.params.clone());
                     }
                     TemplateKind::Function(f) => {
-                        self.register_function_template((**f).clone(), t.params.clone());
+                        if f.name.contains("::") {
+                            self.attach_out_of_class_template_method((**f).clone(), &t.params);
+                        } else {
+                            self.register_function_template((**f).clone(), t.params.clone());
+                        }
                     }
                 },
                 _ => {}

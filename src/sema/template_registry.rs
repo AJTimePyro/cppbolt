@@ -39,6 +39,44 @@ impl Sema {
         );
     }
 
+    pub fn attach_out_of_class_template_method(
+        &mut self,
+        func: FunctionDecl,
+        params: &[TemplateParam],
+    ) {
+        let Some((class_part, method_name)) = func.name.rsplit_once("::") else {
+            self.register_function_template(func, params.to_vec());
+            return;
+        };
+        let class_name = class_part.split('<').next().unwrap_or(class_part);
+        let plain_class = QualifiedName::new(class_name).plain();
+        let short_method = method_name.to_string();
+
+        let mut matched = false;
+        for (key, (template_class, _)) in self.class_templates.iter_mut() {
+            if QualifiedName::new(key).plain() == plain_class {
+                matched = true;
+                if let Some(existing) = template_class
+                    .methods
+                    .iter_mut()
+                    .find(|m| m.name == short_method && m.params.len() == func.params.len())
+                {
+                    existing.body = func.body.clone();
+                    if !func.ctor_initializers.is_empty() {
+                        existing.ctor_initializers = func.ctor_initializers.clone();
+                    }
+                } else {
+                    let mut m = func.clone();
+                    m.name = short_method.clone();
+                    template_class.methods.push(m);
+                }
+            }
+        }
+        if !matched {
+            self.register_function_template(func, params.to_vec());
+        }
+    }
+
     pub fn resolve_and_instantiate_type(
         &mut self,
         ty: &mut Type,
