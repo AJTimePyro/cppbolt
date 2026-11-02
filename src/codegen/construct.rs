@@ -11,7 +11,7 @@ impl<'a> Codegen<'a> {
         class_name: &str,
         arg_types: &[Type],
     ) -> Option<(u32, FunctionSig)> {
-        let short_name = class_name.split("::").last().unwrap_or(class_name);
+        let short_name = QualifiedName::new(class_name).class_short_name();
         let q1 = format!("{}::{}", class_name, short_name);
         let q2 = format!(
             "{}::{}",
@@ -47,7 +47,7 @@ impl<'a> Codegen<'a> {
     /// Finds an explicit copy constructor for `class_name` that can bind an
     /// argument with the given constness.
     pub fn find_copy_constructor(&self, class_name: &str, is_source_const: bool) -> Option<u32> {
-        let short_name = class_name.split("::").last().unwrap_or(class_name);
+        let short_name = QualifiedName::new(class_name).class_short_name();
         let q1 = format!("{class_name}::{short_name}");
         let q2 = format!(
             "{}::{short_name}",

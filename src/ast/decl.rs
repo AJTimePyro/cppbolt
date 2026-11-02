@@ -1,6 +1,6 @@
 use super::expr::Expr;
 use super::stmt::Stmt;
-use super::template::TemplateDecl;
+use super::template::{TemplateDecl, TemplateParam};
 use super::types::Type;
 use std::collections::HashMap;
 
@@ -32,6 +32,7 @@ pub struct FunctionDecl {
     pub ref_qualifier: RefQualifier,
     pub is_static: bool,
     pub ctor_initializers: Vec<(String, Vec<Expr>)>,
+    pub template_params: Vec<TemplateParam>,
     pub line: usize,
     pub col: usize,
 }

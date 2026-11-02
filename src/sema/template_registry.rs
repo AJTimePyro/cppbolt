@@ -248,6 +248,20 @@ impl Sema {
         methods: &mut Vec<FunctionDecl>,
     ) -> Result<(), CompileError> {
         for mut m in all_methods {
+            if !m.template_params.is_empty() {
+                self.member_templates
+                    .entry(inst_name.to_string())
+                    .or_default()
+                    .push(m.clone());
+                let plain = QualifiedName::new(inst_name).plain();
+                if plain != inst_name {
+                    self.member_templates
+                        .entry(plain.to_string())
+                        .or_default()
+                        .push(m);
+                }
+                continue;
+            }
             self.register_struct_method(inst_name, &m);
             if m.is_virtual || m.name.starts_with('~') {
                 let prev_class = self.current_class.take();

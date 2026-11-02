@@ -114,6 +114,7 @@ impl Sema {
                             ref_qualifier: RefQualifier::None,
                             is_static: false,
                             ctor_initializers: vec![],
+                            template_params: vec![],
                             line: 0,
                             col: 0,
                         });
@@ -170,6 +171,7 @@ impl Sema {
                         ref_qualifier: RefQualifier::None,
                         is_static: false,
                         ctor_initializers: vec![],
+                        template_params: vec![],
                         line: 0,
                         col: 0,
                     });
@@ -330,7 +332,12 @@ impl Sema {
             ref_qualifier: m.ref_qualifier,
         };
         self.register_function(sig.clone());
-        self.functions.entry(qual_name).or_default().push(sig);
+        self.functions.entry(qual_name).or_default().push(sig.clone());
+        let short = QualifiedName::new(class_name).class_short_name();
+        if m.name != short {
+            let short_qual = format!("{}::{}", class_name, short);
+            self.functions.entry(short_qual).or_default().push(sig);
+        }
     }
 
     /// Rejects abstract variable types and completes a zero-length array type

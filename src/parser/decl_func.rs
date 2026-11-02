@@ -28,6 +28,7 @@ impl Parser {
             ref_qualifier,
             is_static: false,
             ctor_initializers,
+            template_params: Vec::new(),
             line,
             col,
         })

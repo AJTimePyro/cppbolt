@@ -31,7 +31,7 @@ impl Parser {
         self.parse_template_body(params, t_line, t_col, declarations)
     }
 
-    fn parse_template_params(&mut self) -> Result<Vec<TemplateParam>, CompileError> {
+    pub(super) fn parse_template_params(&mut self) -> Result<Vec<TemplateParam>, CompileError> {
         let mut params = Vec::new();
         while self.peek() != &TokenKind::Gt && self.peek() != &TokenKind::Shr {
             let p_line = self.current().line;

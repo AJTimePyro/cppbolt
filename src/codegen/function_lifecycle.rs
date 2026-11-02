@@ -11,7 +11,7 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let short_cls = cls.split("::").last().unwrap_or(cls);
+        let short_cls = QualifiedName::new(cls).class_short_name();
         if f.name == *cls || f.name == short_cls {
             self.compile_constructor_body(f, cls, ctx, code)?;
         } else if f.name == format!("~{}", cls) || f.name == format!("~{}", short_cls) {
@@ -30,7 +30,7 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let short_cls = cls.split("::").last().unwrap_or(cls);
+        let short_cls = QualifiedName::new(cls).class_short_name();
         if let Some((_, target_args)) = f
             .ctor_initializers
             .iter()

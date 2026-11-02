@@ -101,7 +101,7 @@ impl<'a> Codegen<'a> {
         if !method_name.starts_with('~') {
             return None;
         }
-        let short_cls = class_name.split("::").last().unwrap_or(class_name);
+        let short_cls = QualifiedName::new(class_name).class_short_name();
         let canonical = format!("{}_~{}", class_name, short_cls);
         let canonical_short = format!("{}_~{}", short_cls, short_cls);
         let dtor_name = format!("{}_{}", class_name, method_name);

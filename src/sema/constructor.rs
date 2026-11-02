@@ -2,8 +2,11 @@
 //! arguments, the default arguments, and the copy initialization of an object
 //! of the class.
 
-use super::template_deduce::{parse_types_list, split_template_call_name};
+use super::analyze::this_param;
+use super::template_deduce::{deduce_template_arguments, parse_types_list, split_template_call_name};
+use super::template_subst::substitute_function;
 use super::*;
+use crate::ast::decl::RefQualifier;
 
 /// The outcome of a call that names a class.
 pub(super) enum ConstructorCall {
@@ -62,7 +65,12 @@ impl Sema {
                 self.instantiate_pending_method(&sig.mangled_name)?;
             }
             None => {
-                if !self.is_copy_initialization(class_name, arg_types) {
+                if let Some(sig) =
+                    self.try_instantiate_member_template_constructor(class_name, arg_types, args, pos)?
+                {
+                    self.fill_constructor_defaults(&sig, args)?;
+                    self.instantiate_pending_method(&sig.mangled_name)?;
+                } else if !self.is_copy_initialization(class_name, arg_types) {
                     return Err(self.no_matching_constructor(class_name, pos));
                 }
             }
@@ -81,12 +89,15 @@ impl Sema {
         arg_types: &[Type],
         args: Option<&[Expr]>,
     ) -> Option<FunctionSig> {
-        let short = class_name.split("::").last().unwrap_or(class_name);
-        let alternate = QualifiedName::new(class_name).alternate();
+        let qname = QualifiedName::new(class_name);
+        let short = qname.class_short_name();
+        let alternate = qname.alternate();
         let mut candidates: Vec<FunctionSig> = Vec::new();
         for name in [
             format!("{class_name}::{short}"),
+            format!("{class_name}::{class_name}"),
             format!("{alternate}::{short}"),
+            format!("{alternate}::{alternate}"),
         ] {
             if let Some(sigs) = self.functions.get(&name) {
                 candidates.extend(sigs.iter().cloned());
@@ -212,5 +223,71 @@ impl Sema {
             self.analyze_expr(arg)?;
         }
         Ok(())
+    }
+
+    pub(super) fn try_instantiate_member_template_constructor(
+        &mut self,
+        class_name: &str,
+        arg_types: &[Type],
+        args: &[Expr],
+        pos: ExprPos,
+    ) -> Result<Option<FunctionSig>, CompileError> {
+        let short = QualifiedName::new(class_name).class_short_name();
+        let plain = QualifiedName::new(class_name).plain();
+        let templates = self
+            .member_templates
+            .get(class_name)
+            .cloned()
+            .or_else(|| self.member_templates.get(plain).cloned());
+        let Some(templates) = templates else {
+            return Ok(None);
+        };
+
+        for cand in templates {
+            let is_ctor = cand.name == short || cand.name == class_name || cand.name == plain;
+            if !is_ctor || cand.template_params.is_empty() {
+                continue;
+            }
+            if let Ok(mapping) = deduce_template_arguments(
+                &cand.template_params,
+                &cand,
+                &[],
+                (arg_types, args),
+                pos,
+            ) {
+                let mut spec_func = substitute_function(&cand, &mapping, None, Some(short.to_string()));
+                self.resolve_and_instantiate_type(&mut spec_func.return_type, pos.line, pos.col)?;
+                for p in &mut spec_func.params {
+                    self.resolve_and_instantiate_type(&mut p.ty, pos.line, pos.col)?;
+                }
+                self.register_struct_method(class_name, &spec_func);
+                let qual_name = format!("{}::{}", class_name, spec_func.name);
+                let mut params = spec_func.params.clone();
+                if !spec_func.is_static {
+                    params.insert(0, this_param(class_name, spec_func.is_const));
+                }
+                let mut mangled = self.mangle_name(&qual_name, &params);
+                match spec_func.ref_qualifier {
+                    RefQualifier::LValue => mangled.push_str("_R"),
+                    RefQualifier::RValue => mangled.push_str("_O"),
+                    RefQualifier::None => {}
+                }
+                self.pending_template_methods
+                    .insert(mangled.clone(), (class_name.to_string(), spec_func.clone()));
+
+                let sig = FunctionSig {
+                    name: spec_func.name,
+                    mangled_name: mangled,
+                    return_type: spec_func.return_type,
+                    param_types: params.into_iter().map(|p| p.ty).collect(),
+                    default_args: spec_func.params.into_iter().map(|p| p.default_val).collect(),
+                    is_static: spec_func.is_static,
+                    is_explicit: spec_func.is_explicit,
+                    ref_qualifier: spec_func.ref_qualifier,
+                };
+                return Ok(Some(sig));
+            }
+        }
+        Ok(None)
     }
 }

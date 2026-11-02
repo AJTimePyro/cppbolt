@@ -68,10 +68,7 @@ impl Parser {
                             token.col,
                         ));
                     }
-                    if matches!(
-                        self.peek(),
-                        TokenKind::KwPublic | TokenKind::KwPrivate | TokenKind::KwProtected
-                    ) {
+                    if matches!(self.peek(), TokenKind::KwPublic | TokenKind::KwPrivate | TokenKind::KwProtected) {
                         self.advance();
                     } else {
                         break;
@@ -121,6 +118,31 @@ impl Parser {
             return Ok(());
         }
 
+        let template_params = if self.peek() == &TokenKind::KwTemplate {
+            self.advance();
+            self.expect(TokenKind::Lt)?;
+            let params = self.parse_template_params()?;
+            let param_names: HashSet<String> = params.iter().map(|p| p.name.clone()).collect();
+            self.active_type_params.push(param_names);
+            Some(params)
+        } else {
+            None
+        };
+
+        let initial_methods_len = body.methods.len();
+        let res = self.parse_struct_member_tail(body);
+        if let Some(params) = template_params {
+            self.active_type_params.pop();
+            if body.methods.len() > initial_methods_len
+                && let Some(last) = body.methods.last_mut()
+            {
+                last.template_params = params;
+            }
+        }
+        res
+    }
+
+    fn parse_struct_member_tail(&mut self, body: &mut StructBody) -> Result<(), CompileError> {
         let mut is_explicit = false;
         while matches!(
             self.peek(),

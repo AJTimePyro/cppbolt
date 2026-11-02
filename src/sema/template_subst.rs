@@ -253,25 +253,34 @@ pub fn substitute_stmt(
     }
 }
 
+fn substitute_func_name(func_name: &str, injected_class: Option<(&str, &Type)>) -> String {
+    if let Some((cname, target_ty)) = injected_class {
+        if func_name == cname {
+            return target_ty.to_c_type();
+        }
+        if func_name == format!("~{}", cname) {
+            return format!("~{}", target_ty.to_c_type());
+        }
+    }
+    func_name.to_string()
+}
+
 pub fn substitute_function(
     func: &FunctionDecl,
     mapping: &HashMap<String, Type>,
     injected_class: Option<(&str, &Type)>,
     new_name: Option<String>,
 ) -> FunctionDecl {
-    let name = new_name.unwrap_or_else(|| {
-        if let Some((cname, target_ty)) = injected_class {
-            if func.name == cname {
-                target_ty.to_c_type()
-            } else if func.name == format!("~{}", cname) {
-                format!("~{}", target_ty.to_c_type())
-            } else {
-                func.name.clone()
-            }
-        } else {
-            func.name.clone()
+    let mut remaining_template_params = Vec::new();
+    let mut active_mapping = mapping.clone();
+    for p in &func.template_params {
+        if !mapping.contains_key(&p.name) {
+            remaining_template_params.push(p.clone());
+            active_mapping.remove(&p.name);
         }
-    });
+    }
+    let mapping = &active_mapping;
+    let name = new_name.unwrap_or_else(|| substitute_func_name(&func.name, injected_class));
 
     let return_type = substitute_type(&func.return_type, mapping, injected_class);
     let params = func
@@ -282,9 +291,10 @@ pub fn substitute_function(
             if let Some(def) = &mut default_val {
                 substitute_expr(def, mapping, injected_class);
             }
+            let new_ty = substitute_type(&p.ty, mapping, injected_class);
             Param {
                 name: p.name.clone(),
-                ty: substitute_type(&p.ty, mapping, injected_class),
+                ty: new_ty,
                 default_val,
             }
         })
@@ -319,6 +329,7 @@ pub fn substitute_function(
         ref_qualifier: func.ref_qualifier,
         is_static: func.is_static,
         ctor_initializers,
+        template_params: remaining_template_params,
         line: func.line,
         col: func.col,
     }
@@ -421,6 +432,7 @@ mod tests {
             ref_qualifier: Default::default(),
             is_static: false,
             ctor_initializers: Vec::new(),
+            template_params: Vec::new(),
             line: 1,
             col: 1,
         };
@@ -456,6 +468,7 @@ mod tests {
                 ref_qualifier: Default::default(),
                 is_static: false,
                 ctor_initializers: Vec::new(),
+                template_params: Vec::new(),
                 line: 1,
                 col: 1,
             }],
