@@ -19,6 +19,7 @@ mod expr_lambda;
 mod prefix;
 mod stmt;
 mod structs;
+mod structs_nested;
 mod template;
 mod types;
 mod unsupported;
@@ -39,6 +40,7 @@ pub struct Parser {
     pub open_namespaces: Vec<String>,
     pub namespace_aliases: HashMap<String, String>,
     pub known_namespaces: HashSet<String>,
+    pub active_struct_scopes: Vec<String>,
     nesting: DepthCounters,
     nesting_exceeded: Cell<bool>,
 }
@@ -94,6 +96,7 @@ impl Parser {
             open_namespaces: Vec::new(),
             namespace_aliases: HashMap::new(),
             known_namespaces: HashSet::new(),
+            active_struct_scopes: Vec::new(),
             nesting: DepthCounters::new(),
             nesting_exceeded: Cell::new(false),
         }
@@ -275,9 +278,15 @@ impl Parser {
         None
     }
 
-    /// Prefixes `name` with the enclosing namespace when it is not already qualified.
+    /// Prefixes `name` with the enclosing struct or namespace when it is not already qualified.
     pub(super) fn qualify_name(&self, name: String) -> String {
-        if self.current_namespace.is_empty() || name.contains("::") {
+        if name.contains("::") {
+            return name;
+        }
+        if let Some(enclosing) = self.active_struct_scopes.last() {
+            return format!("{}::{}", enclosing, name);
+        }
+        if self.current_namespace.is_empty() {
             name
         } else {
             format!("{}::{}", self.current_namespace.join("::"), name)

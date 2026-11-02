@@ -155,6 +155,7 @@ classes_oop/structs/brace_init_dynamic_new
 classes_oop/structs/brace_init_scalars
 classes_oop/structs/brace_init_temporaries
 classes_oop/structs/initializer_lists
+classes_oop/structs/nested_classes
 classes_oop/structs/regress_struct_ref_assign
 classes_oop/structs/regress_struct_ref_subscript
 classes_oop/structs/struct_basic
@@ -202,6 +203,7 @@ classes_oop_variant/statics_namespaces/references
 classes_oop_variant/statics_namespaces/static_local_constructor_args
 classes_oop_variant/statics_namespaces/static_members
 classes_oop_variant/structs/initializer_lists
+classes_oop_variant/structs/nested_classes_variant
 classes_oop_variant/structs/regress_struct_ref_assign
 classes_oop_variant/structs/regress_struct_ref_subscript
 classes_oop_variant/structs/struct_basic
@@ -315,6 +317,7 @@ negative/narrowing_constant_overflow
 negative/narrowing_float_to_int
 negative/narrowing_signed_to_unsigned
 negative/nesting_depth_limit
+negative/nested_class_private_access
 negative/new_array_excess_elements
 negative/no_matching_constructor_list
 negative/operator_arrow_cycle

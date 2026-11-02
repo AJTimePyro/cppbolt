@@ -1,0 +1,1 @@
+tests/negative/nested_class_private_access.cpp:10:16: error: 'secret' is a private member of 'Outer::Inner'

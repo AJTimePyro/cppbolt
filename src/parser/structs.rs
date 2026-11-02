@@ -16,10 +16,12 @@ impl Parser {
         let base_classes = self.parse_base_classes()?;
         self.expect(TokenKind::LBrace)?;
 
+        self.active_struct_scopes.push(name.clone());
         let mut body = StructBody::new(name, is_class, start.line, start.col);
         while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
             self.parse_struct_member(&mut body)?;
         }
+        self.active_struct_scopes.pop();
 
         self.expect(TokenKind::RBrace)?;
         self.expect(TokenKind::Semi)?;
@@ -54,7 +56,7 @@ impl Parser {
         Ok((name, is_class))
     }
 
-    fn parse_base_classes(&mut self) -> Result<Vec<String>, CompileError> {
+    pub(super) fn parse_base_classes(&mut self) -> Result<Vec<String>, CompileError> {
         let mut base_classes = Vec::new();
         if self.peek() == &TokenKind::Colon {
             self.advance();
@@ -107,11 +109,14 @@ impl Parser {
         Ok(base_classes)
     }
 
-    fn parse_struct_member(&mut self, body: &mut StructBody) -> Result<(), CompileError> {
+    pub(super) fn parse_struct_member(&mut self, body: &mut StructBody) -> Result<(), CompileError> {
         if self.parse_struct_access(body)? {
             return Ok(());
         }
         if self.parse_struct_friend()? {
+            return Ok(());
+        }
+        if self.parse_nested_struct_member(body)? {
             return Ok(());
         }
         if self.parse_struct_typedef(body)? {
@@ -178,20 +183,21 @@ impl Parser {
     }
 }
 
-struct StructBody {
-    name: String,
-    is_class: bool,
-    fields: Vec<(String, Type)>,
-    methods: Vec<FunctionDecl>,
-    static_fields: Vec<(String, Type, Option<Expr>)>,
-    private_members: Vec<String>,
-    is_private: bool,
-    line: usize,
-    col: usize,
+pub(super) struct StructBody {
+    pub(super) name: String,
+    pub(super) is_class: bool,
+    pub(super) fields: Vec<(String, Type)>,
+    pub(super) methods: Vec<FunctionDecl>,
+    pub(super) static_fields: Vec<(String, Type, Option<Expr>)>,
+    pub(super) private_members: Vec<String>,
+    pub(super) nested_structs: Vec<Decl>,
+    pub(super) is_private: bool,
+    pub(super) line: usize,
+    pub(super) col: usize,
 }
 
 impl StructBody {
-    fn new(name: String, is_class: bool, line: usize, col: usize) -> Self {
+    pub(super) fn new(name: String, is_class: bool, line: usize, col: usize) -> Self {
         Self {
             name,
             is_class,
@@ -199,13 +205,14 @@ impl StructBody {
             methods: Vec::new(),
             static_fields: Vec::new(),
             private_members: Vec::new(),
+            nested_structs: Vec::new(),
             is_private: is_class,
             line,
             col,
         }
     }
 
-    fn into_decl(self, base_classes: Vec<String>) -> Decl {
+    pub(super) fn into_decl(self, base_classes: Vec<String>) -> Decl {
         Decl::StructDecl {
             name: self.name,
             is_class: self.is_class,
@@ -214,6 +221,7 @@ impl StructBody {
             methods: self.methods,
             static_fields: self.static_fields,
             private_members: self.private_members,
+            nested_structs: self.nested_structs,
             line: self.line,
             col: self.col,
         }
@@ -251,53 +259,7 @@ impl Parser {
         Ok(false)
     }
 
-    fn parse_struct_typedef(&mut self, body: &mut StructBody) -> Result<bool, CompileError> {
-        if self.peek() == &TokenKind::KwTypedef {
-            self.advance();
-            let ty = self.parse_type()?;
-            let tname = match self.advance().kind.clone() {
-                TokenKind::Ident(id) => id,
-                _ => {
-                    return Err(CompileError::new(
-                        "Expected typedef alias identifier",
-                        self.current().line,
-                        self.current().col,
-                    ));
-                }
-            };
-            self.expect(TokenKind::Semi)?;
-            self.register_member_alias(&body.name, tname, ty);
-            return Ok(true);
-        }
-        Ok(false)
-    }
 
-    fn parse_struct_using(&mut self, body: &mut StructBody) -> Result<bool, CompileError> {
-        if self.peek() == &TokenKind::KwUsing {
-            self.advance();
-            let alias = match self.advance().kind.clone() {
-                TokenKind::Ident(id) => id,
-                _ => {
-                    return Err(CompileError::new(
-                        "Expected alias identifier in using",
-                        self.current().line,
-                        self.current().col,
-                    ));
-                }
-            };
-            if self.peek() == &TokenKind::Assign {
-                self.advance();
-                let ty = self.parse_type()?;
-                self.expect(TokenKind::Semi)?;
-                self.register_member_alias(&body.name, alias, ty);
-                return Ok(true);
-            } else {
-                self.expect(TokenKind::Semi)?;
-                return Ok(true);
-            }
-        }
-        Ok(false)
-    }
 
     /// Parses the conversion operator, destructor, and constructor forms of a
     /// class member. Returns `true` when one of them was parsed.

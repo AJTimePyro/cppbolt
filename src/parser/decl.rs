@@ -41,7 +41,7 @@ impl Parser {
 
         if self.peek() == &TokenKind::KwStruct || self.peek() == &TokenKind::KwClass {
             let decl = self.parse_struct()?;
-            declarations.push(decl);
+            flatten_struct_decl(decl, declarations);
             return Ok(());
         }
 
@@ -376,4 +376,13 @@ fn token_starts_expr(tok: &TokenKind) -> bool {
             | TokenKind::Bang
             | TokenKind::Tilde
     )
+}
+
+fn flatten_struct_decl(decl: Decl, declarations: &mut Vec<Decl>) {
+    if let Decl::StructDecl { nested_structs, .. } = &decl {
+        for nested in nested_structs {
+            flatten_struct_decl(nested.clone(), declarations);
+        }
+    }
+    declarations.push(decl);
 }

@@ -53,6 +53,11 @@ impl Parser {
                         || self.is_known_template(id)
                         || self.is_active_type_param(id)
                         || self.type_aliases.contains_key(id)
+                        || self
+                            .active_struct_scopes
+                            .iter()
+                            .rev()
+                            .any(|s| self.known_types.contains(&format!("{}::{}", s, id)))
                 }
             }
             _ => false,
@@ -286,21 +291,23 @@ impl Parser {
         Ok(ty)
     }
 
+    fn parse_decltype_specifier(&mut self) -> Result<Type, CompileError> {
+        self.advance();
+        self.expect(TokenKind::LParen)?;
+        let res = if self.peek() == &TokenKind::KwNullptr {
+            self.advance();
+            Type::Nullptr
+        } else {
+            let _ = self.parse_expr()?;
+            Type::Pointer(Box::new(Type::Void))
+        };
+        self.expect(TokenKind::RParen)?;
+        Ok(res)
+    }
+
     fn parse_named_type(&mut self) -> Result<Type, CompileError> {
         let ty = match self.peek() {
-            TokenKind::KwDecltype => {
-                self.advance();
-                self.expect(TokenKind::LParen)?;
-                let res = if self.peek() == &TokenKind::KwNullptr {
-                    self.advance();
-                    Type::Nullptr
-                } else {
-                    let _ = self.parse_expr()?;
-                    Type::Pointer(Box::new(Type::Void))
-                };
-                self.expect(TokenKind::RParen)?;
-                res
-            }
+            TokenKind::KwDecltype => self.parse_decltype_specifier()?,
             TokenKind::ColonColon | TokenKind::Ident(_) => {
                 let raw_id = self.parse_qualified_name()?;
                 let id = self.resolve_namespace_alias(&raw_id);
@@ -333,6 +340,13 @@ impl Parser {
                     .find(|ns| self.known_types.contains(&format!("{}::{}", ns, id)))
                 {
                     Type::Struct(format!("{}::{}", ns, id))
+                } else if let Some(scope) = self
+                    .active_struct_scopes
+                    .iter()
+                    .rev()
+                    .find(|s| self.known_types.contains(&format!("{}::{}", s, id)))
+                {
+                    Type::Struct(format!("{}::{}", scope, id))
                 } else if self.known_types.contains(&id) {
                     Type::Struct(id)
                 } else if QualifiedName::new(&id).in_std() {

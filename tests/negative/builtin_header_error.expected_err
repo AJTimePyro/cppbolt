@@ -1,1 +1,1 @@
-detail_avl_tree.h:12:13: error: Unexpected token in struct body
+map:28:17: error: Expected type specifier, found 'typename'

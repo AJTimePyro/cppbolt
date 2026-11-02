@@ -437,6 +437,7 @@ impl Sema {
                     methods: vec![method_decl],
                     static_fields: Vec::new(),
                     private_members: Vec::new(),
+                    nested_structs: Vec::new(),
                     line: 0,
                     col: 0,
                 });

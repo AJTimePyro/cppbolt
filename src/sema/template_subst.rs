@@ -407,6 +407,7 @@ pub fn substitute_struct(
         methods,
         static_fields,
         private_members: template_class.private_members.clone(),
+        nested_structs: Vec::new(),
         line,
         col,
     }
