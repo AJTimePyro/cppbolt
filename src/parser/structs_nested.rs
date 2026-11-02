@@ -30,7 +30,6 @@ impl Parser {
         };
         let full_name = format!("{}::{}", body.name, short_name);
         self.known_types.insert(full_name.clone());
-        self.known_types.insert(short_name.clone());
         if body.is_private {
             body.private_members.push(short_name);
             body.private_members.push(full_name.clone());
@@ -44,7 +43,7 @@ impl Parser {
         let base_classes = self.parse_base_classes()?;
         self.expect(TokenKind::LBrace)?;
 
-        self.active_struct_scopes.push(body.name.clone());
+        self.active_struct_scopes.push(full_name.clone());
         let mut inner_body = StructBody::new(full_name, is_class, start.line, start.col);
         while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
             self.parse_struct_member(&mut inner_body)?;
