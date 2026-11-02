@@ -30,11 +30,18 @@ impl Sema {
     }
 
     pub fn register_function_template(&mut self, decl: FunctionDecl, params: Vec<TemplateParam>) {
-        insert_template_aliases(
-            &mut self.function_templates,
-            decl.name.clone(),
-            (decl, params),
-        );
+        let name = decl.name.clone();
+        let short = name.split("::").last().unwrap_or(&name).to_string();
+        let qualified = QualifiedName::new(&name);
+        let std_name = qualified.std_name().into_owned();
+        let plain = qualified.plain().to_string();
+        let item = (decl, params);
+        for key in [name, short, std_name, plain] {
+            let list = self.function_templates.entry(key).or_default();
+            if !list.iter().any(|(d, _)| d.params.len() == item.0.params.len()) {
+                list.push(item.clone());
+            }
+        }
     }
 
     pub fn attach_out_of_class_template_method(
@@ -394,13 +401,28 @@ impl Sema {
             self.current_class = prev_class;
             res?;
             method_decl.body = func_decl.body;
+            let mut found = false;
             for decl in &mut self.synthesized_decls {
                 if let Decl::StructDecl { name, methods, .. } = decl
                     && name == &class_name
                 {
-                    methods.push(method_decl);
+                    methods.push(method_decl.clone());
+                    found = true;
                     break;
                 }
+            }
+            if !found {
+                self.synthesized_decls.push(Decl::StructDecl {
+                    name: class_name.clone(),
+                    is_class: false,
+                    base_classes: Vec::new(),
+                    fields: Vec::new(),
+                    methods: vec![method_decl],
+                    static_fields: Vec::new(),
+                    private_members: Vec::new(),
+                    line: 0,
+                    col: 0,
+                });
             }
         }
         Ok(())

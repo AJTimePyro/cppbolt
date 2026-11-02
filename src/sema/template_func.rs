@@ -23,23 +23,40 @@ impl Sema {
                 (name, Vec::new())
             };
 
-        if let Some((template_decl, template_params)) =
-            self.function_templates.get(tmpl_name).cloned()
-        {
-            let mapping = deduce_template_arguments(
-                &template_params,
-                &template_decl,
-                &explicit_args,
-                (arg_types, args),
-                pos,
-            )?;
-            let sig = self.instantiate_function_template(
-                &mapping,
-                &template_params,
-                &template_decl,
-                pos,
-            )?;
-            return Ok(Some(sig));
+        if let Some(candidates) = self.function_templates.get(tmpl_name).cloned() {
+            let mut last_err = None;
+            for (template_decl, template_params) in &candidates {
+                let min_args = template_decl
+                    .params
+                    .iter()
+                    .filter(|p| p.default_val.is_none())
+                    .count();
+                let max_args = template_decl.params.len();
+                if args.len() < min_args || args.len() > max_args {
+                    continue;
+                }
+                match deduce_template_arguments(
+                    template_params,
+                    template_decl,
+                    &explicit_args,
+                    (arg_types, args),
+                    pos,
+                ) {
+                    Ok(mapping) => {
+                        let sig = self.instantiate_function_template(
+                            &mapping,
+                            template_params,
+                            template_decl,
+                            pos,
+                        )?;
+                        return Ok(Some(sig));
+                    }
+                    Err(e) => last_err = Some(e),
+                }
+            }
+            if let Some(e) = last_err {
+                return Err(e);
+            }
         }
         Ok(None)
     }

@@ -7,6 +7,7 @@ mod assign;
 mod constructor;
 mod expr;
 mod expr_call;
+mod expr_call_member;
 mod expr_lambda;
 mod expr_member;
 mod expr_ops;
@@ -18,6 +19,7 @@ mod stmt;
 mod stmt_decl;
 mod stmt_range_for;
 mod stmt_structured_binding;
+mod synthesize;
 pub mod template_deduce;
 mod template_func;
 mod template_registry;
@@ -157,7 +159,7 @@ pub struct Sema {
     pub synthesized_decls: Vec<Decl>,
     pub current_func_is_const: bool,
     pub class_templates: HashMap<String, (TemplateClass, Vec<TemplateParam>)>,
-    pub function_templates: HashMap<String, (FunctionDecl, Vec<TemplateParam>)>,
+    pub function_templates: HashMap<String, Vec<(FunctionDecl, Vec<TemplateParam>)>>,
     pub instantiated_classes: HashSet<String>,
     pub instantiated_functions: HashSet<String>,
     pub pending_template_methods: HashMap<String, (String, FunctionDecl)>,

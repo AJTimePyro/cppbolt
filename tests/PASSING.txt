@@ -215,6 +215,8 @@ memory_model_variant/large_global_4mb
 memory_model_variant/malloc_zero
 memory_model_variant/vector_growth_64mb
 memory_model/vector_growth_64mb
+mini_stl/algorithm_basic
+mini_stl/algorithm_sort
 mini_stl/cin_getline_newline
 mini_stl/cmath_basic
 mini_stl/cout_float_format
@@ -228,6 +230,7 @@ mini_stl/iostream_width_double
 mini_stl/pair_basic
 mini_stl/range_for_string
 mini_stl/rounding_evidence
+mini_stl/sort_comparator
 mini_stl/stream_edge_cases
 mini_stl/stream_operator_overload
 mini_stl/string_basic
@@ -235,6 +238,7 @@ mini_stl/string_comprehensive
 mini_stl/vector_aliasing
 mini_stl/vector_basic
 mini_stl/vector_objects
+mini_stl_variant/algorithm_sort_variant
 mini_stl_variant/cin_getline_newline
 mini_stl_variant/cout_float_format
 mini_stl_variant/cstdio_basic

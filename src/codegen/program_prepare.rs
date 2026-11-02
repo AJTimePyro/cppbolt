@@ -179,6 +179,9 @@ impl<'a> Codegen<'a> {
         name: &'p String,
         m: &'p FunctionDecl,
     ) -> Option<FuncCandidate<'p>> {
+        if !m.template_params.is_empty() {
+            return None;
+        }
         let short_name = QualifiedName::new(name).class_short_name();
         let aliases = self.collect_method_aliases(name, m);
         let mut calls = HashSet::new();

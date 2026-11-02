@@ -76,144 +76,6 @@ impl Sema {
         Ok(())
     }
 
-    fn synthesize_destructors(&mut self, program: &mut Program) {
-        let mut structs_with_dtor = std::collections::HashSet::new();
-        for decl in &program.declarations {
-            if let Decl::StructDecl { name, methods, .. } = decl
-                && methods.iter().any(|m| m.name.starts_with("~"))
-            {
-                structs_with_dtor.insert(name.clone());
-            }
-        }
-
-        for decl in &mut program.declarations {
-            if let Decl::StructDecl {
-                name,
-                base_classes,
-                fields,
-                methods,
-                ..
-            } = decl
-            {
-                let dtor_name = format!("~{}", name);
-                if !methods.iter().any(|m| m.name == dtor_name) {
-                    let has_dtor_members = fields
-                        .iter()
-                        .any(|(_, ty)| type_has_dtor(ty, &structs_with_dtor))
-                        || base_classes.iter().any(|b| structs_with_dtor.contains(b));
-                    if has_dtor_members {
-                        methods.push(FunctionDecl {
-                            name: dtor_name,
-                            return_type: Type::Void,
-                            params: vec![],
-                            body: Some(Stmt::new(StmtKind::Compound(vec![]), 0, 0)),
-                            is_virtual: false,
-                            is_pure_virtual: false,
-                            is_const: false,
-                            is_explicit: false,
-                            ref_qualifier: RefQualifier::None,
-                            is_static: false,
-                            ctor_initializers: vec![],
-                            template_params: vec![],
-                            line: 0,
-                            col: 0,
-                        });
-                    }
-                }
-            }
-        }
-    }
-
-    fn synthesize_constructors(&mut self, program: &mut Program) {
-        // A default constructor is synthesized for classes without explicit
-        // constructors unless blocked by subobject constructors. Iterate to a
-        // fixed point so a class becomes constructible once its dependencies do.
-        let (mut any_ctor, mut default_ctor) = self.collect_explicit_constructors(program);
-
-        loop {
-            let mut changed = false;
-            for decl in &mut program.declarations {
-                let Decl::StructDecl {
-                    name,
-                    base_classes,
-                    fields,
-                    methods,
-                    ..
-                } = decl
-                else {
-                    continue;
-                };
-                if any_ctor.contains(name) {
-                    continue;
-                }
-                let short = name.rsplit("::").next().unwrap_or(name);
-                let has_ctor = methods.iter().any(|m| m.name == *name || m.name == short);
-                if has_ctor {
-                    continue;
-                }
-
-                let base_blocks = base_classes
-                    .iter()
-                    .any(|base| any_ctor.contains(base) && !default_ctor.contains(base));
-                let field_blocks = fields
-                    .iter()
-                    .any(|(_, ty)| type_ctor_status(ty, &any_ctor, &default_ctor).1);
-                if !base_blocks && !field_blocks {
-                    methods.push(FunctionDecl {
-                        name: name.clone(),
-                        return_type: Type::Void,
-                        params: vec![],
-                        body: Some(Stmt::new(StmtKind::Compound(vec![]), 0, 0)),
-                        is_virtual: false,
-                        is_pure_virtual: false,
-                        is_const: false,
-                        is_explicit: false,
-                        ref_qualifier: RefQualifier::None,
-                        is_static: false,
-                        ctor_initializers: vec![],
-                        template_params: vec![],
-                        line: 0,
-                        col: 0,
-                    });
-                    any_ctor.insert(name.clone());
-                    default_ctor.insert(name.clone());
-                    changed = true;
-                }
-            }
-            if !changed {
-                break;
-            }
-        }
-    }
-
-    /// Collects the classes that declare a constructor, and those whose
-    /// constructor takes no arguments.
-    fn collect_explicit_constructors(
-        &self,
-        program: &Program,
-    ) -> (
-        std::collections::HashSet<String>,
-        std::collections::HashSet<String>,
-    ) {
-        let mut any_ctor = std::collections::HashSet::new();
-        let mut default_ctor = std::collections::HashSet::new();
-        for decl in &program.declarations {
-            if let Decl::StructDecl { name, methods, .. } = decl {
-                let short = name.rsplit("::").next().unwrap_or(name);
-                for m in methods {
-                    if m.name == *name || m.name == short {
-                        any_ctor.insert(name.clone());
-                        if m.params.is_empty() {
-                            default_ctor.insert(name.clone());
-                        }
-                    }
-                }
-            }
-        }
-
-        (any_ctor, default_ctor)
-    }
-
     fn register_declarations(&mut self, program: &mut Program) -> Result<(), CompileError> {
         let mut defined_functions = std::collections::HashSet::new();
         for decl in &mut program.declarations {
@@ -283,29 +145,33 @@ impl Sema {
     ) {
         for sf in static_fields {
             let qual_name = format!("{}::{}", name, sf.0);
-            self.global_vars.insert(
-                qual_name.clone(),
-                VarSymbol {
-                    name: qual_name.clone(),
-                    ty: sf.1.clone(),
-                    is_global: true,
-                    stack_offset: 0,
-                },
-            );
+            let sym = VarSymbol {
+                name: qual_name.clone(),
+                ty: sf.1.clone(),
+                is_global: true,
+                stack_offset: 0,
+            };
+            self.global_vars.insert(qual_name.clone(), sym.clone());
             if let Some(alias) = QualifiedName::new(&qual_name).implicit_alias() {
-                self.global_vars.insert(
-                    alias.to_string(),
-                    VarSymbol {
-                        name: alias.to_string(),
-                        ty: sf.1.clone(),
-                        is_global: true,
-                        stack_offset: 0,
-                    },
-                );
+                self.global_vars.insert(alias.to_string(), sym);
             }
         }
         for m in methods {
-            self.register_struct_method(name, m);
+            if !m.template_params.is_empty() {
+                self.member_templates
+                    .entry(name.to_string())
+                    .or_default()
+                    .push(m.clone());
+                let plain = QualifiedName::new(name).plain();
+                if plain != name {
+                    self.member_templates
+                        .entry(plain.to_string())
+                        .or_default()
+                        .push(m.clone());
+                }
+            } else {
+                self.register_struct_method(name, m);
+            }
         }
     }
 
@@ -444,6 +310,9 @@ impl Sema {
                 Decl::StructDecl { name, methods, .. } => {
                     self.current_class = Some(name.to_string());
                     for m in methods {
+                        if !m.template_params.is_empty() {
+                            continue;
+                        }
                         let mut func_decl = m.clone();
                         if !m.is_static {
                             func_decl.params.insert(0, this_param(name, m.is_const));
@@ -470,31 +339,5 @@ pub(super) fn this_param(class: &str, is_const: bool) -> Param {
         name: "this".to_string(),
         ty: Type::Pointer(Box::new(inner)),
         default_val: None,
-    }
-}
-
-/// Reports whether a field/base type needs a synthesized default constructor
-/// and whether an existing non-default constructor blocks synthesis.
-fn type_ctor_status(
-    ty: &Type,
-    any_ctor: &std::collections::HashSet<String>,
-    default_ctor: &std::collections::HashSet<String>,
-) -> (bool, bool) {
-    match ty.strip_const() {
-        Type::Struct(name) => (
-            default_ctor.contains(name),
-            any_ctor.contains(name) && !default_ctor.contains(name),
-        ),
-        Type::Array(element, _) => type_ctor_status(element, any_ctor, default_ctor),
-        _ => (false, false),
-    }
-}
-
-/// Returns true when a value of `ty` owns a subobject with a destructor.
-fn type_has_dtor(ty: &Type, structs_with_dtor: &std::collections::HashSet<String>) -> bool {
-    match ty.strip_const() {
-        Type::Struct(name) => structs_with_dtor.contains(name),
-        Type::Array(element, _) => type_has_dtor(element, structs_with_dtor),
-        _ => false,
     }
 }
