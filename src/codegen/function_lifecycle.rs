@@ -11,7 +11,7 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let short_cls = cls.split("::").last().unwrap_or(cls);
+        let short_cls = QualifiedName::new(cls).class_short_name();
         if f.name == *cls || f.name == short_cls {
             self.compile_constructor_body(f, cls, ctx, code)?;
         } else if f.name == format!("~{}", cls) || f.name == format!("~{}", short_cls) {
@@ -30,7 +30,7 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let short_cls = cls.split("::").last().unwrap_or(cls);
+        let short_cls = QualifiedName::new(cls).class_short_name();
         if let Some((_, target_args)) = f
             .ctor_initializers
             .iter()
@@ -177,29 +177,7 @@ impl<'a> Codegen<'a> {
                 .find(|(name, _)| name == &fld.name)
                 .map(|(_, args)| args.as_slice());
             if let Type::Struct(sname) = fld.ty.strip_const() {
-                let arg_types: Vec<Type> = init_args
-                    .map(|args| args.iter().map(|a| self.get_expr_type(a, ctx)).collect())
-                    .unwrap_or_default();
-                if let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types) {
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, 0); // this
-                    code.push(OP_I32_CONST);
-                    write_i32(code, fld.offset as i32);
-                    code.push(OP_I32_ADD);
-                    if let Some(args) = init_args {
-                        let full_args = self.constructor_arguments(&sig, args);
-                        for (i, a) in full_args.iter().enumerate() {
-                            let param_ty = sig.param_types.get(i + 1);
-                            self.compile_call_arg(a, param_ty, ctx, code)?;
-                        }
-                    }
-                    code.push(OP_CALL);
-                    write_u32(code, ctor_idx);
-                } else if let Some(layout) = self.sema.struct_layouts.get(sname).cloned()
-                    && let Some(args) = init_args
-                {
-                    self.emit_field_initializers(&layout, args, fld.offset as u32, ctx, code)?;
-                }
+                self.compile_struct_field_init(sname, fld.offset, init_args, ctx, code)?;
             } else if let Type::Array(elem_ty, count) = fld.ty.strip_const()
                 && let Type::Struct(sname) = elem_ty.strip_const()
                 && init_args.is_none_or(|a| a.is_empty())
@@ -228,6 +206,69 @@ impl<'a> Codegen<'a> {
             {
                 self.compile_member_init_expr(fld, args, ctx, code)?;
             }
+        }
+        Ok(())
+    }
+
+    fn compile_struct_field_init(
+        &mut self,
+        sname: &str,
+        fld_offset: usize,
+        init_args: Option<&[Expr]>,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        let arg_types: Vec<Type> = init_args
+            .map(|args| args.iter().map(|a| self.get_expr_type(a, ctx)).collect())
+            .unwrap_or_default();
+        if let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types) {
+            code.push(OP_LOCAL_GET);
+            write_u32(code, 0); // this
+            code.push(OP_I32_CONST);
+            write_i32(code, fld_offset as i32);
+            code.push(OP_I32_ADD);
+            if let Some(args) = init_args {
+                let full_args = self.constructor_arguments(&sig, args);
+                for (i, a) in full_args.iter().enumerate() {
+                    let param_ty = sig.param_types.get(i + 1);
+                    self.compile_call_arg(a, param_ty, ctx, code)?;
+                }
+            }
+            code.push(OP_CALL);
+            write_u32(code, ctor_idx);
+        } else if let Some(args) = init_args
+            && args.len() == 1
+            && matches!(
+                arg_types[0].strip_const().strip_reference(),
+                Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(sname))
+            )
+        {
+            self.compile_lvalue_addr(&args[0], ctx, code)?;
+            code.push(OP_LOCAL_SET);
+            write_u32(code, ctx.scratch1);
+            let size = self
+                .sema
+                .struct_layouts
+                .get(sname)
+                .map(|l| l.size)
+                .ok_or_else(|| self.internal_error("missing struct layout"))?;
+            crate::codegen::raii::emit_struct_byte_copy(
+                size,
+                fld_offset as u32,
+                |code| {
+                    code.push(OP_LOCAL_GET);
+                    write_u32(code, 0); // this
+                },
+                |code| {
+                    code.push(OP_LOCAL_GET);
+                    write_u32(code, ctx.scratch1);
+                },
+                code,
+            );
+        } else if let Some(layout) = self.sema.struct_layouts.get(sname).cloned()
+            && let Some(args) = init_args
+        {
+            self.emit_field_initializers(&layout, args, fld_offset as u32, ctx, code)?;
         }
         Ok(())
     }

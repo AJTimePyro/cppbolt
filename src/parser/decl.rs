@@ -200,6 +200,12 @@ impl Parser {
             self.advance();
         }
 
+        if self.is_out_of_class_ctor_or_dtor() {
+            let name = self.parse_qualified_name()?;
+            let decl = self.parse_function_tail(name, Type::Void, start_tok.line, start_tok.col)?;
+            return Ok(vec![Decl::Function(decl)]);
+        }
+
         let specifiers = self.parse_specifier_type()?;
         let mut declarations = Vec::new();
         loop {

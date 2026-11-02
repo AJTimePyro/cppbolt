@@ -1,0 +1,5 @@
+vi size: 3, vi[1]: 200
+orig vi[1]: 200, copy vi[1]: 999
+vi size after pop: 2
+vi empty after clear: 1
+vd size: 2, vd[0]: 1.5, vd[1]: 2.5

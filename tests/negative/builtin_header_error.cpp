@@ -1,6 +1,6 @@
 // The diagnostic must name the built-in header and the line inside it,
 // not the file that included it.
-#include <utility>
+#include <map>
 
 int main() {
     return 0;

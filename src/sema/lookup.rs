@@ -15,6 +15,16 @@ impl Sema {
         false
     }
 
+    pub fn base_subobject_offset(&self, derived: &str, base: &str) -> Option<usize> {
+        self.struct_layouts.get(derived).and_then(|layout| {
+            layout
+                .base_offsets
+                .iter()
+                .find(|(b, _)| b == base)
+                .map(|(_, off)| *off)
+        })
+    }
+
     pub fn find_field_in_class(&self, class_name: &str, field_name: &str) -> Option<StructField> {
         if class_name.is_empty() {
             return None;

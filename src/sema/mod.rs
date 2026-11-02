@@ -7,6 +7,7 @@ mod assign;
 mod constructor;
 mod expr;
 mod expr_call;
+mod expr_call_member;
 mod expr_lambda;
 mod expr_member;
 mod expr_ops;
@@ -18,7 +19,9 @@ mod stmt;
 mod stmt_decl;
 mod stmt_range_for;
 mod stmt_structured_binding;
+mod synthesize;
 pub mod template_deduce;
+mod template_func;
 mod template_registry;
 pub mod template_subst;
 #[cfg(test)]
@@ -156,12 +159,14 @@ pub struct Sema {
     pub synthesized_decls: Vec<Decl>,
     pub current_func_is_const: bool,
     pub class_templates: HashMap<String, (TemplateClass, Vec<TemplateParam>)>,
-    pub function_templates: HashMap<String, (FunctionDecl, Vec<TemplateParam>)>,
+    pub function_templates: HashMap<String, Vec<(FunctionDecl, Vec<TemplateParam>)>>,
     pub instantiated_classes: HashSet<String>,
     pub instantiated_functions: HashSet<String>,
     pub pending_template_methods: HashMap<String, (String, FunctionDecl)>,
+    pub member_templates: HashMap<String, Vec<FunctionDecl>>,
     pub instantiation_depth: usize,
     pub instantiation_stack: Vec<String>,
+    pub structs_with_dtor: HashSet<String>,
     depth: crate::depth::DepthCounters,
 }
 
@@ -193,8 +198,10 @@ impl Sema {
             instantiated_classes: HashSet::new(),
             instantiated_functions: HashSet::new(),
             pending_template_methods: HashMap::new(),
+            member_templates: HashMap::new(),
             instantiation_depth: 0,
             instantiation_stack: Vec::new(),
+            structs_with_dtor: HashSet::new(),
             current_class: None,
             current_func_name: None,
             open_namespaces: Vec::new(),

@@ -1,7 +1,21 @@
 use super::*;
 
+fn method_matches_out_of_class(
+    m: &FunctionDecl,
+    short_method: &str,
+    params: &[Param],
+    is_const: bool,
+) -> bool {
+    (m.name == short_method || m.name == format!("~{}", short_method))
+        && m.params.len() == params.len()
+        && m.is_const == is_const
+        && m.body.is_none()
+        && m.params.iter().zip(params).all(|(p1, p2)| p1.ty == p2.ty)
+}
+
 impl Sema {
     pub fn analyze_program(&mut self, program: &mut Program) -> Result<(), CompileError> {
+        self.attach_out_of_class_methods(program);
         self.register_types(program)?;
         self.synthesize_destructors(program);
         self.synthesize_constructors(program);
@@ -9,6 +23,62 @@ impl Sema {
         self.analyze_declarations(program)?;
         program.declarations.append(&mut self.synthesized_decls);
         Ok(())
+    }
+
+    fn attach_out_of_class_methods(&mut self, program: &mut Program) {
+        for i in 0..program.declarations.len() {
+            let (plain_class, short_method, params, is_const) = match &program.declarations[i] {
+                Decl::Function(f) if f.name.contains("::") && f.body.is_some() => {
+                    let Some((class_part, method_name)) = f.name.rsplit_once("::") else {
+                        continue;
+                    };
+                    (
+                        QualifiedName::new(class_part).plain().to_string(),
+                        method_name.to_string(),
+                        f.params.clone(),
+                        f.is_const,
+                    )
+                }
+                _ => continue,
+            };
+            let mut target_idx = None;
+            for (j, decl) in program.declarations.iter().enumerate() {
+                if i != j
+                    && let Decl::StructDecl { name, methods, .. } = decl
+                    && QualifiedName::new(name).plain() == plain_class
+                    && methods
+                        .iter()
+                        .any(|m| method_matches_out_of_class(m, &short_method, &params, is_const))
+                {
+                    target_idx = Some(j);
+                    break;
+                }
+            }
+            let Some(j) = target_idx else {
+                continue;
+            };
+            let (body, inits) = match &mut program.declarations[i] {
+                Decl::Function(f) => {
+                    f.name.clear();
+                    (f.body.take(), std::mem::take(&mut f.ctor_initializers))
+                }
+                _ => continue,
+            };
+            if let Decl::StructDecl { methods, .. } = &mut program.declarations[j]
+                && let Some(existing) = methods
+                    .iter_mut()
+                    .find(|m| method_matches_out_of_class(m, &short_method, &params, is_const))
+            {
+                existing.body = body;
+                if !inits.is_empty() {
+                    existing.ctor_initializers = inits;
+                }
+            }
+        }
+        program.declarations.retain(|d| match d {
+            Decl::Function(f) => !f.name.is_empty(),
+            _ => true,
+        });
     }
 
     fn register_types(&mut self, program: &mut Program) -> Result<(), CompileError> {
@@ -63,149 +133,17 @@ impl Sema {
                         self.register_class_template(c.clone(), t.params.clone());
                     }
                     TemplateKind::Function(f) => {
-                        self.register_function_template((**f).clone(), t.params.clone());
+                        if f.name.contains("::") {
+                            self.attach_out_of_class_template_method((**f).clone(), &t.params);
+                        } else {
+                            self.register_function_template((**f).clone(), t.params.clone());
+                        }
                     }
                 },
                 _ => {}
             }
         }
         Ok(())
-    }
-
-    fn synthesize_destructors(&mut self, program: &mut Program) {
-        let mut structs_with_dtor = std::collections::HashSet::new();
-        for decl in &program.declarations {
-            if let Decl::StructDecl { name, methods, .. } = decl
-                && methods.iter().any(|m| m.name.starts_with("~"))
-            {
-                structs_with_dtor.insert(name.clone());
-            }
-        }
-
-        for decl in &mut program.declarations {
-            if let Decl::StructDecl {
-                name,
-                base_classes,
-                fields,
-                methods,
-                ..
-            } = decl
-            {
-                let dtor_name = format!("~{}", name);
-                if !methods.iter().any(|m| m.name == dtor_name) {
-                    let has_dtor_members = fields
-                        .iter()
-                        .any(|(_, ty)| type_has_dtor(ty, &structs_with_dtor))
-                        || base_classes.iter().any(|b| structs_with_dtor.contains(b));
-                    if has_dtor_members {
-                        methods.push(FunctionDecl {
-                            name: dtor_name,
-                            return_type: Type::Void,
-                            params: vec![],
-                            body: Some(Stmt::new(StmtKind::Compound(vec![]), 0, 0)),
-                            is_virtual: false,
-                            is_pure_virtual: false,
-                            is_const: false,
-                            is_explicit: false,
-                            ref_qualifier: RefQualifier::None,
-                            is_static: false,
-                            ctor_initializers: vec![],
-                            line: 0,
-                            col: 0,
-                        });
-                    }
-                }
-            }
-        }
-    }
-
-    fn synthesize_constructors(&mut self, program: &mut Program) {
-        // A default constructor is synthesized for classes without explicit
-        // constructors unless blocked by subobject constructors. Iterate to a
-        // fixed point so a class becomes constructible once its dependencies do.
-        let (mut any_ctor, mut default_ctor) = self.collect_explicit_constructors(program);
-
-        loop {
-            let mut changed = false;
-            for decl in &mut program.declarations {
-                let Decl::StructDecl {
-                    name,
-                    base_classes,
-                    fields,
-                    methods,
-                    ..
-                } = decl
-                else {
-                    continue;
-                };
-                if any_ctor.contains(name) {
-                    continue;
-                }
-                let short = name.rsplit("::").next().unwrap_or(name);
-                let has_ctor = methods.iter().any(|m| m.name == *name || m.name == short);
-                if has_ctor {
-                    continue;
-                }
-
-                let base_blocks = base_classes
-                    .iter()
-                    .any(|base| any_ctor.contains(base) && !default_ctor.contains(base));
-                let field_blocks = fields
-                    .iter()
-                    .any(|(_, ty)| type_ctor_status(ty, &any_ctor, &default_ctor).1);
-                if !base_blocks && !field_blocks {
-                    methods.push(FunctionDecl {
-                        name: name.clone(),
-                        return_type: Type::Void,
-                        params: vec![],
-                        body: Some(Stmt::new(StmtKind::Compound(vec![]), 0, 0)),
-                        is_virtual: false,
-                        is_pure_virtual: false,
-                        is_const: false,
-                        is_explicit: false,
-                        ref_qualifier: RefQualifier::None,
-                        is_static: false,
-                        ctor_initializers: vec![],
-                        line: 0,
-                        col: 0,
-                    });
-                    any_ctor.insert(name.clone());
-                    default_ctor.insert(name.clone());
-                    changed = true;
-                }
-            }
-            if !changed {
-                break;
-            }
-        }
-    }
-
-    /// Collects the classes that declare a constructor, and those whose
-    /// constructor takes no arguments.
-    fn collect_explicit_constructors(
-        &self,
-        program: &Program,
-    ) -> (
-        std::collections::HashSet<String>,
-        std::collections::HashSet<String>,
-    ) {
-        let mut any_ctor = std::collections::HashSet::new();
-        let mut default_ctor = std::collections::HashSet::new();
-        for decl in &program.declarations {
-            if let Decl::StructDecl { name, methods, .. } = decl {
-                let short = name.rsplit("::").next().unwrap_or(name);
-                for m in methods {
-                    if m.name == *name || m.name == short {
-                        any_ctor.insert(name.clone());
-                        if m.params.is_empty() {
-                            default_ctor.insert(name.clone());
-                        }
-                    }
-                }
-            }
-        }
-
-        (any_ctor, default_ctor)
     }
 
     fn register_declarations(&mut self, program: &mut Program) -> Result<(), CompileError> {
@@ -277,29 +215,33 @@ impl Sema {
     ) {
         for sf in static_fields {
             let qual_name = format!("{}::{}", name, sf.0);
-            self.global_vars.insert(
-                qual_name.clone(),
-                VarSymbol {
-                    name: qual_name.clone(),
-                    ty: sf.1.clone(),
-                    is_global: true,
-                    stack_offset: 0,
-                },
-            );
+            let sym = VarSymbol {
+                name: qual_name.clone(),
+                ty: sf.1.clone(),
+                is_global: true,
+                stack_offset: 0,
+            };
+            self.global_vars.insert(qual_name.clone(), sym.clone());
             if let Some(alias) = QualifiedName::new(&qual_name).implicit_alias() {
-                self.global_vars.insert(
-                    alias.to_string(),
-                    VarSymbol {
-                        name: alias.to_string(),
-                        ty: sf.1.clone(),
-                        is_global: true,
-                        stack_offset: 0,
-                    },
-                );
+                self.global_vars.insert(alias.to_string(), sym);
             }
         }
         for m in methods {
-            self.register_struct_method(name, m);
+            if !m.template_params.is_empty() {
+                self.member_templates
+                    .entry(name.to_string())
+                    .or_default()
+                    .push(m.clone());
+                let plain = QualifiedName::new(name).plain();
+                if plain != name {
+                    self.member_templates
+                        .entry(plain.to_string())
+                        .or_default()
+                        .push(m.clone());
+                }
+            } else {
+                self.register_struct_method(name, m);
+            }
         }
     }
 
@@ -326,7 +268,18 @@ impl Sema {
             ref_qualifier: m.ref_qualifier,
         };
         self.register_function(sig.clone());
-        self.functions.entry(qual_name).or_default().push(sig);
+        self.functions
+            .entry(qual_name)
+            .or_default()
+            .push(sig.clone());
+        let short = QualifiedName::new(class_name).class_short_name();
+        if m.name == class_name {
+            let short_qual = format!("{}::{}", class_name, short);
+            self.functions.entry(short_qual).or_default().push(sig);
+        } else if m.name == format!("~{}", class_name) {
+            let short_qual = format!("{}::~{}", class_name, short);
+            self.functions.entry(short_qual).or_default().push(sig);
+        }
     }
 
     /// Rejects abstract variable types and completes a zero-length array type
@@ -430,6 +383,9 @@ impl Sema {
                 Decl::StructDecl { name, methods, .. } => {
                     self.current_class = Some(name.to_string());
                     for m in methods {
+                        if !m.template_params.is_empty() {
+                            continue;
+                        }
                         let mut func_decl = m.clone();
                         if !m.is_static {
                             func_decl.params.insert(0, this_param(name, m.is_const));
@@ -456,31 +412,5 @@ pub(super) fn this_param(class: &str, is_const: bool) -> Param {
         name: "this".to_string(),
         ty: Type::Pointer(Box::new(inner)),
         default_val: None,
-    }
-}
-
-/// Reports whether a field/base type needs a synthesized default constructor
-/// and whether an existing non-default constructor blocks synthesis.
-fn type_ctor_status(
-    ty: &Type,
-    any_ctor: &std::collections::HashSet<String>,
-    default_ctor: &std::collections::HashSet<String>,
-) -> (bool, bool) {
-    match ty.strip_const() {
-        Type::Struct(name) => (
-            default_ctor.contains(name),
-            any_ctor.contains(name) && !default_ctor.contains(name),
-        ),
-        Type::Array(element, _) => type_ctor_status(element, any_ctor, default_ctor),
-        _ => (false, false),
-    }
-}
-
-/// Returns true when a value of `ty` owns a subobject with a destructor.
-fn type_has_dtor(ty: &Type, structs_with_dtor: &std::collections::HashSet<String>) -> bool {
-    match ty.strip_const() {
-        Type::Struct(name) => structs_with_dtor.contains(name),
-        Type::Array(element, _) => type_has_dtor(element, structs_with_dtor),
-        _ => false,
     }
 }

@@ -121,6 +121,31 @@ impl Parser {
             return Ok(());
         }
 
+        let template_params = if self.peek() == &TokenKind::KwTemplate {
+            self.advance();
+            self.expect(TokenKind::Lt)?;
+            let params = self.parse_template_params()?;
+            let param_names: HashSet<String> = params.iter().map(|p| p.name.clone()).collect();
+            self.active_type_params.push(param_names);
+            Some(params)
+        } else {
+            None
+        };
+
+        let initial_methods_len = body.methods.len();
+        let res = self.parse_struct_member_tail(body);
+        if let Some(params) = template_params {
+            self.active_type_params.pop();
+            if body.methods.len() > initial_methods_len
+                && let Some(last) = body.methods.last_mut()
+            {
+                last.template_params = params;
+            }
+        }
+        res
+    }
+
+    fn parse_struct_member_tail(&mut self, body: &mut StructBody) -> Result<(), CompileError> {
         let mut is_explicit = false;
         while matches!(
             self.peek(),
@@ -443,6 +468,9 @@ impl Parser {
         is_static: bool,
     ) -> Result<(), CompileError> {
         let final_ty = self.parse_array_suffix(ty.clone())?;
+        if body.is_private {
+            body.private_members.push(fname.clone());
+        }
         if is_static {
             let init = if self.peek() == &TokenKind::Assign {
                 self.advance();
@@ -451,14 +479,8 @@ impl Parser {
                 None
             };
             self.expect(TokenKind::Semi)?;
-            if body.is_private {
-                body.private_members.push(fname.clone());
-            }
             body.static_fields.push((fname, final_ty, init));
         } else {
-            if body.is_private {
-                body.private_members.push(fname.clone());
-            }
             body.fields.push((fname, final_ty));
             while self.peek() == &TokenKind::Comma {
                 self.advance();

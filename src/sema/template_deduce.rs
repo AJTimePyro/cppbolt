@@ -6,6 +6,7 @@ use crate::ast::template::TemplateParam;
 use crate::ast::types::Type;
 use crate::diagnostics::CompileError;
 use crate::lexer::TokenKind;
+use crate::name::QualifiedName;
 use std::collections::HashMap;
 
 /// Splits a template call identifier such as `my_max<int>` into `("my_max", "int")`.
@@ -167,14 +168,16 @@ fn deduce_template_instance(
         args: a_args,
     } = clean_arg
     {
-        if name == a_name && args.len() == a_args.len() {
+        if QualifiedName::new(name).matches(QualifiedName::new(a_name))
+            && args.len() == a_args.len()
+        {
             for (p_arg, a_arg) in args.iter().zip(a_args.iter()) {
                 deduce_type(p_arg, a_arg, deduced, true, pos)?;
             }
         }
     } else if let Type::Struct(sname) = clean_arg
         && let Some((s_base, s_args_str)) = split_template_call_name(sname)
-        && s_base == name
+        && QualifiedName::new(s_base).matches(QualifiedName::new(name))
         && let Ok(s_args) = parse_types_list(s_args_str, &[name.to_string()])
         && args.len() == s_args.len()
     {

@@ -179,11 +179,17 @@ impl<'a> Codegen<'a> {
         name: &'p String,
         m: &'p FunctionDecl,
     ) -> Option<FuncCandidate<'p>> {
+        if !m.template_params.is_empty() {
+            return None;
+        }
+        let short_name = QualifiedName::new(name).class_short_name();
         let aliases = self.collect_method_aliases(name, m);
         let mut calls = HashSet::new();
-        if m.name == *name {
+        if m.name == *name || m.name == short_name {
             calls.insert(format!("{}_~{}", name, name));
             calls.insert(format!("{}::~{}", name, name));
+            calls.insert(format!("{}_~{}", name, short_name));
+            calls.insert(format!("{}::~{}", name, short_name));
         }
         if let Some(body) = &m.body {
             collect_stmt_calls(body, &mut calls);
@@ -199,7 +205,10 @@ impl<'a> Codegen<'a> {
         // A constructor or destructor implicitly calls the lifecycle methods
         // of its bases and members.
         if let Some(layout) = self.sema.struct_layouts.get(name)
-            && (m.name == *name || m.name == format!("~{}", name))
+            && (m.name == *name
+                || m.name == short_name
+                || m.name == format!("~{}", name)
+                || m.name == format!("~{}", short_name))
         {
             for b in &layout.base_classes {
                 collect_type_lifecycle(&Type::Struct(b.clone()), &mut calls);
@@ -231,19 +240,24 @@ impl<'a> Codegen<'a> {
     }
 
     fn collect_method_aliases(&self, name: &str, m: &FunctionDecl) -> Vec<String> {
+        let short_name = QualifiedName::new(name).class_short_name();
         let qual_name = format!("{}::{}", name, m.name);
         let mut aliases = vec![
             m.name.clone(),
             qual_name.clone(),
             format!("{}_{}", name, m.name),
         ];
-        if m.name == name {
+        if m.name == name || m.name == short_name {
             aliases.push(format!("{}_{}", name, name));
             aliases.push(format!("{}::{}", name, name));
+            aliases.push(format!("{}_{}", name, short_name));
+            aliases.push(format!("{}::{}", name, short_name));
         }
-        if m.name == format!("~{}", name) {
+        if m.name == format!("~{}", name) || m.name == format!("~{}", short_name) {
             aliases.push(format!("{}_~{}", name, name));
             aliases.push(format!("{}::~{}", name, name));
+            aliases.push(format!("{}_~{}", name, short_name));
+            aliases.push(format!("{}::~{}", name, short_name));
         }
         let mut params = m.params.clone();
         if !m.is_static {

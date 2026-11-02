@@ -146,8 +146,8 @@ impl Type {
     /// Returns the common type of a binary arithmetic expression after
     /// applying [`Type::integer_promotion`] to both operands.
     pub fn usual_arithmetic_conversion(&self, other: &Type) -> Type {
-        let self_clean = self.strip_const();
-        let other_clean = other.strip_const();
+        let self_clean = self.strip_reference().strip_const();
+        let other_clean = other.strip_reference().strip_const();
         if self_clean == &Type::Double || other_clean == &Type::Double {
             return Type::Double;
         }

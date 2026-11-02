@@ -309,20 +309,60 @@ impl Parser {
         mut id: String,
         error_pos: Option<(usize, usize)>,
     ) -> Result<String, CompileError> {
+        if self.is_template_qualifier_ahead() {
+            let args = self.parse_template_args()?;
+            let args_str = args
+                .iter()
+                .map(|a| a.to_c_type())
+                .collect::<Vec<_>>()
+                .join(", ");
+            id = format!("{}<{}>", id, args_str);
+        }
         while self.peek() == &TokenKind::ColonColon {
             self.advance();
-            match self.advance().kind.clone() {
-                TokenKind::Ident(sub) => {
-                    id = format!("{}::{}", id, sub);
+            if self.peek() == &TokenKind::Tilde {
+                self.advance();
+                match self.advance().kind.clone() {
+                    TokenKind::Ident(sub) => {
+                        id = format!("{}::~{}", id, sub);
+                    }
+                    _ => {
+                        let (line, col) =
+                            error_pos.unwrap_or_else(|| (self.current().line, self.current().col));
+                        return Err(CompileError::new(
+                            "Expected identifier after '~'",
+                            line,
+                            col,
+                        ));
+                    }
                 }
-                _ => {
-                    let (line, col) =
-                        error_pos.unwrap_or_else(|| (self.current().line, self.current().col));
-                    return Err(CompileError::new(
-                        "Expected identifier after '::'",
-                        line,
-                        col,
-                    ));
+            } else if self.peek() == &TokenKind::KwOperator {
+                self.advance();
+                let op = self.parse_operator_name()?;
+                id = format!("{}::{}", id, op);
+            } else {
+                match self.advance().kind.clone() {
+                    TokenKind::Ident(sub) => {
+                        id = format!("{}::{}", id, sub);
+                        if self.is_template_qualifier_ahead() {
+                            let args = self.parse_template_args()?;
+                            let args_str = args
+                                .iter()
+                                .map(|a| a.to_c_type())
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            id = format!("{}<{}>", id, args_str);
+                        }
+                    }
+                    _ => {
+                        let (line, col) =
+                            error_pos.unwrap_or_else(|| (self.current().line, self.current().col));
+                        return Err(CompileError::new(
+                            "Expected identifier after '::'",
+                            line,
+                            col,
+                        ));
+                    }
                 }
             }
         }

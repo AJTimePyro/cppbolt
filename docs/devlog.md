@@ -4,6 +4,57 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-02: Template Method Defaults, Lifecycle Synthesis, and Out-of-Class Qualified Attachment
+
+Resolved review findings in member template default argument mapping, same-arity template candidate deduplication, parameter shadowing, out-of-class qualified constructor parsing, and base subobject copying.
+
+### Summary of Work
+
+1. Corrected member template default argument indexing in `src/sema/constructor.rs`, mapping default argument expressions across the full signature parameter slice including the leading implicit instance receiver.
+2. Deduplicated function template candidates in `src/sema/template_registry.rs` using exact parameter types rather than arity alone, preserving coexisting same-arity overloads and updating bodies on forward declarations.
+3. Aligned out-of-class template method attachment with parameter types and constness, preventing same-arity overloads from overwriting existing definitions.
+4. Extended constructor and destructor detection in `src/parser/template.rs` to traverse multi-part namespace and class qualifier paths (`Outer::Inner::Class::Class()`).
+5. Added in-place out-of-class non-template method attachment in `src/sema/analyze.rs`, attaching method and constructor bodies to target struct declarations prior to layout and semantic checking.
+6. Enforced member template parameter shadowing during outer class template substitution in `src/sema/template_subst.rs`, preserving inner template parameters.
+7. Refined functor dispatch in `src/sema/expr_call.rs` to verify that member templates match `operator()` before rewriting instance calls.
+8. Included base class initializers in synthesized copy constructors and prepended base assignments in copy assignment operators in `src/sema/synthesize.rs`, with base subobject offset adjustments in `src/codegen/call_args.rs` and `src/codegen/lvalue.rs`.
+9. Added dynamic destructor and copy operation synthesis for instantiated template classes containing members with non-trivial lifecycles.
+10. Added 8 unit tests in `src/sema/tests.rs` covering all resolved cases, and updated golden baseline hashes across 13 affected tests.
+
+### Verification Results
+
+- Unit and integration tests: 394 corpus tests on disk, 390 passed, 4 expected failures, 0 unexpected failures. All 16 unit tests in `src/sema/tests.rs` and 88 library unit tests passed.
+- Golden baseline: all 283 entries match `tests/golden.txt`.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
+## 2026-11-02: Member Function Templates, Standard Vector, and Algorithm Overloads
+
+Implemented member function templates, out-of-class template method definitions, dependent member type aliases, and multi-arity function template overloads. These additions unlock `<vector>`, `<utility>` (`std::pair`), and `<algorithm>` (`std::sort`, `std::reverse`, `std::min`, `std::max`).
+
+### Summary of Work
+
+1. Added parsing and registration for out-of-class template method definitions (`template <typename T> void Class<T>::method()`) in `src/parser/decl.rs` and `src/sema/template_registry.rs`.
+2. Supported member function templates inside class templates and concrete structs in `src/parser/structs.rs`, `src/sema/constructor.rs`, and `src/sema/template_registry.rs`. This enables templated constructors and call operators such as `pair(U1&&, U2&&)` and functor invocations.
+3. Enabled dependent member type aliases on instantiated template classes (such as `std::vector<int>::iterator` to `int*`) in `src/parser/types.rs` and `src/sema/template_registry.rs`. Range-based for loops over template containers now resolve iterators and dereferenced elements directly.
+4. Expanded function template registration in `src/sema/template_registry.rs` to track candidate lists rather than single declarations. Candidate filtering by arity and default arguments enables overloads such as `std::sort(first, last)` and `std::sort(first, last, comp)` to coexist.
+5. Handled member template instantiations for plain structs (such as `DefaultLess::operator()<T>`) by synthesizing concrete method declarations into the AST for WebAssembly codegen.
+6. Added constructor conversion for by-value struct arguments in `src/codegen/call_args.rs`, creating managed temporaries when passing arguments such as string literals to struct parameters.
+7. Synthesized copy constructors and copy assignment operators for classes containing non-trivial subobjects in `src/sema/synthesize.rs`, and updated placement new and member initializers in `src/codegen/expr_new.rs` and `src/codegen/function_lifecycle.rs` to copy struct bytes when explicit copy constructors are absent.
+8. Extracted `src/sema/template_func.rs`, `src/sema/synthesize.rs`, and `src/sema/expr_call_member.rs` to maintain repository census compliance.
+9. Added 5 variant tests: `tests/templates_operators_variant/template_class_methods_variant.cpp`, `tests/mini_stl_variant/pair_basic.cpp`, `tests/mini_stl_variant/vector_basic.cpp`, `tests/mini_stl_variant/iterators_range_for_variant.cpp`, `tests/mini_stl_variant/algorithm_sort_variant.cpp`, and `tests/mini_stl_variant/combined_integration_variant.cpp`.
+
+### Verification Results
+
+- Unit and integration tests: 394 corpus tests on disk, 390 passed, 4 expected failures (remaining associative container tests), 0 unexpected failures. All 107 negative tests passed.
+- Host oracle gate: matched native compiler behavior on all expected files (82.2s).
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
 ## 2026-11-01: Template Integration Bugfixes and Lifecycle Lowering
 
 Resolved edge cases across template type resolution, field layout calculation, lazy operator lowering, RAII destructor lifecycles, and function argument deduction.

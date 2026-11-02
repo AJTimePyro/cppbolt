@@ -250,6 +250,7 @@ impl Parser {
                                 || sub == "nullptr_t"
                                 || self.known_types.contains(sub)
                                 || self.known_types.contains(&format!("std::{}", sub))
+                                || self.is_known_template(sub)
                                 || self.type_aliases.contains_key(sub)
                         } else {
                             false
@@ -261,6 +262,8 @@ impl Parser {
                     id == "size_t"
                         || id == "ptrdiff_t"
                         || self.known_types.contains(id)
+                        || self.is_known_template(id)
+                        || self.is_active_type_param(id)
                         || self.type_aliases.contains_key(id)
                 }
             }

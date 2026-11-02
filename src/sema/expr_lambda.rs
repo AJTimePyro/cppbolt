@@ -243,6 +243,7 @@ fn base_fn_decl(name: &str, pos: ExprPos) -> FunctionDecl {
         ref_qualifier: RefQualifier::None,
         is_static: false,
         ctor_initializers: vec![],
+        template_params: vec![],
         line: pos.line,
         col: pos.col,
     }

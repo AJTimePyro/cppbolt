@@ -1,20 +1,13 @@
 use super::constructor::ConstructorCall;
-use super::overload::same_parameters;
 use super::*;
 
 /// The return type of a function pointer or of a function type.
 fn function_return_type(ty: &Type) -> Option<Type> {
-    let stripped = ty.strip_const();
-    if let Type::Pointer(inner) = stripped {
-        if let Type::Function { return_type, .. } = &**inner {
-            return Some((**return_type).clone());
-        }
-        return None;
+    match ty.strip_const() {
+        Type::Pointer(inner) => function_return_type(inner),
+        Type::Function { return_type, .. } => Some((**return_type).clone()),
+        _ => None,
     }
-    if let Type::Function { return_type, .. } = stripped {
-        return Some((**return_type).clone());
-    }
-    None
 }
 
 impl Sema {
@@ -46,13 +39,12 @@ impl Sema {
                 return Ok(ty);
             }
             if let Some(sname) = self.class_named(&name, pos.line, pos.col) {
-                match self.analyze_constructor_call(&sname, args, &arg_types, *pos)? {
-                    ConstructorCall::Elided(inner) => {
-                        *expr = inner;
-                        return Ok(Type::Struct(sname));
-                    }
-                    ConstructorCall::Selected => return Ok(Type::Struct(sname)),
+                if let ConstructorCall::Elided(inner) =
+                    self.analyze_constructor_call(&sname, args, &arg_types, *pos)?
+                {
+                    *expr = inner;
                 }
+                return Ok(Type::Struct(sname));
             }
             self.redirect_to_method(callee, &name, *pos);
         }
@@ -62,10 +54,6 @@ impl Sema {
         }
 
         if let Expr::Identifier(raw_name) = &mut **callee {
-            let resolved = self.resolve_alias_in_qualified_name(raw_name);
-            if resolved != *raw_name {
-                *raw_name = resolved;
-            }
             let name = raw_name.strip_prefix("::").unwrap_or(raw_name).to_string();
             self.check_ambiguous_name(&name)?;
             let var_ty = self.lookup_var(&name).map(|v| v.ty.clone());
@@ -100,7 +88,10 @@ impl Sema {
         arg_types: &[Type],
         pos: ExprPos,
     ) -> Result<Option<Type>, CompileError> {
-        if self.find_method_in_class(sname, "operator()").is_some() {
+        let plain = QualifiedName::new(sname).plain();
+        let has_member_template =
+            self.has_functor_template(sname) || self.has_functor_template(plain);
+        if self.find_method_in_class(sname, "operator()").is_some() || has_member_template {
             *callee = Expr::MemberAccess {
                 object: Box::new(callee.clone()),
                 member: "operator()".to_string(),
@@ -110,6 +101,12 @@ impl Sema {
             return self.analyze_member_callee(callee, args, arg_types);
         }
         Ok(None)
+    }
+
+    fn has_functor_template(&self, sname: &str) -> bool {
+        self.member_templates
+            .get(sname)
+            .is_some_and(|templates| templates.iter().any(|m| m.name == "operator()"))
     }
 
     /// Rewrites a call to a method of the current class into a member access.
@@ -161,191 +158,63 @@ impl Sema {
         args: &mut Vec<Expr>,
         arg_types: &[Type],
     ) -> Result<Option<Type>, CompileError> {
-        if let Expr::MemberAccess {
+        let Expr::MemberAccess {
             object,
             member,
             is_arrow,
             pos,
         } = &mut *callee
+        else {
+            return Ok(None);
+        };
+        let obj_ty = self.analyze_expr(object.as_mut())?;
+        if let Some(ret) =
+            self.try_pseudo_destructor_call(&obj_ty, *is_arrow, member, args.len(), *pos)?
         {
-            let obj_ty = self.analyze_expr(object.as_mut())?;
-            if let Some(ret) =
-                self.try_pseudo_destructor_call(&obj_ty, *is_arrow, member, args.len(), *pos)?
-            {
-                return Ok(Some(ret));
-            }
-            let (struct_name, receiver_const) =
-                self.member_struct_name(&obj_ty, *is_arrow, *pos)?;
-
-            if member.starts_with('~') {
-                let ret = self.resolve_struct_destructor(&struct_name, member, *pos)?;
-                return Ok(Some(ret));
-            }
-            let receiver_is_lvalue = if *is_arrow {
-                true
-            } else {
-                obj_ty.is_reference() || object.is_lvalue()
-            };
-            let all_overloads = self.find_method_overloads_in_class(&struct_name, member, false);
-            if all_overloads.is_empty() {
-                return Err(CompileError::new(
-                    format!("No member named '{}' in struct '{}'", member, struct_name),
-                    pos.line,
-                    pos.col,
-                ));
-            }
-            Self::check_ref_qualifier_compatibility(&all_overloads, receiver_is_lvalue, *pos)?;
-            if let Some(sig) = self.find_method_in_class_for_receiver_category(
-                &struct_name,
-                member,
-                receiver_const,
-                receiver_is_lvalue,
-            ) {
-                // The arguments must match one of the overloads of the method.
-                self.check_member_arguments(
-                    (&struct_name, member),
-                    (receiver_const, receiver_is_lvalue),
-                    arg_types,
-                    Some(args),
-                    *pos,
-                )?;
-                // A member call may leave out arguments that have default
-                // values.
-                self.fill_member_defaults(&sig, args)?;
-                self.convert_call_args(args, &sig.param_types[1..], arg_types, *pos)?;
-                self.instantiate_pending_method(&sig.mangled_name)?;
-                return Ok(Some(sig.return_type.clone()));
-            } else {
-                return Err(CompileError::new(
-                    format!("No member named '{}' in struct '{}'", member, struct_name),
-                    pos.line,
-                    pos.col,
-                ));
-            }
+            return Ok(Some(ret));
         }
+        let (struct_name, receiver_const) = self.member_struct_name(&obj_ty, *is_arrow, *pos)?;
+        if member.starts_with('~') {
+            return self
+                .resolve_struct_destructor(&struct_name, member, *pos)
+                .map(Some);
+        }
+        let receiver_is_lvalue = if *is_arrow {
+            true
+        } else {
+            obj_ty.is_reference() || object.is_lvalue()
+        };
+        let sig = self.resolve_member_sig(
+            (&struct_name, member),
+            (receiver_const, receiver_is_lvalue),
+            args,
+            arg_types,
+            *pos,
+        )?;
+        if let Some(sig) = sig {
+            self.fill_member_defaults(&sig, args)?;
+            self.convert_call_args(args, &sig.param_types[1..], arg_types, *pos)?;
+            self.instantiate_pending_method(&sig.mangled_name)?;
+            return Ok(Some(sig.return_type.clone()));
+        }
+        if self
+            .find_method_overloads_in_class(&struct_name, member, false)
+            .is_empty()
+        {
+            return Err(CompileError::new(
+                format!("No member named '{member}' in struct '{struct_name}'"),
+                pos.line,
+                pos.col,
+            ));
+        }
+        self.check_member_arguments(
+            (&struct_name, member),
+            (receiver_const, receiver_is_lvalue),
+            arg_types,
+            Some(args),
+            *pos,
+        )?;
         Ok(None)
-    }
-
-    fn check_ref_qualifier_compatibility(
-        all_overloads: &[FunctionSig],
-        receiver_is_lvalue: bool,
-        pos: ExprPos,
-    ) -> Result<(), CompileError> {
-        let has_matching = all_overloads.iter().any(|sig| match sig.ref_qualifier {
-            RefQualifier::None => true,
-            RefQualifier::LValue => receiver_is_lvalue || crate::sema::sig_receiver_is_const(sig),
-            RefQualifier::RValue => !receiver_is_lvalue,
-        });
-        if !has_matching {
-            let msg = if receiver_is_lvalue {
-                "cannot call rvalue ref-qualified method on an lvalue"
-            } else {
-                "cannot call lvalue ref-qualified method on an rvalue"
-            };
-            return Err(CompileError::new(msg, pos.line, pos.col));
-        }
-        Ok(())
-    }
-
-    /// Checks that the arguments of a method call match an overload.
-    ///
-    /// The first parameter of a method is the implicit `this`, so the
-    /// arguments start at the second one.
-    fn check_member_arguments(
-        &self,
-        target: (&str, &str),
-        receiver: (bool, bool),
-        arg_types: &[Type],
-        args: Option<&[Expr]>,
-        pos: ExprPos,
-    ) -> Result<(), CompileError> {
-        let (class_name, member) = target;
-        let (receiver_const, receiver_is_lvalue) = receiver;
-        let overloads = self.find_method_overloads_in_class(class_name, member, receiver_const);
-        if overloads.is_empty() {
-            return Ok(());
-        }
-        let mut conversion_failure: Option<ConversionFailure> = None;
-        let mut best_score = usize::MAX;
-        let mut best: Option<&FunctionSig> = None;
-        let mut ambiguous = false;
-        for sig in &overloads {
-            match self.score_member_sig(sig, receiver_const, receiver_is_lvalue, arg_types, args) {
-                Some(Ok(score)) => {
-                    if score < best_score {
-                        best_score = score;
-                        best = Some(sig);
-                        ambiguous = false;
-                    } else if score == best_score
-                        && let Some(best) = best
-                        && !same_parameters(best, sig)
-                    {
-                        ambiguous = true;
-                    }
-                }
-                Some(Err(failure)) => {
-                    conversion_failure.get_or_insert(failure);
-                }
-                None => {}
-            }
-        }
-        if ambiguous {
-            return Err(self.ambiguous_call(member, arg_types, pos));
-        }
-        if best.is_some() {
-            return Ok(());
-        }
-        if let Some(failure) = conversion_failure {
-            return Err(self.no_matching_conversion(member, &failure, pos));
-        }
-        let expected = overloads
-            .first()
-            .map(|s| s.param_types.len().saturating_sub(1))
-            .unwrap_or(0);
-        Err(CompileError::new(
-            format!(
-                "No matching function call for '{}': expected {} arguments, found {}",
-                member,
-                expected,
-                arg_types.len()
-            ),
-            pos.line,
-            pos.col,
-        ))
-    }
-
-    fn score_member_sig(
-        &self,
-        sig: &FunctionSig,
-        receiver_const: bool,
-        receiver_is_lvalue: bool,
-        arg_types: &[Type],
-        args: Option<&[Expr]>,
-    ) -> Option<Result<usize, ConversionFailure>> {
-        if receiver_is_lvalue && sig.ref_qualifier == RefQualifier::RValue {
-            return None;
-        }
-        if !receiver_is_lvalue
-            && sig.ref_qualifier == RefQualifier::LValue
-            && !crate::sema::sig_receiver_is_const(sig)
-        {
-            return None;
-        }
-        let params = sig.param_types.get(1..).unwrap_or(&[]);
-        let defaults = sig.default_args.get(1..).unwrap_or(&[]);
-        let min_args = defaults.iter().take_while(|d| d.is_none()).count();
-        if arg_types.len() < min_args || arg_types.len() > params.len() {
-            return None;
-        }
-        Some(self.score_arguments(params, arg_types, args).map(|score| {
-            let const_bonus =
-                usize::from(!receiver_const && crate::sema::sig_receiver_is_const(sig));
-            let ref_bonus = match (receiver_is_lvalue, sig.ref_qualifier) {
-                (true, RefQualifier::None) | (false, RefQualifier::None) => 1,
-                _ => 0,
-            };
-            score + const_bonus + ref_bonus
-        }))
     }
 
     fn convert_call_args(
@@ -405,7 +274,7 @@ impl Sema {
 
         let (Some(candidates), Some(selection)) = (&candidates, selection) else {
             return Err(CompileError::new(
-                format!("Undefined function '{}'", name),
+                format!("Undefined function '{name}'"),
                 pos.line,
                 pos.col,
             ));
@@ -422,8 +291,7 @@ impl Sema {
         let cand = &candidates[0];
         Err(CompileError::new(
             format!(
-                "No matching function call for '{}': expected {} arguments, found {}",
-                name,
+                "No matching function call for '{name}': expected {} arguments, found {}",
                 cand.param_types.len(),
                 args.len()
             ),
@@ -456,11 +324,12 @@ impl Sema {
         args: &mut [Expr],
         pos: ExprPos,
     ) -> Result<Option<(Type, Expr)>, CompileError> {
-        let ty = if let Some(alias_ty) = self.type_aliases.get(name) {
-            alias_ty.clone()
-        } else if let Some(scalar_ty) = Type::from_scalar_name(name) {
-            scalar_ty
-        } else {
+        let Some(ty) = self
+            .type_aliases
+            .get(name)
+            .cloned()
+            .or_else(|| Type::from_scalar_name(name))
+        else {
             return Ok(None);
         };
         if !ty.is_scalar() {

@@ -21,6 +21,7 @@ pub const FEATURES: &[&str] = &[
     "memory_model_variant",
     "runtime_trap",
     "templates_operators",
+    "templates_operators_variant",
     "mini_stl",
     "mini_stl_variant",
     "independent",

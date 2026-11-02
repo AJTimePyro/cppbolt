@@ -141,11 +141,12 @@ impl<'a> Codegen<'a> {
         self.func_indices.insert(qual_name, func_idx);
         self.func_indices
             .insert(format!("{}_{}", name, m.name), func_idx);
-        if m.name == *name {
+        let short_name = QualifiedName::new(name).class_short_name();
+        if m.name == *name || m.name == short_name {
             self.func_indices
                 .insert(format!("{}_{}", name, name), func_idx);
         }
-        if m.name == format!("~{}", name) {
+        if m.name == format!("~{}", name) || m.name == format!("~{}", short_name) {
             self.func_indices
                 .insert(format!("{}_~{}", name, name), func_idx);
         }

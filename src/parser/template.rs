@@ -31,7 +31,7 @@ impl Parser {
         self.parse_template_body(params, t_line, t_col, declarations)
     }
 
-    fn parse_template_params(&mut self) -> Result<Vec<TemplateParam>, CompileError> {
+    pub(super) fn parse_template_params(&mut self) -> Result<Vec<TemplateParam>, CompileError> {
         let mut params = Vec::new();
         while self.peek() != &TokenKind::Gt && self.peek() != &TokenKind::Shr {
             let p_line = self.current().line;
@@ -222,5 +222,76 @@ impl Parser {
         }
         self.consume_template_closing_gt()?;
         Ok(args)
+    }
+
+    pub(super) fn is_template_qualifier_ahead(&self) -> bool {
+        if self.peek() != &TokenKind::Lt {
+            return false;
+        }
+        self.skip_template_angles(0)
+            .is_some_and(|end| self.peek_ahead(end) == &TokenKind::ColonColon)
+    }
+
+    fn skip_template_angles(&self, mut idx: usize) -> Option<usize> {
+        let mut depth = 0;
+        while let Some(tok) = self.tokens.get(self.pos + idx) {
+            match tok.kind {
+                TokenKind::Lt => depth += 1,
+                TokenKind::Gt => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(idx + 1);
+                    }
+                }
+                TokenKind::Shr => {
+                    if depth <= 2 {
+                        return Some(idx + 1);
+                    }
+                    depth -= 2;
+                }
+                TokenKind::Semi | TokenKind::LBrace | TokenKind::RBrace | TokenKind::Eof => {
+                    return None;
+                }
+                _ => {}
+            }
+            idx += 1;
+        }
+        None
+    }
+
+    pub(super) fn is_out_of_class_ctor_or_dtor(&self) -> bool {
+        let mut idx = 0;
+        if self.peek_ahead(idx) == &TokenKind::ColonColon {
+            idx += 1;
+        }
+        let mut last_class = String::new();
+        loop {
+            let TokenKind::Ident(name) = self.peek_ahead(idx) else {
+                return false;
+            };
+            last_class.clear();
+            last_class.push_str(name);
+            idx += 1;
+            if self.peek_ahead(idx) == &TokenKind::Lt {
+                let Some(next_idx) = self.skip_template_angles(idx) else {
+                    return false;
+                };
+                idx = next_idx;
+            }
+            if self.peek_ahead(idx) != &TokenKind::ColonColon {
+                return false;
+            }
+            idx += 1;
+            let mut check_idx = idx;
+            if self.peek_ahead(check_idx) == &TokenKind::Tilde {
+                check_idx += 1;
+            }
+            if let TokenKind::Ident(sub_name) = self.peek_ahead(check_idx)
+                && sub_name == &last_class
+                && self.peek_ahead(check_idx + 1) == &TokenKind::LParen
+            {
+                return true;
+            }
+        }
     }
 }

@@ -71,6 +71,37 @@ impl<'a> Codegen<'a> {
                 }
                 code.push(OP_CALL);
                 write_u32(code, ctor_idx);
+            } else if args.len() == 1
+                && matches!(
+                    arg_types[0].strip_const().strip_reference(),
+                    Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(sname))
+                )
+            {
+                let size = self
+                    .sema
+                    .struct_layouts
+                    .get(sname)
+                    .map(|l| l.size)
+                    .ok_or_else(|| self.internal_error("missing struct layout"))?;
+                self.compile_lvalue_addr(&args[0], ctx, code)?;
+                code.push(OP_LOCAL_SET);
+                write_u32(code, ctx.scratch1);
+                super::raii::emit_struct_byte_copy(
+                    size,
+                    0,
+                    |code| {
+                        code.push(OP_LOCAL_GET);
+                        write_u32(code, ctx.fp_local);
+                        code.push(OP_I32_LOAD);
+                        write_u32(code, 2);
+                        write_u32(code, obj_slot);
+                    },
+                    |code| {
+                        code.push(OP_LOCAL_GET);
+                        write_u32(code, ctx.scratch1);
+                    },
+                    code,
+                );
             } else if let Some(layout) = self.sema.struct_layouts.get(sname).cloned() {
                 self.emit_construct_aggregate_at(&layout, args, obj_slot, ctx, code)?;
             }

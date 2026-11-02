@@ -92,6 +92,16 @@ impl<'a> QualifiedName<'a> {
     pub fn matches(self, other: Self) -> bool {
         self.plain() == other.plain()
     }
+
+    /// Extracts the unqualified class identifier, ignoring template arguments and namespace qualifiers.
+    pub fn class_short_name(self) -> &'a str {
+        let base = if let Some(open) = self.0.find('<') {
+            &self.0[..open]
+        } else {
+            self.0
+        };
+        base.split("::").last().unwrap_or(base)
+    }
 }
 
 #[cfg(test)]

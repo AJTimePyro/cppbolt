@@ -61,6 +61,10 @@ impl Sema {
         }
         if let Some(init_expr) = init {
             self.analyze_var_init(name, ty, init_expr, line, col)?;
+        } else if let Type::Struct(sname) = ty.strip_const()
+            && let Some(sig) = self.find_constructor_for(sname, &[], None)
+        {
+            self.instantiate_pending_method(&sig.mangled_name)?;
         }
         if is_static {
             self.declare_static_var(name, ty, line, col)?;
@@ -169,6 +173,22 @@ impl Sema {
                 line,
                 col,
             ));
+        }
+        if let Type::Struct(sname) = ty.strip_const() {
+            if let Some(sig) = self.find_constructor_for(
+                sname,
+                std::slice::from_ref(&init_ty),
+                Some(std::slice::from_ref(init_expr)),
+            ) {
+                self.instantiate_pending_method(&sig.mangled_name)?;
+            } else if let Some(sig) = self.try_instantiate_member_template_constructor(
+                sname,
+                std::slice::from_ref(&init_ty),
+                std::slice::from_ref(init_expr),
+                ExprPos::new(line, col),
+            )? {
+                self.instantiate_pending_method(&sig.mangled_name)?;
+            }
         }
         Ok(())
     }

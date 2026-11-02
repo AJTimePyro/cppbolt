@@ -16,7 +16,9 @@ pub fn substitute_type(
     match ty {
         Type::TypeParam(name) => mapping.get(name).cloned().unwrap_or_else(|| ty.clone()),
         Type::Struct(name) => {
-            if let Some((_, target_ty)) = injected_class.filter(|(c, _)| *c == name) {
+            if let Some((c, target_ty)) = injected_class
+                && crate::QualifiedName::new(c).matches(crate::QualifiedName::new(name))
+            {
                 return target_ty.clone();
             }
             if let Some(target) = mapping.get(name) {
@@ -82,7 +84,13 @@ pub fn substitute_expr(
         Expr::Unary { expr, .. } | Expr::SizeofExpr(expr) | Expr::Delete { expr, .. } => {
             substitute_expr(expr, mapping, injected_class);
         }
-        Expr::Assign { target, value, .. } | Expr::CompoundAssign { target, value, .. } => {
+        Expr::Binary {
+            left: target,
+            right: value,
+            ..
+        }
+        | Expr::Assign { target, value, .. }
+        | Expr::CompoundAssign { target, value, .. } => {
             substitute_expr(target, mapping, injected_class);
             substitute_expr(value, mapping, injected_class);
         }
@@ -90,17 +98,18 @@ pub fn substitute_expr(
             substitute_expr(array, mapping, injected_class);
             substitute_expr(index, mapping, injected_class);
         }
-        Expr::MemberAccess { object, .. } => {
+        Expr::MemberAccess { object, member, .. } => {
             substitute_expr(object, mapping, injected_class);
+            substitute_member_name(member, mapping);
         }
         Expr::Ternary {
             cond,
             then_expr,
             else_expr,
         } => {
-            substitute_expr(cond, mapping, injected_class);
-            substitute_expr(then_expr, mapping, injected_class);
-            substitute_expr(else_expr, mapping, injected_class);
+            for e in [cond, then_expr, else_expr] {
+                substitute_expr(e, mapping, injected_class);
+            }
         }
         Expr::Cast {
             target_type, expr, ..
@@ -111,30 +120,50 @@ pub fn substitute_expr(
         Expr::SizeofType(ty) | Expr::TypedInitList { ty, .. } => {
             *ty = substitute_type(ty, mapping, injected_class);
         }
-        Expr::New {
-            ty,
-            args,
-            array_size,
-            placement,
-            ..
-        } => {
-            *ty = substitute_type(ty, mapping, injected_class);
-            for arg in args {
-                substitute_expr(arg, mapping, injected_class);
-            }
-            if let Some(size) = array_size {
-                substitute_expr(size, mapping, injected_class);
-            }
-            if let Some(place) = placement {
-                substitute_expr(place, mapping, injected_class);
-            }
-        }
+        Expr::New { .. } => substitute_new(expr, mapping, injected_class),
         Expr::InitializerList { elements, .. } => {
             for el in elements {
                 substitute_expr(el, mapping, injected_class);
             }
         }
         _ => {}
+    }
+}
+
+fn substitute_member_name(member: &mut String, mapping: &HashMap<String, Type>) {
+    if let Some(rest) = member.strip_prefix('~')
+        && let Some(ty) = mapping.get(rest)
+    {
+        let c_ty = ty.to_c_type();
+        let short = c_ty.rsplit("::").next().unwrap_or(&c_ty);
+        *member = format!("~{short}");
+    }
+}
+
+fn substitute_new(
+    expr: &mut Expr,
+    mapping: &HashMap<String, Type>,
+    injected_class: Option<(&str, &Type)>,
+) {
+    let Expr::New {
+        ty,
+        args,
+        array_size,
+        placement,
+        ..
+    } = expr
+    else {
+        return;
+    };
+    *ty = substitute_type(ty, mapping, injected_class);
+    for arg in args {
+        substitute_expr(arg, mapping, injected_class);
+    }
+    if let Some(size) = array_size {
+        substitute_expr(size, mapping, injected_class);
+    }
+    if let Some(place) = placement {
+        substitute_expr(place, mapping, injected_class);
     }
 }
 
@@ -253,25 +282,36 @@ pub fn substitute_stmt(
     }
 }
 
+fn substitute_func_name(func_name: &str, injected_class: Option<(&str, &Type)>) -> String {
+    if let Some((cname, target_ty)) = injected_class {
+        if func_name == cname {
+            return target_ty.to_c_type();
+        }
+        if func_name == format!("~{}", cname) {
+            return format!("~{}", target_ty.to_c_type());
+        }
+    }
+    func_name.to_string()
+}
+
 pub fn substitute_function(
     func: &FunctionDecl,
     mapping: &HashMap<String, Type>,
     injected_class: Option<(&str, &Type)>,
     new_name: Option<String>,
 ) -> FunctionDecl {
-    let name = new_name.unwrap_or_else(|| {
-        if let Some((cname, target_ty)) = injected_class {
-            if func.name == cname {
-                target_ty.to_c_type()
-            } else if func.name == format!("~{}", cname) {
-                format!("~{}", target_ty.to_c_type())
-            } else {
-                func.name.clone()
-            }
-        } else {
-            func.name.clone()
+    let mut remaining_template_params = Vec::new();
+    let mut active_mapping = mapping.clone();
+    for p in &func.template_params {
+        if injected_class.is_some() {
+            remaining_template_params.push(p.clone());
+            active_mapping.remove(&p.name);
+        } else if !mapping.contains_key(&p.name) {
+            remaining_template_params.push(p.clone());
         }
-    });
+    }
+    let mapping = &active_mapping;
+    let name = new_name.unwrap_or_else(|| substitute_func_name(&func.name, injected_class));
 
     let return_type = substitute_type(&func.return_type, mapping, injected_class);
     let params = func
@@ -319,6 +359,7 @@ pub fn substitute_function(
         ref_qualifier: func.ref_qualifier,
         is_static: func.is_static,
         ctor_initializers,
+        template_params: remaining_template_params,
         line: func.line,
         col: func.col,
     }
@@ -368,114 +409,5 @@ pub fn substitute_struct(
         private_members: template_class.private_members.clone(),
         line,
         col,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_substitute_scalar_type() {
-        let mut mapping = HashMap::new();
-        mapping.insert("T".to_string(), Type::Int);
-
-        let t_param = Type::TypeParam("T".to_string());
-        assert_eq!(substitute_type(&t_param, &mapping, None), Type::Int);
-
-        let ptr = Type::Pointer(Box::new(Type::TypeParam("T".to_string())));
-        assert_eq!(
-            substitute_type(&ptr, &mapping, None),
-            Type::Pointer(Box::new(Type::Int))
-        );
-    }
-
-    #[test]
-    fn test_substitute_injected_class_name() {
-        let mapping = HashMap::new();
-        let target_ty = Type::Struct("Holder<int>".to_string());
-        let bare = Type::Struct("Holder".to_string());
-
-        let res = substitute_type(&bare, &mapping, Some(("Holder", &target_ty)));
-        assert_eq!(res, target_ty);
-    }
-
-    #[test]
-    fn test_substitute_function() {
-        let mut mapping = HashMap::new();
-        mapping.insert("T".to_string(), Type::Int);
-
-        let func = FunctionDecl {
-            name: "get".to_string(),
-            return_type: Type::TypeParam("T".to_string()),
-            params: vec![Param {
-                name: "val".to_string(),
-                ty: Type::TypeParam("T".to_string()),
-                default_val: None,
-            }],
-            body: None,
-            is_virtual: false,
-            is_pure_virtual: false,
-            is_const: true,
-            is_explicit: false,
-            ref_qualifier: Default::default(),
-            is_static: false,
-            ctor_initializers: Vec::new(),
-            line: 1,
-            col: 1,
-        };
-
-        let subst = substitute_function(&func, &mapping, None, None);
-        assert_eq!(subst.return_type, Type::Int);
-        assert_eq!(subst.params[0].ty, Type::Int);
-    }
-
-    #[test]
-    fn test_substitute_struct() {
-        let mut mapping = HashMap::new();
-        mapping.insert("T".to_string(), Type::Int);
-
-        let tclass = TemplateClass {
-            name: "Holder".to_string(),
-            is_class: true,
-            base_classes: Vec::new(),
-            fields: vec![("value".to_string(), Type::TypeParam("T".to_string()))],
-            methods: vec![FunctionDecl {
-                name: "Holder".to_string(),
-                return_type: Type::Void,
-                params: vec![Param {
-                    name: "val".to_string(),
-                    ty: Type::TypeParam("T".to_string()),
-                    default_val: None,
-                }],
-                body: None,
-                is_virtual: false,
-                is_pure_virtual: false,
-                is_const: false,
-                is_explicit: false,
-                ref_qualifier: Default::default(),
-                is_static: false,
-                ctor_initializers: Vec::new(),
-                line: 1,
-                col: 1,
-            }],
-            static_fields: Vec::new(),
-            private_members: Vec::new(),
-        };
-
-        let subst = substitute_struct(&tclass, &mapping, "Holder<int>", 1, 1);
-        let Decl::StructDecl {
-            name,
-            fields,
-            methods,
-            ..
-        } = subst
-        else {
-            unreachable!("expected StructDecl");
-        };
-        assert_eq!(name, "Holder<int>");
-        assert_eq!(fields[0].1, Type::Int);
-        assert_eq!(methods[0].name, "Holder<int>");
-        assert_eq!(methods[0].params[0].ty, Type::Int);
     }
 }

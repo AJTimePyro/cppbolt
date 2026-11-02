@@ -316,10 +316,7 @@ fn collect_call_node<'a>(expr: &'a Expr, calls: &mut HashSet<String>, stack: &mu
         Expr::Cast { expr, .. } => stack.push(expr),
         Expr::New { ty, args, .. } => {
             if let Type::Struct(sname) = ty.strip_const() {
-                calls.insert(format!("{}_{}", sname, sname));
-                calls.insert(format!("{}::{}", sname, sname));
-                calls.insert(format!("{}_~{}", sname, sname));
-                calls.insert(format!("{}::~{}", sname, sname));
+                insert_lifecycle_calls(sname, calls);
             }
             stack.extend(args.iter());
         }
@@ -359,34 +356,33 @@ fn collect_binary_operator(op: BinaryOp, calls: &mut HashSet<String>) {
 }
 
 /// The mangled name of the operator called by a compound assignment.
+#[rustfmt::skip]
 pub(super) fn compound_assign_operator_name(op: &BinaryOp) -> String {
-    format!(
-        "operator{}=",
-        match op {
-            BinaryOp::Add => "+",
-            BinaryOp::Sub => "-",
-            BinaryOp::Mul => "*",
-            BinaryOp::Div => "/",
-            BinaryOp::Rem => "%",
-            BinaryOp::BitAnd => "&",
-            BinaryOp::BitOr => "|",
-            BinaryOp::BitXor => "^",
-            BinaryOp::Shl => "<<",
-            BinaryOp::Shr => ">>",
-            _ => "",
+    let sym = match op {
+        BinaryOp::Add => "+", BinaryOp::Sub => "-", BinaryOp::Mul => "*",
+        BinaryOp::Div => "/", BinaryOp::Rem => "%", BinaryOp::BitAnd => "&",
+        BinaryOp::BitOr => "|", BinaryOp::BitXor => "^", BinaryOp::Shl => "<<",
+        BinaryOp::Shr => ">>", _ => "",
+    };
+    format!("operator{sym}=")
+}
+
+fn insert_lifecycle_calls(sname: &str, calls: &mut HashSet<String>) {
+    let short = QualifiedName::new(sname).class_short_name();
+    for n in [sname, short] {
+        for prefix in ["", "~"] {
+            calls.insert(format!("{sname}_{prefix}{n}"));
+            calls.insert(format!("{sname}::{prefix}{n}"));
         }
-    )
+    }
 }
 
 pub(super) fn collect_type_lifecycle(ty: &Type, calls: &mut HashSet<String>) {
     match ty.strip_const() {
         Type::Struct(sname) => {
-            calls.insert(format!("{}_{}", sname, sname));
-            calls.insert(format!("{}::{}", sname, sname));
-            calls.insert(format!("{}_~{}", sname, sname));
-            calls.insert(format!("{}::~{}", sname, sname));
-            calls.insert(format!("{}_operator=", sname));
-            calls.insert(format!("{}::operator=", sname));
+            insert_lifecycle_calls(sname, calls);
+            calls.insert(format!("{sname}_operator="));
+            calls.insert(format!("{sname}::operator="));
         }
         Type::Array(element, _) => collect_type_lifecycle(element, calls),
         _ => {}
