@@ -169,14 +169,37 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let aty = self.get_expr_type(a, ctx);
-        if is_byval_struct
-            && self.is_struct_lvalue(a, ctx)
-            && let Type::Struct(sname) = aty.strip_const().strip_reference()
-        {
-            let is_const = aty.strip_reference().is_const();
-            if let Some(ctor_idx) = self.find_copy_constructor(sname, is_const) {
-                self.compile_call_arg_byval_temp(a, sname, ctor_idx, ctx, code)?;
-                return Ok(());
+        if is_byval_struct && let Some(pty) = param_ty {
+            let clean_p = pty.strip_const().strip_reference();
+            let clean_a = aty.strip_const().strip_reference();
+            if let Type::Struct(psname) = clean_p {
+                let is_same = if let Type::Struct(asname) = clean_a {
+                    QualifiedName::new(psname).matches(QualifiedName::new(asname))
+                } else {
+                    false
+                };
+                if is_same && self.is_struct_lvalue(a, ctx) {
+                    let is_const = aty.strip_reference().is_const();
+                    if let Some(ctor_idx) = self.find_copy_constructor(psname, is_const) {
+                        self.compile_call_arg_byval_temp(a, psname, ctor_idx, ctx, code)?;
+                        return Ok(());
+                    }
+                } else if !is_same
+                    && let Some(ctor_idx) =
+                        self.find_constructor(psname, std::slice::from_ref(clean_a))
+                {
+                    self.compile_call_arg_ref_temp(
+                        a,
+                        clean_p,
+                        CtorCall {
+                            type_name: psname,
+                            ctor_idx,
+                        },
+                        ctx,
+                        code,
+                    )?;
+                    return Ok(());
+                }
             }
         }
         self.compile_expr(a, ctx, code)?;
