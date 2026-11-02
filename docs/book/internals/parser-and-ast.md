@@ -7,7 +7,7 @@ The parser transforms the flat token stream into a structured Abstract Syntax Tr
 ## 1. Role in the Pipeline
 
 1. **Unsupported Feature Fast-Reject**: Before executing the full grammar parser, `Parser::validate_supported_features` (`src/parser/unsupported.rs`) scans the token stream to detect explicitly unsupported C++ constructs (e.g. `operator()`, `operator->`, `operator*()`, `postfix ++/--`, namespace aliases, `const` ref method overloads) and returns clean diagnostics.
-2. **Grammar Parsing (Recursive Descent)**: Parses top-level declarations (functions, structs, classes, globals, enums, type aliases) and statements (`if`, `while`, `for`, `switch`, `return`, compound blocks).
+2. **Grammar Parsing (Recursive Descent)**: Parses top-level declarations (functions, structs, classes, globals, enums, type aliases) and statements (`if`, `while`, `for`, `switch`, `return`, compound blocks). Recognizes out-of-class constructor and destructor definitions across nested namespace and class qualifiers without requiring return type specifiers.
 3. **Expression Parsing (Pratt Parser)**: Parses expressions using precedence climbing / Pratt parsing (`src/parser/expr.rs`), handling complex operator hierarchies, ternary conditionals, array subscripts, member access, casts, and object constructions.
 4. **Per-Construct Recursion Budgeting**: To prevent thread stack exhaustion when compiling deep programs in WebAssembly engines, the parser tracks recursion limits via `DepthCounters` across expressions, parentheses, call arguments, statements, and blocks.
 

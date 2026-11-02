@@ -4,6 +4,32 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-02: Template Method Defaults, Lifecycle Synthesis, and Out-of-Class Qualified Attachment
+
+We resolved review findings in member template method default argument indexing, same-arity template candidate deduplication, parameter shadowing, out-of-class qualified constructor parsing, and base subobject copy synthesis.
+
+### Summary of Work
+
+1. Corrected member template default argument indexing in `src/sema/constructor.rs`, mapping default argument expressions across the full signature parameter slice including the leading implicit instance receiver.
+2. Deduplicated function template candidates in `src/sema/template_registry.rs` using exact parameter types rather than arity alone, preserving coexisting same-arity overloads and updating bodies on forward-declared templates.
+3. Aligned out-of-class template method attachment with parameter types and constness, preventing same-arity overloads from overwriting existing definitions.
+4. Updated out-of-class constructor and destructor detection in `src/parser/template.rs` to traverse multi-part namespace and class qualifier paths (`Outer::Inner::Class::Class()`).
+5. Added in-place out-of-class non-template method attachment in `src/sema/analyze.rs`, attaching method and constructor bodies to target struct declarations prior to layout and semantic checking.
+6. Enforced member template parameter shadowing during outer class template substitution in `src/sema/template_subst.rs`, preserving inner template parameters.
+7. Refined functor dispatch in `src/sema/expr_call.rs` to verify that member templates match `operator()` before rewriting instance calls.
+8. Included base class initializers in synthesized copy constructors and prepended base assignments in copy assignment operators in `src/sema/synthesize.rs`, with zero-offset adjustment for derived-to-base reference arguments in `src/codegen/call_args.rs` and `src/codegen/lvalue.rs`.
+9. Added dynamic destructor and copy operation synthesis for instantiated template classes containing members with non-trivial lifecycles.
+10. Added 8 unit tests in `src/sema/tests.rs` covering all resolved cases, and updated golden baseline hashes across 13 affected tests.
+
+### Verification Results
+
+- Unit and integration tests: 394 corpus tests on disk, 390 passed, 4 expected failures, 0 unexpected failures. All 16 unit tests in `src/sema/tests.rs` and 88 library unit tests passed.
+- Golden baseline: all 283 entries match `tests/golden.txt`.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
 ## 2026-11-02: Member Function Templates, Standard Vector, and Algorithm Overloads
 
 We implemented member function templates, out-of-class template method definitions, dependent member type aliases, and multi-arity function template overloads. These changes unlocked `<vector>`, `<utility>` (`std::pair`), and `<algorithm>` (`std::sort`, `std::reverse`, `std::min`, `std::max`).

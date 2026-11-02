@@ -95,8 +95,11 @@ cargo run --bin cppbolt-testrunner -- target/release/cppbolt-cli
   - Type resolution recursively unwraps pointers, references, const qualifiers, and arrays, generating concrete struct layouts before calculating member access offsets.
   - Non-template structs compute layouts after resolving template fields, giving fields valid offsets and sizes. Non-template functions accept and return template instance types.
   - Class template member methods instantiate lazily on first call, address-of reference, or operator overload lookup (`operator[]`, unary operators). Unused member methods are neither typechecked nor emitted into WebAssembly.
-  - Non-virtual class template destructors instantiate eagerly alongside virtual methods so synthesized cleanup logic can drop values on scope exit.
-  - Function template overload resolution deduces type arguments from values, references, const references, top-level const pointers, and template instance arguments. Explicit template arguments (`func<int>(val)`, `func<Inner<int>>(val)`) override deduction and parse nested template types. Default argument expressions fill omitted trailing parameters. Exact non-template function overloads take precedence over template specializations.
+  - Non-virtual class template destructors instantiate eagerly alongside virtual methods so synthesized cleanup logic can drop values on scope exit. Dynamically instantiated template classes containing fields with non-trivial destructors synthesize cleanup methods and copy operations.
+  - Function template overload resolution deduces type arguments from values, references, const references, top-level const pointers, and template instance arguments. Candidate registration tracks overloads sharing identical parameter counts by signature. Explicit template arguments (`func<int>(val)`, `func<Inner<int>>(val)`) override deduction and parse nested template types. Default argument expressions fill omitted trailing parameters for both free and member template functions. Exact non-template function overloads take precedence over template specializations.
+  - Out-of-class method definitions match class template and concrete struct declarations by parameter types and const qualification, including across multi-part namespace paths (`Outer::Inner::Class::Class()`).
+  - Member template parameters shadow outer class template parameters with identical names during class instantiation.
+  - Expression calls on struct instances dispatch to `operator()` only when an explicit call operator or member template `operator()` exists.
   - Instantiation recursion is limited to 500 levels (`template instantiation depth exceeded (limit: 500)`).
 
 ### 2. Nesting Limits per Construct
