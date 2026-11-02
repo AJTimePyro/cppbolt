@@ -46,7 +46,7 @@ Compiling templated standard library headers like `<vector>`, `<utility>`, and `
     We parse the `typename` prefix before qualified type specifiers in template and function declarations (`typename T::iterator`). Semantic analysis resolves dependent names through qualified alias tables and registered nested types, rejecting unqualified `typename` specifiers and non-type dependent names with distinct diagnostics.
 
 11. Eager constructor dependency analysis (`src/sema/constructor.rs`, `src/sema/stmt.rs`).
-    When analyzing an instantiated constructor, semantic analysis inspects member initializer expressions and base class subobjects after parameter bindings enter scope. Dependent default constructors for member subobjects and array elements instantiate immediately so member layouts and destructor cleanup chains remain fully populated before WebAssembly code emission.
+    When analyzing an instantiated constructor, semantic analysis inspects member initializer expressions and base class subobjects after parameter bindings enter scope. Dependent default constructors for member subobjects and array elements instantiate immediately, populating member layouts and destructor cleanups before WebAssembly code emission.
 
 ## Consequences
 ### Positive
