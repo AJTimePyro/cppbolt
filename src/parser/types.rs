@@ -346,7 +346,9 @@ impl Parser {
                             self.current().col,
                         ));
                     }
-                } else if self.known_types.contains(&format!("std::{}", id)) {
+                } else if self.known_types.contains(&format!("std::{}", id))
+                    || self.is_template_member_type(&id)
+                {
                     Type::Struct(id)
                 } else {
                     return Err(CompileError::new(
@@ -390,5 +392,16 @@ impl Parser {
             cur_type = Type::Array(Box::new(cur_type), size);
         }
         Ok(cur_type)
+    }
+
+    pub(super) fn is_template_member_type(&self, id: &str) -> bool {
+        let plain = QualifiedName::new(id).plain();
+        if let Some(gt) = plain.rfind('>')
+            && plain[gt..].starts_with(">::")
+        {
+            let base = plain.split('<').next().unwrap_or(plain);
+            return self.is_known_template(base);
+        }
+        false
     }
 }

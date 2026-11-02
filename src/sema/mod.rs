@@ -19,6 +19,7 @@ mod stmt_decl;
 mod stmt_range_for;
 mod stmt_structured_binding;
 pub mod template_deduce;
+mod template_func;
 mod template_registry;
 pub mod template_subst;
 #[cfg(test)]
