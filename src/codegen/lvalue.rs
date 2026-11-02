@@ -229,16 +229,8 @@ impl<'a> Codegen<'a> {
                 self.find_method_for_receiver(sname, "operator[]", &[idx_ty], receiver_const)
             {
                 self.compile_lvalue_addr(array, ctx, code)?;
-                let is_r = sig
-                    .param_types
-                    .get(1)
-                    .map(|p| p.is_reference())
-                    .unwrap_or(false);
-                if is_r {
-                    self.compile_lvalue_addr(index, ctx, code)?;
-                } else {
-                    self.compile_expr(index, ctx, code)?;
-                }
+                let param_ty = sig.param_types.get(1);
+                self.compile_call_arg(index, param_ty, ctx, code)?;
                 code.push(OP_CALL);
                 write_u32(code, m_idx);
                 return Ok(());

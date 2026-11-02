@@ -299,13 +299,11 @@ impl Parser {
         self.known_types.insert(name);
     }
 
-    /// Records a type alias declared inside a class under both the qualified `Class::alias` and the plain `alias` spelling.
+    /// Records a type alias declared inside a class under the qualified `Class::alias` spelling.
     pub(super) fn register_member_alias(&mut self, owner: &str, alias: String, ty: Type) {
         let qualified = format!("{}::{}", owner, alias);
-        self.type_aliases.insert(qualified.clone(), ty.clone());
-        self.type_aliases.insert(alias.clone(), ty);
+        self.type_aliases.insert(qualified.clone(), ty);
         self.known_types.insert(qualified);
-        self.known_types.insert(alias);
     }
 
     /// Parses the `::`-separated tail of a qualified name, appending every

@@ -246,10 +246,14 @@ impl Sema {
         pos: (usize, usize),
     ) -> Result<(), CompileError> {
         let (line, col) = pos;
-        let mut mapping = HashMap::new();
-        for (param, arg) in template_params.iter().zip(args.iter()) {
-            mapping.insert(param.name.clone(), arg.clone());
-        }
+        let mapping = self.prepare_instantiation_mapping(
+            template_class,
+            template_params,
+            args,
+            inst_name,
+            pos,
+        );
+        self.instantiate_nested_structs(template_class, inst_name, &mapping, pos)?;
 
         let mut struct_decl = substitute_struct(template_class, &mapping, inst_name, line, col);
         let Decl::StructDecl {
@@ -345,7 +349,7 @@ impl Sema {
         }
     }
 
-    fn setup_instantiated_methods(
+    pub(super) fn setup_instantiated_methods(
         &mut self,
         inst_name: &str,
         all_methods: Vec<FunctionDecl>,
@@ -398,6 +402,7 @@ impl Sema {
                 self.current_class = prev_class;
                 res?;
                 m.body = vmethod.body;
+                m.ctor_initializers = vmethod.ctor_initializers;
                 for decl in &mut self.synthesized_decls {
                     if let Decl::StructDecl { name, methods, .. } = decl
                         && name == inst_name
@@ -427,12 +432,20 @@ impl Sema {
             self.current_class = prev_class;
             res?;
             method_decl.body = func_decl.body;
+            method_decl.ctor_initializers = func_decl.ctor_initializers;
             let mut found = false;
             for decl in &mut self.synthesized_decls {
                 if let Decl::StructDecl { name, methods, .. } = decl
                     && name == &class_name
                 {
-                    methods.push(method_decl.clone());
+                    if let Some(existing) = methods
+                        .iter_mut()
+                        .find(|m| m.name == method_decl.name && m.params == method_decl.params)
+                    {
+                        *existing = method_decl.clone();
+                    } else {
+                        methods.push(method_decl.clone());
+                    }
                     found = true;
                     break;
                 }

@@ -440,6 +440,7 @@ fn test_substitute_struct() {
         )],
         static_fields: Vec::new(),
         private_members: Vec::new(),
+        nested_structs: Vec::new(),
     };
 
     let subst = template_subst::substitute_struct(&tclass, &mapping, "Holder<int>", 1, 1);

@@ -214,14 +214,16 @@ impl Sema {
             }
             Ok(Type::Pointer(Box::new(ty.clone())))
         } else {
-            if let Type::Struct(sname) = ty.strip_const()
-                && self.is_cxx17_aggregate(sname)
-            {
-                self.resolve_list_init(ty, args, InitContext::DirectList, pos)?;
-                return Ok(Type::Pointer(Box::new(ty.clone())));
+            let mut arg_types = Vec::new();
+            for a in args.iter_mut() {
+                arg_types.push(self.analyze_expr(a)?);
             }
-            for a in args {
-                self.analyze_expr(a)?;
+            if let Type::Struct(sname) = ty.strip_const() {
+                if self.is_cxx17_aggregate(sname) {
+                    self.resolve_list_init(ty, args, InitContext::DirectList, pos)?;
+                } else {
+                    let _ = self.analyze_constructor_call(sname, args, &arg_types, pos)?;
+                }
             }
             Ok(Type::Pointer(Box::new(ty.clone())))
         }

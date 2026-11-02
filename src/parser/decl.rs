@@ -195,7 +195,10 @@ impl Parser {
         let start_tok = self.current().clone();
         while matches!(
             self.peek(),
-            TokenKind::KwInline | TokenKind::KwConstexpr | TokenKind::KwExplicit
+            TokenKind::KwInline
+                | TokenKind::KwConstexpr
+                | TokenKind::KwExplicit
+                | TokenKind::KwStatic
         ) {
             self.advance();
         }

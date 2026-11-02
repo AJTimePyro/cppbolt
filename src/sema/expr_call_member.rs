@@ -13,21 +13,13 @@ impl Sema {
         let all_overloads = self.find_method_overloads_in_class(struct_name, member, false);
         if !all_overloads.is_empty() {
             Self::check_ref_qualifier_compatibility(&all_overloads, is_lval, pos)?;
-            if let Some(sig) = self.find_method_in_class_for_receiver_category(
-                struct_name,
-                member,
-                is_const,
-                is_lval,
-            ) && self
-                .check_member_arguments(
-                    (struct_name, member),
-                    (is_const, is_lval),
-                    arg_types,
-                    Some(args),
-                    pos,
-                )
-                .is_ok()
-            {
+            if let Some(sig) = self.select_member_overload(
+                (struct_name, member),
+                (is_const, is_lval),
+                arg_types,
+                Some(args),
+                pos,
+            )? {
                 return Ok(Some(sig));
             }
         }
@@ -55,6 +47,42 @@ impl Sema {
         Ok(())
     }
 
+    pub(super) fn select_member_overload(
+        &self,
+        target: (&str, &str),
+        receiver: (bool, bool),
+        arg_types: &[Type],
+        args: Option<&[Expr]>,
+        pos: ExprPos,
+    ) -> Result<Option<FunctionSig>, CompileError> {
+        let (class_name, member) = target;
+        let (receiver_const, receiver_is_lvalue) = receiver;
+        let overloads = self.find_method_overloads_in_class(class_name, member, receiver_const);
+        let mut best_score = usize::MAX;
+        let mut best: Option<&FunctionSig> = None;
+        let mut ambiguous = false;
+        for sig in &overloads {
+            if let Some(Ok(score)) =
+                self.score_member_sig(sig, receiver_const, receiver_is_lvalue, arg_types, args)
+            {
+                if score < best_score {
+                    best_score = score;
+                    best = Some(sig);
+                    ambiguous = false;
+                } else if score == best_score
+                    && let Some(best) = best
+                    && !same_parameters(best, sig)
+                {
+                    ambiguous = true;
+                }
+            }
+        }
+        if ambiguous {
+            return Err(self.ambiguous_call(member, arg_types, pos));
+        }
+        Ok(best.cloned())
+    }
+
     /// Checks that the arguments of a method call match an overload.
     ///
     /// The first parameter of a method is the implicit `this`, so the
@@ -74,34 +102,12 @@ impl Sema {
             return Ok(());
         }
         let mut conversion_failure: Option<ConversionFailure> = None;
-        let mut best_score = usize::MAX;
-        let mut best: Option<&FunctionSig> = None;
-        let mut ambiguous = false;
         for sig in &overloads {
-            match self.score_member_sig(sig, receiver_const, receiver_is_lvalue, arg_types, args) {
-                Some(Ok(score)) => {
-                    if score < best_score {
-                        best_score = score;
-                        best = Some(sig);
-                        ambiguous = false;
-                    } else if score == best_score
-                        && let Some(best) = best
-                        && !same_parameters(best, sig)
-                    {
-                        ambiguous = true;
-                    }
-                }
-                Some(Err(failure)) => {
-                    conversion_failure.get_or_insert(failure);
-                }
-                None => {}
+            if let Some(Err(failure)) =
+                self.score_member_sig(sig, receiver_const, receiver_is_lvalue, arg_types, args)
+            {
+                conversion_failure.get_or_insert(failure);
             }
-        }
-        if ambiguous {
-            return Err(self.ambiguous_call(member, arg_types, pos));
-        }
-        if best.is_some() {
-            return Ok(());
         }
         if let Some(failure) = conversion_failure {
             return Err(self.no_matching_conversion(member, &failure, pos));

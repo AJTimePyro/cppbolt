@@ -1,4 +1,4 @@
-use super::decl::FunctionDecl;
+use super::decl::{Decl, FunctionDecl};
 use super::expr::Expr;
 use super::types::Type;
 
@@ -18,6 +18,7 @@ pub struct TemplateClass {
     pub methods: Vec<FunctionDecl>,
     pub static_fields: Vec<(String, Type, Option<Expr>)>,
     pub private_members: Vec<String>,
+    pub nested_structs: Vec<Decl>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

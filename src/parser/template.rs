@@ -146,6 +146,7 @@ impl Parser {
             methods,
             static_fields,
             private_members,
+            nested_structs,
             ..
         } = decl
         else {
@@ -161,6 +162,7 @@ impl Parser {
             methods,
             static_fields,
             private_members,
+            nested_structs,
         };
         Ok(vec![Decl::Template(TemplateDecl {
             params,

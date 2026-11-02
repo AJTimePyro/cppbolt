@@ -95,12 +95,32 @@ impl<'a> QualifiedName<'a> {
 
     /// Extracts the unqualified class identifier, ignoring template arguments and namespace qualifiers.
     pub fn class_short_name(self) -> &'a str {
-        let base = if let Some(open) = self.0.find('<') {
-            &self.0[..open]
+        let mut depth = 0usize;
+        let mut last_colons = None;
+        let bytes = self.0.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            match bytes[i] {
+                b'<' => depth += 1,
+                b'>' => depth = depth.saturating_sub(1),
+                b':' if depth == 0 && i + 1 < bytes.len() && bytes[i + 1] == b':' => {
+                    last_colons = Some(i);
+                    i += 1;
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        let last_segment = if let Some(idx) = last_colons {
+            &self.0[idx + 2..]
         } else {
             self.0
         };
-        base.split("::").last().unwrap_or(base)
+        if let Some(open) = last_segment.find('<') {
+            &last_segment[..open]
+        } else {
+            last_segment
+        }
     }
 }
 
@@ -147,6 +167,19 @@ mod tests {
         assert_ne!(
             static_local_name("first", 3, 5, "value"),
             static_local_name("first", 4, 5, "value")
+        );
+    }
+
+    #[test]
+    fn extracts_class_short_name_for_nested_and_templates() {
+        assert_eq!(QualifiedName::new("Foo").class_short_name(), "Foo");
+        assert_eq!(QualifiedName::new("std::string").class_short_name(), "string");
+        assert_eq!(QualifiedName::new("std::vector<int>").class_short_name(), "vector");
+        assert_eq!(QualifiedName::new("Outer<int>::Inner").class_short_name(), "Inner");
+        assert_eq!(QualifiedName::new("Outer<int>::Inner<float>").class_short_name(), "Inner");
+        assert_eq!(
+            QualifiedName::new("std::detail::AVLTree<int, double>::Node").class_short_name(),
+            "Node"
         );
     }
 }

@@ -124,6 +124,16 @@ impl Type {
         }
     }
 
+    pub fn clean_type(&self) -> &Type {
+        let mut curr = self;
+        loop {
+            match curr {
+                Type::Const(inner) | Type::Reference(inner) => curr = inner,
+                _ => return curr,
+            }
+        }
+    }
+
     /// Applies the C++ integral promotions used before arithmetic.
     ///
     /// `char`, `short`, `bool`, and enum values promote to `int`; this target

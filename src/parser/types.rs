@@ -346,6 +346,8 @@ impl Parser {
                     Type::UnsignedInt
                 } else if id == "ptrdiff_t" {
                     Type::Int
+                } else if let Some(scoped) = self.resolve_active_struct_scope_type(&id) {
+                    scoped
                 } else if let Some(alias) = self.type_aliases.get(&id).cloned() {
                     alias
                 } else if self.known_enums.contains(&id) {
@@ -364,13 +366,6 @@ impl Parser {
                     .find(|ns| self.known_types.contains(&format!("{}::{}", ns, id)))
                 {
                     Type::Struct(format!("{}::{}", ns, id))
-                } else if let Some(scope) = self
-                    .active_struct_scopes
-                    .iter()
-                    .rev()
-                    .find(|s| self.known_types.contains(&format!("{}::{}", s, id)))
-                {
-                    Type::Struct(format!("{}::{}", scope, id))
                 } else if self.known_types.contains(&id) {
                     Type::Struct(id)
                 } else if QualifiedName::new(&id).in_std() {
@@ -445,5 +440,18 @@ impl Parser {
             return self.is_active_type_param(base) || self.type_aliases.contains_key(base);
         }
         false
+    }
+
+    fn resolve_active_struct_scope_type(&self, id: &str) -> Option<Type> {
+        for scope in self.active_struct_scopes.iter().rev() {
+            let scoped = format!("{}::{}", scope, id);
+            if let Some(alias) = self.type_aliases.get(&scoped).cloned() {
+                return Some(alias);
+            }
+            if self.known_types.contains(&scoped) {
+                return Some(Type::Struct(scoped));
+            }
+        }
+        None
     }
 }

@@ -5,8 +5,13 @@ impl<'a> Codegen<'a> {
         let temps = std::mem::take(&mut ctx.temp_objects);
         for (sname, temp_slot, should_destroy) in temps.iter().rev() {
             if *should_destroy {
-                let dtor_name = format!("{}_~{}", sname, sname);
-                if let Some(&dtor_idx) = self.func_indices.get(&dtor_name) {
+                let short_sname = QualifiedName::new(sname).class_short_name();
+                let dtor_idx = self
+                    .func_indices
+                    .get(&format!("{}_~{}", sname, sname))
+                    .or_else(|| self.func_indices.get(&format!("{}_~{}", sname, short_sname)))
+                    .copied();
+                if let Some(dtor_idx) = dtor_idx {
                     code.push(OP_LOCAL_GET);
                     write_u32(code, ctx.fp_local);
                     code.push(OP_I32_LOAD);
@@ -34,8 +39,13 @@ impl<'a> Codegen<'a> {
     ) {
         for (_name, ty, offset) in objs.iter().rev() {
             if let Type::Struct(sname) = ty.strip_const() {
-                let dtor_name = format!("{}_~{}", sname, sname);
-                if let Some(&dtor_idx) = self.func_indices.get(&dtor_name) {
+                let short_sname = QualifiedName::new(sname).class_short_name();
+                let dtor_idx = self
+                    .func_indices
+                    .get(&format!("{}_~{}", sname, sname))
+                    .or_else(|| self.func_indices.get(&format!("{}_~{}", sname, short_sname)))
+                    .copied();
+                if let Some(dtor_idx) = dtor_idx {
                     code.push(OP_LOCAL_GET);
                     write_u32(code, ctx.fp_local);
                     code.push(OP_I32_CONST);
