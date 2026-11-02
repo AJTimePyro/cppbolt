@@ -1,0 +1,1 @@
+tests/negative/nested_type_private_access.cpp:10:5: error: 'Secret' is a private member of 'Outer'

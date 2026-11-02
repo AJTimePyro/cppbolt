@@ -245,6 +245,43 @@ impl Sema {
             }
         }
     }
+
+    pub(super) fn check_nested_type_access(
+        &self,
+        sname: &str,
+        line: usize,
+        col: usize,
+    ) -> Result<(), CompileError> {
+        let Some((parent, child)) = sname.rsplit_once("::") else {
+            return Ok(());
+        };
+        let p_clean = QualifiedName::new(parent).plain();
+        let Some(layout) = self
+            .struct_layouts
+            .get(parent)
+            .or_else(|| self.struct_layouts.get(p_clean))
+        else {
+            return Ok(());
+        };
+        if layout.private_members.contains(child) || layout.private_members.contains(sname) {
+            let cur_clean = self
+                .current_class
+                .as_deref()
+                .map(|c| QualifiedName::new(c).plain());
+            let in_class = match cur_clean {
+                Some(cur) => cur == p_clean || cur.starts_with(&format!("{p_clean}::")),
+                None => false,
+            };
+            if !in_class {
+                return Err(CompileError::new(
+                    format!("'{child}' is a private member of '{p_clean}'"),
+                    line,
+                    col,
+                ));
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]

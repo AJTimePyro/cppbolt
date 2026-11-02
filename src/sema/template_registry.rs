@@ -114,6 +114,12 @@ impl Sema {
             Type::Struct(sname) => {
                 let sname_clone = sname.clone();
                 self.resolve_struct_type_alias(ty, &sname_clone, line, col)?;
+                if let Type::Struct(resolved_name) = ty {
+                    self.check_nested_type_access(&sname_clone, line, col)?;
+                    if resolved_name != &sname_clone {
+                        self.check_nested_type_access(resolved_name, line, col)?;
+                    }
+                }
             }
             Type::Pointer(inner)
             | Type::Reference(inner)
