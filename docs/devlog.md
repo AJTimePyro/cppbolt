@@ -350,3 +350,44 @@ Section 2 of the roadmap tracked `reinterpret_cast` across scalar and pointer ty
 - Added unit tests across lexer, parser, sema, and codegen in `src/`.
 - Verified clean suite with 339 passing tests in `cppbolt-testrunner`.
 - Verified zero warnings with `cargo clippy` and satisfied all census constraints.
+
+---
+
+## 2026-11-02: Nested Classes, Dependent Types, and Associative Containers (std::map, std::set)
+
+### Context & Motivation
+Standard library associative containers `std::map`, `std::set`, and their backing self-balancing binary search tree `detail::AVLTree` in `stdlib/` required core language features that `cppbolt` lacked:
+1. Member classes within structs and templates (`struct Outer { struct Inner {}; };`).
+2. Parsing the `typename` keyword for dependent type specifiers (`typename Container<T>::Node*`).
+3. Instantiating nested template classes with specialized field layouts, methods, and lifecycle management.
+4. Overload selection for member functions across distinct receiver categories and value qualifiers.
+5. Synthesizing default constructors and eager instantiation of constructor dependencies across member subobjects and array elements.
+
+### Work Executed
+1. Non-template nested classes:
+   - Extended struct parsing in `src/parser/structs.rs` and `src/parser/structs_nested.rs` to recognize inner struct and class declarations, registering them under outer scope paths (`Outer::Inner`).
+   - Recorded nested structures on `Decl::StructDecl` and added access control validation in `src/sema/lookup.rs` to reject private nested class access from external scopes.
+2. Parser support for `typename` and dependent type specifiers:
+   - Added `TokenKind::KwTypename` handling in `src/parser/types.rs` and `src/parser/prefix.rs`.
+   - Permitted `typename` only before qualified names (`typename Scope::Type`), rejecting unqualified usages (`typename int x;`).
+   - Preserved qualified type specifiers across function parameter and return types without premature stripping.
+3. Template nested classes and dependent member type instantiation:
+   - Extended `QualifiedName::class_short_name` in `src/name.rs` to handle arbitrary angle brackets and nested scopes.
+   - Captured nested struct declarations on `TemplateClass` in `src/ast/template.rs` and `src/parser/template.rs`.
+   - Implemented `instantiate_nested_structs` in `src/sema/template_nested.rs` to clone, substitute, lay out, and register nested classes for each outer template specialization.
+   - Populated dependent member type aliases across multiple scope layers in `populate_instantiation_member_aliases`.
+   - Maintained type cleanliness in `src/ast/types.rs` via `clean_type`, stripping references and const qualifiers in layout comparisons.
+4. Overload resolution and lifecycle synthesis:
+   - Added `select_member_overload` in `src/sema/expr_call_member.rs` to score and return the best-matching method signature, ensuring member calls instantiate the exact selected overload.
+   - Updated constructor dependency analysis in `src/sema/constructor.rs` to instantiate member field constructors and array element default constructors eagerly after parameters enter scope.
+   - Corrected destructor detection in `src/sema/synthesize.rs`, tracking template classes with explicit destructors and synthesizing default constructors before copy operations.
+   - Handled scoped destructor names in `src/codegen/function_lifecycle.rs` and `src/codegen/raii.rs` via short and full name fallback lookups.
+
+### Verification
+- Added positive test coverage in `tests/classes_oop/structs/nested_classes.cpp`, `tests/templates_operators/template_nested_classes.cpp`, `tests/templates_operators/typename_dependent_syntax.cpp`, and their corresponding `_variant` suites.
+- Added negative diagnostic tests in `tests/negative/nested_class_private_access.cpp` and `tests/negative/typename_unqualified.cpp`.
+- Enabled `tests/mini_stl/map_basic.cpp`, `tests/mini_stl/set_basic.cpp`, and `tests/mini_stl/differential_fuzz.cpp` (verifying all 20 seeds with AVL tree balancing invariants) in `tests/PASSING.txt`.
+- All 401 corpus tests pass (`/tmp/target/release/cppbolt-testrunner /tmp/target/release/cppbolt-cli`).
+- All 89 library and binary tests pass (`cargo test`).
+- Updated and verified cryptographic hashes in `tests/golden.txt` (`--check-golden`).
+- Clippy passes with zero warnings (`cargo clippy --all-targets -- -D warnings`), and census checks confirm zero functions over 80 lines and zero files over 500 lines (`cppbolt-census`).
