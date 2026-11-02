@@ -31,7 +31,7 @@ Compiling templated standard library headers like `<vector>`, `<utility>`, and `
    Member methods declaring their own template parameters (such as `pair(U1&&, U2&&)` or `DefaultLess::operator()<T>`) bypass eager class method registration and register into `member_templates`. We deduce their arguments and synthesize concrete methods during call resolution. For non-template structs, instantiated methods synthesize into dedicated struct declarations so codegen compiles them with concrete types.
 
 6. Instantiated dependent type aliases (`src/sema/template_registry.rs`).
-   When instantiating a class template that declares member type aliases (such as `using iterator = T*`), we substitute the template arguments into the target type and register the qualified alias (such as `std::vector<int>::iterator -> int*`).
+   When instantiating a class template that declares member type aliases (such as `using iterator = T*`), we substitute the template arguments into the target type and register the qualified alias (such as `std::vector<int>::iterator` resolving to `int*`).
 
 7. Multi-arity function template candidate sets (`src/sema/template_registry.rs`, `src/sema/template_func.rs`).
    Function template registration maintains a candidate vector for each identifier. Overload resolution filters candidates by parameter count and default arguments before argument deduction, allowing overloads like `sort(first, last)` and `sort(first, last, comp)` to coexist.

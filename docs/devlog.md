@@ -6,18 +6,18 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ## 2026-11-02: Template Method Defaults, Lifecycle Synthesis, and Out-of-Class Qualified Attachment
 
-We resolved review findings in member template method default argument indexing, same-arity template candidate deduplication, parameter shadowing, out-of-class qualified constructor parsing, and base subobject copy synthesis.
+Resolved review findings in member template default argument mapping, same-arity template candidate deduplication, parameter shadowing, out-of-class qualified constructor parsing, and base subobject copying.
 
 ### Summary of Work
 
 1. Corrected member template default argument indexing in `src/sema/constructor.rs`, mapping default argument expressions across the full signature parameter slice including the leading implicit instance receiver.
-2. Deduplicated function template candidates in `src/sema/template_registry.rs` using exact parameter types rather than arity alone, preserving coexisting same-arity overloads and updating bodies on forward-declared templates.
+2. Deduplicated function template candidates in `src/sema/template_registry.rs` using exact parameter types rather than arity alone, preserving coexisting same-arity overloads and updating bodies on forward declarations.
 3. Aligned out-of-class template method attachment with parameter types and constness, preventing same-arity overloads from overwriting existing definitions.
-4. Updated out-of-class constructor and destructor detection in `src/parser/template.rs` to traverse multi-part namespace and class qualifier paths (`Outer::Inner::Class::Class()`).
+4. Extended constructor and destructor detection in `src/parser/template.rs` to traverse multi-part namespace and class qualifier paths (`Outer::Inner::Class::Class()`).
 5. Added in-place out-of-class non-template method attachment in `src/sema/analyze.rs`, attaching method and constructor bodies to target struct declarations prior to layout and semantic checking.
 6. Enforced member template parameter shadowing during outer class template substitution in `src/sema/template_subst.rs`, preserving inner template parameters.
 7. Refined functor dispatch in `src/sema/expr_call.rs` to verify that member templates match `operator()` before rewriting instance calls.
-8. Included base class initializers in synthesized copy constructors and prepended base assignments in copy assignment operators in `src/sema/synthesize.rs`, with zero-offset adjustment for derived-to-base reference arguments in `src/codegen/call_args.rs` and `src/codegen/lvalue.rs`.
+8. Included base class initializers in synthesized copy constructors and prepended base assignments in copy assignment operators in `src/sema/synthesize.rs`, with base subobject offset adjustments in `src/codegen/call_args.rs` and `src/codegen/lvalue.rs`.
 9. Added dynamic destructor and copy operation synthesis for instantiated template classes containing members with non-trivial lifecycles.
 10. Added 8 unit tests in `src/sema/tests.rs` covering all resolved cases, and updated golden baseline hashes across 13 affected tests.
 
@@ -32,13 +32,13 @@ We resolved review findings in member template method default argument indexing,
 
 ## 2026-11-02: Member Function Templates, Standard Vector, and Algorithm Overloads
 
-We implemented member function templates, out-of-class template method definitions, dependent member type aliases, and multi-arity function template overloads. These changes unlocked `<vector>`, `<utility>` (`std::pair`), and `<algorithm>` (`std::sort`, `std::reverse`, `std::min`, `std::max`).
+Implemented member function templates, out-of-class template method definitions, dependent member type aliases, and multi-arity function template overloads. These additions unlock `<vector>`, `<utility>` (`std::pair`), and `<algorithm>` (`std::sort`, `std::reverse`, `std::min`, `std::max`).
 
 ### Summary of Work
 
 1. Added parsing and registration for out-of-class template method definitions (`template <typename T> void Class<T>::method()`) in `src/parser/decl.rs` and `src/sema/template_registry.rs`.
 2. Supported member function templates inside class templates and concrete structs in `src/parser/structs.rs`, `src/sema/constructor.rs`, and `src/sema/template_registry.rs`. This enables templated constructors and call operators such as `pair(U1&&, U2&&)` and functor invocations.
-3. Enabled dependent member type aliases on instantiated template classes (such as `std::vector<int>::iterator -> int*`) in `src/parser/types.rs` and `src/sema/template_registry.rs`. Range-based for loops over template containers now resolve iterators and dereferenced elements directly.
+3. Enabled dependent member type aliases on instantiated template classes (such as `std::vector<int>::iterator` to `int*`) in `src/parser/types.rs` and `src/sema/template_registry.rs`. Range-based for loops over template containers now resolve iterators and dereferenced elements directly.
 4. Expanded function template registration in `src/sema/template_registry.rs` to track candidate lists rather than single declarations. Candidate filtering by arity and default arguments enables overloads such as `std::sort(first, last)` and `std::sort(first, last, comp)` to coexist.
 5. Handled member template instantiations for plain structs (such as `DefaultLess::operator()<T>`) by synthesizing concrete method declarations into the AST for WebAssembly codegen.
 6. Added constructor conversion for by-value struct arguments in `src/codegen/call_args.rs`, creating managed temporaries when passing arguments such as string literals to struct parameters.
