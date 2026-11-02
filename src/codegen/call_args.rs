@@ -77,7 +77,12 @@ impl<'a> Codegen<'a> {
         } else {
             clean_p == clean_a
         };
-        if !is_same
+        let is_derived = if let (Type::Struct(s1), Type::Struct(s2)) = (&clean_p, &clean_a) {
+            self.sema.is_subclass(s2, s1)
+        } else {
+            false
+        };
+        if !is_same && !is_derived
             && matches!(clean_p, Type::Struct(_))
             && let Type::Struct(psname) = clean_p
             && let Some(ctor_idx) = self.find_constructor(psname, std::slice::from_ref(clean_a))
@@ -95,6 +100,17 @@ impl<'a> Codegen<'a> {
             return Ok(());
         }
         self.compile_lvalue_addr(a, ctx, code)?;
+        if is_derived
+            && let (Type::Struct(s1), Type::Struct(s2)) = (&clean_p, &clean_a)
+            && let Some(offset) = self.sema.struct_layouts.get(s2).and_then(|l| {
+                l.base_offsets.iter().find(|(b, _)| b == s1).map(|(_, off)| *off)
+            })
+            && offset != 0
+        {
+            code.push(OP_I32_CONST);
+            write_i32(code, offset as i32);
+            code.push(OP_I32_ADD);
+        }
         Ok(())
     }
 

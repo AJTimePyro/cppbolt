@@ -166,6 +166,7 @@ pub struct Sema {
     pub member_templates: HashMap<String, Vec<FunctionDecl>>,
     pub instantiation_depth: usize,
     pub instantiation_stack: Vec<String>,
+    pub structs_with_dtor: HashSet<String>,
     depth: crate::depth::DepthCounters,
 }
 
@@ -200,6 +201,7 @@ impl Sema {
             member_templates: HashMap::new(),
             instantiation_depth: 0,
             instantiation_stack: Vec::new(),
+            structs_with_dtor: HashSet::new(),
             current_class: None,
             current_func_name: None,
             open_namespaces: Vec::new(),

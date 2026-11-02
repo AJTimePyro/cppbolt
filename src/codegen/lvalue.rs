@@ -88,7 +88,27 @@ impl<'a> Codegen<'a> {
             | Expr::CompoundAssign { .. } => self.compile_lvalue_value(expr, ctx, code),
             Expr::Cast {
                 target_type, expr, ..
-            } if target_type.is_reference() => self.compile_lvalue_addr(expr, ctx, code),
+            } if target_type.is_reference() => {
+                self.compile_lvalue_addr(expr, ctx, code)?;
+                let aty = self.get_expr_type(expr, ctx);
+                if let (Some(clean_target), Some(clean_src)) =
+                    (target_type.deref_type(), aty.deref_type().or(Some(&aty)))
+                    && let (Type::Struct(s_target), Type::Struct(s_src)) =
+                        (clean_target.strip_const(), clean_src.strip_const())
+                    && let Some(offset) = self.sema.struct_layouts.get(s_src).and_then(|l| {
+                        l.base_offsets
+                            .iter()
+                            .find(|(b, _)| b == s_target)
+                            .map(|(_, off)| *off)
+                    })
+                    && offset != 0
+                {
+                    code.push(OP_I32_CONST);
+                    write_i32(code, offset as i32);
+                    code.push(OP_I32_ADD);
+                }
+                Ok(())
+            }
             _ => self.compile_lvalue_temporary(expr, ctx, code),
         }
     }

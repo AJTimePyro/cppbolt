@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use super::*;
 
-fn insert_type_aliases(set: &mut HashSet<String>, name: &str) {
+pub(crate) fn insert_type_aliases(set: &mut HashSet<String>, name: &str) {
     set.insert(name.to_string());
     if let Some(short) = name.rsplit("::").next() {
         set.insert(short.to_string());
@@ -12,7 +12,7 @@ fn insert_type_aliases(set: &mut HashSet<String>, name: &str) {
     set.insert(qualified.plain().to_string());
 }
 
-fn set_contains_type(set: &HashSet<String>, name: &str) -> bool {
+pub(crate) fn set_contains_type(set: &HashSet<String>, name: &str) -> bool {
     if set.contains(name) {
         return true;
     }
@@ -27,12 +27,11 @@ fn set_contains_type(set: &HashSet<String>, name: &str) -> bool {
 
 impl Sema {
     pub(super) fn synthesize_destructors(&mut self, program: &mut Program) {
-        let mut structs_with_dtor = HashSet::new();
         for decl in &program.declarations {
             if let Decl::StructDecl { name, methods, .. } = decl
                 && methods.iter().any(|m| m.name.starts_with('~'))
             {
-                insert_type_aliases(&mut structs_with_dtor, name);
+                insert_type_aliases(&mut self.structs_with_dtor, name);
             }
         }
 
@@ -47,10 +46,10 @@ impl Sema {
             {
                 let has_dtor_members = fields
                     .iter()
-                    .any(|(_, ty)| type_has_dtor(ty, &structs_with_dtor))
+                    .any(|(_, ty)| type_has_dtor(ty, &self.structs_with_dtor))
                     || base_classes
                         .iter()
-                        .any(|b| set_contains_type(&structs_with_dtor, b));
+                        .any(|b| set_contains_type(&self.structs_with_dtor, b));
                 if has_dtor_members {
                     let dtor_name = format!("~{}", name);
                     if !methods.iter().any(|m| m.name == dtor_name) {
@@ -71,9 +70,48 @@ impl Sema {
                             col: 0,
                         });
                     }
-                    synthesize_copy_operations(name, fields, methods);
+                    insert_type_aliases(&mut self.structs_with_dtor, name);
+                    synthesize_copy_operations(name, base_classes, fields, methods);
                 }
             }
+        }
+    }
+
+    pub(crate) fn synthesize_instantiation_lifecycle(
+        &mut self,
+        inst_name: &str,
+        base_classes: &[String],
+        fields: &[(String, Type)],
+        methods: &mut Vec<FunctionDecl>,
+    ) {
+        let has_dtor_members = fields
+            .iter()
+            .any(|(_, ty)| type_has_dtor(ty, &self.structs_with_dtor))
+            || base_classes
+                .iter()
+                .any(|b| set_contains_type(&self.structs_with_dtor, b));
+        if has_dtor_members {
+            let dtor_name = format!("~{}", inst_name);
+            if !methods.iter().any(|m| m.name == dtor_name) {
+                methods.push(FunctionDecl {
+                    name: dtor_name,
+                    return_type: Type::Void,
+                    params: vec![],
+                    body: Some(Stmt::new(StmtKind::Compound(vec![]), 0, 0)),
+                    is_virtual: false,
+                    is_pure_virtual: false,
+                    is_const: false,
+                    is_explicit: false,
+                    ref_qualifier: RefQualifier::None,
+                    is_static: false,
+                    ctor_initializers: vec![],
+                    template_params: vec![],
+                    line: 0,
+                    col: 0,
+                });
+            }
+            insert_type_aliases(&mut self.structs_with_dtor, inst_name);
+            synthesize_copy_operations(inst_name, base_classes, fields, methods);
         }
     }
 
@@ -183,7 +221,7 @@ fn type_ctor_status(
 }
 
 /// Returns true when a value of `ty` owns a subobject with a destructor.
-fn type_has_dtor(ty: &Type, structs_with_dtor: &HashSet<String>) -> bool {
+pub(crate) fn type_has_dtor(ty: &Type, structs_with_dtor: &HashSet<String>) -> bool {
     match ty.strip_const() {
         Type::Struct(name) => set_contains_type(structs_with_dtor, name),
         Type::Array(element, _) => type_has_dtor(element, structs_with_dtor),
@@ -191,17 +229,19 @@ fn type_has_dtor(ty: &Type, structs_with_dtor: &HashSet<String>) -> bool {
     }
 }
 
-fn synthesize_copy_operations(
+pub(crate) fn synthesize_copy_operations(
     name: &str,
+    base_classes: &[String],
     fields: &[(String, Type)],
     methods: &mut Vec<FunctionDecl>,
 ) {
-    synthesize_copy_constructor(name, fields, methods);
-    synthesize_copy_assignment(name, fields, methods);
+    synthesize_copy_constructor(name, base_classes, fields, methods);
+    synthesize_copy_assignment(name, base_classes, fields, methods);
 }
 
 fn synthesize_copy_constructor(
     name: &str,
+    base_classes: &[String],
     fields: &[(String, Type)],
     methods: &mut Vec<FunctionDecl>,
 ) {
@@ -213,20 +253,21 @@ fn synthesize_copy_constructor(
     });
     if !has_copy_ctor {
         let param_ty = Type::Reference(Box::new(Type::Const(Box::new(Type::Struct(name.to_string())))));
-        let initializers = fields
+        let mut initializers: Vec<(String, Vec<Expr>)> = base_classes
             .iter()
-            .map(|(fname, _)| {
-                (
-                    fname.clone(),
-                    vec![Expr::MemberAccess {
-                        object: Box::new(Expr::Identifier("o".to_string())),
-                        member: fname.clone(),
-                        is_arrow: false,
-                        pos: ExprPos::new(0, 0),
-                    }],
-                )
-            })
+            .map(|base| (base.clone(), vec![Expr::Identifier("o".to_string())]))
             .collect();
+        initializers.extend(fields.iter().map(|(fname, _)| {
+            (
+                fname.clone(),
+                vec![Expr::MemberAccess {
+                    object: Box::new(Expr::Identifier("o".to_string())),
+                    member: fname.clone(),
+                    is_arrow: false,
+                    pos: ExprPos::new(0, 0),
+                }],
+            )
+        }));
         methods.push(FunctionDecl {
             name: name.to_string(),
             return_type: Type::Void,
@@ -252,6 +293,7 @@ fn synthesize_copy_constructor(
 
 fn synthesize_copy_assignment(
     name: &str,
+    base_classes: &[String],
     fields: &[(String, Type)],
     methods: &mut Vec<FunctionDecl>,
 ) {
@@ -263,37 +305,7 @@ fn synthesize_copy_assignment(
     });
     if !has_copy_assign {
         let param_ty = Type::Reference(Box::new(Type::Const(Box::new(Type::Struct(name.to_string())))));
-        let mut body_stmts = Vec::new();
-        for (fname, _) in fields {
-            body_stmts.push(Stmt::new(
-                StmtKind::Expr(Expr::Assign {
-                    target: Box::new(Expr::MemberAccess {
-                        object: Box::new(Expr::This),
-                        member: fname.clone(),
-                        is_arrow: true,
-                        pos: ExprPos::new(0, 0),
-                    }),
-                    value: Box::new(Expr::MemberAccess {
-                        object: Box::new(Expr::Identifier("o".to_string())),
-                        member: fname.clone(),
-                        is_arrow: false,
-                        pos: ExprPos::new(0, 0),
-                    }),
-                    pos: ExprPos::new(0, 0),
-                }),
-                0,
-                0,
-            ));
-        }
-        body_stmts.push(Stmt::new(
-            StmtKind::Return(Some(Expr::Unary {
-                op: UnaryOp::Deref,
-                expr: Box::new(Expr::This),
-                pos: ExprPos::new(0, 0),
-            })),
-            0,
-            0,
-        ));
+        let body_stmts = synthesize_copy_assignment_body(base_classes, fields);
         methods.push(FunctionDecl {
             name: "operator=".to_string(),
             return_type: Type::Reference(Box::new(Type::Struct(name.to_string()))),
@@ -315,4 +327,65 @@ fn synthesize_copy_assignment(
             col: 0,
         });
     }
+}
+
+fn synthesize_copy_assignment_body(
+    base_classes: &[String],
+    fields: &[(String, Type)],
+) -> Vec<Stmt> {
+    let mut body_stmts = Vec::new();
+    for base in base_classes {
+        body_stmts.push(Stmt::new(
+            StmtKind::Expr(Expr::Assign {
+                target: Box::new(Expr::Cast {
+                    kind: CastKind::Static,
+                    target_type: Type::Reference(Box::new(Type::Struct(base.clone()))),
+                    expr: Box::new(Expr::Unary {
+                        op: UnaryOp::Deref,
+                        expr: Box::new(Expr::This),
+                        pos: ExprPos::new(0, 0),
+                    }),
+                }),
+                value: Box::new(Expr::Cast {
+                    kind: CastKind::Static,
+                    target_type: Type::Reference(Box::new(Type::Const(Box::new(Type::Struct(base.clone()))))),
+                    expr: Box::new(Expr::Identifier("o".to_string())),
+                }),
+                pos: ExprPos::new(0, 0),
+            }),
+            0,
+            0,
+        ));
+    }
+    for (fname, _) in fields {
+        body_stmts.push(Stmt::new(
+            StmtKind::Expr(Expr::Assign {
+                target: Box::new(Expr::MemberAccess {
+                    object: Box::new(Expr::This),
+                    member: fname.clone(),
+                    is_arrow: true,
+                    pos: ExprPos::new(0, 0),
+                }),
+                value: Box::new(Expr::MemberAccess {
+                    object: Box::new(Expr::Identifier("o".to_string())),
+                    member: fname.clone(),
+                    is_arrow: false,
+                    pos: ExprPos::new(0, 0),
+                }),
+                pos: ExprPos::new(0, 0),
+            }),
+            0,
+            0,
+        ));
+    }
+    body_stmts.push(Stmt::new(
+        StmtKind::Return(Some(Expr::Unary {
+            op: UnaryOp::Deref,
+            expr: Box::new(Expr::This),
+            pos: ExprPos::new(0, 0),
+        })),
+        0,
+        0,
+    ));
+    body_stmts
 }
