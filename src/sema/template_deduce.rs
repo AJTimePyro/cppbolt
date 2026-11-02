@@ -168,7 +168,9 @@ fn deduce_template_instance(
         args: a_args,
     } = clean_arg
     {
-        if QualifiedName::new(name).matches(QualifiedName::new(a_name)) && args.len() == a_args.len() {
+        if QualifiedName::new(name).matches(QualifiedName::new(a_name))
+            && args.len() == a_args.len()
+        {
             for (p_arg, a_arg) in args.iter().zip(a_args.iter()) {
                 deduce_type(p_arg, a_arg, deduced, true, pos)?;
             }

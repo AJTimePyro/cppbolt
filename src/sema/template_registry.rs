@@ -40,7 +40,10 @@ impl Sema {
             let list = self.function_templates.entry(key).or_default();
             if let Some((existing_decl, _)) = list.iter_mut().find(|(d, _)| {
                 d.params.len() == item.0.params.len()
-                    && d.params.iter().zip(&item.0.params).all(|(p1, p2)| p1.ty == p2.ty)
+                    && d.params
+                        .iter()
+                        .zip(&item.0.params)
+                        .all(|(p1, p2)| p1.ty == p2.ty)
             }) {
                 if existing_decl.body.is_none() && item.0.body.is_some() {
                     existing_decl.body = item.0.body.clone();
@@ -68,17 +71,16 @@ impl Sema {
         for (key, (template_class, _)) in self.class_templates.iter_mut() {
             if QualifiedName::new(key).plain() == plain_class {
                 matched = true;
-                if let Some(existing) = template_class
-                    .methods
-                    .iter_mut()
-                    .find(|m| {
-                        m.name == short_method
-                            && m.params.len() == func.params.len()
-                            && m.is_const == func.is_const
-                            && m.body.is_none()
-                            && m.params.iter().zip(&func.params).all(|(p1, p2)| p1.ty == p2.ty)
-                    })
-                {
+                if let Some(existing) = template_class.methods.iter_mut().find(|m| {
+                    m.name == short_method
+                        && m.params.len() == func.params.len()
+                        && m.is_const == func.is_const
+                        && m.body.is_none()
+                        && m.params
+                            .iter()
+                            .zip(&func.params)
+                            .all(|(p1, p2)| p1.ty == p2.ty)
+                }) {
                     existing.body = func.body.clone();
                     if !func.ctor_initializers.is_empty() {
                         existing.ctor_initializers = func.ctor_initializers.clone();

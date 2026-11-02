@@ -224,7 +224,9 @@ fn synthesize_copy_constructor(
             && matches!(m.params[0].ty.strip_const(), Type::Reference(inner) if matches!(inner.strip_const(), Type::Struct(s) if s == name || s == short))
     });
     if !has_copy_ctor {
-        let param_ty = Type::Reference(Box::new(Type::Const(Box::new(Type::Struct(name.to_string())))));
+        let param_ty = Type::Reference(Box::new(Type::Const(Box::new(Type::Struct(
+            name.to_string(),
+        )))));
         let mut initializers: Vec<(String, Vec<Expr>)> = base_classes
             .iter()
             .map(|base| (base.clone(), vec![Expr::Identifier("o".to_string())]))
@@ -276,7 +278,9 @@ fn synthesize_copy_assignment(
             && matches!(m.params[0].ty.strip_const(), Type::Reference(inner) if matches!(inner.strip_const(), Type::Struct(s) if s == name || s == short))
     });
     if !has_copy_assign {
-        let param_ty = Type::Reference(Box::new(Type::Const(Box::new(Type::Struct(name.to_string())))));
+        let param_ty = Type::Reference(Box::new(Type::Const(Box::new(Type::Struct(
+            name.to_string(),
+        )))));
         let body_stmts = synthesize_copy_assignment_body(base_classes, fields);
         methods.push(FunctionDecl {
             name: "operator=".to_string(),
@@ -320,7 +324,9 @@ fn synthesize_copy_assignment_body(
                 }),
                 value: Box::new(Expr::Cast {
                     kind: CastKind::Static,
-                    target_type: Type::Reference(Box::new(Type::Const(Box::new(Type::Struct(base.clone()))))),
+                    target_type: Type::Reference(Box::new(Type::Const(Box::new(Type::Struct(
+                        base.clone(),
+                    ))))),
                     expr: Box::new(Expr::Identifier("o".to_string())),
                 }),
                 pos: ExprPos::new(0, 0),

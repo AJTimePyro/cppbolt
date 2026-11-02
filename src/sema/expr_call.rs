@@ -89,8 +89,8 @@ impl Sema {
         pos: ExprPos,
     ) -> Result<Option<Type>, CompileError> {
         let plain = QualifiedName::new(sname).plain();
-        let has_member_template = self.has_functor_template(sname)
-            || self.has_functor_template(plain);
+        let has_member_template =
+            self.has_functor_template(sname) || self.has_functor_template(plain);
         if self.find_method_in_class(sname, "operator()").is_some() || has_member_template {
             *callee = Expr::MemberAccess {
                 object: Box::new(callee.clone()),
@@ -173,10 +173,11 @@ impl Sema {
         {
             return Ok(Some(ret));
         }
-        let (struct_name, receiver_const) =
-            self.member_struct_name(&obj_ty, *is_arrow, *pos)?;
+        let (struct_name, receiver_const) = self.member_struct_name(&obj_ty, *is_arrow, *pos)?;
         if member.starts_with('~') {
-            return self.resolve_struct_destructor(&struct_name, member, *pos).map(Some);
+            return self
+                .resolve_struct_destructor(&struct_name, member, *pos)
+                .map(Some);
         }
         let receiver_is_lvalue = if *is_arrow {
             true
@@ -196,7 +197,10 @@ impl Sema {
             self.instantiate_pending_method(&sig.mangled_name)?;
             return Ok(Some(sig.return_type.clone()));
         }
-        if self.find_method_overloads_in_class(&struct_name, member, false).is_empty() {
+        if self
+            .find_method_overloads_in_class(&struct_name, member, false)
+            .is_empty()
+        {
             return Err(CompileError::new(
                 format!("No member named '{member}' in struct '{struct_name}'"),
                 pos.line,
@@ -269,7 +273,11 @@ impl Sema {
         }
 
         let (Some(candidates), Some(selection)) = (&candidates, selection) else {
-            return Err(CompileError::new(format!("Undefined function '{name}'"), pos.line, pos.col));
+            return Err(CompileError::new(
+                format!("Undefined function '{name}'"),
+                pos.line,
+                pos.col,
+            ));
         };
         if selection.ambiguous {
             return Err(self.ambiguous_call(name, arg_types, pos));
@@ -282,7 +290,11 @@ impl Sema {
         }
         let cand = &candidates[0];
         Err(CompileError::new(
-            format!("No matching function call for '{name}': expected {} arguments, found {}", cand.param_types.len(), args.len()),
+            format!(
+                "No matching function call for '{name}': expected {} arguments, found {}",
+                cand.param_types.len(),
+                args.len()
+            ),
             pos.line,
             pos.col,
         ))
@@ -337,7 +349,11 @@ impl Sema {
         let arg_ty = self.analyze_expr(&mut arg)?;
         if !self.can_assign_expr(&ty, &arg_ty, Some(&arg)) {
             return Err(CompileError::new(
-                format!("cannot convert '{}' to '{}' in functional cast", arg_ty.to_c_type(), ty.to_c_type()),
+                format!(
+                    "cannot convert '{}' to '{}' in functional cast",
+                    arg_ty.to_c_type(),
+                    ty.to_c_type()
+                ),
                 pos.line,
                 pos.col,
             ));

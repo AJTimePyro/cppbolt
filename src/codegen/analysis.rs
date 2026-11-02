@@ -356,6 +356,7 @@ fn collect_binary_operator(op: BinaryOp, calls: &mut HashSet<String>) {
 }
 
 /// The mangled name of the operator called by a compound assignment.
+#[rustfmt::skip]
 pub(super) fn compound_assign_operator_name(op: &BinaryOp) -> String {
     let sym = match op {
         BinaryOp::Add => "+", BinaryOp::Sub => "-", BinaryOp::Mul => "*",

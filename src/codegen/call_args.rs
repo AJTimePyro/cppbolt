@@ -82,7 +82,8 @@ impl<'a> Codegen<'a> {
         } else {
             false
         };
-        if !is_same && !is_derived
+        if !is_same
+            && !is_derived
             && matches!(clean_p, Type::Struct(_))
             && let Type::Struct(psname) = clean_p
             && let Some(ctor_idx) = self.find_constructor(psname, std::slice::from_ref(clean_a))

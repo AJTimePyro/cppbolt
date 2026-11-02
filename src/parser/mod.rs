@@ -329,7 +329,11 @@ impl Parser {
                     _ => {
                         let (line, col) =
                             error_pos.unwrap_or_else(|| (self.current().line, self.current().col));
-                        return Err(CompileError::new("Expected identifier after '~'", line, col));
+                        return Err(CompileError::new(
+                            "Expected identifier after '~'",
+                            line,
+                            col,
+                        ));
                     }
                 }
             } else if self.peek() == &TokenKind::KwOperator {

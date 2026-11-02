@@ -268,7 +268,10 @@ impl Sema {
             ref_qualifier: m.ref_qualifier,
         };
         self.register_function(sig.clone());
-        self.functions.entry(qual_name).or_default().push(sig.clone());
+        self.functions
+            .entry(qual_name)
+            .or_default()
+            .push(sig.clone());
         let short = QualifiedName::new(class_name).class_short_name();
         if m.name == class_name {
             let short_qual = format!("{}::{}", class_name, short);

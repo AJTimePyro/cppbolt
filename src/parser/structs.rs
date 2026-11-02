@@ -68,7 +68,10 @@ impl Parser {
                             token.col,
                         ));
                     }
-                    if matches!(self.peek(), TokenKind::KwPublic | TokenKind::KwPrivate | TokenKind::KwProtected) {
+                    if matches!(
+                        self.peek(),
+                        TokenKind::KwPublic | TokenKind::KwPrivate | TokenKind::KwProtected
+                    ) {
                         self.advance();
                     } else {
                         break;
@@ -465,6 +468,9 @@ impl Parser {
         is_static: bool,
     ) -> Result<(), CompileError> {
         let final_ty = self.parse_array_suffix(ty.clone())?;
+        if body.is_private {
+            body.private_members.push(fname.clone());
+        }
         if is_static {
             let init = if self.peek() == &TokenKind::Assign {
                 self.advance();
@@ -473,14 +479,8 @@ impl Parser {
                 None
             };
             self.expect(TokenKind::Semi)?;
-            if body.is_private {
-                body.private_members.push(fname.clone());
-            }
             body.static_fields.push((fname, final_ty, init));
         } else {
-            if body.is_private {
-                body.private_members.push(fname.clone());
-            }
             body.fields.push((fname, final_ty));
             while self.peek() == &TokenKind::Comma {
                 self.advance();

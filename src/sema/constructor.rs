@@ -3,7 +3,9 @@
 //! of the class.
 
 use super::analyze::this_param;
-use super::template_deduce::{deduce_template_arguments, parse_types_list, split_template_call_name};
+use super::template_deduce::{
+    deduce_template_arguments, parse_types_list, split_template_call_name,
+};
 use super::template_subst::substitute_function;
 use super::*;
 use crate::ast::decl::RefQualifier;
@@ -65,8 +67,8 @@ impl Sema {
                 self.instantiate_pending_method(&sig.mangled_name)?;
             }
             None => {
-                if let Some(sig) =
-                    self.try_instantiate_member_template_constructor(class_name, arg_types, args, pos)?
+                if let Some(sig) = self
+                    .try_instantiate_member_template_constructor(class_name, arg_types, args, pos)?
                 {
                     self.fill_constructor_defaults(&sig, args)?;
                     self.instantiate_pending_method(&sig.mangled_name)?;
@@ -252,14 +254,14 @@ impl Sema {
             if !matches_name || cand.template_params.is_empty() {
                 continue;
             }
-            if let Ok(mapping) = deduce_template_arguments(
-                &cand.template_params,
-                &cand,
-                &[],
-                (arg_types, args),
-                pos,
-            ) {
-                let new_name = if method_name.is_none() { Some(short.to_string()) } else { None };
+            if let Ok(mapping) =
+                deduce_template_arguments(&cand.template_params, &cand, &[], (arg_types, args), pos)
+            {
+                let new_name = if method_name.is_none() {
+                    Some(short.to_string())
+                } else {
+                    None
+                };
                 let mut spec_func = substitute_function(&cand, &mapping, None, new_name);
                 self.resolve_and_instantiate_type(&mut spec_func.return_type, pos.line, pos.col)?;
                 for p in &mut spec_func.params {

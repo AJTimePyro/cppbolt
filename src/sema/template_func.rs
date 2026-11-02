@@ -1,4 +1,6 @@
-use super::template_deduce::{deduce_template_arguments, parse_types_list, split_template_call_name};
+use super::template_deduce::{
+    deduce_template_arguments, parse_types_list, split_template_call_name,
+};
 use super::template_subst::substitute_function;
 use super::*;
 use crate::ast::decl::RefQualifier;

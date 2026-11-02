@@ -227,7 +227,8 @@ fn test_out_of_class_template_method_matching_params() -> Result<(), Box<dyn std
 }
 
 #[test]
-fn test_synthesized_copy_operations_include_base_classes() -> Result<(), Box<dyn std::error::Error>> {
+fn test_synthesized_copy_operations_include_base_classes() -> Result<(), Box<dyn std::error::Error>>
+{
     let code = r#"
         struct Base {
             int b;
@@ -254,7 +255,8 @@ fn test_synthesized_copy_operations_include_base_classes() -> Result<(), Box<dyn
 }
 
 #[test]
-fn test_instantiated_template_class_synthesizes_copy_operations() -> Result<(), Box<dyn std::error::Error>> {
+fn test_instantiated_template_class_synthesizes_copy_operations()
+-> Result<(), Box<dyn std::error::Error>> {
     let code = r#"
         struct Resource {
             int id;
@@ -348,6 +350,110 @@ fn test_functor_call_dispatch_requires_call_operator() -> Result<(), Box<dyn std
     let mut program = parser.parse_program()?;
     let mut sema = Sema::new();
     let res = sema.analyze_program(&mut program);
-    assert!(res.is_err(), "Calling an object without operator() must fail even if it has member templates");
+    assert!(
+        res.is_err(),
+        "Calling an object without operator() must fail even if it has member templates"
+    );
     Ok(())
+}
+
+#[test]
+fn test_substitute_scalar_type() {
+    let mut mapping = std::collections::HashMap::new();
+    mapping.insert("T".to_string(), Type::Int);
+
+    let t_param = Type::TypeParam("T".to_string());
+    assert_eq!(
+        template_subst::substitute_type(&t_param, &mapping, None),
+        Type::Int
+    );
+
+    let ptr = Type::Pointer(Box::new(Type::TypeParam("T".to_string())));
+    assert_eq!(
+        template_subst::substitute_type(&ptr, &mapping, None),
+        Type::Pointer(Box::new(Type::Int))
+    );
+}
+
+#[test]
+fn test_substitute_injected_class_name() {
+    let mapping = std::collections::HashMap::new();
+    let target_ty = Type::Struct("Holder<int>".to_string());
+    let bare = Type::Struct("Holder".to_string());
+
+    let res = template_subst::substitute_type(&bare, &mapping, Some(("Holder", &target_ty)));
+    assert_eq!(res, target_ty);
+}
+
+fn dummy_func(name: &str, ret: Type, param: Type, is_const: bool) -> FunctionDecl {
+    FunctionDecl {
+        name: name.to_string(),
+        return_type: ret,
+        params: vec![Param {
+            name: "val".to_string(),
+            ty: param,
+            default_val: None,
+        }],
+        body: None,
+        is_virtual: false,
+        is_pure_virtual: false,
+        is_const,
+        is_explicit: false,
+        ref_qualifier: Default::default(),
+        is_static: false,
+        ctor_initializers: Vec::new(),
+        template_params: Vec::new(),
+        line: 1,
+        col: 1,
+    }
+}
+
+#[test]
+fn test_substitute_function() {
+    let mut mapping = std::collections::HashMap::new();
+    mapping.insert("T".to_string(), Type::Int);
+    let func = dummy_func(
+        "get",
+        Type::TypeParam("T".to_string()),
+        Type::TypeParam("T".to_string()),
+        true,
+    );
+    let subst = template_subst::substitute_function(&func, &mapping, None, None);
+    assert_eq!(subst.return_type, Type::Int);
+    assert_eq!(subst.params[0].ty, Type::Int);
+}
+
+#[test]
+fn test_substitute_struct() {
+    let mut mapping = std::collections::HashMap::new();
+    mapping.insert("T".to_string(), Type::Int);
+    let tclass = TemplateClass {
+        name: "Holder".to_string(),
+        is_class: true,
+        base_classes: Vec::new(),
+        fields: vec![("value".to_string(), Type::TypeParam("T".to_string()))],
+        methods: vec![dummy_func(
+            "Holder",
+            Type::Void,
+            Type::TypeParam("T".to_string()),
+            false,
+        )],
+        static_fields: Vec::new(),
+        private_members: Vec::new(),
+    };
+
+    let subst = template_subst::substitute_struct(&tclass, &mapping, "Holder<int>", 1, 1);
+    let Decl::StructDecl {
+        name,
+        fields,
+        methods,
+        ..
+    } = subst
+    else {
+        unreachable!("expected StructDecl");
+    };
+    assert_eq!(name, "Holder<int>");
+    assert_eq!(fields[0].1, Type::Int);
+    assert_eq!(methods[0].name, "Holder<int>");
+    assert_eq!(methods[0].params[0].ty, Type::Int);
 }
