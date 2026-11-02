@@ -1,1 +1,1 @@
-map:28:17: error: Expected type specifier, found 'typename'
+detail_avl_tree.h:137:25: error: No member named 'left' in struct 'std::detail::AVLTree::Node'

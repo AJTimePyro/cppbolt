@@ -24,6 +24,13 @@ pub fn substitute_type(
             if let Some(target) = mapping.get(name) {
                 return target.clone();
             }
+            if let Some((target, member)) = name
+                .split_once("::")
+                .and_then(|(base, member)| mapping.get(base).map(|target| (target, member)))
+            {
+                let base_str = target.to_c_type();
+                return Type::Struct(format!("{}::{}", base_str, member));
+            }
             if name.contains('<') {
                 return Type::Struct(substitute_template_name(name, mapping));
             }

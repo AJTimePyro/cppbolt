@@ -1,0 +1,1 @@
+tests/negative/typename_unqualified.cpp:2:14: error: 'typename' must be followed by a qualified name

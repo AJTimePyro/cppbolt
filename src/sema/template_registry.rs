@@ -269,6 +269,15 @@ impl Sema {
             self.resolve_and_instantiate_type(fty, line, col)?;
         }
 
+        for m in methods.iter_mut() {
+            if m.template_params.is_empty() {
+                self.resolve_and_instantiate_type(&mut m.return_type, line, col)?;
+                for p in &mut m.params {
+                    self.resolve_and_instantiate_type(&mut p.ty, line, col)?;
+                }
+            }
+        }
+
         self.synthesize_instantiation_lifecycle(inst_name, base_classes, fields, methods);
 
         self.compute_struct_layout(RecordLayout {
