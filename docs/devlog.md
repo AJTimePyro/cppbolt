@@ -391,3 +391,34 @@ Standard library associative containers `std::map`, `std::set`, and their backin
 - All 89 library and binary tests pass (`cargo test`).
 - Updated and verified cryptographic hashes in `tests/golden.txt` (`--check-golden`).
 - Clippy passes with zero warnings (`cargo clippy --all-targets -- -D warnings`), and census checks confirm zero functions over 80 lines and zero files over 500 lines (`cppbolt-census`).
+
+---
+
+## 2026-11-02: Nested Class Access Control, Scope Resolution, and Fixed-Point Dependent Aliases
+
+### Context & Motivation
+Following the initial nested classes and associative container support, a targeted code review identified five edge cases:
+1. Active struct scope tracking pushed outer class names instead of fully qualified nested names, corrupting inner struct member alias registration.
+2. Short names of nested structs were inserted directly into the global known types table, allowing invalid unqualified references from global scope and causing name collisions.
+3. Access control was only enforced on member access expressions (`obj.member`), leaving private nested type specifiers instantiable from external scopes without diagnostics.
+4. Chained member type aliases in template instantiations were evaluated in a fixed 3-iteration loop, failing on deeper alias chains.
+5. Injected member type aliases unconditionally included the `std::` prefix for all template classes, polluting the `std` namespace.
+
+### Work Executed
+1. Corrected active struct scope tracking and global namespace isolation:
+   - In `src/parser/structs_nested.rs`, push `full_name` onto `active_struct_scopes` so member aliases declared inside inner structs associate with the inner scope path.
+   - Removed `known_types.insert(short_name)` in `src/parser/structs_nested.rs`. Inner struct type names now resolve strictly through active struct scopes via `resolve_active_struct_scope_type`, keeping the global namespace clean.
+2. Implemented nested type access control:
+   - Added `check_nested_type_access` in `src/sema/lookup.rs` and integrated it into `resolve_and_instantiate_type` in `src/sema/template_registry.rs`.
+   - Verified that references to private nested types originate from within the enclosing class, its nested descendants, or a template specialization parameterized by that type. External references produce compile errors.
+3. Fixed-point dependent alias resolution and namespace hygiene:
+   - Replaced fixed 3-iteration loops in `src/sema/template_nested.rs` with fixed-point iteration (`while changed && iterations < 16`), resolving arbitrary alias chains and terminating early when stable.
+   - Guarded `std::` alias injection in `src/sema/template_nested.rs` and `src/sema/template_registry.rs` to only apply when the template or instance resides in the `std` namespace.
+
+### Verification
+- Added positive tests in `tests/classes_oop/structs/nested_classes_scopes.cpp` (verifying inner struct scope alias tracking) and `tests/templates_operators/template_nested_alias_chain.cpp` (verifying 5-hop chained dependent aliases).
+- Added negative diagnostic tests in `tests/negative/nested_class_unqualified_leak.cpp` (rejecting unqualified inner struct references) and `tests/negative/nested_type_private_access.cpp` (rejecting external instantiation of private nested types).
+- Added all 4 new tests to `tests/PASSING.txt` and verified the full test suite (405 passing tests in `cppbolt-testrunner`).
+- Re-baselined and verified cryptographic hashes across all 294 golden tests in `tests/golden.txt` (`--check-golden`).
+- Passed all 89 library unit and integration tests (`cargo test`).
+- Verified zero clippy warnings (`cargo clippy --all-targets -- -D warnings`) and passed all code census constraints (`cppbolt-census`).

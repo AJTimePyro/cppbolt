@@ -156,6 +156,7 @@ classes_oop/structs/brace_init_scalars
 classes_oop/structs/brace_init_temporaries
 classes_oop/structs/initializer_lists
 classes_oop/structs/nested_classes
+classes_oop/structs/nested_classes_scopes
 classes_oop/structs/regress_struct_ref_assign
 classes_oop/structs/regress_struct_ref_subscript
 classes_oop/structs/struct_basic
@@ -321,6 +322,8 @@ negative/narrowing_float_to_int
 negative/narrowing_signed_to_unsigned
 negative/nesting_depth_limit
 negative/nested_class_private_access
+negative/nested_class_unqualified_leak
+negative/nested_type_private_access
 negative/new_array_excess_elements
 negative/no_matching_constructor_list
 negative/operator_arrow_cycle
@@ -391,6 +394,7 @@ templates_operators/template_func_multi
 templates_operators/template_lazy_member
 templates_operators/template_multi_instance
 templates_operators/template_multi_param
+templates_operators/template_nested_alias_chain
 templates_operators/template_nested_classes
 templates_operators/template_ops_dtor
 templates_operators/template_pair

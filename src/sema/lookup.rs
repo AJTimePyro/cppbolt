@@ -268,8 +268,15 @@ impl Sema {
                 .current_class
                 .as_deref()
                 .map(|c| QualifiedName::new(c).plain());
+            let s_clean = QualifiedName::new(sname).plain();
             let in_class = match cur_clean {
-                Some(cur) => cur == p_clean || cur.starts_with(&format!("{p_clean}::")),
+                Some(cur) => {
+                    cur == p_clean
+                        || cur.starts_with(&format!("{p_clean}::"))
+                        || cur.starts_with(&format!("{p_clean}<"))
+                        || cur.contains(sname)
+                        || cur.contains(s_clean)
+                }
                 None => false,
             };
             if !in_class {
