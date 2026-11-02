@@ -261,62 +261,66 @@ impl Parser {
         false
     }
 
+    fn skip_template_angles(&self, mut idx: usize) -> Option<usize> {
+        let mut depth = 0;
+        while let Some(tok) = self.tokens.get(self.pos + idx) {
+            match tok.kind {
+                TokenKind::Lt => depth += 1,
+                TokenKind::Gt => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(idx + 1);
+                    }
+                }
+                TokenKind::Shr => {
+                    if depth <= 2 {
+                        return Some(idx + 1);
+                    }
+                    depth -= 2;
+                }
+                TokenKind::Semi | TokenKind::LBrace | TokenKind::RBrace | TokenKind::Eof => {
+                    return None;
+                }
+                _ => {}
+            }
+            idx += 1;
+        }
+        None
+    }
+
     pub(super) fn is_out_of_class_ctor_or_dtor(&self) -> bool {
         let mut idx = 0;
         if self.peek_ahead(idx) == &TokenKind::ColonColon {
             idx += 1;
         }
-        let TokenKind::Ident(class_name) = self.peek_ahead(idx) else {
-            return false;
-        };
-        idx += 1;
-        if self.peek_ahead(idx) == &TokenKind::Lt {
-            let mut depth = 0;
-            let mut found_end = false;
-            while let Some(tok) = self.tokens.get(self.pos + idx) {
-                match tok.kind {
-                    TokenKind::Lt => depth += 1,
-                    TokenKind::Gt => {
-                        depth -= 1;
-                        if depth == 0 {
-                            idx += 1;
-                            found_end = true;
-                            break;
-                        }
-                    }
-                    TokenKind::Shr => {
-                        if depth <= 2 {
-                            idx += 1;
-                            found_end = true;
-                            break;
-                        }
-                        depth -= 2;
-                    }
-                    TokenKind::Semi | TokenKind::LBrace | TokenKind::RBrace | TokenKind::Eof => {
-                        return false;
-                    }
-                    _ => {}
-                }
-                idx += 1;
+        let mut last_class = String::new();
+        loop {
+            let TokenKind::Ident(name) = self.peek_ahead(idx) else {
+                return false;
+            };
+            last_class.clear();
+            last_class.push_str(name);
+            idx += 1;
+            if self.peek_ahead(idx) == &TokenKind::Lt {
+                let Some(next_idx) = self.skip_template_angles(idx) else {
+                    return false;
+                };
+                idx = next_idx;
             }
-            if !found_end {
+            if self.peek_ahead(idx) != &TokenKind::ColonColon {
                 return false;
             }
-        }
-        if self.peek_ahead(idx) != &TokenKind::ColonColon {
-            return false;
-        }
-        idx += 1;
-        if self.peek_ahead(idx) == &TokenKind::Tilde {
             idx += 1;
+            let mut check_idx = idx;
+            if self.peek_ahead(check_idx) == &TokenKind::Tilde {
+                check_idx += 1;
+            }
+            if let TokenKind::Ident(sub_name) = self.peek_ahead(check_idx)
+                && sub_name == &last_class
+                && self.peek_ahead(check_idx + 1) == &TokenKind::LParen
+            {
+                return true;
+            }
         }
-        let TokenKind::Ident(sub_name) = self.peek_ahead(idx) else {
-            return false;
-        };
-        if sub_name != class_name {
-            return false;
-        }
-        idx += 1;
-        self.peek_ahead(idx) == &TokenKind::LParen
     }
 }

@@ -2,6 +2,7 @@ use super::*;
 
 impl Sema {
     pub fn analyze_program(&mut self, program: &mut Program) -> Result<(), CompileError> {
+        self.attach_out_of_class_methods(program);
         self.register_types(program)?;
         self.synthesize_destructors(program);
         self.synthesize_constructors(program);
@@ -9,6 +10,70 @@ impl Sema {
         self.analyze_declarations(program)?;
         program.declarations.append(&mut self.synthesized_decls);
         Ok(())
+    }
+
+    fn attach_out_of_class_methods(&mut self, program: &mut Program) {
+        for i in 0..program.declarations.len() {
+            let (plain_class, short_method, params, is_const) = match &program.declarations[i] {
+                Decl::Function(f) if f.name.contains("::") && f.body.is_some() => {
+                    let Some((class_part, method_name)) = f.name.rsplit_once("::") else {
+                        continue;
+                    };
+                    (
+                        QualifiedName::new(class_part).plain().to_string(),
+                        method_name.to_string(),
+                        f.params.clone(),
+                        f.is_const,
+                    )
+                }
+                _ => continue,
+            };
+            let mut target_idx = None;
+            for (j, decl) in program.declarations.iter().enumerate() {
+                if i != j
+                    && let Decl::StructDecl { name, methods, .. } = decl
+                    && QualifiedName::new(name).plain() == plain_class
+                    && methods.iter().any(|m| {
+                        (m.name == short_method || m.name == format!("~{}", short_method))
+                            && m.params.len() == params.len()
+                            && m.is_const == is_const
+                            && m.body.is_none()
+                            && m.params.iter().zip(&params).all(|(p1, p2)| p1.ty == p2.ty)
+                    })
+                {
+                    target_idx = Some(j);
+                    break;
+                }
+            }
+            let Some(j) = target_idx else {
+                continue;
+            };
+            let (body, inits) = match &mut program.declarations[i] {
+                Decl::Function(f) => {
+                    f.name.clear();
+                    (f.body.take(), std::mem::take(&mut f.ctor_initializers))
+                }
+                _ => continue,
+            };
+            if let Decl::StructDecl { methods, .. } = &mut program.declarations[j]
+                && let Some(existing) = methods.iter_mut().find(|m| {
+                    (m.name == short_method || m.name == format!("~{}", short_method))
+                        && m.params.len() == params.len()
+                        && m.is_const == is_const
+                        && m.body.is_none()
+                        && m.params.iter().zip(&params).all(|(p1, p2)| p1.ty == p2.ty)
+                })
+            {
+                existing.body = body;
+                if !inits.is_empty() {
+                    existing.ctor_initializers = inits;
+                }
+            }
+        }
+        program.declarations.retain(|d| match d {
+            Decl::Function(f) => !f.name.is_empty(),
+            _ => true,
+        });
     }
 
     fn register_types(&mut self, program: &mut Program) -> Result<(), CompileError> {
