@@ -231,6 +231,9 @@ mini_stl/stream_edge_cases
 mini_stl/stream_operator_overload
 mini_stl/string_basic
 mini_stl/string_comprehensive
+mini_stl/vector_aliasing
+mini_stl/vector_basic
+mini_stl/vector_objects
 mini_stl_variant/cin_getline_newline
 mini_stl_variant/cout_float_format
 mini_stl_variant/cstdio_basic
@@ -245,6 +248,7 @@ mini_stl_variant/stream_edge_cases
 mini_stl_variant/stream_operator_overload
 mini_stl_variant/string_basic
 mini_stl_variant/string_comprehensive
+mini_stl_variant/vector_basic
 negative/aggregate_excess_elements
 negative/ambiguous_overload_call
 negative/ambiguous_using_directives

@@ -225,9 +225,10 @@ impl Sema {
         Ok(())
     }
 
-    pub(super) fn try_instantiate_member_template_constructor(
+    pub(super) fn try_instantiate_member_template(
         &mut self,
         class_name: &str,
+        method_name: Option<&str>,
         arg_types: &[Type],
         args: &[Expr],
         pos: ExprPos,
@@ -244,8 +245,11 @@ impl Sema {
         };
 
         for cand in templates {
-            let is_ctor = cand.name == short || cand.name == class_name || cand.name == plain;
-            if !is_ctor || cand.template_params.is_empty() {
+            let matches_name = match method_name {
+                Some(m) => cand.name == m,
+                None => cand.name == short || cand.name == class_name || cand.name == plain,
+            };
+            if !matches_name || cand.template_params.is_empty() {
                 continue;
             }
             if let Ok(mapping) = deduce_template_arguments(
@@ -255,7 +259,8 @@ impl Sema {
                 (arg_types, args),
                 pos,
             ) {
-                let mut spec_func = substitute_function(&cand, &mapping, None, Some(short.to_string()));
+                let new_name = if method_name.is_none() { Some(short.to_string()) } else { None };
+                let mut spec_func = substitute_function(&cand, &mapping, None, new_name);
                 self.resolve_and_instantiate_type(&mut spec_func.return_type, pos.line, pos.col)?;
                 for p in &mut spec_func.params {
                     self.resolve_and_instantiate_type(&mut p.ty, pos.line, pos.col)?;
@@ -289,5 +294,15 @@ impl Sema {
             }
         }
         Ok(None)
+    }
+
+    pub(super) fn try_instantiate_member_template_constructor(
+        &mut self,
+        class_name: &str,
+        arg_types: &[Type],
+        args: &[Expr],
+        pos: ExprPos,
+    ) -> Result<Option<FunctionSig>, CompileError> {
+        self.try_instantiate_member_template(class_name, None, arg_types, args, pos)
     }
 }

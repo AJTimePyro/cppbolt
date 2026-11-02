@@ -334,8 +334,11 @@ impl Sema {
         self.register_function(sig.clone());
         self.functions.entry(qual_name).or_default().push(sig.clone());
         let short = QualifiedName::new(class_name).class_short_name();
-        if m.name != short {
+        if m.name == class_name {
             let short_qual = format!("{}::{}", class_name, short);
+            self.functions.entry(short_qual).or_default().push(sig);
+        } else if m.name == format!("~{}", class_name) {
+            let short_qual = format!("{}::~{}", class_name, short);
             self.functions.entry(short_qual).or_default().push(sig);
         }
     }

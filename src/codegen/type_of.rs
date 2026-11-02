@@ -78,14 +78,18 @@ impl<'a> Codegen<'a> {
             .lookup_var_in_context(name, &ctx.current_func_name)
         {
             sym.ty.clone()
-        } else if let Some(cls) = &ctx.current_class {
-            if let Some(fld) = self.sema.find_field_in_class(cls, name) {
-                fld.ty.clone()
-            } else if let Some(sym) = self.sema.lookup_var(&format!("{}::{}", cls, name)) {
-                sym.ty.clone()
-            } else {
-                Type::Int
-            }
+        } else if let Some(cls) = &ctx.current_class
+            && let Some(ty) = self
+                .sema
+                .find_field_in_class(cls, name)
+                .map(|f| f.ty.clone())
+                .or_else(|| {
+                    self.sema
+                        .lookup_var(&format!("{}::{}", cls, name))
+                        .map(|sym| sym.ty.clone())
+                })
+        {
+            ty
         } else if let Some(sig) = self
             .sema
             .functions

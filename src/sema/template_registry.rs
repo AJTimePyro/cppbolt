@@ -216,9 +216,8 @@ impl Sema {
 
         self.register_instantiated_static_fields(inst_name, static_fields);
         let all_methods = std::mem::take(methods);
-        self.setup_instantiated_methods(inst_name, all_methods, methods)?;
-
         self.synthesized_decls.push(struct_decl);
+        self.setup_instantiated_methods(inst_name, all_methods)?;
         Ok(())
     }
 
@@ -245,9 +244,13 @@ impl Sema {
         &mut self,
         inst_name: &str,
         all_methods: Vec<FunctionDecl>,
-        methods: &mut Vec<FunctionDecl>,
     ) -> Result<(), CompileError> {
-        for mut m in all_methods {
+        for m in &all_methods {
+            if m.template_params.is_empty() {
+                self.register_struct_method(inst_name, m);
+            }
+        }
+        for m in &all_methods {
             if !m.template_params.is_empty() {
                 self.member_templates
                     .entry(inst_name.to_string())
@@ -258,26 +261,9 @@ impl Sema {
                     self.member_templates
                         .entry(plain.to_string())
                         .or_default()
-                        .push(m);
+                        .push(m.clone());
                 }
-                continue;
-            }
-            self.register_struct_method(inst_name, &m);
-            if m.is_virtual || m.name.starts_with('~') {
-                let prev_class = self.current_class.take();
-                self.current_class = Some(inst_name.to_string());
-                let mut vmethod = m.clone();
-                if !vmethod.is_static {
-                    vmethod
-                        .params
-                        .insert(0, this_param(inst_name, vmethod.is_const));
-                }
-                let res = self.analyze_function(&mut vmethod);
-                self.current_class = prev_class;
-                res?;
-                m.body = vmethod.body;
-                methods.push(m);
-            } else {
+            } else if !m.is_virtual && !m.name.starts_with('~') {
                 let qual_name = format!("{}::{}", inst_name, m.name);
                 let mut params = m.params.clone();
                 if !m.is_static {
@@ -290,7 +276,31 @@ impl Sema {
                     RefQualifier::None => {}
                 }
                 self.pending_template_methods
-                    .insert(mangled, (inst_name.to_string(), m));
+                    .insert(mangled, (inst_name.to_string(), m.clone()));
+            }
+        }
+        for mut m in all_methods {
+            if m.template_params.is_empty() && (m.is_virtual || m.name.starts_with('~')) {
+                let prev_class = self.current_class.take();
+                self.current_class = Some(inst_name.to_string());
+                let mut vmethod = m.clone();
+                if !vmethod.is_static {
+                    vmethod
+                        .params
+                        .insert(0, this_param(inst_name, vmethod.is_const));
+                }
+                let res = self.analyze_function(&mut vmethod);
+                self.current_class = prev_class;
+                res?;
+                m.body = vmethod.body;
+                for decl in &mut self.synthesized_decls {
+                    if let Decl::StructDecl { name, methods, .. } = decl
+                        && name == inst_name
+                    {
+                        methods.push(m);
+                        break;
+                    }
+                }
             }
         }
         Ok(())
