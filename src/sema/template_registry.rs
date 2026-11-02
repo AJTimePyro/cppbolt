@@ -336,6 +336,7 @@ impl Sema {
     ) {
         let plain_tmpl = QualifiedName::new(tmpl_name).plain();
         let plain_inst = QualifiedName::new(inst_name).plain();
+        let is_std = QualifiedName::new(inst_name).in_std() || QualifiedName::new(tmpl_name).in_std();
         let mut new_aliases = Vec::new();
         for (alias_name, ty) in &self.type_aliases {
             let Some((owner, member)) = alias_name.rsplit_once("::") else {
@@ -344,7 +345,9 @@ impl Sema {
             if QualifiedName::new(owner).plain() == plain_tmpl {
                 let subst_ty = substitute_type(ty, mapping, None);
                 new_aliases.push((format!("{inst_name}::{member}"), subst_ty.clone()));
-                new_aliases.push((format!("std::{plain_inst}::{member}"), subst_ty.clone()));
+                if is_std {
+                    new_aliases.push((format!("std::{plain_inst}::{member}"), subst_ty.clone()));
+                }
                 if plain_inst != inst_name {
                     new_aliases.push((format!("{plain_inst}::{member}"), subst_ty));
                 }

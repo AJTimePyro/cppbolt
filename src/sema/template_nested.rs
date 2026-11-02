@@ -59,8 +59,13 @@ impl Sema {
     ) {
         let plain_tmpl = QualifiedName::new(&template_class.name).plain();
         let plain_inst = QualifiedName::new(inst_name).plain();
+        let is_std = QualifiedName::new(inst_name).in_std() || QualifiedName::new(&template_class.name).in_std();
 
-        for _ in 0..3 {
+        let mut changed = true;
+        let mut iterations = 0;
+        while changed && iterations < 16 {
+            changed = false;
+            iterations += 1;
             let existing: Vec<(String, Type)> =
                 self.type_aliases.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
             for (alias_name, ty) in existing {
@@ -72,10 +77,13 @@ impl Sema {
                     let _ = self.resolve_and_instantiate_type(&mut subst_ty, line, col);
                     mapping.insert(member.to_string(), subst_ty.clone());
                     self.type_aliases.insert(format!("{inst_name}::{member}"), subst_ty.clone());
-                    self.type_aliases.insert(format!("std::{plain_inst}::{member}"), subst_ty.clone());
+                    if is_std {
+                        self.type_aliases.insert(format!("std::{plain_inst}::{member}"), subst_ty.clone());
+                    }
                     if plain_inst != inst_name {
                         self.type_aliases.insert(format!("{plain_inst}::{member}"), subst_ty);
                     }
+                    changed = true;
                 }
             }
         }
