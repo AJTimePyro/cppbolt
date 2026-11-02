@@ -359,16 +359,16 @@ impl Sema {
             return Ok(());
         };
         for base in &layout.base_classes {
-            let empty_tys = Vec::new();
-            let tys = arg_types_map.get(base).unwrap_or(&empty_tys);
+            let tys = arg_types_map.get(base).map_or(&[][..], |v| v.as_slice());
             if let Some(sig) = self.find_constructor_for(base, tys, None) {
                 self.instantiate_pending_method(&sig.mangled_name)?;
             }
         }
         for fld in &layout.fields {
             if let Some(sname) = element_struct_name(&fld.ty) {
-                let empty_tys = Vec::new();
-                let tys = arg_types_map.get(&fld.name).unwrap_or(&empty_tys);
+                let tys = arg_types_map
+                    .get(&fld.name)
+                    .map_or(&[][..], |v| v.as_slice());
                 if let Some(sig) = self.find_constructor_for(sname, tys, None) {
                     self.instantiate_pending_method(&sig.mangled_name)?;
                 }

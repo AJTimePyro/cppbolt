@@ -45,7 +45,13 @@ impl Sema {
             }
         }
 
-        self.populate_instantiation_member_aliases(template_class, inst_name, &mut mapping, line, col);
+        self.populate_instantiation_member_aliases(
+            template_class,
+            inst_name,
+            &mut mapping,
+            line,
+            col,
+        );
         mapping
     }
 
@@ -59,29 +65,37 @@ impl Sema {
     ) {
         let plain_tmpl = QualifiedName::new(&template_class.name).plain();
         let plain_inst = QualifiedName::new(inst_name).plain();
-        let is_std = QualifiedName::new(inst_name).in_std() || QualifiedName::new(&template_class.name).in_std();
+        let is_std = QualifiedName::new(inst_name).in_std()
+            || QualifiedName::new(&template_class.name).in_std();
 
         let mut changed = true;
         let mut iterations = 0;
         while changed && iterations < 16 {
             changed = false;
             iterations += 1;
-            let existing: Vec<(String, Type)> =
-                self.type_aliases.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            let existing: Vec<(String, Type)> = self
+                .type_aliases
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
             for (alias_name, ty) in existing {
                 let Some((owner, member)) = alias_name.rsplit_once("::") else {
                     continue;
                 };
-                if QualifiedName::new(owner).plain() == plain_tmpl && !mapping.contains_key(member) {
+                if QualifiedName::new(owner).plain() == plain_tmpl && !mapping.contains_key(member)
+                {
                     let mut subst_ty = substitute_type(&ty, mapping, None);
                     let _ = self.resolve_and_instantiate_type(&mut subst_ty, line, col);
                     mapping.insert(member.to_string(), subst_ty.clone());
-                    self.type_aliases.insert(format!("{inst_name}::{member}"), subst_ty.clone());
+                    self.type_aliases
+                        .insert(format!("{inst_name}::{member}"), subst_ty.clone());
                     if is_std {
-                        self.type_aliases.insert(format!("std::{plain_inst}::{member}"), subst_ty.clone());
+                        self.type_aliases
+                            .insert(format!("std::{plain_inst}::{member}"), subst_ty.clone());
                     }
                     if plain_inst != inst_name {
-                        self.type_aliases.insert(format!("{plain_inst}::{member}"), subst_ty);
+                        self.type_aliases
+                            .insert(format!("{plain_inst}::{member}"), subst_ty);
                     }
                     changed = true;
                 }
@@ -193,12 +207,8 @@ impl Sema {
             col,
         };
 
-        self.register_nested_struct_decl(p.nested_inst_name, subst_decl);
+        self.synthesized_decls.push(subst_decl);
         self.setup_instantiated_methods(p.nested_inst_name, all_methods)?;
         Ok(())
-    }
-
-    fn register_nested_struct_decl(&mut self, _inst_name: &str, decl: Decl) {
-        self.synthesized_decls.push(decl);
     }
 }

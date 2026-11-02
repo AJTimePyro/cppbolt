@@ -173,10 +173,22 @@ mod tests {
     #[test]
     fn extracts_class_short_name_for_nested_and_templates() {
         assert_eq!(QualifiedName::new("Foo").class_short_name(), "Foo");
-        assert_eq!(QualifiedName::new("std::string").class_short_name(), "string");
-        assert_eq!(QualifiedName::new("std::vector<int>").class_short_name(), "vector");
-        assert_eq!(QualifiedName::new("Outer<int>::Inner").class_short_name(), "Inner");
-        assert_eq!(QualifiedName::new("Outer<int>::Inner<float>").class_short_name(), "Inner");
+        assert_eq!(
+            QualifiedName::new("std::string").class_short_name(),
+            "string"
+        );
+        assert_eq!(
+            QualifiedName::new("std::vector<int>").class_short_name(),
+            "vector"
+        );
+        assert_eq!(
+            QualifiedName::new("Outer<int>::Inner").class_short_name(),
+            "Inner"
+        );
+        assert_eq!(
+            QualifiedName::new("Outer<int>::Inner<float>").class_short_name(),
+            "Inner"
+        );
         assert_eq!(
             QualifiedName::new("std::detail::AVLTree<int, double>::Node").class_short_name(),
             "Node"

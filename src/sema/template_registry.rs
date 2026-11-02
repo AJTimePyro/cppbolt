@@ -336,7 +336,8 @@ impl Sema {
     ) {
         let plain_tmpl = QualifiedName::new(tmpl_name).plain();
         let plain_inst = QualifiedName::new(inst_name).plain();
-        let is_std = QualifiedName::new(inst_name).in_std() || QualifiedName::new(tmpl_name).in_std();
+        let is_std =
+            QualifiedName::new(inst_name).in_std() || QualifiedName::new(tmpl_name).in_std();
         let mut new_aliases = Vec::new();
         for (alias_name, ty) in &self.type_aliases {
             let Some((owner, member)) = alias_name.rsplit_once("::") else {

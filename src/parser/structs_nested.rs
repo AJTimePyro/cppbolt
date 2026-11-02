@@ -37,7 +37,9 @@ impl Parser {
 
         if self.peek() == &TokenKind::Semi {
             self.advance();
-            return Ok(StructBody::new(full_name, is_class, start.line, start.col).into_decl(Vec::new()));
+            return Ok(
+                StructBody::new(full_name, is_class, start.line, start.col).into_decl(Vec::new())
+            );
         }
 
         let base_classes = self.parse_base_classes()?;
@@ -99,13 +101,10 @@ impl Parser {
             if self.peek() == &TokenKind::Assign {
                 self.advance();
                 let ty = self.parse_type()?;
-                self.expect(TokenKind::Semi)?;
                 self.register_member_alias(&body.name, alias, ty);
-                return Ok(true);
-            } else {
-                self.expect(TokenKind::Semi)?;
-                return Ok(true);
             }
+            self.expect(TokenKind::Semi)?;
+            return Ok(true);
         }
         Ok(false)
     }

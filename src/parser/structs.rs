@@ -109,7 +109,10 @@ impl Parser {
         Ok(base_classes)
     }
 
-    pub(super) fn parse_struct_member(&mut self, body: &mut StructBody) -> Result<(), CompileError> {
+    pub(super) fn parse_struct_member(
+        &mut self,
+        body: &mut StructBody,
+    ) -> Result<(), CompileError> {
         if self.parse_struct_access(body)? {
             return Ok(());
         }
@@ -258,8 +261,6 @@ impl Parser {
         }
         Ok(false)
     }
-
-
 
     /// Parses the conversion operator, destructor, and constructor forms of a
     /// class member. Returns `true` when one of them was parsed.

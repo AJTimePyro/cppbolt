@@ -89,21 +89,23 @@ impl Sema {
             insert_type_aliases(&mut self.structs_with_dtor, inst_name);
         }
         let short = inst_name.rsplit("::").next().unwrap_or(inst_name);
-        let has_user_ctor = methods.iter().any(|m| m.name == inst_name || m.name == short);
+        let has_user_ctor = methods
+            .iter()
+            .any(|m| m.name == inst_name || m.name == short);
         if !has_user_ctor {
             methods.push(FunctionDecl {
                 name: inst_name.to_string(),
                 return_type: Type::Void,
-                params: vec![],
-                body: Some(Stmt::new(StmtKind::Compound(vec![]), 0, 0)),
+                params: Vec::new(),
+                body: Some(Stmt::new(StmtKind::Compound(Vec::new()), 0, 0)),
                 is_virtual: false,
                 is_pure_virtual: false,
                 is_const: false,
                 is_explicit: false,
                 ref_qualifier: RefQualifier::None,
                 is_static: false,
-                ctor_initializers: vec![],
-                template_params: vec![],
+                ctor_initializers: Vec::new(),
+                template_params: Vec::new(),
                 line: 0,
                 col: 0,
             });
