@@ -44,35 +44,7 @@ impl Sema {
                 ..
             } = decl
             {
-                let has_dtor_members = fields
-                    .iter()
-                    .any(|(_, ty)| type_has_dtor(ty, &self.structs_with_dtor))
-                    || base_classes
-                        .iter()
-                        .any(|b| set_contains_type(&self.structs_with_dtor, b));
-                if has_dtor_members {
-                    let dtor_name = format!("~{}", name);
-                    if !methods.iter().any(|m| m.name == dtor_name) {
-                        methods.push(FunctionDecl {
-                            name: dtor_name,
-                            return_type: Type::Void,
-                            params: vec![],
-                            body: Some(Stmt::new(StmtKind::Compound(vec![]), 0, 0)),
-                            is_virtual: false,
-                            is_pure_virtual: false,
-                            is_const: false,
-                            is_explicit: false,
-                            ref_qualifier: RefQualifier::None,
-                            is_static: false,
-                            ctor_initializers: vec![],
-                            template_params: vec![],
-                            line: 0,
-                            col: 0,
-                        });
-                    }
-                    insert_type_aliases(&mut self.structs_with_dtor, name);
-                    synthesize_copy_operations(name, base_classes, fields, methods);
-                }
+                self.synthesize_instantiation_lifecycle(name, base_classes, fields, methods);
             }
         }
     }

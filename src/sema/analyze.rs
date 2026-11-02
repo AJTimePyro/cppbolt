@@ -1,5 +1,18 @@
 use super::*;
 
+fn method_matches_out_of_class(
+    m: &FunctionDecl,
+    short_method: &str,
+    params: &[Param],
+    is_const: bool,
+) -> bool {
+    (m.name == short_method || m.name == format!("~{}", short_method))
+        && m.params.len() == params.len()
+        && m.is_const == is_const
+        && m.body.is_none()
+        && m.params.iter().zip(params).all(|(p1, p2)| p1.ty == p2.ty)
+}
+
 impl Sema {
     pub fn analyze_program(&mut self, program: &mut Program) -> Result<(), CompileError> {
         self.attach_out_of_class_methods(program);
@@ -33,13 +46,9 @@ impl Sema {
                 if i != j
                     && let Decl::StructDecl { name, methods, .. } = decl
                     && QualifiedName::new(name).plain() == plain_class
-                    && methods.iter().any(|m| {
-                        (m.name == short_method || m.name == format!("~{}", short_method))
-                            && m.params.len() == params.len()
-                            && m.is_const == is_const
-                            && m.body.is_none()
-                            && m.params.iter().zip(&params).all(|(p1, p2)| p1.ty == p2.ty)
-                    })
+                    && methods
+                        .iter()
+                        .any(|m| method_matches_out_of_class(m, &short_method, &params, is_const))
                 {
                     target_idx = Some(j);
                     break;
@@ -56,13 +65,9 @@ impl Sema {
                 _ => continue,
             };
             if let Decl::StructDecl { methods, .. } = &mut program.declarations[j]
-                && let Some(existing) = methods.iter_mut().find(|m| {
-                    (m.name == short_method || m.name == format!("~{}", short_method))
-                        && m.params.len() == params.len()
-                        && m.is_const == is_const
-                        && m.body.is_none()
-                        && m.params.iter().zip(&params).all(|(p1, p2)| p1.ty == p2.ty)
-                })
+                && let Some(existing) = methods
+                    .iter_mut()
+                    .find(|m| method_matches_out_of_class(m, &short_method, &params, is_const))
             {
                 existing.body = body;
                 if !inits.is_empty() {

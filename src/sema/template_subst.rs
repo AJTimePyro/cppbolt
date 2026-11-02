@@ -318,10 +318,9 @@ pub fn substitute_function(
             if let Some(def) = &mut default_val {
                 substitute_expr(def, mapping, injected_class);
             }
-            let new_ty = substitute_type(&p.ty, mapping, injected_class);
             Param {
                 name: p.name.clone(),
-                ty: new_ty,
+                ty: substitute_type(&p.ty, mapping, injected_class),
                 default_val,
             }
         })

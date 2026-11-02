@@ -228,37 +228,8 @@ impl Parser {
         if self.peek() != &TokenKind::Lt {
             return false;
         }
-        let mut depth = 0;
-        let mut i = 0;
-        while let Some(tok) = self.tokens.get(self.pos + i) {
-            match tok.kind {
-                TokenKind::Lt => depth += 1,
-                TokenKind::Gt => {
-                    depth -= 1;
-                    if depth == 0 {
-                        return matches!(
-                            self.tokens.get(self.pos + i + 1).map(|t| &t.kind),
-                            Some(TokenKind::ColonColon)
-                        );
-                    }
-                }
-                TokenKind::Shr => {
-                    if depth <= 2 {
-                        return matches!(
-                            self.tokens.get(self.pos + i + 1).map(|t| &t.kind),
-                            Some(TokenKind::ColonColon)
-                        );
-                    }
-                    depth -= 2;
-                }
-                TokenKind::Semi | TokenKind::LBrace | TokenKind::RBrace | TokenKind::Eof => {
-                    return false;
-                }
-                _ => {}
-            }
-            i += 1;
-        }
-        false
+        self.skip_template_angles(0)
+            .is_some_and(|end| self.peek_ahead(end) == &TokenKind::ColonColon)
     }
 
     fn skip_template_angles(&self, mut idx: usize) -> Option<usize> {

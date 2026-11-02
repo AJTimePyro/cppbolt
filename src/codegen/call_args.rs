@@ -102,9 +102,7 @@ impl<'a> Codegen<'a> {
         self.compile_lvalue_addr(a, ctx, code)?;
         if is_derived
             && let (Type::Struct(s1), Type::Struct(s2)) = (&clean_p, &clean_a)
-            && let Some(offset) = self.sema.struct_layouts.get(s2).and_then(|l| {
-                l.base_offsets.iter().find(|(b, _)| b == s1).map(|(_, off)| *off)
-            })
+            && let Some(offset) = self.sema.base_subobject_offset(s2, s1)
             && offset != 0
         {
             code.push(OP_I32_CONST);

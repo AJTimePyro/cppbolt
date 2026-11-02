@@ -95,12 +95,7 @@ impl<'a> Codegen<'a> {
                     (target_type.deref_type(), aty.deref_type().or(Some(&aty)))
                     && let (Type::Struct(s_target), Type::Struct(s_src)) =
                         (clean_target.strip_const(), clean_src.strip_const())
-                    && let Some(offset) = self.sema.struct_layouts.get(s_src).and_then(|l| {
-                        l.base_offsets
-                            .iter()
-                            .find(|(b, _)| b == s_target)
-                            .map(|(_, off)| *off)
-                    })
+                    && let Some(offset) = self.sema.base_subobject_offset(s_src, s_target)
                     && offset != 0
                 {
                     code.push(OP_I32_CONST);
