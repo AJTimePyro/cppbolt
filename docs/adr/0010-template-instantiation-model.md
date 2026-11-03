@@ -39,11 +39,21 @@ Compiling templated standard library headers like `<vector>`, `<utility>`, and `
 8. Recursion depth budget (`src/sema/template_registry.rs`).
    We cap recursion depth at 500 levels, rejecting recursive template expansions with an explicit diagnostic before exhausting the WebAssembly call stack.
 
+9. Nested class instantiation in class templates (`src/sema/template_nested.rs`).
+   When instantiating a class template containing member struct declarations (such as `AVLTree<T>::Node`), we capture nested AST declarations in `TemplateClass` and clone them with outer type arguments substituted. Each nested struct receives its qualified canonical name (such as `std::detail::AVLTree<int, int>::Node`), computes its record layout, and registers synthesized lifecycle hooks and member methods.
+
+10. Dependent type specifiers and typename disambiguation (`src/parser/types.rs`, `src/sema/template_nested.rs`).
+    We parse the `typename` prefix before qualified type specifiers in template and function declarations (`typename T::iterator`). Semantic analysis resolves dependent names through qualified alias tables and registered nested types, rejecting unqualified `typename` specifiers and non-type dependent names with distinct diagnostics.
+
+11. Eager constructor dependency analysis (`src/sema/constructor.rs`, `src/sema/stmt.rs`).
+    When analyzing an instantiated constructor, semantic analysis inspects member initializer expressions and base class subobjects after parameter bindings enter scope. Dependent default constructors for member subobjects and array elements instantiate immediately, populating member layouts and destructor cleanups before WebAssembly code emission.
+
 ## Consequences
 ### Positive
 - Reuses existing AST substitution and struct layout routines without separate uninstantiated typing passes (`src/sema/template_subst.rs`, `tests/templates_operators/template_class_basic.cpp`).
 - Unused member methods are neither analyzed nor emitted to WebAssembly, keeping output binaries compact (`tests/templates_operators/template_lazy_member.cpp`).
 - Standard containers like `std::vector` and `std::pair` compile and execute with full RAII semantics, dynamic growth, and range-based for loops (`tests/mini_stl/vector_basic.cpp`, `tests/mini_stl/iterators_range_for.cpp`).
+- Associative containers `std::map`, `std::set`, and their backing `detail::AVLTree` compile cleanly with full nested node structures, balance rotations, and iterator traversals (`tests/mini_stl/map_basic.cpp`, `tests/mini_stl/set_basic.cpp`, `tests/mini_stl/differential_fuzz.cpp`).
 - Sorting algorithms with default or custom comparators resolve correctly across multiple arities (`tests/mini_stl/algorithm_sort.cpp`, `tests/mini_stl/sort_comparator.cpp`).
 
 ### Negative / Trade-offs

@@ -53,6 +53,14 @@ impl<'a> Codegen<'a> {
             .copied()
     }
 
+    pub(super) fn lookup_struct_dtor(&self, sname: &str) -> Option<u32> {
+        let short_sname = QualifiedName::new(sname).class_short_name();
+        self.func_indices
+            .get(&format!("{sname}_~{sname}"))
+            .or_else(|| self.func_indices.get(&format!("{sname}_~{short_sname}")))
+            .copied()
+    }
+
     /// Looks up a virtual method on a class or one of its bases.
     pub fn find_class_vmethod(&self, class_name: &str, method_name: &str) -> Option<u32> {
         let m_name = format!("{}_{}", class_name, method_name);

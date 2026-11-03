@@ -22,6 +22,7 @@ mod stmt_structured_binding;
 mod synthesize;
 pub mod template_deduce;
 mod template_func;
+mod template_nested;
 mod template_registry;
 pub mod template_subst;
 #[cfg(test)]

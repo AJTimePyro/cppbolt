@@ -56,6 +56,10 @@ impl Sema {
         fields: &[(String, Type)],
         methods: &mut Vec<FunctionDecl>,
     ) {
+        let has_custom_dtor = methods.iter().any(|m| m.name.starts_with('~'));
+        if has_custom_dtor {
+            insert_type_aliases(&mut self.structs_with_dtor, inst_name);
+        }
         let has_dtor_members = fields
             .iter()
             .any(|(_, ty)| type_has_dtor(ty, &self.structs_with_dtor))
@@ -83,6 +87,30 @@ impl Sema {
                 });
             }
             insert_type_aliases(&mut self.structs_with_dtor, inst_name);
+        }
+        let short = inst_name.rsplit("::").next().unwrap_or(inst_name);
+        let has_user_ctor = methods
+            .iter()
+            .any(|m| m.name == inst_name || m.name == short);
+        if !has_user_ctor {
+            methods.push(FunctionDecl {
+                name: inst_name.to_string(),
+                return_type: Type::Void,
+                params: Vec::new(),
+                body: Some(Stmt::new(StmtKind::Compound(Vec::new()), 0, 0)),
+                is_virtual: false,
+                is_pure_virtual: false,
+                is_const: false,
+                is_explicit: false,
+                ref_qualifier: RefQualifier::None,
+                is_static: false,
+                ctor_initializers: Vec::new(),
+                template_params: Vec::new(),
+                line: 0,
+                col: 0,
+            });
+        }
+        if has_dtor_members || has_custom_dtor {
             synthesize_copy_operations(inst_name, base_classes, fields, methods);
         }
     }

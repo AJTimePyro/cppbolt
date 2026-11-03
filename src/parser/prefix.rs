@@ -18,7 +18,10 @@ impl Parser {
                     if ty.is_scalar() {
                         return self.parse_functional_cast(ty, start);
                     }
-                    if matches!(ty, Type::Struct(_) | Type::TemplateInstance { .. }) {
+                    if matches!(
+                        ty,
+                        Type::Struct(_) | Type::TemplateInstance { .. } | Type::TypeParam(_)
+                    ) {
                         self.advance();
                         let args = self.parse_call_args()?;
                         let call = Expr::Call {

@@ -1,0 +1,1 @@
+tests/negative/nested_class_unqualified_leak.cpp:8:11: error: Expected ';', found identifier 'in'

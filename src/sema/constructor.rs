@@ -18,11 +18,25 @@ pub(super) enum ConstructorCall {
     Selected,
 }
 
+fn element_struct_name(ty: &Type) -> Option<&str> {
+    match ty.strip_const() {
+        Type::Struct(name) => Some(name),
+        Type::Array(elem, _) => element_struct_name(elem),
+        _ => None,
+    }
+}
+
 impl Sema {
     /// The class a name refers to, if the name names one.
     pub(super) fn class_named(&mut self, name: &str, line: usize, col: usize) -> Option<String> {
         if self.struct_layouts.contains_key(name) {
             return Some(name.to_string());
+        }
+        if let Some(cls) = &self.current_class {
+            let scoped = format!("{}::{}", cls, name);
+            if self.struct_layouts.contains_key(&scoped) {
+                return Some(scoped);
+            }
         }
         if let Some((base, args_str)) = split_template_call_name(name) {
             let known: Vec<String> = self.class_templates.keys().cloned().collect();
@@ -306,5 +320,60 @@ impl Sema {
         pos: ExprPos,
     ) -> Result<Option<FunctionSig>, CompileError> {
         self.try_instantiate_member_template(class_name, None, arg_types, args, pos)
+    }
+
+    pub(super) fn instantiate_constructor_dependencies(
+        &mut self,
+        cls: &str,
+        func: &mut FunctionDecl,
+    ) -> Result<(), CompileError> {
+        let short_cls = cls.split("::").last().unwrap_or(cls).to_string();
+        let has_delegating = func
+            .ctor_initializers
+            .iter()
+            .any(|(name, _)| name == cls || name == &short_cls);
+        if has_delegating && func.ctor_initializers.len() > 1 {
+            return Err(CompileError::new(
+                "mem-initializer for delegating constructor cannot be combined with other member or base initializers",
+                func.line,
+                func.col,
+            ));
+        }
+        let mut arg_types_map: HashMap<String, Vec<Type>> = HashMap::new();
+        for (init_name, args) in &mut func.ctor_initializers {
+            let mut tys = Vec::new();
+            for arg in args.iter_mut() {
+                tys.push(self.analyze_expr(arg)?);
+            }
+            if (init_name == cls || init_name == &short_cls)
+                && let Some(sig) = self.find_constructor_for(cls, &tys, Some(args))
+            {
+                self.instantiate_pending_method(&sig.mangled_name)?;
+            }
+            arg_types_map.insert(init_name.clone(), tys);
+        }
+        if has_delegating {
+            return Ok(());
+        }
+        let Some(layout) = self.struct_layouts.get(cls).cloned() else {
+            return Ok(());
+        };
+        for base in &layout.base_classes {
+            let tys = arg_types_map.get(base).map_or(&[][..], |v| v.as_slice());
+            if let Some(sig) = self.find_constructor_for(base, tys, None) {
+                self.instantiate_pending_method(&sig.mangled_name)?;
+            }
+        }
+        for fld in &layout.fields {
+            if let Some(sname) = element_struct_name(&fld.ty) {
+                let tys = arg_types_map
+                    .get(&fld.name)
+                    .map_or(&[][..], |v| v.as_slice());
+                if let Some(sig) = self.find_constructor_for(sname, tys, None) {
+                    self.instantiate_pending_method(&sig.mangled_name)?;
+                }
+            }
+        }
+        Ok(())
     }
 }

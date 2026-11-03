@@ -89,6 +89,7 @@ impl Sema {
             methods,
             static_fields: vec![],
             private_members: vec![],
+            nested_structs: vec![],
             line: pos.line,
             col: pos.col,
         });

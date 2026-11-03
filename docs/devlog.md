@@ -350,3 +350,49 @@ Section 2 of the roadmap tracked `reinterpret_cast` across scalar and pointer ty
 - Added unit tests across lexer, parser, sema, and codegen in `src/`.
 - Verified clean suite with 339 passing tests in `cppbolt-testrunner`.
 - Verified zero warnings with `cargo clippy` and satisfied all census constraints.
+
+---
+
+## 2026-11-02: Nested Classes, Dependent Types, and Associative Containers (std::map, std::set)
+
+Implemented member classes within structs and templates, the `typename` keyword for dependent type specifiers, template nested class instantiation, and method overload selection by value category. These additions enabled `std::map`, `std::set`, and their self-balancing binary search tree `detail::AVLTree` in `stdlib/`.
+
+### Summary of Work
+
+1. Parsed inner struct and class declarations in `src/parser/structs.rs` and `src/parser/structs_nested.rs`, registering nested definitions under their outer qualified paths (`Outer::Inner`) and flattening them into top-level declarations.
+2. Added `typename` keyword handling in `src/parser/types.rs` and `src/parser/prefix.rs`, requiring qualification (`typename Scope::Type`) and preserving qualified specifiers across function signatures.
+3. Implemented `instantiate_nested_structs` and `populate_instantiation_member_aliases` in `src/sema/template_nested.rs`, cloning and specializing inner classes with outer template arguments substituted and computing their record layouts.
+4. Added `select_member_overload` in `src/sema/expr_call_member.rs` to score candidate signatures and resolve calls across receiver constness and value categories.
+5. Added eager constructor dependency resolution in `src/sema/constructor.rs`, instantiating member subobject and array element constructors before body analysis.
+6. Handled scoped destructor lookups in `src/codegen/function_lifecycle.rs` and `src/codegen/raii.rs` via short and qualified names.
+7. Enabled `tests/mini_stl/map_basic.cpp`, `tests/mini_stl/set_basic.cpp`, and the 20-seed differential fuzzing suite `tests/mini_stl/differential_fuzz.cpp` in `tests/PASSING.txt`.
+
+### Verification Results
+
+- Unit and integration tests: 401 corpus tests on disk, 401 passed, 1 expected failure (`vector_brace_init`), 0 unexpected failures. All 109 negative tests passed.
+- Host oracle gate: matched native compiler behavior on all expected files.
+- Golden baseline: updated to 294 entries in `tests/golden.txt`, all matching `target/release/cppbolt-cli`.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
+## 2026-11-02: Nested Class Access Control, Scope Resolution, and Fixed-Point Dependent Aliases
+
+Resolved review findings in nested struct scope tracking, global namespace pollution, type specifier access control, and chained dependent alias resolution.
+
+### Summary of Work
+
+1. Pushed qualified names onto `active_struct_scopes` in `src/parser/structs_nested.rs`, ensuring member aliases declared in inner structs bind to the inner scope rather than the outer class.
+2. Removed unqualified nested struct names from `known_types` in `src/parser/structs_nested.rs`, scoping nested names to their enclosing struct and resolving them via `resolve_active_struct_scope_type`.
+3. Implemented `check_nested_type_access` in `src/sema/lookup.rs` and called it during type resolution in `src/sema/template_registry.rs`, rejecting external references to private nested types while permitting enclosing classes and parameterized templates.
+4. Replaced the fixed 3-iteration alias expansion loop in `src/sema/template_nested.rs` with fixed-point iteration (`while changed && iterations < 16`), supporting arbitrary alias chain depths.
+5. Guarded member alias injection in `src/sema/template_nested.rs` and `src/sema/template_registry.rs`, injecting `std::` aliases only for classes declared within the `std` namespace.
+6. Added positive tests for nested scopes and alias chains (`nested_classes_scopes.cpp`, `template_nested_alias_chain.cpp`), and negative diagnostic tests for unqualified leakage and private access (`nested_class_unqualified_leak.cpp`, `nested_type_private_access.cpp`).
+
+### Verification Results
+
+- Unit and integration tests: 406 corpus tests on disk, 405 passed, 1 expected failure (`vector_brace_init`), 0 unexpected failures. All 111 negative tests passed.
+- Golden baseline: all 294 entries match `tests/golden.txt`.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings with `-D warnings` across all targets.

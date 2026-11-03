@@ -25,28 +25,13 @@ impl Sema {
             arg_types.push(self.analyze_expr(a)?);
         }
 
-        if let Expr::Identifier(raw_name) = &mut **callee {
-            let resolved = self.resolve_alias_in_qualified_name(raw_name);
-            if resolved != *raw_name {
-                *raw_name = resolved;
+        if let Some((ty, replacement)) =
+            self.try_resolve_identifier_call(callee, args, &arg_types, *pos)?
+        {
+            if let Some(rep) = replacement {
+                *expr = rep;
             }
-            let name = raw_name.strip_prefix("::").unwrap_or(raw_name).to_string();
-            if name == "printf" || name == "std::printf" || name.ends_with("::printf") {
-                return Ok(Type::Int);
-            }
-            if let Some((ty, replacement)) = self.try_scalar_call(&name, args, *pos)? {
-                *expr = replacement;
-                return Ok(ty);
-            }
-            if let Some(sname) = self.class_named(&name, pos.line, pos.col) {
-                if let ConstructorCall::Elided(inner) =
-                    self.analyze_constructor_call(&sname, args, &arg_types, *pos)?
-                {
-                    *expr = inner;
-                }
-                return Ok(Type::Struct(sname));
-            }
-            self.redirect_to_method(callee, &name, *pos);
+            return Ok(ty);
         }
 
         if let Some(return_type) = self.analyze_member_callee(callee, args, &arg_types)? {
@@ -67,6 +52,22 @@ impl Sema {
                 {
                     return Ok(ret);
                 }
+            } else if let Some(cls) = self.current_class.clone()
+                && let Some(fld) = self.find_field_in_class(&cls, &name)
+            {
+                let fld_ty = fld.ty.clone();
+                **callee = Expr::MemberAccess {
+                    object: Box::new(Expr::This),
+                    member: name.clone(),
+                    is_arrow: true,
+                    pos: *pos,
+                };
+                if let Type::Struct(sname) = fld_ty.strip_const().strip_reference()
+                    && let Some(ret) =
+                        self.try_functor_call(callee, sname, args, &arg_types, *pos)?
+                {
+                    return Ok(ret);
+                }
             }
             return self.resolve_named_call(&name, args, &arg_types, callee, *pos);
         }
@@ -78,6 +79,38 @@ impl Sema {
             return Ok(ret);
         }
         Ok(function_return_type(&callee_ty).unwrap_or(Type::Int))
+    }
+
+    fn try_resolve_identifier_call(
+        &mut self,
+        callee: &mut Expr,
+        args: &mut Vec<Expr>,
+        arg_types: &[Type],
+        pos: ExprPos,
+    ) -> Result<Option<(Type, Option<Expr>)>, CompileError> {
+        let Expr::Identifier(raw_name) = &mut *callee else {
+            return Ok(None);
+        };
+        let resolved = self.resolve_alias_in_qualified_name(raw_name);
+        if resolved != *raw_name {
+            *raw_name = resolved;
+        }
+        let name = raw_name.strip_prefix("::").unwrap_or(raw_name).to_string();
+        if name == "printf" || name == "std::printf" || name.ends_with("::printf") {
+            return Ok(Some((Type::Int, None)));
+        }
+        if let Some((ty, replacement)) = self.try_scalar_call(&name, args, pos)? {
+            return Ok(Some((ty, Some(replacement))));
+        }
+        if let Some(sname) = self.class_named(&name, pos.line, pos.col) {
+            let elided = match self.analyze_constructor_call(&sname, args, arg_types, pos)? {
+                ConstructorCall::Elided(inner) => Some(inner),
+                ConstructorCall::Selected => None,
+            };
+            return Ok(Some((Type::Struct(sname), elided)));
+        }
+        self.redirect_to_method(callee, &name, pos);
+        Ok(None)
     }
 
     fn try_functor_call(

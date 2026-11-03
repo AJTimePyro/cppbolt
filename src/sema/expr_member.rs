@@ -27,7 +27,10 @@ impl Sema {
                 .as_deref()
                 .map(|c| QualifiedName::new(c).plain());
             let s_clean = QualifiedName::new(&struct_name).plain();
-            let in_class = cur_clean == Some(s_clean);
+            let in_class = match cur_clean {
+                Some(cur) => cur == s_clean || cur.starts_with(&format!("{}::", s_clean)),
+                None => false,
+            };
             if !in_class {
                 return Err(CompileError::new(
                     format!("'{}' is a private member of '{}'", member, struct_name),

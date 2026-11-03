@@ -2,20 +2,6 @@ use super::*;
 
 impl Sema {
     pub(super) fn analyze_function(&mut self, func: &mut FunctionDecl) -> Result<(), CompileError> {
-        if let Some(cls) = &self.current_class {
-            let short_cls = cls.split("::").last().unwrap_or(cls);
-            let has_delegating = func
-                .ctor_initializers
-                .iter()
-                .any(|(name, _)| name == cls || name == short_cls);
-            if has_delegating && func.ctor_initializers.len() > 1 {
-                return Err(CompileError::new(
-                    "mem-initializer for delegating constructor cannot be combined with other member or base initializers",
-                    func.line,
-                    func.col,
-                ));
-            }
-        }
         self.current_func_return_type =
             (func.return_type != Type::Auto).then(|| func.return_type.clone());
         self.current_func_name = Some(func.name.clone());
@@ -42,6 +28,13 @@ impl Sema {
                 ));
             };
             scope.vars.insert(param.name.clone(), sym);
+        }
+
+        if let Some(cls) = self.current_class.clone() {
+            let short_cls = cls.split("::").last().unwrap_or(&cls);
+            if func.name == cls || func.name == short_cls {
+                self.instantiate_constructor_dependencies(&cls, func)?;
+            }
         }
 
         if let Some(body) = &mut func.body {

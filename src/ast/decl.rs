@@ -56,6 +56,7 @@ pub enum Decl {
         methods: Vec<FunctionDecl>,
         static_fields: Vec<(String, Type, Option<Expr>)>,
         private_members: Vec<String>,
+        nested_structs: Vec<Decl>,
         line: usize,
         col: usize,
     },

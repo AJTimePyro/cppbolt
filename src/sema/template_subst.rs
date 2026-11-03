@@ -16,13 +16,25 @@ pub fn substitute_type(
     match ty {
         Type::TypeParam(name) => mapping.get(name).cloned().unwrap_or_else(|| ty.clone()),
         Type::Struct(name) => {
-            if let Some((c, target_ty)) = injected_class
-                && crate::QualifiedName::new(c).matches(crate::QualifiedName::new(name))
-            {
-                return target_ty.clone();
+            if let Some((c, target_ty)) = injected_class {
+                let short_c = c.rsplit_once("::").map(|(_, s)| s).unwrap_or(c);
+                if (name == c
+                    || name == short_c
+                    || crate::QualifiedName::new(c).matches(crate::QualifiedName::new(name)))
+                    && (!name.contains('<') || c.contains('<'))
+                {
+                    return target_ty.clone();
+                }
             }
             if let Some(target) = mapping.get(name) {
                 return target.clone();
+            }
+            if let Some((target, member)) = name
+                .split_once("::")
+                .and_then(|(base, member)| mapping.get(base).map(|target| (target, member)))
+            {
+                let base_str = target.to_c_type();
+                return Type::Struct(format!("{}::{}", base_str, member));
             }
             if name.contains('<') {
                 return Type::Struct(substitute_template_name(name, mapping));
@@ -174,6 +186,13 @@ fn substitute_callee_identifier(
 ) {
     if let Some((_, target_ty)) = injected_class.filter(|(c, _)| *c == name.as_str()) {
         *name = target_ty.to_c_type();
+    } else if let Some(target) = mapping.get(name.as_str()) {
+        *name = target.to_c_type();
+    } else if let Some((target, member)) = name
+        .split_once("::")
+        .and_then(|(b, m)| mapping.get(b).map(|t| (t, m)))
+    {
+        *name = format!("{}::{}", target.to_c_type(), member);
     } else if name.contains('<') {
         *name = substitute_template_name(name, mapping);
     }
@@ -183,16 +202,20 @@ pub fn substitute_template_name(name: &str, mapping: &HashMap<String, Type>) -> 
     let Some(open) = name.find('<') else {
         return name.to_string();
     };
-    if !name.ends_with('>') {
+    let Some(close) = name.rfind('>') else {
+        return name.to_string();
+    };
+    if open >= close {
         return name.to_string();
     }
     let base = &name[..open];
-    let inside = &name[open + 1..name.len() - 1];
+    let inside = &name[open + 1..close];
+    let suffix = &name[close + 1..];
     let mut result = inside.to_string();
     for (param, ty) in mapping {
         result = replace_whole_word(&result, param, &ty.to_c_type());
     }
-    format!("{}<{}>", base, result)
+    format!("{}<{}>{}", base, result, suffix)
 }
 
 fn replace_whole_word(text: &str, word: &str, replacement: &str) -> String {
@@ -284,10 +307,11 @@ pub fn substitute_stmt(
 
 fn substitute_func_name(func_name: &str, injected_class: Option<(&str, &Type)>) -> String {
     if let Some((cname, target_ty)) = injected_class {
-        if func_name == cname {
+        let short_cname = cname.rsplit_once("::").map(|(_, s)| s).unwrap_or(cname);
+        if func_name == cname || func_name == short_cname {
             return target_ty.to_c_type();
         }
-        if func_name == format!("~{}", cname) {
+        if func_name == format!("~{}", cname) || func_name == format!("~{}", short_cname) {
             return format!("~{}", target_ty.to_c_type());
         }
     }
@@ -407,6 +431,7 @@ pub fn substitute_struct(
         methods,
         static_fields,
         private_members: template_class.private_members.clone(),
+        nested_structs: Vec::new(),
         line,
         col,
     }

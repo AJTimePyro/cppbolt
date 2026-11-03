@@ -4,17 +4,14 @@ impl<'a> Codegen<'a> {
     pub(super) fn emit_clean_temporaries(&mut self, ctx: &mut FunctionContext, code: &mut Vec<u8>) {
         let temps = std::mem::take(&mut ctx.temp_objects);
         for (sname, temp_slot, should_destroy) in temps.iter().rev() {
-            if *should_destroy {
-                let dtor_name = format!("{}_~{}", sname, sname);
-                if let Some(&dtor_idx) = self.func_indices.get(&dtor_name) {
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.fp_local);
-                    code.push(OP_I32_LOAD);
-                    write_u32(code, 2);
-                    write_u32(code, *temp_slot);
-                    code.push(OP_CALL);
-                    write_u32(code, dtor_idx);
-                }
+            if *should_destroy && let Some(dtor_idx) = self.lookup_struct_dtor(sname) {
+                code.push(OP_LOCAL_GET);
+                write_u32(code, ctx.fp_local);
+                code.push(OP_I32_LOAD);
+                write_u32(code, 2);
+                write_u32(code, *temp_slot);
+                code.push(OP_CALL);
+                write_u32(code, dtor_idx);
             }
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.fp_local);
@@ -33,17 +30,16 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) {
         for (_name, ty, offset) in objs.iter().rev() {
-            if let Type::Struct(sname) = ty.strip_const() {
-                let dtor_name = format!("{}_~{}", sname, sname);
-                if let Some(&dtor_idx) = self.func_indices.get(&dtor_name) {
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.fp_local);
-                    code.push(OP_I32_CONST);
-                    write_i32(code, *offset as i32);
-                    code.push(OP_I32_ADD); // this
-                    code.push(OP_CALL);
-                    write_u32(code, dtor_idx);
-                }
+            if let Type::Struct(sname) = ty.strip_const()
+                && let Some(dtor_idx) = self.lookup_struct_dtor(sname)
+            {
+                code.push(OP_LOCAL_GET);
+                write_u32(code, ctx.fp_local);
+                code.push(OP_I32_CONST);
+                write_i32(code, *offset as i32);
+                code.push(OP_I32_ADD); // this
+                code.push(OP_CALL);
+                write_u32(code, dtor_idx);
             }
         }
     }

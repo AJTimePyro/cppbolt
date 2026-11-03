@@ -132,25 +132,24 @@ impl Parser {
     }
 
     fn parse_expr_or_decl_stmt(&mut self, line: usize, col: usize) -> Result<Stmt, CompileError> {
+        if self.peek() == &TokenKind::KwTypename {
+            return self.parse_var_decl();
+        }
         if self.is_type_start() {
             let saved_pos = self.pos;
             match self.parse_var_decl() {
-                Ok(stmt) => Ok(stmt),
+                Ok(stmt) => return Ok(stmt),
                 Err(error) => {
                     if self.nesting_exceeded.get() {
                         return Err(error);
                     }
                     self.pos = saved_pos;
-                    let expr = self.parse_expr()?;
-                    self.expect(TokenKind::Semi)?;
-                    Ok(Stmt::new(StmtKind::Expr(expr), line, col))
                 }
             }
-        } else {
-            let expr = self.parse_expr()?;
-            self.expect(TokenKind::Semi)?;
-            Ok(Stmt::new(StmtKind::Expr(expr), line, col))
         }
+        let expr = self.parse_expr()?;
+        self.expect(TokenKind::Semi)?;
+        Ok(Stmt::new(StmtKind::Expr(expr), line, col))
     }
 
     pub(super) fn parse_compound_stmt(&mut self) -> Result<Stmt, CompileError> {

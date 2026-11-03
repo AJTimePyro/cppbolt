@@ -239,7 +239,7 @@ impl<'a> Codegen<'a> {
         } else if let Some(args) = init_args
             && args.len() == 1
             && matches!(
-                arg_types[0].strip_const().strip_reference(),
+                arg_types[0].clean_type(),
                 Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(sname))
             )
         {
@@ -320,7 +320,8 @@ impl<'a> Codegen<'a> {
         cls: &str,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        if f.name != format!("~{}", cls) {
+        let short_cls = QualifiedName::new(cls).class_short_name();
+        if f.name != format!("~{}", cls) && f.name != format!("~{}", short_cls) {
             return Ok(());
         }
         let Some(layout) = self.sema.struct_layouts.get(cls) else {
@@ -329,8 +330,7 @@ impl<'a> Codegen<'a> {
         let base_field_count = self.base_field_count(layout);
         for fld in layout.fields.iter().skip(base_field_count).rev() {
             if let Type::Struct(sname) = fld.ty.strip_const() {
-                let member_dtor = format!("{}_~{}", sname, sname);
-                if let Some(&d_idx) = self.func_indices.get(&member_dtor) {
+                if let Some(d_idx) = self.lookup_struct_dtor(sname) {
                     code.push(OP_LOCAL_GET);
                     write_u32(code, 0); // this
                     code.push(OP_I32_CONST);
@@ -342,8 +342,7 @@ impl<'a> Codegen<'a> {
             } else if let Type::Array(elem_ty, count) = fld.ty.strip_const()
                 && let Type::Struct(sname) = elem_ty.strip_const()
             {
-                let member_dtor = format!("{}_~{}", sname, sname);
-                let Some(&d_idx) = self.func_indices.get(&member_dtor) else {
+                let Some(d_idx) = self.lookup_struct_dtor(sname) else {
                     continue;
                 };
                 let elem_size = u32::try_from(elem_ty.size_of(&self.sema.struct_sizes))

@@ -15,7 +15,8 @@ impl Parser {
             | TokenKind::KwVoid
             | TokenKind::KwAuto
             | TokenKind::KwConst
-            | TokenKind::KwDecltype => true,
+            | TokenKind::KwDecltype
+            | TokenKind::KwTypename => true,
             TokenKind::ColonColon => {
                 if let TokenKind::Ident(sub) = self.peek_ahead(1) {
                     sub == "size_t"
@@ -53,6 +54,11 @@ impl Parser {
                         || self.is_known_template(id)
                         || self.is_active_type_param(id)
                         || self.type_aliases.contains_key(id)
+                        || self
+                            .active_struct_scopes
+                            .iter()
+                            .rev()
+                            .any(|s| self.known_types.contains(&format!("{}::{}", s, id)))
                 }
             }
             _ => false,
@@ -78,9 +84,25 @@ impl Parser {
 
     fn parse_specifier_type_inner(&mut self) -> Result<Type, CompileError> {
         let mut is_const = false;
-        while self.peek() == &TokenKind::KwConst {
-            self.advance();
-            is_const = true;
+        let mut is_typename = false;
+        loop {
+            if self.peek() == &TokenKind::KwConst {
+                self.advance();
+                is_const = true;
+            } else if self.peek() == &TokenKind::KwTypename {
+                self.advance();
+                is_typename = true;
+            } else {
+                break;
+            }
+        }
+
+        if is_typename && !matches!(self.peek(), TokenKind::ColonColon | TokenKind::Ident(_)) {
+            return Err(CompileError::new(
+                "'typename' must be followed by a qualified name",
+                self.current().line,
+                self.current().col,
+            ));
         }
 
         let mut base_type = match self.peek() {
@@ -96,7 +118,7 @@ impl Parser {
             | TokenKind::KwSigned
             | TokenKind::KwUnsigned => self.parse_builtin_type()?,
             TokenKind::KwDecltype | TokenKind::ColonColon | TokenKind::Ident(_) => {
-                self.parse_named_type()?
+                self.parse_named_type(is_typename)?
             }
             _ => {
                 return Err(CompileError::new(
@@ -286,23 +308,32 @@ impl Parser {
         Ok(ty)
     }
 
-    fn parse_named_type(&mut self) -> Result<Type, CompileError> {
+    fn parse_decltype_specifier(&mut self) -> Result<Type, CompileError> {
+        self.advance();
+        self.expect(TokenKind::LParen)?;
+        let res = if self.peek() == &TokenKind::KwNullptr {
+            self.advance();
+            Type::Nullptr
+        } else {
+            let _ = self.parse_expr()?;
+            Type::Pointer(Box::new(Type::Void))
+        };
+        self.expect(TokenKind::RParen)?;
+        Ok(res)
+    }
+
+    fn parse_named_type(&mut self, is_typename: bool) -> Result<Type, CompileError> {
         let ty = match self.peek() {
-            TokenKind::KwDecltype => {
-                self.advance();
-                self.expect(TokenKind::LParen)?;
-                let res = if self.peek() == &TokenKind::KwNullptr {
-                    self.advance();
-                    Type::Nullptr
-                } else {
-                    let _ = self.parse_expr()?;
-                    Type::Pointer(Box::new(Type::Void))
-                };
-                self.expect(TokenKind::RParen)?;
-                res
-            }
+            TokenKind::KwDecltype => self.parse_decltype_specifier()?,
             TokenKind::ColonColon | TokenKind::Ident(_) => {
                 let raw_id = self.parse_qualified_name()?;
+                if is_typename && !raw_id.contains("::") {
+                    return Err(CompileError::new(
+                        "'typename' must be followed by a qualified name",
+                        self.current().line,
+                        self.current().col,
+                    ));
+                }
                 let id = self.resolve_namespace_alias(&raw_id);
                 if self.is_active_type_param(&id) {
                     Type::TypeParam(id)
@@ -315,6 +346,8 @@ impl Parser {
                     Type::UnsignedInt
                 } else if id == "ptrdiff_t" {
                     Type::Int
+                } else if let Some(scoped) = self.resolve_active_struct_scope_type(&id) {
+                    scoped
                 } else if let Some(alias) = self.type_aliases.get(&id).cloned() {
                     alias
                 } else if self.known_enums.contains(&id) {
@@ -346,7 +379,8 @@ impl Parser {
                             self.current().col,
                         ));
                     }
-                } else if self.known_types.contains(&format!("std::{}", id))
+                } else if is_typename
+                    || self.known_types.contains(&format!("std::{}", id))
                     || self.is_template_member_type(&id)
                 {
                     Type::Struct(id)
@@ -402,6 +436,22 @@ impl Parser {
             let base = plain.split('<').next().unwrap_or(plain);
             return self.is_known_template(base);
         }
+        if let Some((base, _member)) = plain.split_once("::") {
+            return self.is_active_type_param(base) || self.type_aliases.contains_key(base);
+        }
         false
+    }
+
+    fn resolve_active_struct_scope_type(&self, id: &str) -> Option<Type> {
+        for scope in self.active_struct_scopes.iter().rev() {
+            let scoped = format!("{}::{}", scope, id);
+            if let Some(alias) = self.type_aliases.get(&scoped).cloned() {
+                return Some(alias);
+            }
+            if self.known_types.contains(&scoped) {
+                return Some(Type::Struct(scoped));
+            }
+        }
+        None
     }
 }

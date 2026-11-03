@@ -114,6 +114,12 @@ impl Sema {
             Type::Struct(sname) => {
                 let sname_clone = sname.clone();
                 self.resolve_struct_type_alias(ty, &sname_clone, line, col)?;
+                if let Type::Struct(resolved_name) = ty {
+                    self.check_nested_type_access(&sname_clone, line, col)?;
+                    if resolved_name != &sname_clone {
+                        self.check_nested_type_access(resolved_name, line, col)?;
+                    }
+                }
             }
             Type::Pointer(inner)
             | Type::Reference(inner)
@@ -246,10 +252,14 @@ impl Sema {
         pos: (usize, usize),
     ) -> Result<(), CompileError> {
         let (line, col) = pos;
-        let mut mapping = HashMap::new();
-        for (param, arg) in template_params.iter().zip(args.iter()) {
-            mapping.insert(param.name.clone(), arg.clone());
-        }
+        let mapping = self.prepare_instantiation_mapping(
+            template_class,
+            template_params,
+            args,
+            inst_name,
+            pos,
+        );
+        self.instantiate_nested_structs(template_class, inst_name, &mapping, pos)?;
 
         let mut struct_decl = substitute_struct(template_class, &mapping, inst_name, line, col);
         let Decl::StructDecl {
@@ -267,6 +277,15 @@ impl Sema {
 
         for (_, fty) in fields.iter_mut() {
             self.resolve_and_instantiate_type(fty, line, col)?;
+        }
+
+        for m in methods.iter_mut() {
+            if m.template_params.is_empty() {
+                self.resolve_and_instantiate_type(&mut m.return_type, line, col)?;
+                for p in &mut m.params {
+                    self.resolve_and_instantiate_type(&mut p.ty, line, col)?;
+                }
+            }
         }
 
         self.synthesize_instantiation_lifecycle(inst_name, base_classes, fields, methods);
@@ -317,6 +336,8 @@ impl Sema {
     ) {
         let plain_tmpl = QualifiedName::new(tmpl_name).plain();
         let plain_inst = QualifiedName::new(inst_name).plain();
+        let is_std =
+            QualifiedName::new(inst_name).in_std() || QualifiedName::new(tmpl_name).in_std();
         let mut new_aliases = Vec::new();
         for (alias_name, ty) in &self.type_aliases {
             let Some((owner, member)) = alias_name.rsplit_once("::") else {
@@ -325,7 +346,9 @@ impl Sema {
             if QualifiedName::new(owner).plain() == plain_tmpl {
                 let subst_ty = substitute_type(ty, mapping, None);
                 new_aliases.push((format!("{inst_name}::{member}"), subst_ty.clone()));
-                new_aliases.push((format!("std::{plain_inst}::{member}"), subst_ty.clone()));
+                if is_std {
+                    new_aliases.push((format!("std::{plain_inst}::{member}"), subst_ty.clone()));
+                }
                 if plain_inst != inst_name {
                     new_aliases.push((format!("{plain_inst}::{member}"), subst_ty));
                 }
@@ -336,7 +359,7 @@ impl Sema {
         }
     }
 
-    fn setup_instantiated_methods(
+    pub(super) fn setup_instantiated_methods(
         &mut self,
         inst_name: &str,
         all_methods: Vec<FunctionDecl>,
@@ -389,6 +412,7 @@ impl Sema {
                 self.current_class = prev_class;
                 res?;
                 m.body = vmethod.body;
+                m.ctor_initializers = vmethod.ctor_initializers;
                 for decl in &mut self.synthesized_decls {
                     if let Decl::StructDecl { name, methods, .. } = decl
                         && name == inst_name
@@ -418,12 +442,20 @@ impl Sema {
             self.current_class = prev_class;
             res?;
             method_decl.body = func_decl.body;
+            method_decl.ctor_initializers = func_decl.ctor_initializers;
             let mut found = false;
             for decl in &mut self.synthesized_decls {
                 if let Decl::StructDecl { name, methods, .. } = decl
                     && name == &class_name
                 {
-                    methods.push(method_decl.clone());
+                    if let Some(existing) = methods
+                        .iter_mut()
+                        .find(|m| m.name == method_decl.name && m.params == method_decl.params)
+                    {
+                        *existing = method_decl.clone();
+                    } else {
+                        methods.push(method_decl.clone());
+                    }
                     found = true;
                     break;
                 }
@@ -437,6 +469,7 @@ impl Sema {
                     methods: vec![method_decl],
                     static_fields: Vec::new(),
                     private_members: Vec::new(),
+                    nested_structs: Vec::new(),
                     line: 0,
                     col: 0,
                 });
