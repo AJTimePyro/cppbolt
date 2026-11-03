@@ -305,6 +305,8 @@ negative/function_struct_to_int
 negative/function_too_few_arguments
 negative/function_too_many_arguments
 negative/include_cycle
+negative/initializer_list_mismatched_types
+negative/initializer_list_narrowing
 negative/invalid_binary_digit
 negative/invalid_digit_separator
 negative/invalid_octal_digit

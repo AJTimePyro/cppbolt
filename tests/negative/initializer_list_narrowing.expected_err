@@ -1,0 +1,1 @@
+tests/negative/initializer_list_narrowing.cpp:4:26: error: narrowing conversion from 'double' to 'int' inside braced-init-list

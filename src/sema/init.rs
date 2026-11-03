@@ -155,7 +155,7 @@ impl Sema {
     pub fn resolve_list_init(
         &mut self,
         target_ty: &Type,
-        init_elements: &mut [Expr],
+        init_elements: &mut Vec<Expr>,
         context: InitContext,
         pos: ExprPos,
     ) -> Result<Type, CompileError> {
@@ -175,6 +175,15 @@ impl Sema {
             return self.resolve_list_init(inner, init_elements, InitContext::DirectList, pos);
         }
 
+        if clean_target == Type::Auto {
+            return self.deduce_auto_initializer_list(init_elements, pos).map(|(_, ty)| ty);
+        }
+
+        if let Some(elem_ty) = self.extract_initializer_list_element_type(&clean_target) {
+            self.resolve_initializer_list_elements(&elem_ty, init_elements, pos)?;
+            return Ok(clean_target);
+        }
+
         if clean_target.is_integer()
             || clean_target.is_floating()
             || clean_target.is_pointer()
@@ -190,7 +199,7 @@ impl Sema {
         if let Type::Struct(ref sname) = clean_target {
             if sname == "initializer_list" || sname == "std::initializer_list" {
                 return Err(CompileError::new(
-                    "std::initializer_list requires template support which is not yet available",
+                    "template argument required for 'initializer_list'",
                     pos.line,
                     pos.col,
                 ));
@@ -376,68 +385,7 @@ impl Sema {
         Ok(Type::Struct(sname.to_string()))
     }
 
-    /// Resolves class constructor initialization via list-init.
-    fn resolve_class_list_init(
-        &mut self,
-        sname: &str,
-        init_elements: &mut [Expr],
-        context: InitContext,
-        pos: ExprPos,
-    ) -> Result<Type, CompileError> {
-        if init_elements.is_empty() {
-            let empty_args: Vec<Type> = Vec::new();
-            if let Some(sig) = self.find_constructor_for(sname, &empty_args, None) {
-                if sig.is_explicit && context.is_copy_list() {
-                    return Err(CompileError::new(
-                        format!(
-                            "chosen default constructor for '{}' is explicit in copy-list-initialization",
-                            sname
-                        ),
-                        pos.line,
-                        pos.col,
-                    ));
-                }
-                return Ok(Type::Struct(sname.to_string()));
-            }
-            return Err(CompileError::new(
-                format!("no matching default constructor for '{}'", sname),
-                pos.line,
-                pos.col,
-            ));
-        }
 
-        let mut arg_types = Vec::new();
-        for elem in init_elements.iter_mut() {
-            arg_types.push(self.analyze_expr(elem)?);
-        }
-
-        let Some(sig) = self.find_constructor_for(sname, &arg_types, Some(init_elements)) else {
-            return Err(CompileError::new(
-                format!("no matching constructor for initialization of '{}'", sname),
-                pos.line,
-                pos.col,
-            ));
-        };
-
-        if sig.is_explicit && context.is_copy_list() {
-            return Err(CompileError::new(
-                format!(
-                    "chosen constructor for '{}' is explicit in copy-list-initialization",
-                    sname
-                ),
-                pos.line,
-                pos.col,
-            ));
-        }
-
-        for (i, elem) in init_elements.iter().enumerate() {
-            if let Some(param_ty) = sig.param_types.get(i + 1) {
-                self.check_narrowing(elem, &arg_types[i], param_ty, pos)?;
-            }
-        }
-
-        Ok(Type::Struct(sname.to_string()))
-    }
 
     /// Determines if a class is an aggregate under C++17 rules ([dcl.init.aggr]).
     pub fn is_cxx17_aggregate(&self, sname: &str) -> bool {
