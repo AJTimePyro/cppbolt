@@ -1,0 +1,1 @@
+tests/negative/initializer_list_nontemplate_class_param_mismatch.cpp:11:5: error: no matching constructor for initialization of 'X'
