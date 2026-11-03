@@ -4,6 +4,29 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-03: `std::initializer_list` Review Fixes
+
+Resolved five validated findings in the initializer-list and brace-initialization support added earlier the same day. Each fix was committed separately with positive, variant, and negative corpus coverage.
+
+### Summary of Work
+
+1. Resolved non-template method parameter and return types in `register_struct_declarations` (`src/sema/analyze.rs`), so a constructor such as `X(std::initializer_list<int>)` or `X(std::vector<int>)` matches an argument whose template type was already instantiated (`c78aa25`).
+2. Ranked every initializer-list constructor instead of taking the first whose elements were convertible: exact conversions beat integral promotions, which beat other standard conversions. A narrowing candidate is skipped, and its diagnostic is reported only when no candidate is viable (`fb4a983`).
+3. Fell back to an empty initializer-list constructor for value-initialization (`T x{}`) when the class declares no default constructor (`fb4a983`).
+4. Normalized extracted template element types to their registered struct names and resolved nested brace lists against the chosen element type, enabling `std::vector<std::vector<int>> v{{1, 2}, {3, 4}}` (`cadf45c`).
+5. Routed a namespace-scope brace initializer through the same list resolution as locals, and lowered a namespace-scope `std::initializer_list<T>` by building its backing array in `main`'s frame and storing the pointer and length in the global object (`366bad8`).
+
+### Known Issue
+
+Range-based `for` loops and structured bindings inside the body of a non-template method are not analyzed: `analyze_declarations` type-checks a clone of each method body and discards the analyzed body, so the loop compiles to nothing. A fix that writes the analyzed body back changes 137 golden hashes, which is out of scope for this milestone; corpus tests avoid method-body loops. Free functions and template method bodies are unaffected. The defect predates this milestone.
+
+### Verification Results
+
+- Corpus: 428 tests on disk, 428 passed, 0 unexpected failures; all 118 negative tests passed.
+- Golden baseline: all 310 entries match `tests/golden.txt`, with only the two new tests added.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings with `-D warnings` across all targets.
+
 ## 2026-11-03: `std::initializer_list` and Brace Initialization
 
 Implemented compiler support for C++17 initializer lists and container brace initialization.
