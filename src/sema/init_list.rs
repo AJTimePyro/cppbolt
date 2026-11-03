@@ -83,7 +83,6 @@ impl Sema {
     }
 
     /// Checks whether `ty` is a `std::initializer_list` specialization.
-    #[allow(dead_code)]
     pub fn is_initializer_list_type(&self, ty: &Type) -> bool {
         self.extract_initializer_list_element_type(ty).is_some()
     }
@@ -140,7 +139,6 @@ impl Sema {
         Ok((elem_ty, Type::Struct(inst_name)))
     }
 
-    /// Validates that all elements in `init_elements` convert to `elem_ty` without narrowing.
     pub fn resolve_initializer_list_elements(
         &mut self,
         elem_ty: &Type,
@@ -288,7 +286,7 @@ impl Sema {
         Ok(())
     }
 
-    /// Resolves class constructor initialization via list-init with preference for initializer_list.
+    /// Resolves class list-initialization, preferring initializer_list constructors.
     pub fn resolve_class_list_init(
         &mut self,
         sname: &str,
@@ -335,8 +333,7 @@ impl Sema {
         context: InitContext,
         pos: ExprPos,
     ) -> Result<Type, CompileError> {
-        let empty_args: Vec<Type> = Vec::new();
-        if let Some(sig) = self.find_constructor_for(sname, &empty_args, None) {
+        if let Some(sig) = self.find_constructor_for(sname, &[], None) {
             if sig.is_explicit && context.is_copy_list() {
                 return Err(CompileError::new(
                     format!(

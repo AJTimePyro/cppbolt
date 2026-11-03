@@ -6,19 +6,19 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ## 2026-11-03: `std::initializer_list` Review Fixes
 
-Resolved five validated findings in the initializer-list and brace-initialization support added earlier the same day. Each fix was committed separately with positive, variant, and negative corpus coverage.
+Fixed five findings in the initializer-list and brace-initialization support added earlier the same day.
 
 ### Summary of Work
 
 1. Resolved non-template method parameter and return types in `register_struct_declarations` (`src/sema/analyze.rs`), so a constructor such as `X(std::initializer_list<int>)` or `X(std::vector<int>)` matches an argument whose template type was already instantiated (`c78aa25`).
 2. Ranked every initializer-list constructor instead of taking the first whose elements were convertible: exact conversions beat integral promotions, which beat other standard conversions. A narrowing candidate is skipped, and its diagnostic is reported only when no candidate is viable (`fb4a983`).
-3. Fell back to an empty initializer-list constructor for value-initialization (`T x{}`) when the class declares no default constructor (`fb4a983`).
+3. Added empty initializer-list constructor fallback for value-initialization (`T x{}`) when the class declares no default constructor (`fb4a983`).
 4. Normalized extracted template element types to their registered struct names and resolved nested brace lists against the chosen element type, enabling `std::vector<std::vector<int>> v{{1, 2}, {3, 4}}` (`cadf45c`).
 5. Routed a namespace-scope brace initializer through the same list resolution as locals, and lowered a namespace-scope `std::initializer_list<T>` by building its backing array in `main`'s frame and storing the pointer and length in the global object (`366bad8`).
 
 ### Known Issue
 
-Range-based `for` loops and structured bindings inside the body of a non-template method are not analyzed: `analyze_declarations` type-checks a clone of each method body and discards the analyzed body, so the loop compiles to nothing. A fix that writes the analyzed body back changes 137 golden hashes, which is out of scope for this milestone; corpus tests avoid method-body loops. Free functions and template method bodies are unaffected. The defect predates this milestone.
+Range-based `for` loops and structured bindings inside non-template method bodies are not analyzed: `analyze_declarations` type-checks a clone of the body and discards it, so the loop compiles to nothing. Writing the analyzed body back changes 137 golden hashes; corpus tests avoid method-body loops for now. Free functions and template method bodies are unaffected.
 
 ### Verification Results
 
@@ -29,12 +29,12 @@ Range-based `for` loops and structured bindings inside the body of a non-templat
 
 ## 2026-11-03: `std::initializer_list` and Brace Initialization
 
-Implemented compiler support for C++17 initializer lists and container brace initialization.
+Implemented `std::initializer_list<T>` and container brace initialization.
 
 ### Summary of Work
 
 1. Added the vector count-and-value constructor so `vector<int>(3, 4)` remains distinct from `vector<int>{3, 4}`.
-2. Added semantic initializer-list resolution with constructor preference, `auto` deduction, homogeneous element checks, narrowing diagnostics, and support for parenthesized braced arguments.
+2. Implemented semantic initializer-list resolution with constructor preference, `auto` deduction, homogeneous element checks, narrowing diagnostics, and support for parenthesized braced arguments.
 3. Lowered each list to a frame-backed contiguous element array plus an eight-byte `{pointer, length}` `std::initializer_list<T>` value. Temporary backing elements are destroyed at full-expression cleanup; local list elements are destroyed with their containing scope.
 4. Added positive, variant, and negative corpus coverage for list arguments, `auto` deduction, vector brace initialization, mismatched types, empty `auto`, and narrowing.
 
