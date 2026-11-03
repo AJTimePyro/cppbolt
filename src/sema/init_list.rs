@@ -52,7 +52,34 @@ impl Sema {
         let inner = rest.strip_suffix('>')?;
         let known_templates: Vec<String> = self.class_templates.keys().cloned().collect();
         let parsed = parse_types_list(inner, &known_templates).ok()?;
-        parsed.into_iter().next()
+        Some(self.normalize_initializer_list_element(parsed.into_iter().next()?))
+    }
+
+    /// Rewrites an instantiated template argument to the struct type the
+    /// instantiation registered.
+    ///
+    /// The `initializer_list<E>` parameter keeps `E` as written, so a nested
+    /// `std::vector<int>` element arrives as a `TemplateInstance` even though
+    /// the class was instantiated. The rest of the analysis only understands
+    /// the registered `Struct` name.
+    fn normalize_initializer_list_element(&self, ty: Type) -> Type {
+        match ty {
+            Type::TemplateInstance { name, args } => {
+                let args: Vec<Type> = args
+                    .into_iter()
+                    .map(|arg| self.normalize_initializer_list_element(arg))
+                    .collect();
+                let plain = QualifiedName::new(&name).plain();
+                let canonical: Vec<String> = args.iter().map(|arg| arg.to_c_type()).collect();
+                let inst_name = format!("{}<{}>", plain, canonical.join(", "));
+                if self.struct_sizes.contains_key(&inst_name) {
+                    Type::Struct(inst_name)
+                } else {
+                    Type::TemplateInstance { name, args }
+                }
+            }
+            other => other,
+        }
     }
 
     /// Checks whether `ty` is a `std::initializer_list` specialization.
@@ -120,7 +147,11 @@ impl Sema {
         init_elements: &mut [Expr],
         pos: ExprPos,
     ) -> Result<(), CompileError> {
+        self.resolve_nested_initializer_lists(elem_ty, init_elements)?;
         for elem in init_elements.iter_mut() {
+            if matches!(elem, Expr::InitializerList { .. }) {
+                continue;
+            }
             let actual = self.analyze_expr(elem)?;
             self.check_narrowing(elem, &actual, elem_ty, pos)?;
             if !self.can_assign_expr(elem_ty, &actual, Some(elem)) {
@@ -164,16 +195,10 @@ impl Sema {
             return Ok(None);
         }
 
-        let mut actual_types = Vec::with_capacity(init_elements.len());
-        for elem in init_elements.iter_mut() {
-            actual_types.push(self.analyze_expr(elem)?);
-        }
-
         let mut best: Option<(usize, FunctionSig, Type)> = None;
         let mut narrowing_error = None;
         for (cand, elem_ty) in candidates {
-            match self.score_initializer_list_candidate(&elem_ty, &actual_types, init_elements, pos)
-            {
+            match self.score_initializer_list_candidate(&elem_ty, init_elements, pos) {
                 Ok(Some(score)) => {
                     if best
                         .as_ref()
@@ -190,6 +215,7 @@ impl Sema {
         }
 
         if let Some((_, sig, elem_ty)) = best {
+            self.resolve_nested_initializer_lists(&elem_ty, init_elements)?;
             return Ok(Some((sig, elem_ty)));
         }
         match narrowing_error {
@@ -217,21 +243,49 @@ impl Sema {
     }
 
     fn score_initializer_list_candidate(
-        &self,
+        &mut self,
         elem_ty: &Type,
-        actual_types: &[Type],
-        init_elements: &[Expr],
+        init_elements: &mut [Expr],
         pos: ExprPos,
     ) -> Result<Option<usize>, CompileError> {
         let mut score = 0;
-        for (elem, actual) in init_elements.iter().zip(actual_types) {
-            self.check_narrowing(elem, actual, elem_ty, pos)?;
-            if !self.can_assign_expr(elem_ty, actual, Some(elem)) {
+        for elem in init_elements.iter_mut() {
+            if matches!(
+                elem,
+                Expr::InitializerList { .. } | Expr::TypedInitList { .. }
+            ) {
+                continue;
+            }
+            let actual = self.analyze_expr(elem)?;
+            self.check_narrowing(elem, &actual, elem_ty, pos)?;
+            if !self.can_assign_expr(elem_ty, &actual, Some(elem)) {
                 return Ok(None);
             }
-            score += conversion_rank(elem_ty, actual);
+            score += conversion_rank(elem_ty, &actual);
         }
         Ok(Some(score))
+    }
+
+    /// Resolves braced elements that initialize the chosen element type.
+    ///
+    /// A nested brace list is only typed once the constructor is known, so
+    /// this runs after the ranking and rewrites each nested list for the
+    /// element type it initializes.
+    fn resolve_nested_initializer_lists(
+        &mut self,
+        elem_ty: &Type,
+        init_elements: &mut [Expr],
+    ) -> Result<(), CompileError> {
+        for elem in init_elements.iter_mut() {
+            if let Expr::InitializerList {
+                elements,
+                pos: sub_pos,
+            } = elem
+            {
+                self.resolve_list_init(elem_ty, elements, InitContext::DirectList, *sub_pos)?;
+            }
+        }
+        Ok(())
     }
 
     /// Resolves class constructor initialization via list-init with preference for initializer_list.
