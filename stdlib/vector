@@ -33,6 +33,16 @@ namespace std {
 
         vector() : _data(nullptr), _size(0), _cap(0) {}
 
+        vector(size_t n, const T& val) : _data(nullptr), _size(0), _cap(0) {
+            if (n > 0) {
+                _realloc(n);
+                for (size_t i = 0; i < n; ++i) {
+                    new (_data + i) T(val);
+                }
+                _size = n;
+            }
+        }
+
         vector(initializer_list<T> init) : _data(nullptr), _size(0), _cap(0) {
             if (init.size() > 0) {
                 _realloc(init.size());

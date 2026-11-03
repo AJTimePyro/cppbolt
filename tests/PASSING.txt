@@ -245,6 +245,7 @@ mini_stl/string_comprehensive
 mini_stl/vector_aliasing
 mini_stl/vector_basic
 mini_stl/vector_objects
+mini_stl/vector_size_ctor
 mini_stl_variant/algorithm_sort_variant
 mini_stl_variant/cin_getline_newline
 mini_stl_variant/combined_integration_variant
@@ -263,6 +264,7 @@ mini_stl_variant/stream_operator_overload
 mini_stl_variant/string_basic
 mini_stl_variant/string_comprehensive
 mini_stl_variant/vector_basic
+mini_stl_variant/vector_size_ctor_variant
 negative/aggregate_excess_elements
 negative/ambiguous_overload_call
 negative/ambiguous_using_directives
