@@ -337,7 +337,12 @@ impl Sema {
         self.resolve_and_instantiate_type(ty, line, col)?;
         self.check_and_complete_var_type(ty, init, line, col)?;
         if let Some(init_expr) = init {
-            let init_ty = self.analyze_expr(init_expr)?;
+            let init_ty = match init_expr {
+                Expr::InitializerList { .. } | Expr::TypedInitList { .. } => {
+                    self.resolve_var_init_type(ty, init_expr)?.0
+                }
+                _ => self.analyze_expr(init_expr)?,
+            };
             if !self.can_assign_expr(ty, &init_ty, Some(init_expr)) {
                 return Err(CompileError::new(
                     format!(

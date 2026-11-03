@@ -22,7 +22,9 @@ impl<'a> Codegen<'a> {
                 init: &init_opt,
                 offset: goffset,
             };
-            if let Type::Struct(sname) = gty.strip_const() {
+            if self.sema.is_initializer_list_type(&gty) {
+                self.compile_global_initializer_list(&global, ctx, code)?;
+            } else if let Type::Struct(sname) = gty.strip_const() {
                 self.compile_global_struct_init(&global, sname, ctx, code)?;
             } else if let Type::Array(elem_ty, _) = gty.strip_const() {
                 self.compile_global_array_init(&global, elem_ty, ctx, code)?;

@@ -45,6 +45,66 @@ impl<'a> Codegen<'a> {
         )
     }
 
+    /// Initializes a namespace-scope `std::initializer_list` object.
+    ///
+    /// The backing array of a namespace-scope list has static storage duration
+    /// in C++, but its elements are written once during the global
+    /// initializers. The array is therefore allocated in the frame of `main`,
+    /// which outlives every use of the list, and its address and length are
+    /// stored in the global object at an absolute data address.
+    pub(super) fn compile_global_initializer_list(
+        &mut self,
+        global: &GlobalInit<'_>,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        let elements: &[Expr] = match global.init.as_ref() {
+            Some(Expr::InitializerList { elements, .. })
+            | Some(Expr::TypedInitList { elements, .. }) => elements,
+            _ => &[],
+        };
+        let Some(elem_ty) = self.sema.extract_initializer_list_element_type(global.ty) else {
+            return Err(self.internal_error("invalid initializer_list type"));
+        };
+        let array_offset = if elements.is_empty() {
+            None
+        } else {
+            let offset = self.allocate_initializer_array(&elem_ty, elements.len(), ctx)?;
+            self.emit_initializer_elements(&elem_ty, elements, offset, ctx, code)?;
+            Some(offset)
+        };
+
+        code.push(OP_I32_CONST);
+        write_i32(code, global.offset as i32);
+        match array_offset {
+            Some(offset) => self.emit_local_address(offset, ctx, code),
+            None => {
+                code.push(OP_I32_CONST);
+                write_i32(code, 0);
+            }
+        }
+        self.emit_store(&Type::Pointer(Box::new(Type::Int)), 0, code);
+
+        code.push(OP_I32_CONST);
+        write_i32(code, global.offset as i32);
+        code.push(OP_I32_CONST);
+        let count = i32::try_from(elements.len())
+            .map_err(|_| self.internal_error("initializer_list is too large"))?;
+        write_i32(code, count);
+        self.emit_store(&Type::UnsignedInt, 4, code);
+
+        if let Some(offset) = array_offset {
+            self.register_initializer_elements(
+                &elem_ty,
+                elements.len(),
+                offset,
+                ctx,
+                InitializerListLifetime::Local,
+            );
+        }
+        Ok(())
+    }
+
     fn emit_initializer_list_storage(
         &mut self,
         storage: InitializerListStorage<'_>,
