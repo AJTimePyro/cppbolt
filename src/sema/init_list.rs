@@ -3,6 +3,43 @@
 use super::*;
 use crate::sema::template_deduce::parse_types_list;
 
+/// Whether a constructor can be called with one initializer-list argument.
+fn accepts_initializer_list(cand: &FunctionSig) -> bool {
+    if cand.param_types.len() < 2 {
+        return false;
+    }
+    if cand.param_types.len() > 2 {
+        let defaults = &cand.default_args;
+        if defaults.len() < cand.param_types.len() || !defaults[2..].iter().all(|d| d.is_some()) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Ranks a standard conversion: exact, promotion, then any other conversion.
+fn conversion_rank(target: &Type, source: &Type) -> usize {
+    let target = target.strip_reference().strip_const();
+    let source = source.strip_reference().strip_const();
+    if target == source {
+        return 0;
+    }
+    let promoted = matches!(
+        source,
+        Type::Bool
+            | Type::Char
+            | Type::SignedChar
+            | Type::UnsignedChar
+            | Type::Short
+            | Type::UnsignedShort
+            | Type::Enum(_)
+    ) && matches!(target, Type::Int | Type::UnsignedInt);
+    if promoted || (source == &Type::Float && target == &Type::Double) {
+        return 1;
+    }
+    2
+}
+
 impl Sema {
     /// Extracts the element type `E` if `ty` is `std::initializer_list<E>`.
     pub fn extract_initializer_list_element_type(&self, ty: &Type) -> Option<Type> {
@@ -101,17 +138,71 @@ impl Sema {
         Ok(())
     }
 
-    /// Searches for viable constructors of `sname` accepting `std::initializer_list<E>`.
+    /// Picks the best constructor of `sname` accepting `std::initializer_list<E>`.
+    ///
+    /// Every initializer-list constructor is a candidate, and the elements
+    /// rank them: an exact conversion beats an integral promotion, which beats
+    /// any other standard conversion. A candidate that needs a narrowing
+    /// conversion is not viable, but its diagnostic is kept in case no other
+    /// candidate matches.
     pub fn find_initializer_list_constructor(
         &mut self,
         sname: &str,
         init_elements: &mut [Expr],
         pos: ExprPos,
     ) -> Result<Option<(FunctionSig, Type)>, CompileError> {
+        let candidates: Vec<(FunctionSig, Type)> = self
+            .initializer_list_constructors(sname)
+            .into_iter()
+            .filter(accepts_initializer_list)
+            .filter_map(|cand| {
+                let elem_ty = self.extract_initializer_list_element_type(&cand.param_types[1])?;
+                Some((cand, elem_ty))
+            })
+            .collect();
+        if candidates.is_empty() {
+            return Ok(None);
+        }
+
+        let mut actual_types = Vec::with_capacity(init_elements.len());
+        for elem in init_elements.iter_mut() {
+            actual_types.push(self.analyze_expr(elem)?);
+        }
+
+        let mut best: Option<(usize, FunctionSig, Type)> = None;
+        let mut narrowing_error = None;
+        for (cand, elem_ty) in candidates {
+            match self.score_initializer_list_candidate(&elem_ty, &actual_types, init_elements, pos)
+            {
+                Ok(Some(score)) => {
+                    if best
+                        .as_ref()
+                        .is_none_or(|(best_score, _, _)| score < *best_score)
+                    {
+                        best = Some((score, cand, elem_ty));
+                    }
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    narrowing_error.get_or_insert(error);
+                }
+            }
+        }
+
+        if let Some((_, sig, elem_ty)) = best {
+            return Ok(Some((sig, elem_ty)));
+        }
+        match narrowing_error {
+            Some(error) => Err(error),
+            None => Ok(None),
+        }
+    }
+
+    fn initializer_list_constructors(&self, sname: &str) -> Vec<FunctionSig> {
         let qname = QualifiedName::new(sname);
         let short = qname.class_short_name();
         let alternate = qname.alternate();
-        let mut candidates: Vec<FunctionSig> = Vec::new();
+        let mut candidates = Vec::new();
         for name in [
             format!("{sname}::{short}"),
             format!("{sname}::{sname}"),
@@ -122,43 +213,25 @@ impl Sema {
                 candidates.extend(sigs.iter().cloned());
             }
         }
-
-        for cand in candidates {
-            if cand.param_types.len() < 2 {
-                continue;
-            }
-            if cand.param_types.len() > 2 {
-                let defaults = &cand.default_args;
-                if defaults.len() < cand.param_types.len()
-                    || !defaults[2..].iter().all(|d| d.is_some())
-                {
-                    continue;
-                }
-            }
-            let param1 = &cand.param_types[1];
-            if let Some(elem_ty) = self.extract_initializer_list_element_type(param1)
-                && self.check_elements_convertible_to(&elem_ty, init_elements, pos)?
-            {
-                return Ok(Some((cand, elem_ty)));
-            }
-        }
-        Ok(None)
+        candidates
     }
 
-    fn check_elements_convertible_to(
-        &mut self,
+    fn score_initializer_list_candidate(
+        &self,
         elem_ty: &Type,
-        init_elements: &mut [Expr],
+        actual_types: &[Type],
+        init_elements: &[Expr],
         pos: ExprPos,
-    ) -> Result<bool, CompileError> {
-        for elem in init_elements.iter_mut() {
-            let actual = self.analyze_expr(elem)?;
-            self.check_narrowing(elem, &actual, elem_ty, pos)?;
-            if !self.can_assign_expr(elem_ty, &actual, Some(elem)) {
-                return Ok(false);
+    ) -> Result<Option<usize>, CompileError> {
+        let mut score = 0;
+        for (elem, actual) in init_elements.iter().zip(actual_types) {
+            self.check_narrowing(elem, actual, elem_ty, pos)?;
+            if !self.can_assign_expr(elem_ty, actual, Some(elem)) {
+                return Ok(None);
             }
+            score += conversion_rank(elem_ty, actual);
         }
-        Ok(true)
+        Ok(Some(score))
     }
 
     /// Resolves class constructor initialization via list-init with preference for initializer_list.
@@ -170,7 +243,7 @@ impl Sema {
         pos: ExprPos,
     ) -> Result<Type, CompileError> {
         if init_elements.is_empty() {
-            return self.resolve_empty_class_init(sname, context, pos);
+            return self.resolve_empty_class_init(sname, init_elements, context, pos);
         }
 
         if let Some((sig, _elem_ty)) =
@@ -200,9 +273,11 @@ impl Sema {
         self.resolve_fallback_class_init(sname, init_elements, context, pos)
     }
 
+    /// Resolves `T t{}`: the default constructor, or an empty initializer list.
     fn resolve_empty_class_init(
-        &self,
+        &mut self,
         sname: &str,
+        init_elements: &mut Vec<Expr>,
         context: InitContext,
         pos: ExprPos,
     ) -> Result<Type, CompileError> {
@@ -218,6 +293,28 @@ impl Sema {
                     pos.col,
                 ));
             }
+            return Ok(Type::Struct(sname.to_string()));
+        }
+        if let Some((sig, _elem_ty)) =
+            self.find_initializer_list_constructor(sname, init_elements, pos)?
+        {
+            self.instantiate_pending_method(&sig.mangled_name)?;
+            if sig.is_explicit && context.is_copy_list() {
+                return Err(CompileError::new(
+                    format!(
+                        "chosen constructor for '{}' is explicit in copy-list-initialization",
+                        sname
+                    ),
+                    pos.line,
+                    pos.col,
+                ));
+            }
+            let list_ty = sig.param_types[1].strip_reference().strip_const().clone();
+            init_elements.push(Expr::TypedInitList {
+                ty: list_ty,
+                elements: Vec::new(),
+                pos,
+            });
             return Ok(Type::Struct(sname.to_string()));
         }
         Err(CompileError::new(
