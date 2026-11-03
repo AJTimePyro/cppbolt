@@ -1,0 +1,1 @@
+tests/negative/initializer_list_nested_element_type.cpp:5:46: error: no matching constructor for initialization of 'vector<int>'

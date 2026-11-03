@@ -57,7 +57,11 @@ impl<'a> Codegen<'a> {
                 expr,
             } => self.compile_cast(*kind, target_type, expr, ctx, code)?,
             Expr::TypedInitList { ty, elements, .. } => {
-                self.compile_typed_init_list(ty, elements, ctx, code)?;
+                if self.sema.is_initializer_list_type(ty) {
+                    self.compile_initializer_list_value(ty, elements, ctx, code)?;
+                } else {
+                    self.compile_typed_init_list(ty, elements, ctx, code)?;
+                }
             }
             Expr::InitializerList { elements, .. } => {
                 if elements.is_empty() {

@@ -1,0 +1,1 @@
+tests/negative/initializer_list_empty_auto.cpp:2:19: error: cannot deduce 'auto' for initializer_list from empty braced list

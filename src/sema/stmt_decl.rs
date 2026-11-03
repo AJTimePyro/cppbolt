@@ -74,7 +74,7 @@ impl Sema {
         Ok(())
     }
 
-    fn resolve_var_init_type(
+    pub(super) fn resolve_var_init_type(
         &mut self,
         ty: &mut Type,
         init_expr: &mut Expr,

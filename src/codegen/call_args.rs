@@ -26,6 +26,13 @@ impl<'a> Codegen<'a> {
             _ => a,
         };
 
+        if let Expr::TypedInitList { ty, .. } = a
+            && self.sema.is_initializer_list_type(ty)
+        {
+            self.compile_expr(a, ctx, code)?;
+            return Ok(());
+        }
+
         let is_ref = param_ty.map(|p| p.is_reference()).unwrap_or(false);
         let is_byval_struct = param_ty
             .map(|p| matches!(p.strip_const(), Type::Struct(_)))

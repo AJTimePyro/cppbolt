@@ -20,6 +20,7 @@ fn context() -> FunctionContext {
         var_scopes: vec![Vec::new()],
         scope_objects: vec![Vec::new()],
         temp_objects: Vec::new(),
+        initializer_list_temps: Vec::new(),
         current_class: None,
         current_func_name: "test".to_string(),
         line: 1,

@@ -1,0 +1,1 @@
+tests/negative/initializer_list_ctor_ranking_narrowing.cpp:8:14: error: narrowing conversion from 'double' to 'int' inside braced-init-list

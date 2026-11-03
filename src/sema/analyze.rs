@@ -198,7 +198,7 @@ impl Sema {
                     static_fields,
                     ..
                 } => {
-                    self.register_struct_declarations(name.as_str(), methods, static_fields);
+                    self.register_struct_declarations(name.as_str(), methods, static_fields)?;
                 }
                 _ => {}
             }
@@ -207,12 +207,16 @@ impl Sema {
     }
 
     /// Registers the static fields and methods of a class.
+    ///
+    /// Non-template method signatures are completed like free function
+    /// signatures, so template types in their parameter and return types are
+    /// instantiated before overload lookup sees them.
     fn register_struct_declarations(
         &mut self,
         name: &str,
-        methods: &[FunctionDecl],
+        methods: &mut [FunctionDecl],
         static_fields: &[(String, Type, Option<Expr>)],
-    ) {
+    ) -> Result<(), CompileError> {
         for sf in static_fields {
             let qual_name = format!("{}::{}", name, sf.0);
             let sym = VarSymbol {
@@ -226,7 +230,8 @@ impl Sema {
                 self.global_vars.insert(alias.to_string(), sym);
             }
         }
-        for m in methods {
+        let previous_class = self.current_class.replace(name.to_string());
+        for m in methods.iter_mut() {
             if !m.template_params.is_empty() {
                 self.member_templates
                     .entry(name.to_string())
@@ -239,10 +244,16 @@ impl Sema {
                         .or_default()
                         .push(m.clone());
                 }
-            } else {
-                self.register_struct_method(name, m);
+                continue;
             }
+            self.resolve_and_instantiate_type(&mut m.return_type, m.line, m.col)?;
+            for param in &mut m.params {
+                self.resolve_and_instantiate_type(&mut param.ty, m.line, m.col)?;
+            }
+            self.register_struct_method(name, m);
         }
+        self.current_class = previous_class;
+        Ok(())
     }
 
     pub(super) fn register_struct_method(&mut self, class_name: &str, m: &FunctionDecl) {
@@ -326,7 +337,12 @@ impl Sema {
         self.resolve_and_instantiate_type(ty, line, col)?;
         self.check_and_complete_var_type(ty, init, line, col)?;
         if let Some(init_expr) = init {
-            let init_ty = self.analyze_expr(init_expr)?;
+            let init_ty = match init_expr {
+                Expr::InitializerList { .. } | Expr::TypedInitList { .. } => {
+                    self.resolve_var_init_type(ty, init_expr)?.0
+                }
+                _ => self.analyze_expr(init_expr)?,
+            };
             if !self.can_assign_expr(ty, &init_ty, Some(init_expr)) {
                 return Err(CompileError::new(
                     format!(

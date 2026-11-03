@@ -12,6 +12,7 @@ mod expr_lambda;
 mod expr_member;
 mod expr_ops;
 mod init;
+mod init_list;
 mod layout;
 mod lookup;
 mod overload;
