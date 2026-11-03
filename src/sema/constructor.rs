@@ -62,6 +62,9 @@ impl Sema {
         arg_types: &[Type],
         pos: ExprPos,
     ) -> Result<ConstructorCall, CompileError> {
+        let effective_arg_types =
+            self.resolve_parenthesized_initializer_list(class_name, args, pos)?;
+        let arg_types = effective_arg_types.as_deref().unwrap_or(arg_types);
         // C++17 guarantees that a prvalue of the class initializes the
         // temporary directly, so `T x(T(1))` and `T x = T(1)` construct the
         // object instead of copying it.
@@ -92,6 +95,36 @@ impl Sema {
             }
         }
         Ok(ConstructorCall::Selected)
+    }
+
+    fn resolve_parenthesized_initializer_list(
+        &mut self,
+        class_name: &str,
+        args: &mut [Expr],
+        pos: ExprPos,
+    ) -> Result<Option<Vec<Type>>, CompileError> {
+        if args.len() != 1 || !matches!(args.first(), Some(Expr::InitializerList { .. })) {
+            return Ok(None);
+        }
+        let Expr::InitializerList {
+            elements,
+            pos: list_pos,
+        } = &mut args[0]
+        else {
+            return Ok(None);
+        };
+        let Some((sig, _)) = self.find_initializer_list_constructor(class_name, elements, pos)?
+        else {
+            return Ok(None);
+        };
+        let list_ty = sig.param_types[1].strip_reference().strip_const().clone();
+        let original = std::mem::take(elements);
+        args[0] = Expr::TypedInitList {
+            ty: list_ty.clone(),
+            elements: original,
+            pos: *list_pos,
+        };
+        Ok(Some(vec![list_ty]))
     }
 
     /// Finds the constructor of a class that accepts the given arguments.

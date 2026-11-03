@@ -21,6 +21,14 @@ impl<'a> Codegen<'a> {
             code.push(OP_CALL);
             write_u32(code, self.func_indices["free"]);
         }
+        let list_temps = std::mem::take(&mut ctx.initializer_list_temps);
+        for (sname, offset) in list_temps.iter().rev() {
+            if let Some(dtor_idx) = self.lookup_struct_dtor(sname) {
+                self.emit_local_address(*offset, ctx, code);
+                code.push(OP_CALL);
+                write_u32(code, dtor_idx);
+            }
+        }
     }
 
     pub(super) fn emit_dtor_for_scope(

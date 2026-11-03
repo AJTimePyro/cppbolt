@@ -60,7 +60,13 @@ impl Sema {
             }
         }
 
-        let elem_ty = deduced_elem.unwrap();
+        let Some(elem_ty) = deduced_elem else {
+            return Err(CompileError::new(
+                "cannot deduce 'auto' for initializer_list",
+                pos.line,
+                pos.col,
+            ));
+        };
         let inst_name = self.instantiate_class_template(
             "std::initializer_list",
             std::slice::from_ref(&elem_ty),
@@ -130,10 +136,10 @@ impl Sema {
                 }
             }
             let param1 = &cand.param_types[1];
-            if let Some(elem_ty) = self.extract_initializer_list_element_type(param1) {
-                if self.check_elements_convertible_to(&elem_ty, init_elements, pos)? {
-                    return Ok(Some((cand, elem_ty)));
-                }
+            if let Some(elem_ty) = self.extract_initializer_list_element_type(param1)
+                && self.check_elements_convertible_to(&elem_ty, init_elements, pos)?
+            {
+                return Ok(Some((cand, elem_ty)));
             }
         }
         Ok(None)
@@ -170,6 +176,7 @@ impl Sema {
         if let Some((sig, _elem_ty)) =
             self.find_initializer_list_constructor(sname, init_elements, pos)?
         {
+            self.instantiate_pending_method(&sig.mangled_name)?;
             if sig.is_explicit && context.is_copy_list() {
                 return Err(CompileError::new(
                     format!(

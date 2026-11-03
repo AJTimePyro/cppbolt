@@ -49,6 +49,7 @@ impl<'a> Codegen<'a> {
             var_scopes: vec![Vec::new()],
             scope_objects: vec![Vec::new()],
             temp_objects: Vec::new(),
+            initializer_list_temps: Vec::new(),
             current_class: class_name.map(str::to_string),
             current_func_name: f.name.clone(),
             line: f.line,

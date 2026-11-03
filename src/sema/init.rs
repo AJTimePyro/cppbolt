@@ -176,7 +176,9 @@ impl Sema {
         }
 
         if clean_target == Type::Auto {
-            return self.deduce_auto_initializer_list(init_elements, pos).map(|(_, ty)| ty);
+            return self
+                .deduce_auto_initializer_list(init_elements, pos)
+                .map(|(_, ty)| ty);
         }
 
         if let Some(elem_ty) = self.extract_initializer_list_element_type(&clean_target) {
@@ -384,8 +386,6 @@ impl Sema {
 
         Ok(Type::Struct(sname.to_string()))
     }
-
-
 
     /// Determines if a class is an aggregate under C++17 rules ([dcl.init.aggr]).
     pub fn is_cxx17_aggregate(&self, sname: &str) -> bool {

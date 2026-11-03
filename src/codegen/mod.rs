@@ -23,6 +23,7 @@ mod function_context;
 mod function_global_init;
 mod function_lifecycle;
 mod function_lookup;
+mod initializer_list;
 mod lvalue;
 mod memory;
 mod method_lookup;
@@ -206,6 +207,8 @@ pub struct FunctionContext {
     pub scope_objects: Vec<Vec<(String, Type, u32)>>,
     /// Statement temporaries: `(class, frame slot, needs destructor)`.
     pub temp_objects: Vec<(String, u32, bool)>,
+    /// Backing-array elements whose destructors run at full-expression end.
+    pub initializer_list_temps: Vec<(String, u32)>,
     pub current_class: Option<String>,
     pub current_func_name: String,
     /// The position of the statement being lowered.

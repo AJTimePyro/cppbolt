@@ -27,6 +27,19 @@ impl<'a> Codegen<'a> {
         }
 
         if let Type::Struct(sname) = ty.strip_const() {
+            if self.sema.is_initializer_list_type(ty)
+                && matches!(
+                    init,
+                    Expr::InitializerList { .. } | Expr::TypedInitList { .. }
+                )
+            {
+                let elements: &[Expr] = match init {
+                    Expr::InitializerList { elements, .. }
+                    | Expr::TypedInitList { elements, .. } => elements,
+                    _ => &[],
+                };
+                return self.compile_initializer_list_local(ty, elements, offset, ctx, code);
+            }
             return self.compile_aggregate_struct(sname, init, offset, ctx, code);
         }
 
