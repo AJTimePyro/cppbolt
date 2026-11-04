@@ -51,9 +51,10 @@ jobs:
         with:
           node-version: 24
           cache: npm
+          cache-dependency-path: npm/package-lock.json
 
       - name: Install JavaScript dependencies
-        run: npm ci
+        run: npm ci --prefix npm
 
       - name: Verify feature matrix test paths
         run: python3 tools/check_feature_matrix.py
