@@ -166,6 +166,16 @@ Comprehensive project documentation is published via mdBook at [https://ajtimepy
 | [`tests/`](tests/)                                               | Compiler test suite (positive tests, negative error tests, runtime traps, variants)             |
 | [`docs/`](docs/)                                                 | mdBook documentation, ADRs, contributing guide, and devlog                                      |
 
+## Development Status
+
+cppbolt is still under active development. You may encounter bugs, unexpected behavior, or unsupported cases. If something doesn't work as expected, please [open an issue](../../issues) with a reproduction example.
+
+## Support
+
+If you find cppbolt interesting or useful and want to support my work, consider [sponsoring me](YOUR_GITHUB_SPONSORS_URL).
+
+If you can't sponsor, that's completely fine! A ⭐ on this repository is equally appreciated. Have suggestions or ideas? Feel free to [open an issue](../../issues).
+
 ## License
 
 cppbolt is licensed under the [Apache License 2.0](LICENSE).
