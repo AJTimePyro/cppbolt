@@ -81,6 +81,9 @@ jobs:
           node tests/ffi_lifecycle.js \
             target/wasm32-unknown-unknown/release/cppbolt.wasm
 
+      - name: Install npm package dependencies
+        run: npm ci --prefix npm
+
       - name: Assemble npm package
         run: |
           tools/build_npm_package.sh \

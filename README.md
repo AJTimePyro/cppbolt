@@ -8,6 +8,76 @@ The compiler is correctness-focused and implements an explicit, predictable lang
 
 ---
 
+## npm Package
+
+Install the published package with npm:
+
+```sh
+npm install cppbolt
+```
+
+In Node.js, create a compiler and compile C++17 source into a WebAssembly
+module:
+
+```js
+import { createCompiler } from "cppbolt";
+
+const compiler = await createCompiler();
+const wasm = compiler.compile(`
+    #include <iostream>
+    int main() {
+        std::cout << "cppbolt says hello!" << std::endl;
+        return 0;
+    }
+`);
+```
+
+To compile and run a program in one call:
+
+```js
+import { createCompiler, compileAndRun } from "cppbolt";
+
+const compiler = await createCompiler();
+const { stdout, exitCode } = await compileAndRun(
+  compiler,
+  `
+    #include <iostream>
+    int main() {
+        std::cout << "cppbolt says hello!" << std::endl;
+        return 0;
+    }
+`,
+);
+
+console.log(stdout);
+console.log(exitCode);
+```
+
+The package also supports browser usage through a CDN:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/cppbolt@1.0.1/dist/cppbolt.browser.js"></script>
+<script>
+  (async () => {
+    const compiler = await CppBolt.createCompiler();
+    const { stdout, exitCode } = await CppBolt.compileAndRun(compiler, `
+      #include <iostream>
+      int main() {
+          std::cout << "cppbolt says hello!" << std::endl;
+          return 0;
+      }
+    `,
+    );
+    console.log(stdout, exitCode);
+  })();
+</script>
+```
+
+See [`npm/README.md`](npm/README.md) for the complete package API, host runtime
+options, and WebAssembly ABI details.
+
+---
+
 ## Quick Demo
 
 ### 1. Build and Run Natively
@@ -43,6 +113,7 @@ target/release/cppbolt-cli hello.cpp -o hello.wasm
 ### 2. Try in the Browser (Playground)
 
 You can try the compiler directly in your browser:
+
 - **Live Online Playground**: [https://ajtimepyro.is-a.dev/cppbolt/](https://ajtimepyro.is-a.dev/cppbolt/)
 - **Online Documentation**: [https://ajtimepyro.is-a.dev/cppbolt/book/](https://ajtimepyro.is-a.dev/cppbolt/book/)
 
@@ -83,17 +154,17 @@ Comprehensive project documentation is published via mdBook at [https://ajtimepy
 
 ## Project Structure
 
-| Path | Responsibility |
-|---|---|
-| [`src/lib.rs`](src/lib.rs) | Core compiler pipeline (`preprocessor -> lexer -> parser -> sema -> codegen`) |
-| [`src/main.rs`](src/main.rs) | Native CLI front end (`cppbolt-cli`) with filesystem include resolution |
-| [`src/ffi.rs`](src/ffi.rs) | WebAssembly C ABI entry points for embedding in browser or Node.js |
-| [`src/bin/cppbolt-testrunner.rs`](src/bin/cppbolt-testrunner.rs) | Corpus test runner, golden baseline verification, and native oracle gates |
-| [`src/bin/cppbolt-census.rs`](src/bin/cppbolt-census.rs) | Code-quality scanner enforcing function length and parameter limits |
-| [`stdlib/`](stdlib/) | Embedded standard library C++ headers (`<iostream>`, `<string>`, `<cstdio>`, etc.) |
-| [`web/`](web/) | Browser playground HTML and worker script; the host runtime is generated from `npm/src/host.ts` |
-| [`tests/`](tests/) | Compiler test suite (positive tests, negative error tests, runtime traps, variants) |
-| [`docs/`](docs/) | mdBook documentation, ADRs, contributing guide, and devlog |
+| Path                                                             | Responsibility                                                                                  |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| [`src/lib.rs`](src/lib.rs)                                       | Core compiler pipeline (`preprocessor -> lexer -> parser -> sema -> codegen`)                   |
+| [`src/main.rs`](src/main.rs)                                     | Native CLI front end (`cppbolt-cli`) with filesystem include resolution                         |
+| [`src/ffi.rs`](src/ffi.rs)                                       | WebAssembly C ABI entry points for embedding in browser or Node.js                              |
+| [`src/bin/cppbolt-testrunner.rs`](src/bin/cppbolt-testrunner.rs) | Corpus test runner, golden baseline verification, and native oracle gates                       |
+| [`src/bin/cppbolt-census.rs`](src/bin/cppbolt-census.rs)         | Code-quality scanner enforcing function length and parameter limits                             |
+| [`stdlib/`](stdlib/)                                             | Embedded standard library C++ headers (`<iostream>`, `<string>`, `<cstdio>`, etc.)              |
+| [`web/`](web/)                                                   | Browser playground HTML and worker script; the host runtime is generated from `npm/src/host.ts` |
+| [`tests/`](tests/)                                               | Compiler test suite (positive tests, negative error tests, runtime traps, variants)             |
+| [`docs/`](docs/)                                                 | mdBook documentation, ADRs, contributing guide, and devlog                                      |
 
 ## License
 

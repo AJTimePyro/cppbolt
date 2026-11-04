@@ -16,20 +16,24 @@ if [ ! -s "$wasm" ]; then
     exit 1
 fi
 
-"$root/node_modules/.bin/tsc" -p "$root/npm/tsconfig.json"
+if [ ! -x "$root/npm/node_modules/.bin/tsc" ] || [ ! -x "$root/npm/node_modules/.bin/esbuild" ]; then
+    echo "Run: npm ci --prefix npm" >&2
+    exit 1
+fi
 
-# Wrap for plain <script> tag browser usage (window.CppBolt).
-{
-    echo 'var exports = exports || {};'
-    cat "$root/npm/dist/compiler.js"
-    echo 'if (typeof module === "undefined" || !module.exports) self.CppBolt = exports;'
-} > "$root/npm/dist/compiler.js.tmp"
-mv "$root/npm/dist/compiler.js.tmp" "$root/npm/dist/compiler.js"
+"$root/npm/node_modules/.bin/tsc" -p "$root/npm/tsconfig.json"
+
+# Browser bundle: whole public API on window.CppBolt
+"$root/npm/node_modules/.bin/esbuild" "$root/npm/src/index.ts" \
+    --bundle --format=iife --global-name=CppBolt \
+    --platform=browser \
+    --outfile="$root/npm/dist/cppbolt.browser.js"
 
 rm -rf "$output"
 mkdir -p "$output/wasm" "$output/dist"
 
 cp "$root/npm/package.json" "$output/package.json"
+(cd "$output" && npm pkg delete devDependencies scripts)
 cp "$root/npm/README.md"    "$output/README.md"
 cp -r "$root/npm/dist/."    "$output/dist/"
 cp "$wasm"                  "$output/wasm/cppbolt.wasm"
