@@ -7,12 +7,12 @@
     "type": "git",
     "url": "https://github.com/AJTimePyro/cppbolt.git"
   },
-  "main": "./dist/compiler.js",
-  "types": "./dist/compiler.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/compiler.d.ts",
-      "default": "./dist/compiler.js"
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     },
     "./wasm/cppbolt.wasm": "./wasm/cppbolt.wasm"
   },

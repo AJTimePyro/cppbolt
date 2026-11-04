@@ -10,7 +10,10 @@ npm install cppbolt
 
 ## Usage
 
-### Node.js
+### Node.js: compile only
+
+`createCompiler()` returns a compiler. `compile()` turns C++ source into a
+complete WebAssembly module as a `Uint8Array`.
 
 ```js
 import { createCompiler } from "cppbolt";
@@ -24,6 +27,28 @@ const wasm = compiler.compile(`
         return 0;
     }
 `);
+```
+
+### Node.js: compile and run
+
+`compileAndRun()` compiles the source and immediately executes it, returning
+its stdout and exit status.
+
+```js
+import { createCompiler, compileAndRun } from "cppbolt";
+
+const compiler = await createCompiler();
+
+const { stdout, exitCode } = await compileAndRun(compiler, `
+    #include <iostream>
+    int main() {
+        std::cout << "cppbolt says hello!" << std::endl;
+        return 0;
+    }
+`);
+
+console.log(stdout);   // "cppbolt says hello!\n"
+console.log(exitCode); // 0
 ```
 
 ### Browser (CDN `<script>` tag)
@@ -45,7 +70,8 @@ const wasm = compiler.compile(`
 </script>
 ```
 
-`createCompiler()` resolves `wasm/cppbolt.wasm` relative to the script URL.
+`createCompiler()` resolves `wasm/cppbolt.wasm` relative to the script URL. When
+using a bundler, import from `"cppbolt"` instead.
 
 ## Compiler API
 
@@ -93,6 +119,20 @@ Emitted modules are WebAssembly binaries that import standard I/O functions from
 | `env.exit` | `(i32) -> void` | Terminate with the given status code. |
 
 Emitted modules export `memory`, `__stack_pointer`, and `__heap_base`, plus `main` if the program defines it. The compiler gives them a 256 MiB maximum linear memory, raised only when static data requires more.
+
+### Host runtime API
+
+The package ships a host for those imports, so you do not implement `env.*`
+yourself.
+
+- `createWasmHost(options?) -> WasmHost` builds the import environment. Options
+  are `stdin` (a string, or `() => number` for streaming input), `onStdout(chunk)`,
+  and `onExit(code)`. The result exposes `imports` for `WebAssembly.instantiate`
+  and `getStdout()`.
+- `new CppBoltRunner(host).run(wasmBytes) -> Promise<RunResult>` instantiates a
+  module, calls `main` (or `_start`), and returns `{ stdout, exitCode }`. A
+  WebAssembly trap is reported as exit code 134 instead of throwing.
+- `compileAndRun(compiler, source, options?)` compiles and runs in one call.
 
 ## Notes
 

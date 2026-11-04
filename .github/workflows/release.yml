@@ -45,9 +45,13 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+          cache: npm
 
       - name: Ensure npm version
         run: npm install --global npm@latest
+
+      - name: Install JavaScript dependencies
+        run: npm ci
 
       - name: Resolve and verify release version
         id: version

@@ -3,7 +3,7 @@
 `cppbolt` is designed to run both natively and inside modern WebAssembly environments (browsers and Node.js). To achieve complete independence from external runtimes like Emscripten, `cppbolt` defines two clear interfaces:
 
 1. **Compiler C ABI**: Exported functions that allow JavaScript host code to pass C++ source strings into the compiler WebAssembly instance and retrieve compiled WebAssembly binaries or error messages.
-2. **Execution Host Interface (`web/host.js`)**: Import functions required by compiled WebAssembly programs to perform console I/O, format numbers, and exit.
+2. **Execution Host Interface (`npm/src/host.ts`)**: Import functions required by compiled WebAssembly programs to perform console I/O, format numbers, and exit. The browser/Node copy `web/host.js` is generated from this single TypeScript source.
 
 ---
 
@@ -65,19 +65,22 @@ The error buffer is private static storage owned by the compiler; failed compila
 
 ## 2. Program Execution Host Runtime (`web/host.js`)
 
-When a compiled C++ program runs, its WebAssembly module expects an imported `env` namespace providing standard character and numeric I/O. `web/host.js` implements this environment for both browser and Node.js hosts:
+When a compiled C++ program runs, its WebAssembly module expects an imported `env` namespace providing standard character and numeric I/O. The single implementation lives in `npm/src/host.ts`; `tools/build_web_host.sh` compiles it into `web/host.js` for the browser playground, and `tools/build_site.sh` runs that step automatically.
 
 ```javascript
-import { createHostEnv } from "./web/host.js";
-
-const host = createHostEnv({
-    onStdout: (text) => console.log(text),
-    onStderr: (text) => console.error(text),
+// web/host.js exposes createWasmHost as a browser global and as a CommonJS export.
+const host = createWasmHost({
+    stdin: "",                              // string, or () => number for streaming input
+    onStdout: (text) => console.log(text),  // streaming output hook
+    onExit: (code) => console.log("exit", code),
 });
 
-// host.importObject provides the imports needed by the compiled C++ program
-const program = await WebAssembly.instantiate(outputBytes, host.importObject);
+// host.imports provides the imports needed by the compiled C++ program
+const program = await WebAssembly.instantiate(outputBytes, host.imports);
 program.instance.exports.main();
+
+// Everything the program wrote so far
+console.log(host.getStdout());
 ```
 
 ### Imported Environment Functions

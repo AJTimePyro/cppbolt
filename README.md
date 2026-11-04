@@ -15,6 +15,9 @@ The compiler is correctness-focused and implements an explicit, predictable lang
 Build the release compiler and run the test suite:
 
 ```sh
+# Install the JavaScript toolchain once (used to generate the host runtime)
+npm ci
+
 # Build the native CLI compiler (target/release/cppbolt-cli)
 cargo build --release
 
@@ -57,7 +60,7 @@ python3 -m http.server --directory site 8000
 # Open http://localhost:8000 in your browser
 ```
 
-The browser playground runs the compiler in a dedicated Web Worker to ensure UI responsiveness, and executes the compiled WebAssembly binary using [`web/host.js`](web/host.js).
+The browser playground runs the compiler in a dedicated Web Worker to ensure UI responsiveness, and executes the compiled WebAssembly binary using a host runtime generated from [`npm/src/host.ts`](npm/src/host.ts). `tools/build_site.sh` writes it to `web/host.js` from that single TypeScript source.
 
 ---
 
@@ -88,7 +91,7 @@ Comprehensive project documentation is published via mdBook at [https://ajtimepy
 | [`src/bin/cppbolt-testrunner.rs`](src/bin/cppbolt-testrunner.rs) | Corpus test runner, golden baseline verification, and native oracle gates |
 | [`src/bin/cppbolt-census.rs`](src/bin/cppbolt-census.rs) | Code-quality scanner enforcing function length and parameter limits |
 | [`stdlib/`](stdlib/) | Embedded standard library C++ headers (`<iostream>`, `<string>`, `<cstdio>`, etc.) |
-| [`web/`](web/) | Browser playground HTML, worker script, and JavaScript host environment (`host.js`) |
+| [`web/`](web/) | Browser playground HTML and worker script; the host runtime is generated from `npm/src/host.ts` |
 | [`tests/`](tests/) | Compiler test suite (positive tests, negative error tests, runtime traps, variants) |
 | [`docs/`](docs/) | mdBook documentation, ADRs, contributing guide, and devlog |
 

@@ -9,6 +9,11 @@ This project does not yet have tagged semantic releases; all historical work is 
 
 ## [Unreleased]
 
+### Single-Source JavaScript Host
+- Made `npm/src/host.ts` (`createWasmHost`) the only implementation of the execution host used by the npm package, playground, corpus runner, and tests.
+- Added `CppBoltRunner` and `compileAndRun` to the npm package, exported from the new `npm/src/index.ts` entry point.
+- Removed the tracked `web/host.js`; `tools/build_web_host.sh` generates it from the TypeScript source, and the playground build, corpus runner, and `tests/browser_flow.rs` invoke it as needed.
+
 ### Extended Casts (`reinterpret_cast`)
 - Added C++17 `reinterpret_cast<T>(expr)` support across scalar integers, pointers, and reference types under the ILP32 data model.
 - Disallowed scalar floating-point conversions and user-defined conversion operators in `reinterpret_cast`.

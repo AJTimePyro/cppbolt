@@ -38,10 +38,13 @@ async function main() {
     const module = Buffer.from(new Uint8Array(api.memory.buffer).slice(result, result + length));
     api.free_result(result, length);
 
-    const { createWasmImports } = require(path.join(root, "web/host.js"));
-    const host = createWasmImports(null, "", (code) => {
-        process.stdout.write(host.getStdout());
-        process.exit(code);
+    const { createWasmHost } = require(path.join(root, "web/host.js"));
+    const host = createWasmHost({
+        stdin: "",
+        onExit: (code) => {
+            process.stdout.write(host.getStdout());
+            process.exit(code);
+        },
     });
     const program = await WebAssembly.instantiate(module, host.imports);
     let code = 0;
@@ -115,9 +118,29 @@ fn wasm_compiler(root: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
     Ok(wasm)
 }
 
+/// Generates the JavaScript host from `npm/src/host.ts` when it is missing.
+///
+/// `web/host.js` is a build artifact, so a fresh checkout has to produce it
+/// before the browser flow can load it.
+fn ensure_web_host(root: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let host = root.join("web/host.js");
+    if host.exists() {
+        return Ok(());
+    }
+    let status = Command::new("bash")
+        .arg(root.join("tools/build_web_host.sh"))
+        .current_dir(root)
+        .status()?;
+    if !status.success() || !host.exists() {
+        return Err("cannot generate web/host.js; run `npm ci` and tools/build_web_host.sh".into());
+    }
+    Ok(())
+}
+
 #[test]
 fn a_browser_host_compiles_and_runs_a_program() -> Result<(), Box<dyn std::error::Error>> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    ensure_web_host(&root)?;
     let wasm = wasm_compiler(&root)?;
     let node = std::env::var("NODE").unwrap_or_else(|_| "node".to_string());
     let work = root.join("target/browser-flow");

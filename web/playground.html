@@ -238,9 +238,12 @@ class ProgramExit {
 
 async function runProgram(bytes) {
     let exitCode = null;
-    const host = createWasmImports(null, "", (code) => {
-        exitCode = code;
-        throw new ProgramExit(code);
+    const host = createWasmHost({
+        stdin: "",
+        onExit: (code) => {
+            exitCode = code;
+            throw new ProgramExit(code);
+        },
     });
     const started = performance.now();
     let trap = null;
