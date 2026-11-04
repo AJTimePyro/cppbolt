@@ -7,10 +7,10 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
-tsc="$root/node_modules/.bin/tsc"
+tsc="$root/npm/node_modules/.bin/tsc"
 
 if [ ! -x "$tsc" ]; then
-    echo "TypeScript is not installed. Run \`npm ci\` in $root first." >&2
+    echo "TypeScript is not installed. Run \`npm ci --prefix npm\` in $root first." >&2
     exit 1
 fi
 
