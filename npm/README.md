@@ -2,8 +2,6 @@
 
 cppbolt compiles a subset of C++17 directly to WebAssembly without LLVM, Emscripten, or a native toolchain. This package contains the compiler built for `wasm32-unknown-unknown`; it exposes a C ABI and has no imports, so you can instantiate it with an empty import object in Node.js, browsers, or Web Workers.
 
-The package contains the raw WebAssembly module with no JavaScript wrapper or CLI. You call the exports directly.
-
 ## Installation
 
 ```sh
@@ -12,60 +10,42 @@ npm install cppbolt
 
 ## Usage
 
+### Node.js
+
 ```js
-import { readFile } from "node:fs/promises";
-import { createRequire } from "node:module";
+import { createCompiler } from "cppbolt";
 
-const require = createRequire(import.meta.url);
-const wasmPath = require.resolve("cppbolt/wasm/cppbolt.wasm");
-const { instance } = await WebAssembly.instantiate(await readFile(wasmPath), {});
-const compiler = instance.exports;
+const compiler = await createCompiler();
 
-function compile(source) {
-  const input = new TextEncoder().encode(source);
-  const inputPtr = compiler.alloc_buffer(input.length);
-  new Uint8Array(compiler.memory.buffer, inputPtr, input.length).set(input);
-
-  const resultPtr = compiler.compile_wasm(inputPtr, input.length);
-  compiler.dealloc_buffer(inputPtr, input.length);
-
-  if (resultPtr === 0) {
-    const length = compiler.get_error_len();
-    const bytes = new Uint8Array(compiler.memory.buffer, compiler.get_error_ptr(), length);
-    throw new Error(new TextDecoder().decode(bytes));
-  }
-
-  const length = compiler.get_result_len();
-  const output = new Uint8Array(compiler.memory.buffer, resultPtr, length).slice();
-  compiler.free_result(resultPtr, length);
-  return output;
-}
-
-const wasm = compile(`
-  #include <iostream>
-
-  int main() {
-      std::cout << "Hello from WebAssembly C++!" << std::endl;
-      return 0;
-  }
+const wasm = compiler.compile(`
+    #include <iostream>
+    int main() {
+        std::cout << "cppbolt says hello!" << std::endl;
+        return 0;
+    }
 `);
 ```
 
-`wasm` is a complete WebAssembly module.
-
-### Browser
-
-Serve `cppbolt.wasm` from your site, then load it:
+### Browser (CDN `<script>` tag)
 
 ```html
-<script type="module">
-  const response = await fetch("/wasm/cppbolt.wasm");
-  const { instance } = await WebAssembly.instantiateStreaming(response, {});
-  const compiler = instance.exports;
+<script src="https://cdn.jsdelivr.net/npm/cppbolt@latest/dist/compiler.js"></script>
+<script>
+  (async () => {
+    const compiler = await CppBolt.createCompiler();
+
+    const wasm = compiler.compile(`
+        #include <iostream>
+        int main() {
+            std::cout << "cppbolt says hello!" << std::endl;
+            return 0;
+        }
+    `);
+  })();
 </script>
 ```
 
-`instantiateStreaming` needs the server to send `Content-Type: application/wasm`; otherwise use `WebAssembly.instantiate(await response.arrayBuffer(), {})`. The compiler ABI interaction inside the `compile` function can be reused in browsers. Replace the Node.js-specific WASM loading code with the browser loading example above.
+`createCompiler()` resolves `wasm/cppbolt.wasm` relative to the script URL.
 
 ## Compiler API
 
@@ -113,8 +93,6 @@ Emitted modules are WebAssembly binaries that import standard I/O functions from
 | `env.exit` | `(i32) -> void` | Terminate with the given status code. |
 
 Emitted modules export `memory`, `__stack_pointer`, and `__heap_base`, plus `main` if the program defines it. The compiler gives them a 256 MiB maximum linear memory, raised only when static data requires more.
-
-The package does not include a host runtime. The repository's [`web/host.js`](https://github.com/AJTimePyro/cppbolt/blob/main/web/host.js) provides a reference implementation for Node.js and browsers. It handles the integer and floating-point formatting flags.
 
 ## Notes
 
