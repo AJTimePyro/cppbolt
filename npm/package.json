@@ -1,14 +1,35 @@
 {
   "name": "cppbolt",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "A C++ compiler targeting WebAssembly",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/AJTimePyro/cppbolt.git"
   },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "jsdelivr": "./dist/cppbolt.browser.js",
+  "unpkg": "./dist/cppbolt.browser.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./wasm/cppbolt.wasm": "./wasm/cppbolt.wasm"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  },
   "files": [
+    "dist/",
     "wasm/cppbolt.wasm",
     "README.md"
-  ]
+  ],
+  "funding": "https://github.com/sponsors/AJTimePyro"
 }

@@ -17,6 +17,9 @@ if [ ! -f "$wasm" ]; then
     exit 1
 fi
 
+# Generate the browser host from its TypeScript source before copying it.
+"$root/tools/build_web_host.sh"
+
 rm -rf "$output"
 mkdir -p "$output/pkg"
 cp "$root/web/playground.html" "$output/index.html"

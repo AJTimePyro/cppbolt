@@ -48,8 +48,9 @@
     section + section {
         border-left: 1px solid var(--border);
     }
-    textarea, pre {
+    #source, pre {
         flex: 1;
+        min-height: 0;
         margin: 0;
         padding: 10px;
         font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -60,6 +61,42 @@
         resize: none;
         overflow: auto;
         white-space: pre-wrap;
+    }
+    #source {
+        padding: 0;
+        overflow: hidden;
+    }
+    .cm-editor {
+        height: 100%;
+        background: transparent;
+        color: inherit;
+    }
+    .cm-scroller {
+        overflow: auto;
+        scroll-behavior: smooth;
+    }
+    .cm-content,
+    .cm-gutter {
+        font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .cm-content {
+        padding: 10px 0;
+        min-height: calc(100% - 20px);
+    }
+    .cm-line {
+        padding: 0 10px;
+    }
+    .cm-gutters {
+        background: transparent;
+        border-right: 1px solid var(--border);
+    }
+    .cm-activeLine,
+    .cm-activeLineGutter {
+        background: color-mix(in srgb, var(--accent) 12%, transparent);
+    }
+    .cm-selectionBackground,
+    .cm-editor ::selection {
+        background: color-mix(in srgb, var(--accent) 35%, transparent) !important;
     }
     .bar {
         display: flex;
@@ -112,7 +149,7 @@
             <button id="example" class="secondary">Load an example</button>
             <span class="status" id="status">ready</span>
         </div>
-        <textarea id="source" spellcheck="false" aria-label="C++ source"></textarea>
+        <div id="source" aria-label="C++ source"></div>
     </section>
     <section>
         <div class="bar">
@@ -123,12 +160,22 @@
     </section>
 </main>
 <script src="host.js"></script>
-<script>
+<script type="module">
 "use strict";
+
+import { basicSetup } from "https://esm.sh/codemirror@6.0.1?deps=@codemirror/state@6.7.6,@codemirror/view@6.43.15";
+import { EditorState } from "https://esm.sh/@codemirror/state@6.7.6";
+import { EditorView } from "https://esm.sh/@codemirror/view@6.43.15?deps=@codemirror/state@6.7.6";
+import {
+    HighlightStyle,
+    syntaxHighlighting,
+} from "https://esm.sh/@codemirror/language@6.13.1?deps=@codemirror/state@6.7.6,@codemirror/view@6.43.15";
+import { cpp } from "https://esm.sh/@codemirror/lang-cpp@6.0.2?deps=@codemirror/state@6.7.6,@codemirror/view@6.43.15";
+import { tags } from "https://esm.sh/@lezer/highlight@1.2.1";
 
 // The compiler runs in a worker, so a deep program never blocks the page.
 const worker = new Worker("playground-worker.js");
-const source = document.getElementById("source");
+const sourceMount = document.getElementById("source");
 const output = document.getElementById("output");
 const status = document.getElementById("status");
 const timing = document.getElementById("timing");
@@ -143,36 +190,84 @@ const parameters = new URLSearchParams(location.search);
 const compilerUrl = parameters.get("compiler") || "pkg/cppbolt_bg.wasm";
 
 const EXAMPLES = [
-    `#include <cstdio>
+    `#include <iostream>
 
 int main() {
     int total = 0;
     for (int i = 1; i <= 10; i = i + 1) {
         total = total + i;
     }
-    std::printf("total=%d\\n", total);
+    std::cout << "The sum from 1 to 10 is " << total << std::endl;
     return 0;
 }
 `,
-    `#include <cstdio>
+    `#include <iostream>
 #include <string>
 
 struct Point {
     int x;
     int y;
     Point(int a, int b) : x(a), y(b) {
-        std::printf("Point(%d, %d)\\n", x, y);
+        std::cout << "Created Point(" << x << ", " << y << ")" << std::endl;
     }
 };
 
 int main() {
     Point p(3, 4);
     std::string text = "hello";
-    std::printf("%s %d\\n", text.c_str(), p.x + p.y);
+    std::cout << text << " from C++!" << std::endl;
+    std::cout << "Point total: " << p.x + p.y << std::endl;
     return 0;
 }
 `,
 ];
+
+const theme = EditorView.theme({
+    "&": {
+        backgroundColor: "transparent",
+        color: "inherit",
+    },
+    ".cm-content": {
+        caretColor: "var(--accent)",
+    },
+    ".cm-cursor, .cm-dropCursor": {
+        borderLeftColor: "var(--accent)",
+    },
+    ".cm-tooltip": {
+        backgroundColor: "Canvas",
+        color: "CanvasText",
+        border: "1px solid var(--border)",
+    },
+});
+const syntaxTheme = HighlightStyle.define([
+    { tag: tags.comment, color: "#8b949e" },
+    { tag: [tags.meta, tags.annotation], color: "#d2a8ff" },
+    { tag: [tags.keyword, tags.controlKeyword, tags.moduleKeyword], color: "#ff7ab2" },
+    { tag: [tags.typeName, tags.className, tags.namespace], color: "#79c0ff" },
+    { tag: [tags.function(tags.variableName), tags.definition(tags.variableName)], color: "#d2a8ff" },
+    { tag: tags.variableName, color: "#f0f6fc" },
+    { tag: tags.propertyName, color: "#a5d6ff" },
+    { tag: [tags.string, tags.regexp], color: "#a5d6a7" },
+    { tag: [tags.number, tags.bool, tags.atom], color: "#f2cc60" },
+    { tag: [tags.operator, tags.operatorKeyword], color: "#ff9b71" },
+    { tag: [tags.punctuation, tags.bracket], color: "#c9d1d9" },
+    { tag: tags.invalid, color: "#ff7b72", textDecoration: "underline wavy" },
+]);
+
+const initialSource = parameters.get("code") ?? EXAMPLES[0];
+const editor = new EditorView({
+    state: EditorState.create({
+        doc: initialSource,
+        extensions: [
+            basicSetup,
+            cpp(),
+            EditorView.lineWrapping,
+            theme,
+            syntaxHighlighting(syntaxTheme),
+        ],
+    }),
+    parent: sourceMount,
+});
 
 let requestId = 0;
 let exampleIndex = 0;
@@ -238,9 +333,12 @@ class ProgramExit {
 
 async function runProgram(bytes) {
     let exitCode = null;
-    const host = createWasmImports(null, "", (code) => {
-        exitCode = code;
-        throw new ProgramExit(code);
+    const host = createWasmHost({
+        stdin: "",
+        onExit: (code) => {
+            exitCode = code;
+            throw new ProgramExit(code);
+        },
     });
     const started = performance.now();
     let trap = null;
@@ -279,7 +377,7 @@ runButton.addEventListener("click", async () => {
     show("", false);
     showTiming({});
     const started = performance.now();
-    const result = await compileInWorker(source.value);
+    const result = await compileInWorker(editor.state.doc.toString());
     if (!result.ok) {
         show(result.diagnostic, true);
         status.textContent = "diagnostic";
@@ -302,18 +400,17 @@ runButton.addEventListener("click", async () => {
 });
 
 exampleButton.addEventListener("click", () => {
-    source.value = EXAMPLES[exampleIndex % EXAMPLES.length];
+    const text = EXAMPLES[exampleIndex % EXAMPLES.length];
+    editor.dispatch({
+        changes: {
+            from: 0,
+            to: editor.state.doc.length,
+            insert: text,
+        },
+    });
     exampleIndex += 1;
     status.textContent = "example loaded";
 });
-
-source.value = EXAMPLES[0];
-
-// A link can carry the program, so a failing case can be shared.
-const code = parameters.get("code");
-if (code !== null) {
-    source.value = code;
-}
 
 if (parameters.get("run") === "1") {
     runButton.click();

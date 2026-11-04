@@ -45,9 +45,13 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+          cache: npm
 
       - name: Ensure npm version
         run: npm install --global npm@latest
+
+      - name: Install JavaScript dependencies
+        run: npm ci
 
       - name: Resolve and verify release version
         id: version
@@ -76,6 +80,9 @@ jobs:
         run: |
           node tests/ffi_lifecycle.js \
             target/wasm32-unknown-unknown/release/cppbolt.wasm
+
+      - name: Install npm package dependencies
+        run: npm ci --prefix npm
 
       - name: Assemble npm package
         run: |

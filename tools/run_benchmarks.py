@@ -46,12 +46,12 @@ def main():
         # 3. WebAssembly with our compiler
         wasm_file = "/tmp/bench.wasm"
         subprocess.run(["target/release/cppbolt-cli", src, "-o", wasm_file], check=True)
-        
+
         js_cmd = f"""
         const fs = require('fs');
-        const {{ createWasmImports }} = require('./web/host.js');
+        const {{ createWasmHost }} = require('./web/host.js');
         const bytes = fs.readFileSync('{wasm_file}');
-        const host = createWasmImports();
+        const host = createWasmHost();
         const t0 = performance.now();
         WebAssembly.instantiate(bytes, host.imports).then(m => {{
             m.instance.exports.main();

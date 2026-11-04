@@ -2,9 +2,12 @@
 /archive
 /site
 /dist
+npm/dist/
+web/host.js
 __pycache__/
 playground/
 /docs/book/book/
+node_modules/
 .superpowers/
 docs/superpowers/
 

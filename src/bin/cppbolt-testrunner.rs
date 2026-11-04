@@ -22,10 +22,10 @@ use std::process::ExitCode;
 
 const NODE_RUNNER: &str = r#"
 const fs=require("fs"), path=require("path");
-const {createWasmImports}=require(path.resolve(".","web/host.js"));
+const {createWasmHost}=require(path.resolve(".","web/host.js"));
 const bytes=fs.readFileSync(process.argv[1]);
 const input=process.argv[2]&&fs.existsSync(process.argv[2])?fs.readFileSync(process.argv[2],"utf8"):"";
-const host=createWasmImports(null,input,code=>{process.stdout.write(host.getStdout());process.exit(code)});
+const host=createWasmHost({stdin:input,onExit:code=>{process.stdout.write(host.getStdout());process.exit(code)}});
 WebAssembly.instantiate(bytes,host.imports).then(({instance})=>{
   let ret=0;
   try { ret=instance.exports.main?instance.exports.main():instance.exports._start(); }
@@ -81,6 +81,23 @@ fn run_golden_mode(
     Some(golden::run(mode, Path::new(&manifest), compiler))
 }
 
+/// Builds `web/host.js` from `npm/src/host.ts` when the host is missing.
+fn ensure_host_runtime() -> Result<(), String> {
+    let host = Path::new("web/host.js");
+    if host.exists() {
+        return Ok(());
+    }
+    let status = std::process::Command::new("bash")
+        .arg("tools/build_web_host.sh")
+        .status()
+        .map_err(|error| format!("cannot run tools/build_web_host.sh: {error}"))?;
+    if status.success() && host.exists() {
+        Ok(())
+    } else {
+        Err("web/host.js is missing; run `npm ci` and tools/build_web_host.sh".to_string())
+    }
+}
+
 fn main() -> ExitCode {
     if checks::check_independent_manifest() > 0 {
         return ExitCode::FAILURE;
@@ -90,6 +107,10 @@ fn main() -> ExitCode {
     let first = args.next();
     if first.as_deref() == Some("--oracle") {
         return oracle::run_oracle(args.next().as_deref());
+    }
+    if let Err(error) = ensure_host_runtime() {
+        eprintln!("{error}");
+        return ExitCode::FAILURE;
     }
     if let Some(code) = run_golden_mode(first.as_deref(), &mut args) {
         return code;
