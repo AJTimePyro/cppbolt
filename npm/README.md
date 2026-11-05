@@ -10,14 +10,34 @@ npm install cppbolt
 
 ## Usage
 
-### Node.js: compile only
+The package provides three entry points. Node.js and bundlers select the right
+one automatically; native browsers and classic scripts use the file directly.
 
-`createCompiler()` returns a compiler. `compile()` turns C++ source into a
-complete WebAssembly module as a `Uint8Array`.
+| Environment                            | Entry point               | How to load it                                                           |
+| -------------------------------------- | ------------------------- | ------------------------------------------------------------------------ |
+| Node.js (CommonJS or ES modules)       | `dist/index.js`           | `require("cppbolt")` or `import ... from "cppbolt"`                      |
+| Browser bundlers and native ES modules | `dist/index.browser.mjs`  | `import ... from "cppbolt"` (bundler) or the module URL (native browser) |
+| Classic browser `<script>`             | `dist/cppbolt.browser.js` | `<script src="..."></script>`, then use the global `CppBolt`             |
+
+### Node.js
+
+`createCompiler()` loads `wasm/cppbolt.wasm` from the installed package. The API
+is identical from CommonJS and ES modules:
 
 ```js
-import { createCompiler } from "cppbolt";
+// CommonJS
+const { createCompiler, compileAndRun } = require("cppbolt");
 
+// ES modules
+import { createCompiler, compileAndRun } from "cppbolt";
+```
+
+#### Compile only
+
+`compile()` turns C++ source into a complete WebAssembly module as a
+`Uint8Array`.
+
+```js
 const compiler = await createCompiler();
 
 const wasm = compiler.compile(`
@@ -29,19 +49,17 @@ const wasm = compiler.compile(`
 `);
 ```
 
-### Node.js: compile and run
+#### Compile and run
 
 `compileAndRun()` compiles the source and immediately executes it, returning
 its stdout and exit status.
 
 ```js
-import { createCompiler, compileAndRun } from "cppbolt";
-
 const compiler = await createCompiler();
 
 const { stdout, exitCode } = await compileAndRun(
-  compiler,
-  `
+	compiler,
+	`
     #include <iostream>
     int main() {
         std::cout << "cppbolt says hello!" << std::endl;
@@ -54,10 +72,58 @@ console.log(stdout); // "cppbolt says hello!\n"
 console.log(exitCode); // 0
 ```
 
-### Browser (CDN `<script>` tag)
+### Browser: bundlers and native ES modules
+
+In Vite, webpack 5, Rollup, or esbuild, use the normal package import. The
+`browser` export condition selects `dist/index.browser.mjs`.
+
+```js
+import { createCompiler, compileAndRun } from "cppbolt";
+
+const compiler = await createCompiler();
+const { stdout, exitCode } = await compileAndRun(
+	compiler,
+	`
+  #include <iostream>
+  int main() {
+      std::cout << "cppbolt says hello!" << std::endl;
+      return 0;
+  }
+`,
+);
+```
+
+`createCompiler()` resolves `wasm/cppbolt.wasm` relative to the module URL.
+Bundlers that understand `new URL(..., import.meta.url)` bundle the binary
+automatically. If the wasm file is served elsewhere, pass an explicit URL:
+`createCompiler("https://example.com/cppbolt.wasm")`.
+
+Native browser ES modules do not support bare package names. Import the module
+file directly, or add a matching import map:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/cppbolt@1.0.1/dist/cppbolt.browser.js"></script>
+<script type="module">
+  import { createCompiler, compileAndRun } from "https://cdn.jsdelivr.net/npm/cppbolt@latest/dist/index.browser.mjs";
+
+  const compiler = await createCompiler();
+  const { stdout, exitCode } = await compileAndRun(compiler, `
+    #include <iostream>
+    int main() {
+        std::cout << "cppbolt says hello!" << std::endl;
+        return 0;
+    }
+  `);
+  console.log(stdout, exitCode);
+</script>
+```
+
+### Browser: classic `<script>` tag
+
+The classic build exposes the global `CppBolt`. Load the script over HTTP(S),
+not `file://`, so it can fetch the wasm binary next to it.
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/cppbolt@latest/dist/cppbolt.browser.js"></script>
 <script>
   (async () => {
     const compiler = await CppBolt.createCompiler();
@@ -74,8 +140,19 @@ console.log(exitCode); // 0
 </script>
 ```
 
-`createCompiler()` resolves `wasm/cppbolt.wasm` relative to the script URL. When
-using a bundler, import from `"cppbolt"` instead.
+`CppBolt.createCompiler()` resolves `wasm/cppbolt.wasm` relative to the script
+URL.
+
+### How the entry points are selected
+
+The npm manifest uses conditional exports, evaluated in declaration order:
+
+| Condition | Entry point              | Selected by                      |
+| --------- | ------------------------ | -------------------------------- |
+| `types`   | `dist/index.d.ts`        | TypeScript                       |
+| `browser` | `dist/index.browser.mjs` | Browser-targeting bundlers       |
+| `node`    | `dist/index.js`          | Node.js (`require` and `import`) |
+| `default` | `dist/index.browser.mjs` | Other ES module environments     |
 
 ## Compiler API
 

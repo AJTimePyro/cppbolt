@@ -1,18 +1,19 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "CommonJS",
-    "types": ["node"],
-    "typeRoots": ["./node_modules/@types"],
-    "declaration": true,
-    "declarationMap": false,
-    "sourceMap": false,
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "rootDir": "./src",
-    "outDir": "./dist"
-  },
-  "include": ["src/**/*"]
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "CommonJS",
+		"types": ["node"],
+		"typeRoots": ["./node_modules/@types"],
+		"declaration": true,
+		"declarationMap": false,
+		"sourceMap": false,
+		"strict": true,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"forceConsistentCasingInFileNames": true,
+		"rootDir": "./src",
+		"outDir": "./dist"
+	},
+	"include": ["src/**/*"],
+	"exclude": ["src/browser.ts", "src/script.ts"]
 }

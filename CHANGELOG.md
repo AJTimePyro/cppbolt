@@ -9,6 +9,11 @@ This project does not yet have tagged semantic releases; all historical work is 
 
 ## [Unreleased]
 
+### Environment-Specific npm Entry Points
+- Split the npm package into a shared API module and three entry points: `dist/index.js` (Node.js CommonJS), `dist/index.browser.mjs` (browser ES modules and bundlers), and `dist/cppbolt.browser.js` (classic `<script>` global).
+- Added conditional exports so `browser` resolves to the browser ESM build, `node` resolves to the Node.js build, and `default` falls back to the browser ESM build.
+- The browser ESM entry resolves `wasm/cppbolt.wasm` relative to its own module URL and accepts an explicit wasm URL.
+
 ### Single-Source JavaScript Host
 - Made `npm/src/host.ts` (`createWasmHost`) the only implementation of the execution host used by the npm package, playground, corpus runner, and tests.
 - Added `CppBoltRunner` and `compileAndRun` to the npm package, exported from the new `npm/src/index.ts` entry point.

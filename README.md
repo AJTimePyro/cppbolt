@@ -53,7 +53,12 @@ console.log(stdout);
 console.log(exitCode);
 ```
 
-The package also supports browser usage through a CDN:
+Browser bundlers resolve the same `import { createCompiler } from "cppbolt"`
+to the browser ES module build, with the wasm binary loaded relative to that
+module. Native browser modules should import `dist/index.browser.mjs` directly
+(or through an import map).
+
+For a classic CDN script, the build exposes the global `CppBolt`:
 
 ```html
 <script src="https://cdn.jsdelivr.net/npm/cppbolt@1.0.1/dist/cppbolt.browser.js"></script>
