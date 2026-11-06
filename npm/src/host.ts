@@ -1,6 +1,29 @@
 // Formatting helpers for the C printf runtime contract.
 // These reproduce the exact C printf rounding semantics for float/double output.
 
+/** Internal control flow used to stop a wasm program after env.exit. */
+const wasmExitMarker = "__cppboltWasmExit";
+
+export class WasmExit extends Error {
+	readonly code: number;
+	readonly [wasmExitMarker] = true;
+
+	constructor(code: number) {
+		super(`wasm program exited with code ${code}`);
+		this.name = "WasmExit";
+		this.code = code;
+	}
+}
+
+export function isWasmExit(error: unknown): error is WasmExit {
+	return (
+		error instanceof WasmExit ||
+		(typeof error === "object" &&
+			error !== null &&
+			(error as { [wasmExitMarker]?: unknown })[wasmExitMarker] === true)
+	);
+}
+
 function roundToEvenExact(vNum: number, prec: number): string {
 	if (Number.isNaN(vNum)) return "nan";
 	if (vNum === Infinity) return "inf";
@@ -234,8 +257,7 @@ export interface WasmHostOptions {
 
 	/**
 	 * Called when the program invokes `exit(code)`.
-	 * If omitted, falls back to `process.exit(code)` in Node.js. Browser hosts
-	 * should provide this hook because there is no `process` to terminate.
+	 * If omitted, the runner still stops the program and returns the exit code.
 	 */
 	onExit?: (code: number) => void;
 }
@@ -437,14 +459,8 @@ export function createWasmHost(options: WasmHostOptions = {}): WasmHost {
 			exit: (code: number): void => {
 				if (onExit) {
 					onExit(code);
-				} else if (
-					typeof process !== "undefined" &&
-					typeof process.exit === "function"
-				) {
-					process.exit(code);
 				}
-				// A browser with no onExit hook has nothing to stop the wasm program;
-				// browser hosts should supply onExit (the playground throws from it).
+				throw new WasmExit(code);
 			},
 		},
 	};

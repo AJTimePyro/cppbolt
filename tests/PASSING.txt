@@ -19,6 +19,7 @@ c_basics/io_printf/printf_flags
 c_basics/io_printf/printf_octal
 c_basics/io_printf/printf_return
 c_basics/io_printf/printf_table
+c_basics/misc/exit_status
 c_basics/misc/large_local_frame
 c_basics/misc/lvalue_matrix
 c_basics/misc/malloc_failure

@@ -208,8 +208,10 @@ yourself.
 
 - `createWasmHost(options?) -> WasmHost` builds the import environment. Options
   are `stdin` (a string, or `() => number` for streaming input), `onStdout(chunk)`,
-  and `onExit(code)`. The result exposes `imports` for `WebAssembly.instantiate`
-  and `getStdout()`.
+  and `onExit(code)`. Calling `exit(code)` invokes `onExit` when supplied and
+  always stops the wasm program; the runner returns that code without terminating
+  the embedding Node.js process. The result exposes `imports` for
+  `WebAssembly.instantiate` and `getStdout()`.
 - `new CppBoltRunner(host).run(wasmBytes) -> Promise<RunResult>` instantiates a
   module, calls `main` (or `_start`), and returns `{ stdout, exitCode }`. A
   WebAssembly trap is reported as exit code 134 instead of throwing.

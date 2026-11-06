@@ -1,4 +1,4 @@
-import type { WasmHost } from "./host.js";
+import { isWasmExit, type WasmHost } from "./host.js";
 
 /**
  * The outcome of running a compiled WebAssembly program.
@@ -41,10 +41,20 @@ export class CppBoltRunner {
 			};
 			const fn = exports.main ?? exports._start;
 			if (fn) exitCode = fn() ?? 0;
-		} catch {
-			// A WebAssembly trap — treat it like SIGABRT (exit 134), matching the
-			// standalone host runner.
-			return { stdout: this.host.getStdout(), exitCode: 134 };
+		} catch (error) {
+			if (isWasmExit(error)) {
+				return { stdout: this.host.getStdout(), exitCode: error.code };
+			}
+			// A WebAssembly trap, treated like SIGABRT (exit 134), matching
+			// the standalone host runner. V8 reports a wasm stack overflow as a
+			// RangeError rather than a WebAssembly.RuntimeError.
+			if (
+				error instanceof WebAssembly.RuntimeError ||
+				(error instanceof RangeError && /call stack/i.test(error.message))
+			) {
+				return { stdout: this.host.getStdout(), exitCode: 134 };
+			}
+			throw error;
 		}
 
 		return { stdout: this.host.getStdout(), exitCode };

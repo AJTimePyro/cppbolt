@@ -6,6 +6,7 @@
 namespace std {
     using ::malloc;
     using ::free;
+    using ::exit;
 }
 
 #endif

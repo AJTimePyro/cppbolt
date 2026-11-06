@@ -5,7 +5,7 @@ import { CppBoltRunner, type RunResult } from "./runner.js";
 // Shared public surface, re-exported by each environment entry point.
 export { CompileError, CppBoltCompiler } from "./compiler.js";
 export type { WasmHost, WasmHostOptions } from "./host.js";
-export { createWasmHost } from "./host.js";
+export { createWasmHost, isWasmExit, WasmExit } from "./host.js";
 export type { RunResult } from "./runner.js";
 export { CppBoltRunner } from "./runner.js";
 

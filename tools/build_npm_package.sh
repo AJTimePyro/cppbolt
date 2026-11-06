@@ -21,6 +21,8 @@ if [ ! -x "$root/npm/node_modules/.bin/tsc" ] || [ ! -x "$root/npm/node_modules/
     exit 1
 fi
 
+rm -rf "$root/npm/dist"
+
 "$root/npm/node_modules/.bin/tsc" -p "$root/npm/tsconfig.json"
 "$root/npm/node_modules/.bin/tsc" -p "$root/npm/tsconfig.browser.json"
 

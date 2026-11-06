@@ -68,7 +68,9 @@ The error buffer is private static storage owned by the compiler; failed compila
 When a compiled C++ program runs, its WebAssembly module expects an imported `env` namespace providing standard character and numeric I/O. The single implementation lives in `npm/src/host.ts`; `tools/build_web_host.sh` compiles it into `web/host.js` for the browser playground, and `tools/build_site.sh` runs that step automatically.
 
 ```javascript
-// web/host.js exposes createWasmHost as a browser global and as a CommonJS export.
+// web/host.js exposes createWasmHost (and WasmExit) as a browser global
+// (CppBoltHost) and as a CommonJS export.
+const { createWasmHost, WasmExit } = CppBoltHost;
 const host = createWasmHost({
     stdin: "",                              // string, or () => number for streaming input
     onStdout: (text) => console.log(text),  // streaming output hook
@@ -77,11 +79,28 @@ const host = createWasmHost({
 
 // host.imports provides the imports needed by the compiled C++ program
 const program = await WebAssembly.instantiate(outputBytes, host.imports);
-program.instance.exports.main();
 
-// Everything the program wrote so far
-console.log(host.getStdout());
+let exitCode = 0;
+try {
+    exitCode = program.instance.exports.main() ?? 0;
+} catch (error) {
+    // Calling exit(code) always stops the program by throwing WasmExit.
+    // Direct users should rethrow anything else, which is a genuine trap.
+    if (!(error instanceof WasmExit)) {
+        throw error;
+    }
+    exitCode = error.code;
+}
+
+// Everything the program wrote before it exited
+console.log(host.getStdout(), "exit", exitCode);
 ```
+
+`exit(code)` invokes `onExit` (when supplied) and then throws a `WasmExit`
+whose `code` property is the requested status. The throw is what stops the
+WebAssembly program; it never terminates the embedding JavaScript host. Prefer
+`CppBoltRunner` (see the npm package README) when you want the exit code
+returned in `RunResult` without handling the sentinel yourself.
 
 ### Imported Environment Functions
 
@@ -91,7 +110,7 @@ console.log(host.getStdout());
 | `env.print_int` | `(val: i64, radix: i32, width: i32, prec: i32, flags: i32) -> i32` | Formats integer with specified width, precision, and flags. Returns character count. |
 | `env.print_double` | `(val: f64, width: i32, prec: i32, mode: i32, flags: i32) -> i32` | Formats double in general (`0`), fixed (`1`), or scientific (`2`) mode. Returns character count. |
 | `env.read_char` | `() -> i32` | Reads next character byte from stdin buffer (returns `-1` on EOF). |
-| `env.exit` | `(code: i32) -> void` | Terminates execution with the given status code. |
+| `env.exit` | `(code: i32) -> void` | Stops execution with the given status code by throwing `WasmExit`. |
 
 #### Formatting Flags Bitmask
 For `print_int` and `print_double`:
