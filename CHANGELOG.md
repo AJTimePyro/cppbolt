@@ -9,6 +9,13 @@ This project does not yet have tagged semantic releases; all historical work is 
 
 ## [Unreleased]
 
+### C++17 Core Language Stabilization
+- Added comma sequence operator `(a, b)` evaluating left-to-right with right-operand result, parsed at precedence 1 to separate expressions from call arguments, multi-declarator definitions, and parameter defaults.
+- Added C++17 selection statement initializers (`if (init; condition)` and `switch (init; condition)`) with scoping confined to the selection statement.
+- Added non-static data member initializers (`= expr` and `{ ... }`) in struct, class, and template declarations.
+- Updated constructor code generation to initialize fields from their default member initializers when omitted from constructor member initializer lists.
+- Updated aggregate initialization to initialize omitted trailing fields from their default member initializers, conforming to C++17 [dcl.init.aggr].
+
 ### npm Async Execution & Timeouts
 - Added `AsyncCppBoltRunner` and `compileAndRunAsync` with `timeoutMs`, `AbortSignal`, `stdin`, and streaming `onStdout` support (`node:worker_threads` on Node.js, bundled Web Worker in browsers).
 - Exported `TimeoutError`, returning any stdout emitted before termination.

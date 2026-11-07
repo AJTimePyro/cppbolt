@@ -450,3 +450,26 @@ Resolved review findings in nested struct scope tracking, global namespace pollu
 - Golden baseline: all 294 entries match `tests/golden.txt`.
 - Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
 - Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
+## 2026-11-07: C++17 Core Stabilization (Comma Expressions, Selection Initializers, NSDMI & Aggregate Defaults)
+
+Validated and resolved four issues identified during C++17 pre-release testing: comma operator evaluation, selection statement initializers, non-static data member initializers (NSDMI), and aggregate initialization default rules.
+
+### Summary of Work
+
+1. Added `BinaryOp::Comma` to the AST and parser at precedence 1 in `src/ast/expr.rs` and `src/parser/expr.rs`. Restricted argument list, parameter default, and declarator parsing to precedence 2 in `src/parser/mod.rs`, `src/parser/decl_func.rs`, and `src/parser/enums_operators.rs` to keep unparenthesized commas distinct from expression sequence operators.
+2. Implemented WebAssembly code generation for comma expressions in `src/codegen/expr_binary.rs`, evaluating the left operand, dropping its result from the value stack, and compiling the right operand.
+3. Implemented C++17 selection statement initializers (`if (init; cond)` and `switch (init; cond)`) in `src/parser/stmt_selection.rs`, desugaring initializers into compound scopes enclosing the selection statement while preserving iterative flattening for deep `else if` chains.
+4. Added support for non-static data member initializers (`= expr` and `{ ... }`) in struct, class, and template declarations across `src/ast/decl.rs`, `src/ast/template.rs`, and `src/parser/structs.rs`.
+5. Updated semantic analysis in `src/sema/analyze.rs` and `src/sema/layout.rs` to validate default member initializer expressions and record `default_init` on `StructField`.
+6. Updated constructor lowering in `src/codegen/function_lifecycle.rs` to fall back to `default_init` for fields omitted from constructor member initializer lists.
+7. Aligned aggregate initialization with C++17 [dcl.init.aggr] in `src/codegen/stmt_var_init.rs`, `src/codegen/expr_new.rs`, and `src/codegen/expr_call.rs`, initializing omitted trailing aggregate fields from their default member initializers rather than zero-initializing. Confirmed that user-declared constructors correctly disqualify aggregates while NSDMI remains allowed.
+
+### Verification Results
+
+- Unit and integration tests: 438 corpus tests on disk, 438 executed, 438 passed, 0 failures. All 120 negative tests passed.
+- Unit tests: 89 passed in `src/lib.rs`.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Diagnostic positions test: confirmed all corpus diagnostics name real source locations.

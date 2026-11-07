@@ -215,7 +215,7 @@ Diagnostics use the format `<file>:line:column: error: message`. The ABI does no
 
 ## Language coverage
 
-cppbolt supports scalar types, pointers, arrays, functions, classes, single inheritance, virtual functions, operator overloading, lambdas, range-based `for`, and the preprocessor, along with an embedded mini standard library (`<iostream>`, `<string>`, `<cstdio>`, `<cmath>`, `<iomanip>`, and related headers).
+cppbolt supports scalar types, pointers, arrays, functions, classes, non-static data member initializers (NSDMI), aggregate initialization, selection initializers (`if`/`switch`), comma operator expressions, single inheritance, virtual functions, operator overloading, lambdas, range-based `for`, and the preprocessor, along with an embedded mini standard library (`<iostream>`, `<string>`, `<cstdio>`, `<cmath>`, `<iomanip>`, and related headers).
 
 Templates, standard containers and algorithms, exceptions, RTTI, and multiple or virtual inheritance are not supported.
 
