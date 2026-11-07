@@ -1,6 +1,11 @@
+import { registerAsyncRunnerFactory } from "./api.js";
+import { AsyncCppBoltRunner } from "./browser-worker.js";
 import { type CppBoltCompiler, loadCompilerFromResponse } from "./compiler.js";
 
 export * from "./api.js";
+export { AsyncCppBoltRunner } from "./browser-worker.js";
+
+registerAsyncRunnerFactory((host) => new AsyncCppBoltRunner(host));
 
 /**
  * Fetch cppbolt.wasm and return a CppBoltCompiler.

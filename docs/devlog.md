@@ -4,6 +4,21 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-07: npm Worker Isolation and Timeouts
+
+Added worker-isolated execution with timeout and cancellation support to the npm package.
+
+### Summary of Work
+
+1. Added `AsyncCppBoltRunner` and `compileAndRunAsync` to `npm/src/api.ts`.
+2. Bundled worker runtimes at build time with esbuild: Node uses `dist/worker.node.js` (`worker_threads`), and browser builds embed the worker IIFE as `__WORKER_BUNDLE__` for `new Blob(...)` construction.
+3. Added `TimeoutError` and `RunOptions` (`timeoutMs`, `signal`, `stdin`, `onStdout`), preserving any stdout emitted before worker termination.
+4. Corrected worker execution semantics: WebAssembly instantiation failures reject with the underlying error (`CompileError`/`LinkError`) rather than masking as SIGABRT exit code 134; program traps are restricted to `RuntimeError` and stack overflow `RangeError`.
+5. Forwarded `stdin` input to worker execution, enabled streaming `onStdout` callbacks, made the `AsyncCppBoltRunner` host parameter optional, and guarded worker termination against multiple invocations.
+6. Added test coverage in `tests/test_npm_node_worker.js`, `tests/test_npm_browser_build.js`, `tests/test_npm_runner_options.js`, `tests/test_npm_compile_and_run_async.js`, and `tests/test_browser_worker.mjs` (Chromium).
+
+---
+
 ## 2026-11-03: `std::initializer_list` Review Fixes
 
 Fixed five findings in the initializer-list and brace-initialization support added earlier the same day.

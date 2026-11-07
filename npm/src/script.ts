@@ -1,6 +1,11 @@
+import { registerAsyncRunnerFactory } from "./api.js";
+import { AsyncCppBoltRunner } from "./browser-worker.js";
 import { type CppBoltCompiler, loadCompilerFromResponse } from "./compiler.js";
 
 export * from "./api.js";
+export { AsyncCppBoltRunner } from "./browser-worker.js";
+
+registerAsyncRunnerFactory((host) => new AsyncCppBoltRunner(host));
 
 // Captured while the classic script is evaluating: by the time callers invoke
 // createCompiler(), document.currentScript is null again.

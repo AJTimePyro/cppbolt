@@ -1,8 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
+import { registerAsyncRunnerFactory } from "./api.js";
 import { type CppBoltCompiler, loadCompilerFromBytes } from "./compiler.js";
+import { AsyncCppBoltRunner } from "./node-worker.js";
 
 export * from "./api.js";
+export { AsyncCppBoltRunner } from "./node-worker.js";
+
+registerAsyncRunnerFactory((host) => new AsyncCppBoltRunner(host));
 
 /**
  * Load cppbolt.wasm from the package directory and return a CppBoltCompiler.

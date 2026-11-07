@@ -15,5 +15,5 @@
 		"outDir": "./dist"
 	},
 	"include": ["src/**/*"],
-	"exclude": ["src/browser.ts", "src/script.ts"]
+	"exclude": ["src/browser.ts", "src/script.ts", "src/browser-worker.ts", "src/worker/*.entry.ts"]
 }

@@ -8,6 +8,37 @@ export interface RunResult {
 	stdout: string;
 	/** The program's exit status, or 134 if it trapped. */
 	exitCode: number;
+	/** Execution time in milliseconds if measured. */
+	elapsedMs?: number;
+}
+
+/**
+ * Options configuring program execution.
+ */
+export interface RunOptions {
+	/** Optional execution timeout in milliseconds. Supported only by `AsyncCppBoltRunner`. */
+	timeoutMs?: number;
+	/** Optional AbortSignal to cancel execution prematurely. Supported only by `AsyncCppBoltRunner`. */
+	signal?: AbortSignal;
+	/** Optional stdin string forwarded to the program. */
+	stdin?: string;
+	/** Optional callback invoked with each chunk written to stdout. */
+	onStdout?: (chunk: string) => void;
+}
+
+/**
+ * Error thrown when execution exceeds timeout limit or is cancelled.
+ */
+export class TimeoutError extends Error {
+	readonly stdout: string;
+	readonly elapsedMs: number;
+
+	constructor(message: string, stdout = "", elapsedMs = 0) {
+		super(message);
+		this.name = "TimeoutError";
+		this.stdout = stdout;
+		this.elapsedMs = elapsedMs;
+	}
 }
 
 /**
@@ -26,8 +57,13 @@ export class CppBoltRunner {
 	 *
 	 * A WebAssembly trap is reported as exit status 134 rather than thrown, so
 	 * callers can inspect partial output the same way a shell would.
+	 *
+	 * Note: Synchronous `CppBoltRunner` executes on the current thread and does not
+	 * support watchdog `timeoutMs` or cancellation via `signal`. For watchdog timeouts
+	 * and cancellation, use `AsyncCppBoltRunner` or `compileAndRunAsync`.
 	 */
-	async run(wasmBytes: Uint8Array): Promise<RunResult> {
+	async run(wasmBytes: Uint8Array, _options?: RunOptions): Promise<RunResult> {
+		const started = performance.now();
 		const { instance } = await WebAssembly.instantiate(
 			wasmBytes as BufferSource,
 			this.host.imports,
@@ -42,8 +78,13 @@ export class CppBoltRunner {
 			const fn = exports.main ?? exports._start;
 			if (fn) exitCode = fn() ?? 0;
 		} catch (error) {
+			const elapsedMs = performance.now() - started;
 			if (isWasmExit(error)) {
-				return { stdout: this.host.getStdout(), exitCode: error.code };
+				return {
+					stdout: this.host.getStdout(),
+					exitCode: error.code,
+					elapsedMs,
+				};
 			}
 			// A WebAssembly trap, treated like SIGABRT (exit 134), matching
 			// the standalone host runner. V8 reports a wasm stack overflow as a
@@ -52,11 +93,15 @@ export class CppBoltRunner {
 				error instanceof WebAssembly.RuntimeError ||
 				(error instanceof RangeError && /call stack/i.test(error.message))
 			) {
-				return { stdout: this.host.getStdout(), exitCode: 134 };
+				return { stdout: this.host.getStdout(), exitCode: 134, elapsedMs };
 			}
 			throw error;
 		}
 
-		return { stdout: this.host.getStdout(), exitCode };
+		return {
+			stdout: this.host.getStdout(),
+			exitCode,
+			elapsedMs: performance.now() - started,
+		};
 	}
 }

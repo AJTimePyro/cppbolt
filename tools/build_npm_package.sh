@@ -23,20 +23,7 @@ fi
 
 rm -rf "$root/npm/dist"
 
-"$root/npm/node_modules/.bin/tsc" -p "$root/npm/tsconfig.json"
-"$root/npm/node_modules/.bin/tsc" -p "$root/npm/tsconfig.browser.json"
-
-# Browser ES module: whole public API, wasm resolved via import.meta.url
-"$root/npm/node_modules/.bin/esbuild" "$root/npm/src/browser.ts" \
-    --bundle --format=esm \
-    --platform=browser \
-    --outfile="$root/npm/dist/index.browser.mjs"
-
-# Classic <script> bundle: whole public API on window.CppBolt
-"$root/npm/node_modules/.bin/esbuild" "$root/npm/src/script.ts" \
-    --bundle --format=iife --global-name=CppBolt \
-    --platform=browser \
-    --outfile="$root/npm/dist/cppbolt.browser.js"
+npm --prefix "$root/npm" run build
 
 rm -rf "$output"
 mkdir -p "$output/wasm" "$output/dist"

@@ -99,8 +99,8 @@ console.log(host.getStdout(), "exit", exitCode);
 `exit(code)` invokes `onExit` (when supplied) and then throws a `WasmExit`
 whose `code` property is the requested status. The throw is what stops the
 WebAssembly program; it never terminates the embedding JavaScript host. Prefer
-`CppBoltRunner` (see the npm package README) when you want the exit code
-returned in `RunResult` without handling the sentinel yourself.
+`CppBoltRunner` or `AsyncCppBoltRunner` (see the npm package README) to get the exit code
+in `RunResult` without catching `WasmExit`, or to enforce execution timeouts and cancellation.
 
 ### Imported Environment Functions
 
@@ -142,6 +142,23 @@ Compiling complex C++ programs with deep recursion can consume significant CPU c
         │<── host.print_char / print_int (stdout) ────────────────────────────│
         │                                                                     │
 ```
+
+`AsyncCppBoltRunner` and `compileAndRunAsync` run compiled programs in a background worker (`worker_threads` in Node.js, or an embedded Web Worker in browsers).
+
+### Isolated Worker Execution (`AsyncCppBoltRunner`)
+
+For user-submitted code or long-running computations, cppbolt provides worker-isolated execution through `AsyncCppBoltRunner` and `compileAndRunAsync`. In Node.js, these use `node:worker_threads`; in browsers, they use a Web Worker created from an embedded blob bundle.
+
+The runner accepts `RunOptions`:
+- `timeoutMs`: Terminates the worker after the given duration and throws a `TimeoutError` containing any stdout produced before termination.
+- `signal`: An `AbortSignal` allowing manual cancellation.
+- `stdin`: String input forwarded to `env.read_char`.
+- `onStdout`: Callback invoked as stdout chunks stream in.
+
+The runner cleanly distinguishes instantiation errors, execution traps, and normal completion:
+- Malformed or incompatible WebAssembly bytecode rejects the returned promise with the underlying `CompileError` or `LinkError`.
+- WebAssembly traps (`WebAssembly.RuntimeError` or stack overflow `RangeError`) resolve with exit status `134` (`SIGABRT`), matching the behavior of the synchronous runner.
+- The constructor `new AsyncCppBoltRunner()` accepts an optional host; omitting it uses the default runtime host within the worker.
 
 ### Shareable URLs
 The playground supports URL query parameters so interactive code snippets can be shared:

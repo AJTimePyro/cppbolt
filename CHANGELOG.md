@@ -9,6 +9,13 @@ This project does not yet have tagged semantic releases; all historical work is 
 
 ## [Unreleased]
 
+### npm Async Execution & Timeouts
+- Added `AsyncCppBoltRunner` and `compileAndRunAsync` with `timeoutMs`, `AbortSignal`, `stdin`, and streaming `onStdout` support (`node:worker_threads` on Node.js, bundled Web Worker in browsers).
+- Exported `TimeoutError`, returning any stdout emitted before termination.
+- Fixed WebAssembly instantiation failure propagation so malformed bytecode rejects with `CompileError`/`LinkError` instead of resolving with exit code 134.
+- Handled runtime traps (`RuntimeError` and call stack `RangeError`) without masking arbitrary JavaScript exceptions as exit status 134.
+- Made `host` optional in `AsyncCppBoltRunner` constructor and added `settled` guards for worker lifecycle cleanup.
+
 ### Environment-Specific npm Entry Points
 - Split the npm package into a shared API module and three entry points: `dist/index.js` (Node.js CommonJS), `dist/index.browser.mjs` (browser ES modules and bundlers), and `dist/cppbolt.browser.js` (classic `<script>` global).
 - Added conditional exports so `browser` resolves to the browser ESM build, `node` resolves to the Node.js build, and `default` falls back to the browser ESM build.

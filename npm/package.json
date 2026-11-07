@@ -22,7 +22,7 @@
 		"./wasm/cppbolt.wasm": "./wasm/cppbolt.wasm"
 	},
 	"scripts": {
-		"build": "tsc -p tsconfig.json && tsc -p tsconfig.browser.json && esbuild src/browser.ts --bundle --format=esm --platform=browser --outfile=dist/index.browser.mjs && esbuild src/script.ts --bundle --format=iife --global-name=CppBolt --platform=browser --outfile=dist/cppbolt.browser.js",
+		"build": "node scripts/build.mjs",
 		"lint": "biome check .",
 		"lint:fix": "biome check --write ."
 	},
