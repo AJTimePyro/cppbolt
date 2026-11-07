@@ -3,6 +3,7 @@ c_basics/control_flow/control_if_else
 c_basics/control_flow/control_loops
 c_basics/control_flow/control_switch
 c_basics/control_flow/if_ternary
+c_basics/control_flow/selection_initializers
 c_basics/control_flow/switch_enum_case
 c_basics/enums/enums
 c_basics/enums/scoped_enums
@@ -56,6 +57,7 @@ c_basics_variant/control_flow/comma_expressions_variant
 c_basics_variant/control_flow/control_if_else
 c_basics_variant/control_flow/control_loops
 c_basics_variant/control_flow/control_switch
+c_basics_variant/control_flow/selection_initializers_variant
 c_basics_variant/enums/enums
 c_basics_variant/functions/functions_call
 c_basics_variant/functions/functions_default_args

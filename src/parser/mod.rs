@@ -18,6 +18,7 @@ mod expr;
 mod expr_lambda;
 mod prefix;
 mod stmt;
+mod stmt_selection;
 mod structs;
 mod structs_nested;
 mod template;

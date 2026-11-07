@@ -1,0 +1,8 @@
+x: 42
+y neg: -5
+s: 2
+count: 10
+Guard(100)
+inside if
+~Guard(100)
+after if

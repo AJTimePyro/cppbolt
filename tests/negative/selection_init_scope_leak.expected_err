@@ -1,0 +1,1 @@
+tests/negative/selection_init_scope_leak.cpp:4:5: error: Undeclared variable or identifier 'scoped_var'
