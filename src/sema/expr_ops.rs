@@ -24,6 +24,10 @@ impl Sema {
             }
         }
 
+        if *op == BinaryOp::Comma {
+            return rty.clone();
+        }
+
         let (l_clean, r_clean) = (
             lty.strip_reference().strip_const(),
             rty.strip_reference().strip_const(),
@@ -161,7 +165,7 @@ impl Sema {
             self.find_call_candidates(op_str, &[lty.clone(), rty.clone()])
                 .is_some()
         });
-        if has_overload {
+        if has_overload || op == BinaryOp::Comma {
             return;
         }
         if let Type::Struct(ref sname) = clean_lty

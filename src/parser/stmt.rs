@@ -322,7 +322,7 @@ impl Parser {
             let (elements, pos) = self.parse_brace_expr_list()?;
             Ok(Expr::InitializerList { elements, pos })
         } else {
-            self.parse_expr()
+            self.parse_expr_prec(2)
         }
     }
 

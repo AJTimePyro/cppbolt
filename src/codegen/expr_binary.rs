@@ -135,6 +135,9 @@ impl<'a> Codegen<'a> {
         if self.emit_overloaded_binary_node(types, left, right, ctx, code)? {
             return Ok(());
         }
+        if *op == BinaryOp::Comma {
+            return self.emit_comma_node(lty, left, right, ctx, code);
+        }
         let lraw = lty.strip_const();
         let rraw = rty.strip_const();
         let is_shift = matches!(op, BinaryOp::Shl | BinaryOp::Shr);
@@ -158,6 +161,45 @@ impl<'a> Codegen<'a> {
         Self::emit_operand_conversion(lraw, &common_ty, code);
         self.compile_expr(right, ctx, code)?;
         Self::emit_operand_conversion(rraw, &common_ty, code);
+        self.emit_pointer_arithmetic_scaling(op, lty, rty, ctx, code);
+
+        Self::emit_binary_op(op, &common_ty, code);
+        if let Some(elem_size) = pointer_diff_elem
+            && elem_size > 1
+        {
+            code.push(OP_I32_CONST);
+            write_i32(code, elem_size);
+            code.push(OP_I32_DIV_S);
+        }
+
+        Ok(())
+    }
+
+    fn emit_comma_node(
+        &mut self,
+        lty: &Type,
+        left: Option<&Expr>,
+        right: &Expr,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        if let Some(left_expr) = left {
+            self.compile_expr(left_expr, ctx, code)?;
+        }
+        if *lty != Type::Void {
+            code.push(OP_DROP);
+        }
+        self.compile_expr(right, ctx, code)
+    }
+
+    fn emit_pointer_arithmetic_scaling(
+        &mut self,
+        op: &BinaryOp,
+        lty: &Type,
+        rty: &Type,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) {
         if (lty.is_pointer() || lty.is_array())
             && rty.is_integer()
             && (op == &BinaryOp::Add || op == &BinaryOp::Sub)
@@ -176,8 +218,6 @@ impl<'a> Codegen<'a> {
                 .map(|d| d.size_of(&self.sema.struct_sizes))
                 .unwrap_or(4)
                 .max(1) as i32;
-            // The stack holds [integer, pointer]. Keep the pointer in a scratch
-            // local while the integer is scaled, then put them back in add order.
             code.push(OP_LOCAL_SET);
             write_u32(code, ctx.scratch1);
             code.push(OP_I32_CONST);
@@ -186,17 +226,6 @@ impl<'a> Codegen<'a> {
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.scratch1);
         }
-
-        Self::emit_binary_op(op, &common_ty, code);
-        if let Some(elem_size) = pointer_diff_elem
-            && elem_size > 1
-        {
-            code.push(OP_I32_CONST);
-            write_i32(code, elem_size);
-            code.push(OP_I32_DIV_S);
-        }
-
-        Ok(())
     }
 
     fn pointer_difference_element(
@@ -414,6 +443,7 @@ impl<'a> Codegen<'a> {
             BinaryOp::LogicalOr => {
                 code.push(OP_I32_OR);
             }
+            BinaryOp::Comma => {}
         }
     }
 }

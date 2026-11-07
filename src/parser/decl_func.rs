@@ -72,7 +72,7 @@ impl Parser {
 
             let default_val = if self.peek() == &TokenKind::Assign {
                 self.advance();
-                Some(self.parse_expr()?)
+                Some(self.parse_expr_prec(2)?)
             } else {
                 None
             };

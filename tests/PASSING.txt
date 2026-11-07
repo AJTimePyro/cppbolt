@@ -1,3 +1,4 @@
+c_basics/control_flow/comma_expressions
 c_basics/control_flow/control_if_else
 c_basics/control_flow/control_loops
 c_basics/control_flow/control_switch
@@ -51,6 +52,7 @@ c_basics/types/sizeof_expr
 c_basics/types/ternary_mixed_types
 c_basics/types/unsigned_wrap
 c_basics/types/value_init_scalar
+c_basics_variant/control_flow/comma_expressions_variant
 c_basics_variant/control_flow/control_if_else
 c_basics_variant/control_flow/control_loops
 c_basics_variant/control_flow/control_switch
