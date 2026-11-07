@@ -402,7 +402,13 @@ pub fn substitute_struct(
     let fields = template_class
         .fields
         .iter()
-        .map(|(fname, fty)| (fname.clone(), substitute_type(fty, mapping, injected)))
+        .map(|(fname, fty, finit)| {
+            let mut init = finit.clone();
+            if let Some((init_expr, _, _)) = &mut init {
+                substitute_expr(init_expr, mapping, injected);
+            }
+            (fname.clone(), substitute_type(fty, mapping, injected), init)
+        })
         .collect();
 
     let methods = template_class

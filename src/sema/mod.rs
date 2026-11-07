@@ -44,6 +44,7 @@ pub struct StructField {
     pub name: String,
     pub ty: Type,
     pub offset: usize,
+    pub default_init: Option<Expr>,
 }
 
 /// Physical layout of one record.

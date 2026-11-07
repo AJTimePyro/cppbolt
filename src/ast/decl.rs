@@ -52,7 +52,7 @@ pub enum Decl {
         name: String,
         is_class: bool,
         base_classes: Vec<String>,
-        fields: Vec<(String, Type)>,
+        fields: Vec<(String, Type, Option<(Expr, usize, usize)>)>,
         methods: Vec<FunctionDecl>,
         static_fields: Vec<(String, Type, Option<Expr>)>,
         private_members: Vec<String>,

@@ -114,8 +114,11 @@ impl Sema {
                     col,
                     ..
                 } => {
-                    for (_, fty) in fields.iter_mut() {
+                    for (fname, fty, finit) in fields.iter_mut() {
                         self.resolve_and_instantiate_type(fty, *line, *col)?;
+                        if let Some((init_expr, fline, fcol)) = finit {
+                            self.check_field_default_init(fname, fty, init_expr, (*fline, *fcol))?;
+                        }
                     }
                     self.compute_struct_layout(RecordLayout {
                         name: name.as_str(),
@@ -412,6 +415,47 @@ impl Sema {
                 }
                 _ => {}
             }
+        }
+        Ok(())
+    }
+
+    fn check_field_default_init(
+        &mut self,
+        fname: &str,
+        fty: &Type,
+        init_expr: &mut Expr,
+        pos: (usize, usize),
+    ) -> Result<(), CompileError> {
+        let (init_ty, is_list) = match init_expr {
+            Expr::InitializerList { elements, pos } => {
+                let context = if elements.is_empty() {
+                    InitContext::ValueInit
+                } else {
+                    InitContext::CopyListInitVar
+                };
+                (self.resolve_list_init(fty, elements, context, *pos)?, true)
+            }
+            Expr::TypedInitList {
+                ty: explicit_ty,
+                elements,
+                pos,
+            } => (
+                self.resolve_list_init(explicit_ty, elements, InitContext::DirectList, *pos)?,
+                true,
+            ),
+            _ => (self.analyze_expr(init_expr)?, false),
+        };
+        if !is_list && !self.can_assign_expr(fty, &init_ty, Some(init_expr)) {
+            return Err(CompileError::new(
+                format!(
+                    "cannot initialize field '{}' of type '{}' with expression of type '{}'",
+                    fname,
+                    fty.to_c_type(),
+                    init_ty.to_c_type()
+                ),
+                pos.0,
+                pos.1,
+            ));
         }
         Ok(())
     }

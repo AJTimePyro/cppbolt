@@ -1,0 +1,5 @@
+c_default: 800 600 32
+c_partial: 1024 600 32
+c_full: 1920 1080 24
+temp h: 600
+dyn: 640 600 32

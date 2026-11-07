@@ -171,11 +171,13 @@ impl<'a> Codegen<'a> {
     ) -> Result<(), CompileError> {
         let base_field_count = self.base_field_count(layout);
         for fld in layout.fields.iter().skip(base_field_count) {
-            let init_args = f
+            let user_args = f
                 .ctor_initializers
                 .iter()
                 .find(|(name, _)| name == &fld.name)
                 .map(|(_, args)| args.as_slice());
+            let init_args =
+                user_args.or_else(|| fld.default_init.as_ref().map(std::slice::from_ref));
             if let Type::Struct(sname) = fld.ty.strip_const() {
                 self.compile_struct_field_init(sname, fld.offset, init_args, ctx, code)?;
             } else if let Type::Array(elem_ty, count) = fld.ty.strip_const()
@@ -306,8 +308,12 @@ impl<'a> Codegen<'a> {
         } else {
             code.push(OP_LOCAL_GET);
             write_u32(code, 0); // this
-            let item_ty = self.get_expr_type(&args[0], ctx);
-            self.compile_expr(&args[0], ctx, code)?;
+            let expr = match &args[0] {
+                Expr::InitializerList { elements, .. } if elements.len() == 1 => &elements[0],
+                other => other,
+            };
+            let item_ty = self.get_expr_type(expr, ctx);
+            self.compile_expr(expr, ctx, code)?;
             self.emit_conversion(&item_ty, &fld.ty, code);
             self.emit_store(&fld.ty, fld.offset as u32, code);
         }

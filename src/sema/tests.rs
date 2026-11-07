@@ -431,7 +431,7 @@ fn test_substitute_struct() {
         name: "Holder".to_string(),
         is_class: true,
         base_classes: Vec::new(),
-        fields: vec![("value".to_string(), Type::TypeParam("T".to_string()))],
+        fields: vec![("value".to_string(), Type::TypeParam("T".to_string()), None)],
         methods: vec![dummy_func(
             "Holder",
             Type::Void,

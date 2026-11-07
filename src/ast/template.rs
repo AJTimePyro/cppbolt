@@ -14,7 +14,7 @@ pub struct TemplateClass {
     pub name: String,
     pub is_class: bool,
     pub base_classes: Vec<String>,
-    pub fields: Vec<(String, Type)>,
+    pub fields: Vec<(String, Type, Option<(Expr, usize, usize)>)>,
     pub methods: Vec<FunctionDecl>,
     pub static_fields: Vec<(String, Type, Option<Expr>)>,
     pub private_members: Vec<String>,

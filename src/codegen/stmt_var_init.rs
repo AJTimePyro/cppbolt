@@ -172,7 +172,11 @@ impl<'a> Codegen<'a> {
                 let field_offset = offset
                     .checked_add(fld.offset as u32)
                     .ok_or_else(|| self.internal_error("object is too large"))?;
-                self.emit_zero_local(&fld.ty, field_offset, ctx, code)?;
+                if let Some(default_init) = &fld.default_init {
+                    self.compile_aggregate_local(&fld.ty, default_init, field_offset, ctx, code)?;
+                } else {
+                    self.emit_zero_local(&fld.ty, field_offset, ctx, code)?;
+                }
                 field_idx += 1;
             }
         }

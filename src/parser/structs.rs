@@ -189,7 +189,7 @@ impl Parser {
 pub(super) struct StructBody {
     pub(super) name: String,
     pub(super) is_class: bool,
-    pub(super) fields: Vec<(String, Type)>,
+    pub(super) fields: Vec<(String, Type, Option<(Expr, usize, usize)>)>,
     pub(super) methods: Vec<FunctionDecl>,
     pub(super) static_fields: Vec<(String, Type, Option<Expr>)>,
     pub(super) private_members: Vec<String>,
@@ -416,6 +416,18 @@ impl Parser {
         }
         Ok(())
     }
+    fn parse_optional_member_init(&mut self) -> Result<Option<(Expr, usize, usize)>, CompileError> {
+        if self.peek() == &TokenKind::Assign {
+            let tok = self.advance().clone();
+            Ok(Some((self.parse_initializer()?, tok.line, tok.col)))
+        } else if self.peek() == &TokenKind::LBrace {
+            let tok = self.current().clone();
+            Ok(Some((self.parse_initializer()?, tok.line, tok.col)))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Parses a field declaration of a class, including comma-separated
     /// declarators and static fields with initializers.
     ///
@@ -444,7 +456,8 @@ impl Parser {
             self.expect(TokenKind::Semi)?;
             body.static_fields.push((fname, final_ty, init));
         } else {
-            body.fields.push((fname, final_ty));
+            let init = self.parse_optional_member_init()?;
+            body.fields.push((fname, final_ty, init));
             while self.peek() == &TokenKind::Comma {
                 self.advance();
                 let (next_ty, next_fname) =
@@ -452,7 +465,8 @@ impl Parser {
                 if body.is_private {
                     body.private_members.push(next_fname.clone());
                 }
-                body.fields.push((next_fname, next_ty));
+                let next_init = self.parse_optional_member_init()?;
+                body.fields.push((next_fname, next_ty, next_init));
             }
             self.expect(TokenKind::Semi)?;
         }

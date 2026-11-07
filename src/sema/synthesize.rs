@@ -53,7 +53,7 @@ impl Sema {
         &mut self,
         inst_name: &str,
         base_classes: &[String],
-        fields: &[(String, Type)],
+        fields: &[(String, Type, Option<(Expr, usize, usize)>)],
         methods: &mut Vec<FunctionDecl>,
     ) {
         let has_custom_dtor = methods.iter().any(|m| m.name.starts_with('~'));
@@ -62,7 +62,7 @@ impl Sema {
         }
         let has_dtor_members = fields
             .iter()
-            .any(|(_, ty)| type_has_dtor(ty, &self.structs_with_dtor))
+            .any(|(_, ty, _)| type_has_dtor(ty, &self.structs_with_dtor))
             || base_classes
                 .iter()
                 .any(|b| set_contains_type(&self.structs_with_dtor, b));
@@ -148,7 +148,7 @@ impl Sema {
                 });
                 let field_blocks = fields
                     .iter()
-                    .any(|(_, ty)| type_ctor_status(ty, &any_ctor, &default_ctor).1);
+                    .any(|(_, ty, _)| type_ctor_status(ty, &any_ctor, &default_ctor).1);
                 if !base_blocks && !field_blocks {
                     methods.push(FunctionDecl {
                         name: name.clone(),
@@ -232,7 +232,7 @@ pub(crate) fn type_has_dtor(ty: &Type, structs_with_dtor: &HashSet<String>) -> b
 pub(crate) fn synthesize_copy_operations(
     name: &str,
     base_classes: &[String],
-    fields: &[(String, Type)],
+    fields: &[(String, Type, Option<(Expr, usize, usize)>)],
     methods: &mut Vec<FunctionDecl>,
 ) {
     synthesize_copy_constructor(name, base_classes, fields, methods);
@@ -242,7 +242,7 @@ pub(crate) fn synthesize_copy_operations(
 fn synthesize_copy_constructor(
     name: &str,
     base_classes: &[String],
-    fields: &[(String, Type)],
+    fields: &[(String, Type, Option<(Expr, usize, usize)>)],
     methods: &mut Vec<FunctionDecl>,
 ) {
     let short = name.rsplit("::").next().unwrap_or(name);
@@ -259,7 +259,7 @@ fn synthesize_copy_constructor(
             .iter()
             .map(|base| (base.clone(), vec![Expr::Identifier("o".to_string())]))
             .collect();
-        initializers.extend(fields.iter().map(|(fname, _)| {
+        initializers.extend(fields.iter().map(|(fname, _, _)| {
             (
                 fname.clone(),
                 vec![Expr::MemberAccess {
@@ -296,7 +296,7 @@ fn synthesize_copy_constructor(
 fn synthesize_copy_assignment(
     name: &str,
     base_classes: &[String],
-    fields: &[(String, Type)],
+    fields: &[(String, Type, Option<(Expr, usize, usize)>)],
     methods: &mut Vec<FunctionDecl>,
 ) {
     let short = name.rsplit("::").next().unwrap_or(name);
@@ -335,7 +335,7 @@ fn synthesize_copy_assignment(
 
 fn synthesize_copy_assignment_body(
     base_classes: &[String],
-    fields: &[(String, Type)],
+    fields: &[(String, Type, Option<(Expr, usize, usize)>)],
 ) -> Vec<Stmt> {
     let mut body_stmts = Vec::new();
     for base in base_classes {
@@ -363,7 +363,7 @@ fn synthesize_copy_assignment_body(
             0,
         ));
     }
-    for (fname, _) in fields {
+    for (fname, _, _) in fields {
         body_stmts.push(Stmt::new(
             StmtKind::Expr(Expr::Assign {
                 target: Box::new(Expr::MemberAccess {
