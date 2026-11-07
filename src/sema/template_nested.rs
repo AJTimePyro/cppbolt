@@ -11,7 +11,7 @@ struct NestedStructParams<'a> {
     nested_inst_name: &'a str,
     is_class: bool,
     base_classes: &'a [String],
-    fields: &'a [(String, Type, Option<(Expr, usize, usize)>)],
+    fields: &'a [StructFieldDecl],
     methods: &'a [FunctionDecl],
     private_members: &'a [String],
     mapping: &'a HashMap<String, Type>,

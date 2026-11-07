@@ -252,10 +252,7 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         if let Some(init) = &fld.default_init {
-            let expr = match init {
-                Expr::InitializerList { elements, .. } if elements.len() == 1 => &elements[0],
-                other => other,
-            };
+            let expr = unpack_single_element_init(init);
             let a_ty = self.get_expr_type(expr, ctx);
             self.compile_expr(expr, ctx, code)?;
             self.emit_conversion(&a_ty, &fld.ty, code);
@@ -263,6 +260,13 @@ impl<'a> Codegen<'a> {
             self.emit_zero_value(&fld.ty, code);
         }
         Ok(())
+    }
+}
+
+pub(super) fn unpack_single_element_init(expr: &Expr) -> &Expr {
+    match expr {
+        Expr::InitializerList { elements, .. } if elements.len() == 1 => &elements[0],
+        other => other,
     }
 }
 

@@ -4,6 +4,9 @@ use super::template::{TemplateDecl, TemplateParam};
 use super::types::Type;
 use std::collections::HashMap;
 
+pub type FieldInit = Option<(Expr, usize, usize)>;
+pub type StructFieldDecl = (String, Type, FieldInit);
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Param {
     pub name: String,
@@ -52,7 +55,7 @@ pub enum Decl {
         name: String,
         is_class: bool,
         base_classes: Vec<String>,
-        fields: Vec<(String, Type, Option<(Expr, usize, usize)>)>,
+        fields: Vec<StructFieldDecl>,
         methods: Vec<FunctionDecl>,
         static_fields: Vec<(String, Type, Option<Expr>)>,
         private_members: Vec<String>,

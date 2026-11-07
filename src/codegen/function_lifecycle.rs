@@ -308,10 +308,7 @@ impl<'a> Codegen<'a> {
         } else {
             code.push(OP_LOCAL_GET);
             write_u32(code, 0); // this
-            let expr = match &args[0] {
-                Expr::InitializerList { elements, .. } if elements.len() == 1 => &elements[0],
-                other => other,
-            };
+            let expr = construct::unpack_single_element_init(&args[0]);
             let item_ty = self.get_expr_type(expr, ctx);
             self.compile_expr(expr, ctx, code)?;
             self.emit_conversion(&item_ty, &fld.ty, code);

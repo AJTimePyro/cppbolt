@@ -6,7 +6,7 @@ pub(crate) struct RecordLayout<'a> {
     pub(super) name: &'a str,
     pub(super) is_class: bool,
     pub(super) base_classes: &'a [String],
-    pub(super) fields: &'a [(String, Type, Option<(Expr, usize, usize)>)],
+    pub(super) fields: &'a [StructFieldDecl],
     pub(super) methods: &'a [FunctionDecl],
     pub(super) private_members: &'a [String],
     pub(super) line: usize,
@@ -107,11 +107,7 @@ impl Sema {
     }
 
     /// Lays out this record's own fields after all base subobjects.
-    fn layout_own_fields(
-        &mut self,
-        fields: &[(String, Type, Option<(Expr, usize, usize)>)],
-        acc: &mut LayoutAccumulator,
-    ) {
+    fn layout_own_fields(&mut self, fields: &[StructFieldDecl], acc: &mut LayoutAccumulator) {
         for (fname, ftype, finit) in fields {
             let fsize = ftype.size_of(&self.struct_sizes);
             let falign = ftype.align_of(&self.struct_aligns);

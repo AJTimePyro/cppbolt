@@ -53,7 +53,7 @@ impl Sema {
         &mut self,
         inst_name: &str,
         base_classes: &[String],
-        fields: &[(String, Type, Option<(Expr, usize, usize)>)],
+        fields: &[StructFieldDecl],
         methods: &mut Vec<FunctionDecl>,
     ) {
         let has_custom_dtor = methods.iter().any(|m| m.name.starts_with('~'));
@@ -232,7 +232,7 @@ pub(crate) fn type_has_dtor(ty: &Type, structs_with_dtor: &HashSet<String>) -> b
 pub(crate) fn synthesize_copy_operations(
     name: &str,
     base_classes: &[String],
-    fields: &[(String, Type, Option<(Expr, usize, usize)>)],
+    fields: &[StructFieldDecl],
     methods: &mut Vec<FunctionDecl>,
 ) {
     synthesize_copy_constructor(name, base_classes, fields, methods);
@@ -242,7 +242,7 @@ pub(crate) fn synthesize_copy_operations(
 fn synthesize_copy_constructor(
     name: &str,
     base_classes: &[String],
-    fields: &[(String, Type, Option<(Expr, usize, usize)>)],
+    fields: &[StructFieldDecl],
     methods: &mut Vec<FunctionDecl>,
 ) {
     let short = name.rsplit("::").next().unwrap_or(name);
@@ -296,7 +296,7 @@ fn synthesize_copy_constructor(
 fn synthesize_copy_assignment(
     name: &str,
     base_classes: &[String],
-    fields: &[(String, Type, Option<(Expr, usize, usize)>)],
+    fields: &[StructFieldDecl],
     methods: &mut Vec<FunctionDecl>,
 ) {
     let short = name.rsplit("::").next().unwrap_or(name);
@@ -335,7 +335,7 @@ fn synthesize_copy_assignment(
 
 fn synthesize_copy_assignment_body(
     base_classes: &[String],
-    fields: &[(String, Type, Option<(Expr, usize, usize)>)],
+    fields: &[StructFieldDecl],
 ) -> Vec<Stmt> {
     let mut body_stmts = Vec::new();
     for base in base_classes {

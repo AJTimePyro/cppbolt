@@ -5,7 +5,7 @@ use super::*;
 use std::collections::HashSet;
 
 struct LambdaCaptureInfo {
-    fields: Vec<(String, Type, Option<(Expr, usize, usize)>)>,
+    fields: Vec<StructFieldDecl>,
     ctor_params: Vec<Param>,
     ctor_inits: Vec<(String, Vec<Expr>)>,
     ctor_call_args: Vec<Expr>,

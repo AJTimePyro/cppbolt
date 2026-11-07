@@ -189,7 +189,7 @@ impl Parser {
 pub(super) struct StructBody {
     pub(super) name: String,
     pub(super) is_class: bool,
-    pub(super) fields: Vec<(String, Type, Option<(Expr, usize, usize)>)>,
+    pub(super) fields: Vec<StructFieldDecl>,
     pub(super) methods: Vec<FunctionDecl>,
     pub(super) static_fields: Vec<(String, Type, Option<Expr>)>,
     pub(super) private_members: Vec<String>,
@@ -416,7 +416,7 @@ impl Parser {
         }
         Ok(())
     }
-    fn parse_optional_member_init(&mut self) -> Result<Option<(Expr, usize, usize)>, CompileError> {
+    fn parse_optional_member_init(&mut self) -> Result<FieldInit, CompileError> {
         if self.peek() == &TokenKind::Assign {
             let tok = self.advance().clone();
             Ok(Some((self.parse_initializer()?, tok.line, tok.col)))
