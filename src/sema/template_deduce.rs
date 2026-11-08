@@ -87,7 +87,12 @@ pub fn deduce_template_arguments(
         .zip(arg_types.iter().zip(args.iter()))
     {
         let is_lval = arg_expr.is_lvalue();
-        deduce_type(&p.ty, arg_ty, &mut deduced, is_lval, pos)?;
+        let adjusted_arg_ty = if !p.ty.is_reference() {
+            arg_ty.strip_reference().decay_array()
+        } else {
+            arg_ty.clone()
+        };
+        deduce_type(&p.ty, &adjusted_arg_ty, &mut deduced, is_lval, pos)?;
     }
 
     for param in template_params {
@@ -144,6 +149,13 @@ fn deduce_type(
         }
         Type::Pointer(inner) => {
             if let Type::Pointer(arg_inner) = arg_ty.strip_reference().strip_const() {
+                deduce_type(inner, arg_inner, deduced, true, pos)?;
+            }
+        }
+        Type::Array(inner, size) => {
+            if let Type::Array(arg_inner, arg_size) = arg_ty.strip_reference().strip_const()
+                && size == arg_size
+            {
                 deduce_type(inner, arg_inner, deduced, true, pos)?;
             }
         }

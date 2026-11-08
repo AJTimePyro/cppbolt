@@ -410,6 +410,8 @@ impl Sema {
                             func_decl.params.insert(0, this_param(name, m.is_const));
                         }
                         self.analyze_function(&mut func_decl)?;
+                        m.body = func_decl.body;
+                        m.return_type = func_decl.return_type;
                     }
                     self.current_class = None;
                 }

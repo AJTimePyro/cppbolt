@@ -30,10 +30,11 @@ impl Sema {
             if inner.is_const() {
                 return self.can_assign_expr(inner.strip_const(), value, expr);
             }
-            if let Some(e) = expr {
-                if !value.is_reference() && !e.is_lvalue() {
-                    return false;
-                }
+            if let Some(e) = expr
+                && !value.is_reference()
+                && !e.is_lvalue()
+            {
+                return false;
             }
             if value.strip_reference().is_const() {
                 return false;

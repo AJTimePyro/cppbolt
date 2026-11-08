@@ -9,6 +9,13 @@ This project does not yet have tagged semantic releases; all historical work is 
 
 ## [Unreleased]
 
+### Member Structured Bindings, Range-For Loops & Template Array Decay
+- Preserved analyzed method bodies and deduced return types in semantic analysis so structured bindings (`auto [a, b] = p;`, `auto&`, `const auto&`), range-based `for` loops, and `auto` return types reach codegen in non-template member functions.
+- Applied array-to-pointer decay (`int[N]` to `int*`) during template argument deduction for non-reference parameters per C++17 [temp.deduct.call] p2. This resolves deduction conflicts in `std::sort(arr, arr + n)` and user iterator templates.
+- Added recursive array type matching in template deduction for explicitly array-typed parameters.
+- Fixed member initialization for array fields initialized with braced initializer lists, writing scalar and aggregate struct elements directly to member offsets.
+- Added regression tests in `tests/cxx17_regressions.rs`.
+
 ### C++17 Core Language Stabilization
 - Added comma sequence operator `(a, b)` evaluating left-to-right with right-operand result, parsed at precedence 1 to separate expressions from call arguments, multi-declarator definitions, and parameter defaults.
 - Added C++17 selection statement initializers (`if (init; condition)` and `switch (init; condition)`) with scoping confined to the selection statement.

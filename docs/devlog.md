@@ -4,6 +4,20 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-08: Member Structured Bindings, Range-For Loops, and Template Array Decay
+
+Fixed structured binding and range-based for lowering in non-template member functions, added array-to-pointer decay for function template argument deduction, and fixed array member initialization from initializer lists.
+
+### Summary of Work
+
+1. Preserved analyzed method bodies and deduced return types in `analyze_declarations` (`src/sema/analyze.rs`) by writing `func_decl.body` and `func_decl.return_type` back to `m`. This keeps in-place desugaring of `StmtKind::StructuredBinding` and `StmtKind::RangeFor`, and synchronizes deduced `auto` return types for non-template member functions.
+2. Added array-to-pointer decay for function template argument deduction in `deduce_template_arguments` (`src/sema/template_deduce.rs`) when parameter types are non-references (C++17 [temp.deduct.call] p2). This allows `std::sort(arr, arr + n)` and user-defined iterator templates to deduce pointer types from array arguments.
+3. Added recursive `Type::Array` matching in `deduce_type` (`src/sema/template_deduce.rs`) to retain array dimensions for explicitly array-typed template parameters.
+4. Handled scalar and struct elements in `compile_member_init_expr` and `compile_array_member_init` (`src/codegen/function_lifecycle.rs`) for array members by writing elements sequentially at member offsets instead of emitting an invalid local assignment on an empty WebAssembly stack.
+5. Added regression tests in `tests/cxx17_regressions.rs` for by-value, by-reference, and const-reference structured bindings in member functions, member `auto` return type deduction, `std::sort` array decay, user-defined template iterator functions, array reference retention, member range-for with NSDMI and constructor initialization, container iterators, and array members with struct element types.
+
+---
+
 ## 2026-11-08: Reference Binding and Const Method Diagnostics
 
 Fixed non-const lvalue reference binding to temporaries, preserved reference categories for call arguments, and improved diagnostics for non-const method calls on const objects.
@@ -46,9 +60,9 @@ Fixed five findings in the initializer-list and brace-initialization support add
 4. Normalized extracted template element types to their registered struct names and resolved nested brace lists against the chosen element type, enabling `std::vector<std::vector<int>> v{{1, 2}, {3, 4}}` (`cadf45c`).
 5. Routed a namespace-scope brace initializer through the same list resolution as locals, and lowered a namespace-scope `std::initializer_list<T>` by building its backing array in `main`'s frame and storing the pointer and length in the global object (`366bad8`).
 
-### Known Issue
+### Resolved Issue
 
-Range-based `for` loops and structured bindings inside non-template method bodies are not analyzed: `analyze_declarations` type-checks a clone of the body and discards it, so the loop compiles to nothing. Writing the analyzed body back changes 137 golden hashes; corpus tests avoid method-body loops for now. Free functions and template method bodies are unaffected.
+Range-based `for` loops and structured bindings inside non-template method bodies were previously unanalyzed because `analyze_declarations` type-checked a cloned body and discarded it. Resolved on 2026-11-08 by writing back the analyzed method body. Free functions and template method bodies were unaffected.
 
 ### Verification Results
 
