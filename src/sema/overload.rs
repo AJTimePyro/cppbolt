@@ -89,8 +89,8 @@ impl Sema {
             };
             let p_decay = p.decay_array();
             let a_decay = arg_ty.decay_array();
-            let p_base = p_decay.strip_const();
-            let a_base = a_decay.strip_const();
+            let p_base = p_decay.strip_reference().strip_const();
+            let a_base = a_decay.strip_reference().strip_const();
             let is_null_ptr_const = args
                 .and_then(|a| a.get(i))
                 .is_some_and(Sema::is_null_pointer_constant);

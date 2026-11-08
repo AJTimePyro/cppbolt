@@ -344,7 +344,7 @@ impl Sema {
                 Expr::InitializerList { .. } | Expr::TypedInitList { .. } => {
                     self.resolve_var_init_type(ty, init_expr)?.0
                 }
-                _ => self.analyze_expr(init_expr)?,
+                _ => self.analyze_expr_keeping_reference(init_expr)?,
             };
             if !self.can_assign_expr(ty, &init_ty, Some(init_expr)) {
                 return Err(CompileError::new(
@@ -443,7 +443,7 @@ impl Sema {
                 self.resolve_list_init(explicit_ty, elements, InitContext::DirectList, *pos)?,
                 true,
             ),
-            _ => (self.analyze_expr(init_expr)?, false),
+            _ => (self.analyze_expr_keeping_reference(init_expr)?, false),
         };
         if !is_list && !self.can_assign_expr(fty, &init_ty, Some(init_expr)) {
             return Err(CompileError::new(

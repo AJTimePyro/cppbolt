@@ -6,14 +6,16 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ## 2026-11-08: Reference Binding and Const Method Diagnostics
 
-Fixed non-const lvalue reference binding to temporaries and improved diagnostics for non-const method calls on const objects.
+Fixed non-const lvalue reference binding to temporaries, preserved reference categories for call arguments, and improved diagnostics for non-const method calls on const objects.
 
 ### Summary of Work
 
 1. Enforced value-category checks during reference binding in `can_assign_expr` (`src/sema/assign.rs`) and variable initializers (`src/sema/stmt_decl.rs`), ensuring non-const references reject temporaries and rvalues while const references continue to bind.
 2. Updated function argument overload resolution in `score_arguments` (`src/sema/overload.rs`) to reject rvalues passed to non-const reference parameters, and select const reference overloads when available.
-3. Added diagnostic in `check_member_arguments` (`src/sema/expr_call_member.rs`) when calling a non-const method on a const receiver, reporting that the method exists but cannot be called on a const object instead of falling through to codegen's missing method error.
-4. Added positive regression tests in `tests/c_basics/functions/reference_overload.cpp` and negative regression tests in `tests/negative/reference_temporary_bind.cpp`, `tests/negative/reference_call_temporary.cpp`, and `tests/negative/const_method_call_on_const.cpp`.
+3. Preserved reference types during call argument analysis in `analyze_call` (`src/sema/expr_call.rs`) and in namespace-scope and struct-field initializers (`src/sema/analyze.rs`), allowing reference-returning functions to bind to non-const reference parameters and globals.
+4. Aligned codegen overload parameter scoring in `src/codegen/overload.rs` with semantic analysis, checking reference compatibility and allowing convertible types to bind to const references.
+5. Added diagnostic in `check_member_arguments` (`src/sema/expr_call_member.rs`) when calling a non-const method on a const receiver, reporting that the method exists but cannot be called on a const object instead of falling through to codegen's missing method error.
+6. Added positive regression tests in `tests/c_basics/functions/reference_overload.cpp` and negative regression tests in `tests/negative/reference_temporary_bind.cpp`, `tests/negative/reference_call_temporary.cpp`, and `tests/negative/const_method_call_on_const.cpp`.
 
 ---
 

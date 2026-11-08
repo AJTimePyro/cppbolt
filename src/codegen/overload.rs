@@ -29,10 +29,24 @@ impl<'a> Codegen<'a> {
                 score += 1;
             } else if p_is_ptr && (a.is_integer() || *a == Type::Nullptr) {
                 score += 20;
-            } else if p.is_reference()
-                && p.deref_type().map(|d| d.strip_all_const()) == Some(a_decay.strip_all_const())
-            {
-                score += 2;
+            } else if let Type::Reference(inner) = p {
+                let matches_type = self.sema.reference_types_compatible(
+                    inner.strip_const(),
+                    a.strip_reference().strip_const(),
+                );
+                if !inner.is_const() {
+                    if a.strip_reference().is_const() || !matches_type {
+                        return None;
+                    }
+                    score += 1;
+                } else if matches_type {
+                    let const_bonus = usize::from(!a.strip_reference().is_const());
+                    score += 1 + const_bonus;
+                } else if self.sema.can_assign(inner.strip_const(), a) {
+                    score += 3;
+                } else {
+                    return None;
+                }
             } else if (p.is_integer() && a.is_integer()) || (p.is_floating() && a.is_floating()) {
                 score += 10;
             } else if self.sema.can_assign(p, a) {

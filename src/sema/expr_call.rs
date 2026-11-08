@@ -22,7 +22,7 @@ impl Sema {
 
         let mut arg_types = Vec::new();
         for a in args.iter_mut() {
-            arg_types.push(self.analyze_expr(a)?);
+            arg_types.push(self.analyze_expr_keeping_reference(a)?);
         }
 
         if let Some((ty, replacement)) =
