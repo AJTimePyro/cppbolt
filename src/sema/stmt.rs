@@ -347,7 +347,7 @@ impl Sema {
                 } => {
                     self.resolve_list_init(explicit_ty, elements, InitContext::DirectList, *pos)?
                 }
-                _ => self.analyze_expr(expr)?,
+                _ => self.analyze_expr_keeping_reference(expr)?,
             };
             if let Some(expected) = &self.current_func_return_type {
                 if !matches!(

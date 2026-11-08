@@ -1,0 +1,1 @@
+tests/negative/reference_temporary_bind.cpp:2:5: error: cannot initialize variable 'ref' of type int & with int

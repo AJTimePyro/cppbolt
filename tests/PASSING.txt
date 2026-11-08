@@ -12,6 +12,7 @@ c_basics/functions/functions_call
 c_basics/functions/functions_default_args
 c_basics/functions/functions_overload
 c_basics/functions/overload_resolution
+c_basics/functions/reference_overload
 c_basics/functions/std_abs_long
 c_basics/functions/using_declaration_precedence
 c_basics/io_printf/hello_world
@@ -297,6 +298,7 @@ negative/break_outside_loop
 negative/builtin_header_error
 negative/call_non_function
 negative/const_assign
+negative/const_method_call_on_const
 negative/const_overload_unsupported
 negative/constructor_default_argument_undefined
 negative/constructor_string_argument
@@ -378,6 +380,8 @@ negative/pseudo_destructor_type_mismatch
 negative/pure_virtual_instantiation
 negative/range_for_non_iterable
 negative/redefined_func
+negative/reference_call_temporary
+negative/reference_temporary_bind
 negative/ref_qualifier_lvalue_mismatch
 negative/reinterpret_cast_rvalue_ref
 negative/scalar_excess_elements

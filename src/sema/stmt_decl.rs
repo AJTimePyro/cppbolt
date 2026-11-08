@@ -112,7 +112,7 @@ impl Sema {
             _ => {
                 let previous = self.in_initializer;
                 self.in_initializer = true;
-                let result = self.analyze_expr(init_expr);
+                let result = self.analyze_expr_keeping_reference(init_expr);
                 self.in_initializer = previous;
                 Ok((result?, false))
             }

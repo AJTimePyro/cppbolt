@@ -1,0 +1,1 @@
+tests/negative/reference_call_temporary.cpp:4:5: error: no matching conversion for argument 1 of 'take_ref': cannot convert 'int' to 'int &'

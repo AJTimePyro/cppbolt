@@ -94,12 +94,38 @@ impl Sema {
             let is_null_ptr_const = args
                 .and_then(|a| a.get(i))
                 .is_some_and(Sema::is_null_pointer_constant);
-            if p_base == a_base {
+            if let Type::Reference(inner) = p {
+                let is_lvalue = arg_ty.is_reference()
+                    || args.and_then(|a| a.get(i)).is_some_and(Expr::is_lvalue);
+                let matches_type = self.reference_types_compatible(
+                    inner.strip_const(),
+                    arg_ty.strip_reference().strip_const(),
+                );
+                if !inner.is_const() {
+                    if !is_lvalue || arg_ty.strip_reference().is_const() || !matches_type {
+                        return Err(ConversionFailure {
+                            index: i,
+                            from: arg_ty.clone(),
+                            to: p.clone(),
+                        });
+                    }
+                    score += 1;
+                } else if matches_type {
+                    let const_penalty =
+                        usize::from(is_lvalue && !arg_ty.strip_reference().is_const());
+                    score += 1 + const_penalty;
+                } else if self.can_assign(inner.strip_const(), arg_ty) {
+                    score += 3;
+                } else {
+                    return Err(ConversionFailure {
+                        index: i,
+                        from: arg_ty.clone(),
+                        to: p.clone(),
+                    });
+                }
+            } else if p_base == a_base {
                 // Exact matches add no conversion penalty.
-            } else if self.check_pointer_conversion(&p_decay, &a_decay)
-                || (p.is_reference()
-                    && p.deref_type().map(|d| d.strip_const()) == Some(arg_ty.strip_const()))
-            {
+            } else if self.check_pointer_conversion(&p_decay, &a_decay) {
                 score += 1;
             } else if self.is_promotion(arg_ty, p) {
                 score += 2;
