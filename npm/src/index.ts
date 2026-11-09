@@ -23,10 +23,7 @@ registerAsyncRunnerFactory((host) => new AsyncCppBoltRunner(host));
 export async function createCompiler(
 	wasmLocation?: string | URL | BufferSource,
 ): Promise<CppBoltCompiler> {
-	if (
-		wasmLocation instanceof ArrayBuffer ||
-		ArrayBuffer.isView(wasmLocation)
-	) {
+	if (wasmLocation instanceof ArrayBuffer || ArrayBuffer.isView(wasmLocation)) {
 		return loadCompilerFromBytes(wasmLocation as BufferSource);
 	}
 

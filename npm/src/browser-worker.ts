@@ -2,6 +2,12 @@ import type { WasmHost } from "./host.js";
 import { type RunOptions, type RunResult, TimeoutError } from "./runner.js";
 
 export class AsyncCppBoltRunner {
+	/**
+	 * Creates an isolated Web Worker runner.
+	 *
+	 * Note: Execution runs in an isolated Web Worker with a dedicated host.
+	 * Configure stdin and streaming stdout through `RunOptions` in `run()`.
+	 */
 	constructor(readonly host?: WasmHost) {}
 
 	async run(wasmBytes: Uint8Array, options?: RunOptions): Promise<RunResult> {
