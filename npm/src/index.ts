@@ -1,27 +1,49 @@
-import type { CppBoltCompiler } from "./compiler.js";
-import { createWasmHost, type WasmHostOptions } from "./host.js";
-import { CppBoltRunner, type RunResult } from "./runner.js";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { registerAsyncRunnerFactory } from "./api.js";
+import {
+	type CppBoltCompiler,
+	loadCompilerFromBytes,
+	loadCompilerFromResponse,
+} from "./compiler.js";
+import { AsyncCppBoltRunner } from "./node-worker.js";
 
-// Re-exports — the public surface of the package.
-export { CppBoltCompiler, CompileError, createCompiler } from "./compiler.js";
-export { createWasmHost } from "./host.js";
-export type { WasmHost, WasmHostOptions } from "./host.js";
-export { CppBoltRunner } from "./runner.js";
-export type { RunResult } from "./runner.js";
+export * from "./api.js";
+export { AsyncCppBoltRunner } from "./node-worker.js";
+
+registerAsyncRunnerFactory((host) => new AsyncCppBoltRunner(host));
 
 /**
- * Compiles `source` and runs the resulting module in one call.
- *
- * Builds a fresh host for the run, so streaming output and stdin are configured
- * through `options`. Throws `CompileError` if `source` does not compile.
+ * Instantiates a `CppBoltCompiler` in Node.js environments.
+ * Resolves `wasm/cppbolt.wasm` from the package directory by default, or loads from a
+ * specified file path, URL, or preloaded `BufferSource`.
  */
-export async function compileAndRun(
-  compiler: CppBoltCompiler,
-  source: string,
-  options?: WasmHostOptions,
-): Promise<RunResult> {
-  const host = createWasmHost(options);
-  const runner = new CppBoltRunner(host);
-  const bytes = compiler.compile(source);
-  return runner.run(bytes);
+export async function createCompiler(
+	wasmLocation?: string | URL | BufferSource,
+): Promise<CppBoltCompiler> {
+	if (wasmLocation instanceof ArrayBuffer || ArrayBuffer.isView(wasmLocation)) {
+		return loadCompilerFromBytes(wasmLocation as BufferSource);
+	}
+
+	if (wasmLocation) {
+		const locStr = wasmLocation.toString();
+		if (locStr.startsWith("http://") || locStr.startsWith("https://")) {
+			return loadCompilerFromResponse(await fetch(wasmLocation));
+		}
+		const filePath =
+			wasmLocation instanceof URL ? fileURLToPath(wasmLocation) : wasmLocation;
+		if (!fs.existsSync(filePath)) {
+			throw new Error(`cppbolt: could not find wasm binary at ${filePath}`);
+		}
+		return loadCompilerFromBytes(fs.readFileSync(filePath));
+	}
+
+	const wasmPath = path.join(__dirname, "..", "wasm", "cppbolt.wasm");
+
+	if (!fs.existsSync(wasmPath)) {
+		throw new Error(`cppbolt: could not find wasm binary at ${wasmPath}`);
+	}
+
+	return loadCompilerFromBytes(fs.readFileSync(wasmPath));
 }

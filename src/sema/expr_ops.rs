@@ -7,21 +7,26 @@ impl Sema {
     /// can be type-checked by walking the chain iteratively instead of
     /// recursing once per term.
     pub(super) fn binary_result_type(&mut self, op: &BinaryOp, lty: &Type, rty: &Type) -> Type {
-        if (matches!(lty.strip_const(), Type::Struct(_) | Type::Enum(_))
-            || matches!(rty.strip_const(), Type::Struct(_) | Type::Enum(_)))
+        let clean_lty = lty.strip_reference().strip_const();
+        let clean_rty = rty.strip_reference().strip_const();
+        if (matches!(clean_lty, Type::Struct(_) | Type::Enum(_))
+            || matches!(clean_rty, Type::Struct(_) | Type::Enum(_)))
             && let Some(op_str) = op.op_name()
         {
-            let clean_lty = lty.strip_const();
             if let Type::Struct(sname) = clean_lty
                 && let Some(sig) = self.find_method_in_class(sname, op_str)
             {
                 let _ = self.instantiate_pending_method(&sig.mangled_name);
-                return sig.return_type.strip_reference().clone();
+                return sig.return_type.clone();
             }
             let op_cands = self.find_call_candidates(op_str, &[lty.clone(), rty.clone()]);
             if let Some(sigs) = op_cands {
-                return sigs[0].return_type.strip_reference().clone();
+                return sigs[0].return_type.clone();
             }
+        }
+
+        if *op == BinaryOp::Comma {
+            return rty.clone();
         }
 
         let (l_clean, r_clean) = (
@@ -161,7 +166,7 @@ impl Sema {
             self.find_call_candidates(op_str, &[lty.clone(), rty.clone()])
                 .is_some()
         });
-        if has_overload {
+        if has_overload || op == BinaryOp::Comma {
             return;
         }
         if let Type::Struct(ref sname) = clean_lty

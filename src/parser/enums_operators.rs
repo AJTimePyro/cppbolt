@@ -45,7 +45,7 @@ impl Parser {
 
             let val = if self.peek() == &TokenKind::Assign {
                 self.advance();
-                let expr = self.parse_expr()?;
+                let expr = self.parse_expr_prec(2)?;
                 match expr {
                     Expr::IntLiteral(v, _) => v,
                     _ => {

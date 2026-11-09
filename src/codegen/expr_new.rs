@@ -141,7 +141,7 @@ impl<'a> Codegen<'a> {
             code.push(OP_I32_LOAD);
             write_u32(code, 2);
             write_u32(code, obj_slot); // this
-            self.emit_zero_value(&fld.ty, code);
+            self.emit_field_init_or_zero(fld, ctx, code)?;
             self.emit_store(&fld.ty, fld.offset as u32, code);
             field_idx += 1;
         }

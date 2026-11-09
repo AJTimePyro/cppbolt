@@ -99,6 +99,16 @@ impl Sema {
         let (receiver_const, receiver_is_lvalue) = receiver;
         let overloads = self.find_method_overloads_in_class(class_name, member, receiver_const);
         if overloads.is_empty() {
+            if receiver_const {
+                let all_overloads = self.find_method_overloads_in_class(class_name, member, false);
+                if !all_overloads.is_empty() {
+                    return Err(CompileError::new(
+                        format!("method '{member}' exists but cannot be called on a const object"),
+                        pos.line,
+                        pos.col,
+                    ));
+                }
+            }
             return Ok(());
         }
         let mut conversion_failure: Option<ConversionFailure> = None;

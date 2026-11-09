@@ -53,7 +53,37 @@ console.log(stdout);
 console.log(exitCode);
 ```
 
-The package also supports browser usage through a CDN:
+To run code in an isolated worker with a timeout, cancellation, stdin input, or streaming stdout:
+
+```js
+import { createCompiler, compileAndRunAsync } from "cppbolt";
+
+const compiler = await createCompiler();
+const { stdout, exitCode } = await compileAndRunAsync(
+  compiler,
+  `
+    #include <iostream>
+    int main() {
+        int x;
+        std::cin >> x;
+        std::cout << "Value: " << x * 2 << std::endl;
+        return 0;
+    }
+`,
+  {
+    stdin: "21\n",
+    timeoutMs: 2000,
+    onStdout: (chunk) => console.log("chunk:", chunk),
+  },
+);
+```
+
+Browser bundlers resolve the same `import { createCompiler } from "cppbolt"`
+to the browser ES module build, with the wasm binary loaded relative to that
+module. Native browser modules should import `dist/index.browser.mjs` directly
+(or through an import map).
+
+For a classic CDN script, the build exposes the global `CppBolt`:
 
 ```html
 <script src="https://cdn.jsdelivr.net/npm/cppbolt@1.0.1/dist/cppbolt.browser.js"></script>

@@ -8,7 +8,7 @@ pub mod stmt;
 pub mod template;
 pub mod types;
 
-pub use decl::{Decl, FunctionDecl, Param, Program, RefQualifier};
+pub use decl::{Decl, FieldInit, FunctionDecl, Param, Program, RefQualifier, StructFieldDecl};
 pub use expr::{
     BinaryOp, CastKind, DefaultCapture, Expr, ExprPos, LambdaCapture, UnaryOp,
     zero_literal_for_type,

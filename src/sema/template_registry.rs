@@ -275,7 +275,7 @@ impl Sema {
             return Ok(());
         };
 
-        for (_, fty) in fields.iter_mut() {
+        for (_, fty, _) in fields.iter_mut() {
             self.resolve_and_instantiate_type(fty, line, col)?;
         }
 

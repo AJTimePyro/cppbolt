@@ -1,7 +1,6 @@
 [book]
 authors = ["AJTimePyro", "The cppbolt Authors"]
 language = "en"
-multilingual = false
 src = "."
 title = "cppbolt Documentation"
 

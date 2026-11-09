@@ -171,11 +171,13 @@ impl<'a> Codegen<'a> {
     ) -> Result<(), CompileError> {
         let base_field_count = self.base_field_count(layout);
         for fld in layout.fields.iter().skip(base_field_count) {
-            let init_args = f
+            let user_args = f
                 .ctor_initializers
                 .iter()
                 .find(|(name, _)| name == &fld.name)
                 .map(|(_, args)| args.as_slice());
+            let init_args =
+                user_args.or_else(|| fld.default_init.as_ref().map(std::slice::from_ref));
             if let Type::Struct(sname) = fld.ty.strip_const() {
                 self.compile_struct_field_init(sname, fld.offset, init_args, ctx, code)?;
             } else if let Type::Array(elem_ty, count) = fld.ty.strip_const()
@@ -273,6 +275,45 @@ impl<'a> Codegen<'a> {
         Ok(())
     }
 
+    fn compile_array_member_init(
+        &mut self,
+        (fld_offset, elem_ty, count, list): (usize, &Type, usize, &[Expr]),
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        let elem_size = u32::try_from(elem_ty.size_of(&self.sema.struct_sizes))
+            .map_err(|_| self.internal_error("member is too large"))?;
+        for i in 0..count {
+            let elem_offset = (fld_offset as u32)
+                .checked_add(
+                    (i as u32)
+                        .checked_mul(elem_size)
+                        .ok_or_else(|| self.internal_error("member is too large"))?,
+                )
+                .ok_or_else(|| self.internal_error("member is too large"))?;
+            if let Type::Struct(sname) = elem_ty.strip_const() {
+                let item_args = list.get(i).map(|item| match item {
+                    Expr::InitializerList { elements, .. }
+                    | Expr::TypedInitList { elements, .. } => elements.as_slice(),
+                    _ => std::slice::from_ref(item),
+                });
+                self.compile_struct_field_init(sname, elem_offset as usize, item_args, ctx, code)?;
+            } else {
+                code.push(OP_LOCAL_GET);
+                write_u32(code, 0); // this
+                if let Some(item) = list.get(i) {
+                    let item_ty = self.get_expr_type(item, ctx);
+                    self.compile_expr(item, ctx, code)?;
+                    self.emit_conversion(&item_ty, elem_ty, code);
+                } else {
+                    self.emit_zero_value(elem_ty, code);
+                }
+                self.emit_store(elem_ty, elem_offset, code);
+            }
+        }
+        Ok(())
+    }
+
     fn compile_member_init_expr(
         &mut self,
         fld: &crate::sema::StructField,
@@ -285,29 +326,40 @@ impl<'a> Codegen<'a> {
             write_u32(code, 0); // this
             self.compile_lvalue_addr(&args[0], ctx, code)?;
             self.emit_store(&fld.ty, fld.offset as u32, code);
-        } else if matches!(fld.ty.strip_const(), Type::Array(_, _)) {
-            self.compile_expr(&args[0], ctx, code)?;
-            code.push(OP_LOCAL_SET);
-            write_u32(code, ctx.scratch1);
-            let size = fld.ty.size_of(&self.sema.struct_sizes);
-            crate::codegen::raii::emit_struct_byte_copy(
-                size,
-                fld.offset as u32,
-                |code| {
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, 0);
-                },
-                |code| {
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.scratch1);
-                },
-                code,
-            );
+        } else if let Type::Array(elem_ty, count) = fld.ty.strip_const() {
+            let init_list = match &args[0] {
+                Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } => {
+                    Some(elements.as_slice())
+                }
+                _ => None,
+            };
+            if let Some(list) = init_list {
+                self.compile_array_member_init((fld.offset, elem_ty, *count, list), ctx, code)?;
+            } else {
+                self.compile_expr(&args[0], ctx, code)?;
+                code.push(OP_LOCAL_SET);
+                write_u32(code, ctx.scratch1);
+                let size = fld.ty.size_of(&self.sema.struct_sizes);
+                crate::codegen::raii::emit_struct_byte_copy(
+                    size,
+                    fld.offset as u32,
+                    |code| {
+                        code.push(OP_LOCAL_GET);
+                        write_u32(code, 0);
+                    },
+                    |code| {
+                        code.push(OP_LOCAL_GET);
+                        write_u32(code, ctx.scratch1);
+                    },
+                    code,
+                );
+            }
         } else {
             code.push(OP_LOCAL_GET);
             write_u32(code, 0); // this
-            let item_ty = self.get_expr_type(&args[0], ctx);
-            self.compile_expr(&args[0], ctx, code)?;
+            let expr = construct::unpack_single_element_init(&args[0]);
+            let item_ty = self.get_expr_type(expr, ctx);
+            self.compile_expr(expr, ctx, code)?;
             self.emit_conversion(&item_ty, &fld.ty, code);
             self.emit_store(&fld.ty, fld.offset as u32, code);
         }

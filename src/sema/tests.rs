@@ -431,7 +431,7 @@ fn test_substitute_struct() {
         name: "Holder".to_string(),
         is_class: true,
         base_classes: Vec::new(),
-        fields: vec![("value".to_string(), Type::TypeParam("T".to_string()))],
+        fields: vec![("value".to_string(), Type::TypeParam("T".to_string()), None)],
         methods: vec![dummy_func(
             "Holder",
             Type::Void,
@@ -457,4 +457,16 @@ fn test_substitute_struct() {
     assert_eq!(fields[0].1, Type::Int);
     assert_eq!(methods[0].name, "Holder<int>");
     assert_eq!(methods[0].params[0].ty, Type::Int);
+}
+
+#[test]
+fn test_non_const_reference_rejects_temporary() {
+    let sema = Sema::new();
+    let ref_ty = Type::Reference(Box::new(Type::Int));
+    let val_ty = Type::Int;
+    let literal = Expr::IntLiteral(42, Type::Int);
+    assert!(!sema.can_assign_expr(&ref_ty, &val_ty, Some(&literal)));
+
+    let const_ref_ty = Type::Reference(Box::new(Type::Const(Box::new(Type::Int))));
+    assert!(sema.can_assign_expr(&const_ref_ty, &val_ty, Some(&literal)));
 }

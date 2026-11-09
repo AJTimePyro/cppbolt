@@ -9,6 +9,35 @@ This project does not yet have tagged semantic releases; all historical work is 
 
 ## [Unreleased]
 
+### Member Structured Bindings, Range-For Loops & Template Array Decay
+- Preserved analyzed method bodies and deduced return types in semantic analysis so structured bindings (`auto [a, b] = p;`, `auto&`, `const auto&`), range-based `for` loops, and `auto` return types reach codegen in non-template member functions.
+- Applied array-to-pointer decay (`int[N]` to `int*`) during template argument deduction for non-reference parameters per C++17 [temp.deduct.call] p2. This resolves deduction conflicts in `std::sort(arr, arr + n)` and user iterator templates.
+- Added recursive array type matching in template deduction for explicitly array-typed parameters.
+- Fixed member initialization for array fields initialized with braced initializer lists, writing scalar and aggregate struct elements directly to member offsets.
+- Added regression tests in `tests/cxx17_regressions.rs`.
+
+### C++17 Core Language Stabilization
+- Added comma sequence operator `(a, b)` evaluating left-to-right with right-operand result, parsed at precedence 1 to separate expressions from call arguments, multi-declarator definitions, and parameter defaults.
+- Added C++17 selection statement initializers (`if (init; condition)` and `switch (init; condition)`) with scoping confined to the selection statement.
+- Added non-static data member initializers (`= expr` and `{ ... }`) in struct, class, and template declarations.
+- Updated constructor code generation to initialize fields from their default member initializers when omitted from constructor member initializer lists.
+- Updated aggregate initialization to initialize omitted trailing fields from their default member initializers, conforming to C++17 [dcl.init.aggr].
+
+### npm Async Execution & Timeouts
+- Added `AsyncCppBoltRunner` and `compileAndRunAsync` with `timeoutMs`, `AbortSignal`, `stdin`, and streaming `onStdout` support (`node:worker_threads` on Node.js, bundled Web Worker in browsers).
+- Exported `TimeoutError`, returning any stdout emitted before termination.
+- Fixed WebAssembly instantiation failure propagation so malformed bytecode rejects with `CompileError`/`LinkError` instead of resolving with exit code 134.
+- Handled runtime traps (`RuntimeError` and call stack `RangeError`) without masking arbitrary JavaScript exceptions as exit status 134.
+- Made `host` optional in `AsyncCppBoltRunner` constructor and added `settled` guards for worker lifecycle cleanup.
+- Added worker `exit` event listener in Node runner to reject cleanly when a worker thread terminates unexpectedly.
+
+### Environment-Specific npm Entry Points
+- Split the npm package into a shared API module and three entry points: `dist/index.js` (Node.js CommonJS), `dist/index.browser.mjs` (browser ES modules and bundlers), and `dist/cppbolt.browser.js` (classic `<script>` global).
+- Added conditional exports so `browser` resolves to the browser ESM build, `node` resolves to the Node.js build, and `default` falls back to the browser ESM build.
+- Added explicit `"./browser"` export subpath in `package.json` for bundlers and direct imports.
+- Updated `createCompiler` in the Node entry point to accept optional file paths, URLs, or WebAssembly buffers, aligning with documentation and the browser entry point.
+- The browser ESM entry resolves `wasm/cppbolt.wasm` relative to its own module URL and accepts an explicit wasm URL.
+
 ### Single-Source JavaScript Host
 - Made `npm/src/host.ts` (`createWasmHost`) the only implementation of the execution host used by the npm package, playground, corpus runner, and tests.
 - Added `CppBoltRunner` and `compileAndRun` to the npm package, exported from the new `npm/src/index.ts` entry point.

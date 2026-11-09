@@ -21,13 +21,9 @@ if [ ! -x "$root/npm/node_modules/.bin/tsc" ] || [ ! -x "$root/npm/node_modules/
     exit 1
 fi
 
-"$root/npm/node_modules/.bin/tsc" -p "$root/npm/tsconfig.json"
+rm -rf "$root/npm/dist"
 
-# Browser bundle: whole public API on window.CppBolt
-"$root/npm/node_modules/.bin/esbuild" "$root/npm/src/index.ts" \
-    --bundle --format=iife --global-name=CppBolt \
-    --platform=browser \
-    --outfile="$root/npm/dist/cppbolt.browser.js"
+npm --prefix "$root/npm" run build
 
 rm -rf "$output"
 mkdir -p "$output/wasm" "$output/dist"

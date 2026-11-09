@@ -244,6 +244,30 @@ impl<'a> Codegen<'a> {
         self.find_constructor_sig(class_name, arg_types)
             .map(|(idx, _)| idx)
     }
+
+    pub(super) fn emit_field_init_or_zero(
+        &mut self,
+        fld: &crate::sema::StructField,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        if let Some(init) = &fld.default_init {
+            let expr = unpack_single_element_init(init);
+            let a_ty = self.get_expr_type(expr, ctx);
+            self.compile_expr(expr, ctx, code)?;
+            self.emit_conversion(&a_ty, &fld.ty, code);
+        } else {
+            self.emit_zero_value(&fld.ty, code);
+        }
+        Ok(())
+    }
+}
+
+pub(super) fn unpack_single_element_init(expr: &Expr) -> &Expr {
+    match expr {
+        Expr::InitializerList { elements, .. } if elements.len() == 1 => &elements[0],
+        other => other,
+    }
 }
 
 /// Returns `Some(is_const)` if `sig` is a copy constructor for `class_name`.

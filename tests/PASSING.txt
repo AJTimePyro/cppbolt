@@ -1,7 +1,9 @@
+c_basics/control_flow/comma_expressions
 c_basics/control_flow/control_if_else
 c_basics/control_flow/control_loops
 c_basics/control_flow/control_switch
 c_basics/control_flow/if_ternary
+c_basics/control_flow/selection_initializers
 c_basics/control_flow/switch_enum_case
 c_basics/enums/enums
 c_basics/enums/scoped_enums
@@ -10,6 +12,7 @@ c_basics/functions/functions_call
 c_basics/functions/functions_default_args
 c_basics/functions/functions_overload
 c_basics/functions/overload_resolution
+c_basics/functions/reference_overload
 c_basics/functions/std_abs_long
 c_basics/functions/using_declaration_precedence
 c_basics/io_printf/hello_world
@@ -19,6 +22,7 @@ c_basics/io_printf/printf_flags
 c_basics/io_printf/printf_octal
 c_basics/io_printf/printf_return
 c_basics/io_printf/printf_table
+c_basics/misc/exit_status
 c_basics/misc/large_local_frame
 c_basics/misc/lvalue_matrix
 c_basics/misc/malloc_failure
@@ -50,9 +54,11 @@ c_basics/types/sizeof_expr
 c_basics/types/ternary_mixed_types
 c_basics/types/unsigned_wrap
 c_basics/types/value_init_scalar
+c_basics_variant/control_flow/comma_expressions_variant
 c_basics_variant/control_flow/control_if_else
 c_basics_variant/control_flow/control_loops
 c_basics_variant/control_flow/control_switch
+c_basics_variant/control_flow/selection_initializers_variant
 c_basics_variant/enums/enums
 c_basics_variant/functions/functions_call
 c_basics_variant/functions/functions_default_args
@@ -148,6 +154,7 @@ classes_oop/statics_namespaces/namespaces_comprehensive
 classes_oop/statics_namespaces/references
 classes_oop/statics_namespaces/static_local_constructor_args
 classes_oop/statics_namespaces/static_members
+classes_oop/structs/aggregate_nsdmi
 classes_oop/structs/brace_init_aggregates
 classes_oop/structs/brace_init_brace_elision
 classes_oop/structs/brace_init_classes
@@ -157,6 +164,7 @@ classes_oop/structs/brace_init_temporaries
 classes_oop/structs/initializer_lists
 classes_oop/structs/nested_classes
 classes_oop/structs/nested_classes_scopes
+classes_oop/structs/nsdmi_basic
 classes_oop/structs/regress_struct_ref_assign
 classes_oop/structs/regress_struct_ref_subscript
 classes_oop/structs/struct_basic
@@ -205,6 +213,7 @@ classes_oop_variant/statics_namespaces/static_local_constructor_args
 classes_oop_variant/statics_namespaces/static_members
 classes_oop_variant/structs/initializer_lists
 classes_oop_variant/structs/nested_classes_variant
+classes_oop_variant/structs/nsdmi_basic_variant
 classes_oop_variant/structs/regress_struct_ref_assign
 classes_oop_variant/structs/regress_struct_ref_subscript
 classes_oop_variant/structs/struct_basic
@@ -289,6 +298,7 @@ negative/break_outside_loop
 negative/builtin_header_error
 negative/call_non_function
 negative/const_assign
+negative/const_method_call_on_const
 negative/const_overload_unsupported
 negative/constructor_default_argument_undefined
 negative/constructor_string_argument
@@ -349,6 +359,7 @@ negative/nested_class_unqualified_leak
 negative/nested_type_private_access
 negative/new_array_excess_elements
 negative/no_matching_constructor_list
+negative/nsdmi_type_mismatch
 negative/operator_arrow_cycle
 negative/operator_arrow_invalid
 negative/operator_arrow_non_pointer
@@ -369,12 +380,15 @@ negative/pseudo_destructor_type_mismatch
 negative/pure_virtual_instantiation
 negative/range_for_non_iterable
 negative/redefined_func
+negative/reference_call_temporary
+negative/reference_temporary_bind
 negative/ref_qualifier_lvalue_mismatch
 negative/reinterpret_cast_rvalue_ref
 negative/scalar_excess_elements
 negative/scoped_enum_call_arg
 negative/scoped_enum_implicit_conversion
 negative/scoped_enum_leak
+negative/selection_init_scope_leak
 negative/std_abs_unsigned
 negative/stray_endif
 negative/structured_binding_count_mismatch

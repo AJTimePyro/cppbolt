@@ -10,14 +10,33 @@ npm install cppbolt
 
 ## Usage
 
-### Node.js: compile only
+The package provides three entry points. Node.js and bundlers select the right
+one automatically; native browsers and classic scripts use the file directly.
 
-`createCompiler()` returns a compiler. `compile()` turns C++ source into a
-complete WebAssembly module as a `Uint8Array`.
+| Environment                            | Entry point               | How to load it                                                    |
+| -------------------------------------- | ------------------------- | ----------------------------------------------------------------- |
+| Node.js (CommonJS or ES modules)       | `dist/index.js`           | `require("cppbolt")` or `import ... from "cppbolt"`               |
+| Browser bundlers and native ES modules | `dist/index.browser.mjs`  | `import ... from "cppbolt"` or `"cppbolt/browser"`, or module URL |
+| Classic browser `<script>`             | `dist/cppbolt.browser.js` | `<script src="..."></script>`, then use the global `CppBolt`      |
+
+### Node.js
+
+`createCompiler()` loads `wasm/cppbolt.wasm` from the installed package directory. You can also pass an optional file path, file or HTTP URL, or WebAssembly bytecode buffer (`BufferSource`). The API is identical from CommonJS and ES modules:
 
 ```js
-import { createCompiler } from "cppbolt";
+// CommonJS
+const { createCompiler, compileAndRun } = require("cppbolt");
 
+// ES modules
+import { createCompiler, compileAndRun } from "cppbolt";
+```
+
+#### Compile only
+
+`compile()` turns C++ source into a complete WebAssembly module as a
+`Uint8Array`.
+
+```js
 const compiler = await createCompiler();
 
 const wasm = compiler.compile(`
@@ -29,19 +48,17 @@ const wasm = compiler.compile(`
 `);
 ```
 
-### Node.js: compile and run
+#### Compile and run
 
 `compileAndRun()` compiles the source and immediately executes it, returning
 its stdout and exit status.
 
 ```js
-import { createCompiler, compileAndRun } from "cppbolt";
-
 const compiler = await createCompiler();
 
 const { stdout, exitCode } = await compileAndRun(
-  compiler,
-  `
+	compiler,
+	`
     #include <iostream>
     int main() {
         std::cout << "cppbolt says hello!" << std::endl;
@@ -54,10 +71,94 @@ console.log(stdout); // "cppbolt says hello!\n"
 console.log(exitCode); // 0
 ```
 
-### Browser (CDN `<script>` tag)
+#### Run with timeouts and worker isolation (`compileAndRunAsync`)
+
+Run code in an isolated worker with timeouts, cancellation, stdin input, and streaming stdout:
+
+```js
+const { compileAndRunAsync, TimeoutError } = require("cppbolt");
+
+try {
+	const res = await compileAndRunAsync(
+		compiler,
+		`
+        #include <iostream>
+        int main() {
+            int x;
+            std::cin >> x;
+            std::cout << "Received: " << x << std::endl;
+            return 0;
+        }
+    `,
+		{
+			stdin: "42\n",
+			timeoutMs: 2000,
+			onStdout: (chunk) => process.stdout.write(chunk),
+		},
+	);
+	console.log("Exit status:", res.exitCode);
+} catch (err) {
+	if (err instanceof TimeoutError) {
+		console.error(err.message);
+		console.log("Partial output:", err.stdout);
+	} else {
+		throw err;
+	}
+}
+```
+
+### Browser: bundlers and native ES modules
+
+In Vite, webpack 5, Rollup, or esbuild, use the normal package import. The
+`browser` export condition selects `dist/index.browser.mjs`.
+
+```js
+import { createCompiler, compileAndRun } from "cppbolt";
+
+const compiler = await createCompiler();
+const { stdout, exitCode } = await compileAndRun(
+	compiler,
+	`
+  #include <iostream>
+  int main() {
+      std::cout << "cppbolt says hello!" << std::endl;
+      return 0;
+  }
+`,
+);
+```
+
+`createCompiler()` resolves `wasm/cppbolt.wasm` relative to the module URL.
+Bundlers that understand `new URL(..., import.meta.url)` bundle the binary
+automatically. If the wasm file is served elsewhere, pass an explicit URL:
+`createCompiler("https://example.com/cppbolt.wasm")`.
+
+Native browser ES modules do not support bare package names. Import the module
+file directly, or add a matching import map:
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/cppbolt@1.0.1/dist/cppbolt.browser.js"></script>
+<script type="module">
+  import { createCompiler, compileAndRun } from "https://cdn.jsdelivr.net/npm/cppbolt@latest/dist/index.browser.mjs";
+
+  const compiler = await createCompiler();
+  const { stdout, exitCode } = await compileAndRun(compiler, `
+    #include <iostream>
+    int main() {
+        std::cout << "cppbolt says hello!" << std::endl;
+        return 0;
+    }
+  `);
+  console.log(stdout, exitCode);
+</script>
+```
+
+### Browser: classic `<script>` tag
+
+The classic build exposes the global `CppBolt`. Load the script over HTTP(S),
+not `file://`, so it can fetch the wasm binary next to it.
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/cppbolt@latest/dist/cppbolt.browser.js"></script>
 <script>
   (async () => {
     const compiler = await CppBolt.createCompiler();
@@ -74,8 +175,21 @@ console.log(exitCode); // 0
 </script>
 ```
 
-`createCompiler()` resolves `wasm/cppbolt.wasm` relative to the script URL. When
-using a bundler, import from `"cppbolt"` instead.
+`CppBolt.createCompiler()` resolves `wasm/cppbolt.wasm` relative to the script
+URL.
+
+### How entry points and subpaths are selected
+
+The npm manifest exposes package exports evaluated by Node.js and bundlers:
+
+| Export subpath        | Entry point              | Selected by                      |
+| --------------------- | ------------------------ | -------------------------------- |
+| `.`                   | `dist/index.d.ts`        | TypeScript declaration lookup    |
+| `.`                   | `dist/index.browser.mjs` | Browser-targeting bundlers       |
+| `.`                   | `dist/index.js`          | Node.js (`require` and `import`) |
+| `.`                   | `dist/index.browser.mjs` | Default ES module fallback       |
+| `./browser`           | `dist/index.browser.mjs` | Direct browser ESM import        |
+| `./wasm/cppbolt.wasm` | `wasm/cppbolt.wasm`      | Static compiler WebAssembly asset|
 
 ## Compiler API
 
@@ -102,7 +216,7 @@ Diagnostics use the format `<file>:line:column: error: message`. The ABI does no
 
 ## Language coverage
 
-cppbolt supports scalar types, pointers, arrays, functions, classes, single inheritance, virtual functions, operator overloading, lambdas, range-based `for`, and the preprocessor, along with an embedded mini standard library (`<iostream>`, `<string>`, `<cstdio>`, `<cmath>`, `<iomanip>`, and related headers).
+cppbolt supports scalar types, pointers, arrays, functions, classes, non-static data member initializers (NSDMI), aggregate initialization, selection initializers (`if`/`switch`), comma operator expressions, single inheritance, virtual functions, operator overloading, lambdas, range-based `for`, and the preprocessor, along with an embedded mini standard library (`<iostream>`, `<string>`, `<cstdio>`, `<cmath>`, `<iomanip>`, and related headers).
 
 Templates, standard containers and algorithms, exceptions, RTTI, and multiple or virtual inheritance are not supported.
 
@@ -131,12 +245,21 @@ yourself.
 
 - `createWasmHost(options?) -> WasmHost` builds the import environment. Options
   are `stdin` (a string, or `() => number` for streaming input), `onStdout(chunk)`,
-  and `onExit(code)`. The result exposes `imports` for `WebAssembly.instantiate`
-  and `getStdout()`.
+  and `onExit(code)`. Calling `exit(code)` invokes `onExit` when supplied and
+  always stops the wasm program; the runner returns that code without terminating
+  the embedding Node.js process. The result exposes `imports` for
+  `WebAssembly.instantiate` and `getStdout()`.
 - `new CppBoltRunner(host).run(wasmBytes) -> Promise<RunResult>` instantiates a
   module, calls `main` (or `_start`), and returns `{ stdout, exitCode }`. A
-  WebAssembly trap is reported as exit code 134 instead of throwing.
+  WebAssembly trap is reported as exit code 134 instead of throwing. Runs
+  synchronously on the current thread and does not support watchdog timeouts.
+- `new AsyncCppBoltRunner(host?).run(wasmBytes, options?) -> Promise<RunResult>` runs
+  the module in an isolated background worker (`node:worker_threads` or browser Web Worker)
+  with `timeoutMs`, `signal` (`AbortSignal`), `stdin`, and streaming `onStdout`.
+  Invalid bytecode rejects with `CompileError`/`LinkError`, while program traps resolve
+  with exit code 134.
 - `compileAndRun(compiler, source, options?)` compiles and runs in one call.
+- `compileAndRunAsync(compiler, source, options?)` compiles and runs in a background worker.
 
 ## Notes
 

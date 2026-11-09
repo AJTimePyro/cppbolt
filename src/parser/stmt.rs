@@ -322,47 +322,8 @@ impl Parser {
             let (elements, pos) = self.parse_brace_expr_list()?;
             Ok(Expr::InitializerList { elements, pos })
         } else {
-            self.parse_expr()
+            self.parse_expr_prec(2)
         }
-    }
-
-    pub(super) fn parse_if_stmt(&mut self) -> Result<Stmt, CompileError> {
-        let tok = self.current().clone();
-        // Parse `else if` chains iteratively so an arbitrarily long chain costs
-        // one parser frame, not one frame per branch.
-        let mut branches = Vec::new();
-        loop {
-            self.advance();
-            self.expect(TokenKind::LParen)?;
-            let cond = self.parse_expr()?;
-            self.expect(TokenKind::RParen)?;
-            let then_stmt = Box::new(self.parse_stmt()?);
-            branches.push((cond, then_stmt));
-
-            if self.peek() != &TokenKind::KwElse {
-                break;
-            }
-            self.advance();
-            if self.peek() != &TokenKind::KwIf {
-                let else_stmt = Box::new(self.parse_stmt()?);
-                return Ok(Stmt::new(
-                    StmtKind::If {
-                        branches,
-                        else_stmt: Some(else_stmt),
-                    },
-                    tok.line,
-                    tok.col,
-                ));
-            }
-        }
-        Ok(Stmt::new(
-            StmtKind::If {
-                branches,
-                else_stmt: None,
-            },
-            tok.line,
-            tok.col,
-        ))
     }
 
     pub(super) fn parse_while_stmt(&mut self) -> Result<Stmt, CompileError> {
@@ -462,20 +423,6 @@ impl Parser {
                 step,
                 body,
             },
-            tok.line,
-            tok.col,
-        ))
-    }
-
-    pub(super) fn parse_switch_stmt(&mut self) -> Result<Stmt, CompileError> {
-        let tok = self.current().clone();
-        self.advance();
-        self.expect(TokenKind::LParen)?;
-        let expr = self.parse_expr()?;
-        self.expect(TokenKind::RParen)?;
-        let body = Box::new(self.parse_stmt()?);
-        Ok(Stmt::new(
-            StmtKind::Switch { expr, body },
             tok.line,
             tok.col,
         ))

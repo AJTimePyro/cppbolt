@@ -28,6 +28,9 @@ These features build naturally on existing language constructs without requiring
   - Overloaded function call `operator()` (functors).
 - [x] **Namespace Aliases**: Parse and resolve `namespace NewName = OriginalName;` declarations at file, namespace, and block scopes with chained and qualified lookup resolution.
 - [x] **Extended Casts**: Support `reinterpret_cast` across scalar and pointer types within the ILP32 model.
+- [x] **Comma Expressions**: Parse and lower sequence operator `(a, b)` at precedence 1 without conflicting with argument lists or declarators.
+- [x] **C++17 Selection Initializers**: Parse and desugar `if (init; cond)` and `switch (init; cond)` with scope isolated to the selection body.
+- [x] **Non-Static Data Member Initializers (NSDMI)**: Support in-class field defaults (`= expr`, `{ ... }`) in constructors and aggregate initialization.
 
 ---
 

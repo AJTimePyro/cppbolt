@@ -1,0 +1,1 @@
+tests/negative/nsdmi_type_mismatch.cpp:2:11: error: cannot initialize field 'x' of type 'int' with expression of type 'const char[13]'

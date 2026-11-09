@@ -1,0 +1,1 @@
+tests/negative/const_method_call_on_const.cpp:7:5: error: method 'mutate' exists but cannot be called on a const object

@@ -4,6 +4,50 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-08: Member Structured Bindings, Range-For Loops, and Template Array Decay
+
+Fixed structured binding and range-based for lowering in non-template member functions, added array-to-pointer decay for function template argument deduction, and fixed array member initialization from initializer lists.
+
+### Summary of Work
+
+1. Preserved analyzed method bodies and deduced return types in `analyze_declarations` (`src/sema/analyze.rs`) by writing `func_decl.body` and `func_decl.return_type` back to `m`. This keeps in-place desugaring of `StmtKind::StructuredBinding` and `StmtKind::RangeFor`, and synchronizes deduced `auto` return types for non-template member functions.
+2. Added array-to-pointer decay for function template argument deduction in `deduce_template_arguments` (`src/sema/template_deduce.rs`) when parameter types are non-references (C++17 [temp.deduct.call] p2). This allows `std::sort(arr, arr + n)` and user-defined iterator templates to deduce pointer types from array arguments.
+3. Added recursive `Type::Array` matching in `deduce_type` (`src/sema/template_deduce.rs`) to retain array dimensions for explicitly array-typed template parameters.
+4. Handled scalar and struct elements in `compile_member_init_expr` and `compile_array_member_init` (`src/codegen/function_lifecycle.rs`) for array members by writing elements sequentially at member offsets instead of emitting an invalid local assignment on an empty WebAssembly stack.
+5. Added regression tests in `tests/cxx17_regressions.rs` for by-value, by-reference, and const-reference structured bindings in member functions, member `auto` return type deduction, `std::sort` array decay, user-defined template iterator functions, array reference retention, member range-for with NSDMI and constructor initialization, container iterators, and array members with struct element types.
+
+---
+
+## 2026-11-08: Reference Binding and Const Method Diagnostics
+
+Fixed non-const lvalue reference binding to temporaries, preserved reference categories for call arguments, and improved diagnostics for non-const method calls on const objects.
+
+### Summary of Work
+
+1. Enforced value-category checks during reference binding in `can_assign_expr` (`src/sema/assign.rs`) and variable initializers (`src/sema/stmt_decl.rs`), ensuring non-const references reject temporaries and rvalues while const references continue to bind.
+2. Updated function argument overload resolution in `score_arguments` (`src/sema/overload.rs`) to reject rvalues passed to non-const reference parameters, and select const reference overloads when available.
+3. Preserved reference types during call argument analysis in `analyze_call` (`src/sema/expr_call.rs`) and in namespace-scope and struct-field initializers (`src/sema/analyze.rs`), allowing reference-returning functions to bind to non-const reference parameters and globals.
+4. Aligned codegen overload parameter scoring in `src/codegen/overload.rs` with semantic analysis, checking reference compatibility and allowing convertible types to bind to const references.
+5. Added diagnostic in `check_member_arguments` (`src/sema/expr_call_member.rs`) when calling a non-const method on a const receiver, reporting that the method exists but cannot be called on a const object instead of falling through to codegen's missing method error.
+6. Added positive regression tests in `tests/c_basics/functions/reference_overload.cpp` and negative regression tests in `tests/negative/reference_temporary_bind.cpp`, `tests/negative/reference_call_temporary.cpp`, and `tests/negative/const_method_call_on_const.cpp`.
+
+---
+
+## 2026-11-07: npm Worker Isolation and Timeouts
+
+Added worker-isolated execution with timeout and cancellation support to the npm package.
+
+### Summary of Work
+
+1. Added `AsyncCppBoltRunner` and `compileAndRunAsync` to `npm/src/api.ts`.
+2. Bundled worker runtimes at build time with esbuild: Node uses `dist/worker.node.js` (`worker_threads`), and browser builds embed the worker IIFE as `__WORKER_BUNDLE__` for `new Blob(...)` construction.
+3. Added `TimeoutError` and `RunOptions` (`timeoutMs`, `signal`, `stdin`, `onStdout`), preserving any stdout emitted before worker termination.
+4. Corrected worker execution semantics: WebAssembly instantiation failures reject with the underlying error (`CompileError`/`LinkError`) rather than masking as SIGABRT exit code 134; program traps are restricted to `RuntimeError` and stack overflow `RangeError`.
+5. Forwarded `stdin` input to worker execution, enabled streaming `onStdout` callbacks, made the `AsyncCppBoltRunner` host parameter optional, and guarded worker termination against multiple invocations.
+6. Added test coverage in `tests/test_npm_node_worker.js`, `tests/test_npm_browser_build.js`, `tests/test_npm_runner_options.js`, `tests/test_npm_compile_and_run_async.js`, and `tests/test_browser_worker.mjs` (Chromium).
+
+---
+
 ## 2026-11-03: `std::initializer_list` Review Fixes
 
 Fixed five findings in the initializer-list and brace-initialization support added earlier the same day.
@@ -16,9 +60,9 @@ Fixed five findings in the initializer-list and brace-initialization support add
 4. Normalized extracted template element types to their registered struct names and resolved nested brace lists against the chosen element type, enabling `std::vector<std::vector<int>> v{{1, 2}, {3, 4}}` (`cadf45c`).
 5. Routed a namespace-scope brace initializer through the same list resolution as locals, and lowered a namespace-scope `std::initializer_list<T>` by building its backing array in `main`'s frame and storing the pointer and length in the global object (`366bad8`).
 
-### Known Issue
+### Resolved Issue
 
-Range-based `for` loops and structured bindings inside non-template method bodies are not analyzed: `analyze_declarations` type-checks a clone of the body and discards it, so the loop compiles to nothing. Writing the analyzed body back changes 137 golden hashes; corpus tests avoid method-body loops for now. Free functions and template method bodies are unaffected.
+Range-based `for` loops and structured bindings inside non-template method bodies were previously unanalyzed because `analyze_declarations` type-checked a cloned body and discarded it. Resolved on 2026-11-08 by writing back the analyzed method body. Free functions and template method bodies were unaffected.
 
 ### Verification Results
 
@@ -435,3 +479,26 @@ Resolved review findings in nested struct scope tracking, global namespace pollu
 - Golden baseline: all 294 entries match `tests/golden.txt`.
 - Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
 - Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
+## 2026-11-07: C++17 Core Stabilization (Comma Expressions, Selection Initializers, NSDMI & Aggregate Defaults)
+
+Validated and resolved four issues identified during C++17 pre-release testing: comma operator evaluation, selection statement initializers, non-static data member initializers (NSDMI), and aggregate initialization default rules.
+
+### Summary of Work
+
+1. Added `BinaryOp::Comma` to the AST and parser at precedence 1 in `src/ast/expr.rs` and `src/parser/expr.rs`. Restricted argument list, parameter default, and declarator parsing to precedence 2 in `src/parser/mod.rs`, `src/parser/decl_func.rs`, and `src/parser/enums_operators.rs` to keep unparenthesized commas distinct from expression sequence operators.
+2. Implemented WebAssembly code generation for comma expressions in `src/codegen/expr_binary.rs`, evaluating the left operand, dropping its result from the value stack, and compiling the right operand.
+3. Implemented C++17 selection statement initializers (`if (init; cond)` and `switch (init; cond)`) in `src/parser/stmt_selection.rs`, desugaring initializers into compound scopes enclosing the selection statement while preserving iterative flattening for deep `else if` chains.
+4. Added support for non-static data member initializers (`= expr` and `{ ... }`) in struct, class, and template declarations across `src/ast/decl.rs`, `src/ast/template.rs`, and `src/parser/structs.rs`.
+5. Updated semantic analysis in `src/sema/analyze.rs` and `src/sema/layout.rs` to validate default member initializer expressions and record `default_init` on `StructField`.
+6. Updated constructor lowering in `src/codegen/function_lifecycle.rs` to fall back to `default_init` for fields omitted from constructor member initializer lists.
+7. Aligned aggregate initialization with C++17 [dcl.init.aggr] in `src/codegen/stmt_var_init.rs`, `src/codegen/expr_new.rs`, and `src/codegen/expr_call.rs`, initializing omitted trailing aggregate fields from their default member initializers rather than zero-initializing. Confirmed that user-declared constructors correctly disqualify aggregates while NSDMI remains allowed.
+
+### Verification Results
+
+- Unit and integration tests: 438 corpus tests on disk, 438 executed, 438 passed, 0 failures. All 120 negative tests passed.
+- Unit tests: 89 passed in `src/lib.rs`.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Diagnostic positions test: confirmed all corpus diagnostics name real source locations.

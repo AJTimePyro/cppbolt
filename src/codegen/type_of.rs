@@ -160,6 +160,7 @@ impl<'a> Codegen<'a> {
             }
         }
         match op {
+            BinaryOp::Comma => rty.clone(),
             BinaryOp::LogicalAnd | BinaryOp::LogicalOr => Type::Bool,
             BinaryOp::Eq
             | BinaryOp::Ne

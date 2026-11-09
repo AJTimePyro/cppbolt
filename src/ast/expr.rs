@@ -54,6 +54,7 @@ pub enum BinaryOp {
     Le,
     Gt,
     Ge,
+    Comma,
 }
 
 impl BinaryOp {
@@ -75,6 +76,7 @@ impl BinaryOp {
             BinaryOp::Le => Some("operator<="),
             BinaryOp::Gt => Some("operator>"),
             BinaryOp::Ge => Some("operator>="),
+            BinaryOp::Comma => Some("operator,"),
             _ => None,
         }
     }

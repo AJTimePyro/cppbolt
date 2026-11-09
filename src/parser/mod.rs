@@ -18,6 +18,7 @@ mod expr;
 mod expr_lambda;
 mod prefix;
 mod stmt;
+mod stmt_selection;
 mod structs;
 mod structs_nested;
 mod template;
@@ -210,7 +211,7 @@ impl Parser {
             if self.peek() == &TokenKind::LBrace {
                 args.push(self.parse_initializer()?);
             } else {
-                args.push(self.parse_expr()?);
+                args.push(self.parse_expr_prec(2)?);
             }
             if self.peek() == &TokenKind::Comma {
                 self.advance();

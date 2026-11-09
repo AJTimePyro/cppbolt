@@ -63,6 +63,7 @@ impl Parser {
 
     pub(super) fn current_binary_op(&self) -> Option<(BinaryOpChoice, u8, bool)> {
         match self.peek() {
+            TokenKind::Comma => Some((BinaryOpChoice::Binary(BinaryOp::Comma), 1, false)),
             TokenKind::Assign => Some((BinaryOpChoice::Assign, 2, true)),
             TokenKind::PlusAssign => Some((BinaryOpChoice::Compound(BinaryOp::Add), 2, true)),
             TokenKind::MinusAssign => Some((BinaryOpChoice::Compound(BinaryOp::Sub), 2, true)),

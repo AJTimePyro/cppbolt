@@ -8,6 +8,7 @@ extern "C" {
     void* malloc(size_t);
     void free(void*);
     int printf(const char*, ...);
+    void exit(int);
 }
 
 inline void* memcpy(void* dest, const void* src, size_t n) {

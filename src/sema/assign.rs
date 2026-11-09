@@ -12,7 +12,38 @@ impl Sema {
         self.can_assign_expr(target, value, None)
     }
 
+    pub(crate) fn reference_types_compatible(&self, target: &Type, source: &Type) -> bool {
+        if target == source {
+            return true;
+        }
+        if let (Type::Struct(s1), Type::Struct(s2)) = (target, source) {
+            let p1 = QualifiedName::new(s1).plain();
+            let p2 = QualifiedName::new(s2).plain();
+            p1 == p2 || self.is_subclass(p2, p1)
+        } else {
+            false
+        }
+    }
+
     pub fn can_assign_expr(&self, target: &Type, value: &Type, expr: Option<&Expr>) -> bool {
+        if let Type::Reference(inner) = target {
+            if inner.is_const() {
+                return self.can_assign_expr(inner.strip_const(), value, expr);
+            }
+            if let Some(e) = expr
+                && !value.is_reference()
+                && !e.is_lvalue()
+            {
+                return false;
+            }
+            if value.strip_reference().is_const() {
+                return false;
+            }
+            return self.reference_types_compatible(
+                inner.strip_const(),
+                value.strip_reference().strip_const(),
+            );
+        }
         let target = strip_assign_type(target);
         let value = strip_assign_type(value);
         if target == value {
@@ -64,9 +95,6 @@ impl Sema {
             && self.is_subclass(derived, base)
         {
             return true;
-        }
-        if let Type::Reference(inner) = target {
-            return self.can_assign_expr(inner, value, expr);
         }
         false
     }

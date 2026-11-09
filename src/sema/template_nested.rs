@@ -11,7 +11,7 @@ struct NestedStructParams<'a> {
     nested_inst_name: &'a str,
     is_class: bool,
     base_classes: &'a [String],
-    fields: &'a [(String, Type)],
+    fields: &'a [StructFieldDecl],
     methods: &'a [FunctionDecl],
     private_members: &'a [String],
     mapping: &'a HashMap<String, Type>,
@@ -155,10 +155,14 @@ impl Sema {
         let injected = Some((p.name, &target_ty));
 
         let mut subst_fields = Vec::new();
-        for (fname, fty) in p.fields {
+        for (fname, fty, finit) in p.fields {
             let mut ty = substitute_type(fty, p.mapping, injected);
             self.resolve_and_instantiate_type(&mut ty, line, col)?;
-            subst_fields.push((fname.clone(), ty));
+            let mut init = finit.clone();
+            if let Some((init_expr, _, _)) = &mut init {
+                template_subst::substitute_expr(init_expr, p.mapping, injected);
+            }
+            subst_fields.push((fname.clone(), ty, init));
         }
 
         let mut subst_methods = Vec::new();
