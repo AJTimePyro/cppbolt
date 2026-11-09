@@ -52,16 +52,23 @@ pub fn substitute_type(
             }
         }
         Type::Const(inner) => {
-            Type::Const(Box::new(substitute_type(inner, mapping, injected_class)))
+            let subst_inner = substitute_type(inner, mapping, injected_class);
+            if subst_inner.is_reference() {
+                subst_inner
+            } else {
+                Type::Const(Box::new(subst_inner))
+            }
         }
         Type::Pointer(inner) => {
             Type::Pointer(Box::new(substitute_type(inner, mapping, injected_class)))
         }
         Type::Reference(inner) => {
-            Type::Reference(Box::new(substitute_type(inner, mapping, injected_class)))
+            let subst_inner = substitute_type(inner, mapping, injected_class);
+            collapse_reference(false, subst_inner)
         }
         Type::RvalueReference(inner) => {
-            Type::RvalueReference(Box::new(substitute_type(inner, mapping, injected_class)))
+            let subst_inner = substitute_type(inner, mapping, injected_class);
+            collapse_reference(true, subst_inner)
         }
         Type::Array(inner, size) => Type::Array(
             Box::new(substitute_type(inner, mapping, injected_class)),
@@ -443,5 +450,23 @@ pub fn substitute_struct(
         nested_structs: Vec::new(),
         line,
         col,
+    }
+}
+
+pub fn collapse_reference(outer_is_rvalue: bool, inner: Type) -> Type {
+    if inner.is_reference() {
+        if let Some(target) = inner.deref_type() {
+            if !outer_is_rvalue || inner.is_lvalue_reference() {
+                Type::Reference(Box::new(target.clone()))
+            } else {
+                Type::RvalueReference(Box::new(target.clone()))
+            }
+        } else {
+            inner
+        }
+    } else if outer_is_rvalue {
+        Type::RvalueReference(Box::new(inner))
+    } else {
+        Type::Reference(Box::new(inner))
     }
 }

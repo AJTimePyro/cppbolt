@@ -144,6 +144,25 @@ fn deduce_type(
             }
             deduce_type(inner, arg_ty.strip_reference(), deduced, is_lvalue, pos)?;
         }
+        Type::RvalueReference(inner) => {
+            if let Type::TypeParam(name) = &**inner {
+                let deduced_arg = if is_lvalue {
+                    Type::Reference(Box::new(arg_ty.strip_reference().clone()))
+                } else {
+                    arg_ty.strip_reference().clone()
+                };
+                record_deduced(name, deduced_arg, deduced, pos)?;
+                return Ok(());
+            }
+            if is_lvalue {
+                return Err(CompileError::new(
+                    "cannot bind rvalue reference to an lvalue".to_string(),
+                    pos.line,
+                    pos.col,
+                ));
+            }
+            deduce_type(inner, arg_ty.strip_reference(), deduced, is_lvalue, pos)?;
+        }
         Type::Const(inner) => {
             deduce_type(inner, arg_ty.strip_const(), deduced, is_lvalue, pos)?;
         }
