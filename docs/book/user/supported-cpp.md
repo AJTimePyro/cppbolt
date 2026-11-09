@@ -78,14 +78,14 @@ cargo run --bin cppbolt-testrunner -- target/release/cppbolt-cli
 ## Known Limitations & Design Rules
 
 ### 1. Language Semantics & Edge Cases
-- **Copy Elision**: Prvalue initialization is elided as guaranteed by C++17 (`T x = T(1);`). However, return of named local variables requires running the copy constructor.
+- **Copy Elision & Return Semantics**: Prvalue initialization is elided as guaranteed by C++17 (`T x = T(1);`). Returning local automatic variables by value applies C++11 implicit move semantics: overload resolution selects the move constructor before falling back to copy construction. Returning non-local or unmovable lvalues of move-only types (`std::unique_ptr`) is rejected at compile time.
 - **Move Semantics & Value Categories**:
-  - Expressions evaluate to lvalues or rvalues (prvalues and xvalues). Named variables and reference parameters are lvalues. Function calls returning rvalue references (such as `std::move(x)`) produce xvalues.
-  - Lvalue references `T&` bind only to lvalues. Const lvalue references `const T&` accept both lvalues and rvalues, incurring a penalty for rvalues during overload resolution. Rvalue references `T&&` bind exclusively to rvalues.
-  - Overload resolution ranks exact value-category matches over reference conversions: an rvalue argument prefers `T&&` over `const T&`.
-  - Class definitions declaring user move constructors or move assignment operators suppress implicit copy operations. Initializing a move-only type (such as `std::unique_ptr<T>`) from an lvalue triggers a compile diagnostic.
-  - Forwarding references in function templates (`template <typename T> void f(T&& arg)`) deduce `T = U&` for an lvalue argument of type `U` and `T = U` for an rvalue. Reference substitution collapses reference chains (`&` + `&&` -> `&`, `&&` + `&&` -> `&&`).
-  - Standard headers `<utility>`, `<vector>`, and `<memory>` provide move-enabled resource management. Container buffer reallocation in `std::vector` moves existing elements into freshly allocated memory, and `std::unique_ptr<T>` maintains single-owner semantics without copying.
+  - Expressions evaluate to lvalues, prvalues, or xvalues. Named variables and reference parameters evaluate as lvalues regardless of declared type (including `T&&`). Function calls returning rvalue references (`std::move(x)`) and explicit rvalue reference casts produce xvalues.
+  - Lvalue references `T&` bind only to lvalues. Const lvalue references `const T&` accept both lvalues and rvalues, incurring a conversion penalty for rvalues during overload resolution. Rvalue references `T&&` bind exclusively to rvalues.
+  - Overload resolution ranks exact value category matches over reference conversions: an rvalue argument prefers `T&&` over `const T&`.
+  - Class definitions declaring user move constructors or move assignment operators suppress implicit copy operations. Copying a move-only type (such as `std::unique_ptr<T>`) across direct initialization, copy assignment, pass-by-value calls, or return statements triggers a compile diagnostic.
+  - Forwarding references in function templates (`template <typename T> void f(T&& arg)`) deduce `T = U&` for an lvalue argument of type `U` and `T = U` for an rvalue. Calls returning lvalue references correctly deduce `T = U&`. Reference substitution collapses reference chains (`&` + `&&` -> `&`, `&&` + `&&` -> `&&`). Function template calls validate parameter compatibility of all arguments against instantiated signatures.
+  - Standard headers `<utility>`, `<vector>`, and `<memory>` provide move-enabled resource management. Container buffer reallocation in `std::vector` moves existing elements into freshly allocated memory, `std::unique_ptr<T>` maintains single-owner semantics without copying, and `std::unique_ptr::reset` guards against self-reset.
 - **Null Pointer Constants & Pointer Conversions**:
   - Integer literal zeroes (`0`, `0u`) and `nullptr` (`std::nullptr_t`, `decltype(nullptr)`) qualify as null pointer constants. Zero-valued variables, non-zero integers, and `false` are rejected.
   - Qualification conversions require every subsequent indirection level to be `const` when adding `const` to an intermediate level (`int**` converts to `const int* const*`, but not `const int**`).

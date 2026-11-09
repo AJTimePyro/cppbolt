@@ -20,26 +20,26 @@ Standard C++11 introduced rvalue references (`T&&`), move constructors, move ass
 1. Dedicated rvalue reference representation (`src/ast/types.rs`, `src/lexer/mod.rs`, `src/parser/decl.rs`).
    We represent rvalue references explicitly as `Type::RvalueReference(Box<Type>)`. The lexer recognizes `&&` as `TokenKind::AmpAmp`, which declarator and template argument parsing treat as an rvalue reference operator outside expression contexts.
 
-2. Value category classification and reference binding (`src/sema/assign.rs`, `src/sema/overload.rs`, `src/ast/expr.rs`).
-   We classify expressions into lvalues and rvalues. An lvalue reference `T&` binds only to lvalues (or const references bind to rvalues with an extra conversion penalty). An rvalue reference `T&&` binds exclusively to rvalues.
+2. Value category classification and reference binding (`src/sema/assign.rs`, `src/sema/overload.rs`, `src/ast/expr.rs`, `src/codegen/lvalue.rs`).
+   We classify expressions into lvalues, prvalues, and xvalues. Named variables and reference parameters evaluate as lvalues regardless of declared type (including `T&&`). Expressions become xvalues through explicit rvalue reference casts or function calls returning `T&&`. Function calls returning `T&` evaluate as lvalues. An lvalue reference `T&` binds only to lvalues. Const references `const T&` bind to rvalues with a conversion penalty. Rvalue references `T&&` bind exclusively to rvalues.
 
-3. Overload candidate ranking (`src/sema/overload.rs`, `src/sema/constructor.rs`).
-   During function and constructor overload selection, candidate parameters matching the exact value category of the argument receive a precedence bonus over conversions. For an rvalue argument, `T&&` beats `const T&`. For an lvalue argument, `const T&` is viable while `T&&` is rejected.
+3. Overload candidate ranking (`src/sema/overload.rs`, `src/sema/constructor.rs`, `src/sema/template_func.rs`).
+   During function and constructor overload selection, candidate parameters matching the exact value category of the argument receive precedence over conversions. For an rvalue argument, `T&&` beats `const T&`. For an lvalue argument, `const T&` is viable while `T&&` is rejected. Function template calls validate parameter compatibility of non-deduced and concrete parameters before selecting an instantiated candidate.
 
 4. Reference collapsing in template deduction (`src/sema/template_deduce.rs`).
-   Forwarding references of the form `template <typename T> void f(T&& arg)` deduce `T = U&` when called with an lvalue of type `U`, and `T = U` when called with an rvalue. During template type substitution, reference combinations collapse per standard C++ rules:
+   Forwarding references of the form `template <typename T> void f(T&& arg)` deduce `T = U&` when called with an lvalue of type `U` (including calls returning `U&`), and `T = U` when called with an rvalue. During template type substitution, reference combinations collapse per standard C++ rules:
    - `&` with `&` yields `&`
    - `&` with `&&` yields `&`
    - `&&` with `&` yields `&`
    - `&&` with `&&` yields `&&`
 
-5. Implicit move synthesis and copy suppression (`src/sema/synthesize_ops.rs`, `src/sema/stmt_decl.rs`).
-   When a class defines a destructor, fields with non-trivial move constructors, or base classes with move constructors, we synthesize defaulted move operations unless blocked by user-declared copy operations or custom destructors. Conversely, when a class declares a move constructor or move assignment operator, the compiler suppresses implicit copy operations. Attempting to copy a move-only struct from an lvalue yields a compile-time diagnostic.
+5. Implicit move synthesis and copy suppression (`src/sema/synthesize_ops.rs`, `src/sema/stmt_decl.rs`, `src/sema/assign.rs`, `src/sema/stmt.rs`, `src/codegen/stmt_return.rs`).
+   When a class defines a destructor, fields with non-trivial move constructors, or base classes with move constructors, we synthesize defaulted move operations unless blocked by user-declared copy operations or custom destructors. Conversely, when a class declares a move constructor or move assignment operator, the compiler suppresses implicit copy operations across variable initialization, copy assignment, pass-by-value calls, and returns. Returning local automatic variables by value applies C++11 implicit move semantics to invoke move constructors before falling back to copies.
 
 6. Standard library move support (`stdlib/utility`, `stdlib/vector`, `stdlib/memory`).
-   - `<utility>` provides `std::move` (casting an expression to an xvalue rvalue reference), `std::forward` (preserving original value categories across forwarding references), move-based `std::swap`, and move operations for `std::pair`.
+   - `<utility>` provides `std::move` (casting an expression to an xvalue rvalue reference), `std::forward` (preserving original value categories across forwarding references), move-based `std::swap`, and copy and move operations for `std::pair`.
    - `<vector>` implements move construction, move assignment, `push_back(T&&)`, and move-based reallocation during buffer growth.
-   - `<memory>` implements `std::unique_ptr<T>` (providing exclusive resource ownership, move construction, move assignment, pointer dereferencing, `reset`, and `release`) and `std::make_unique`.
+   - `<memory>` implements `std::unique_ptr<T>` (providing exclusive resource ownership, move construction, move assignment, pointer dereferencing, `reset` with self-reset guard, and `release`) and `std::make_unique`.
 
 ## Consequences
 ### Positive
