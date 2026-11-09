@@ -3,11 +3,12 @@
 All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-This project does not yet have tagged semantic releases; all historical work is grouped by development milestone under `[Unreleased]`.
 
 ---
 
 ## [Unreleased]
+
+## [1.1.0] - 2026-11-09
 
 ### Member Structured Bindings, Range-For Loops & Template Array Decay
 - Preserved analyzed method bodies and deduced return types in semantic analysis so structured bindings (`auto [a, b] = p;`, `auto&`, `const auto&`), range-based `for` loops, and `auto` return types reach codegen in non-template member functions.
