@@ -292,7 +292,7 @@ impl Expr {
             Expr::Unary {
                 op: UnaryOp::Deref, ..
             } => true,
-            Expr::Cast { target_type, .. } => target_type.is_reference(),
+            Expr::Cast { target_type, .. } => target_type.is_lvalue_reference(),
             _ => false,
         }
     }

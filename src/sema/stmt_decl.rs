@@ -138,6 +138,17 @@ impl Sema {
         }
         deduce_auto_type(ty, &init_ty);
         if !is_list_init && !self.can_assign_expr(ty, &init_ty, Some(init_expr)) {
+            if ty.is_rvalue_reference() {
+                return Err(CompileError::new(
+                    format!(
+                        "cannot bind rvalue reference of type '{}' to lvalue of type '{}'",
+                        ty.to_c_type(),
+                        init_ty.to_c_type()
+                    ),
+                    line,
+                    col,
+                ));
+            }
             return Err(CompileError::new(
                 format!(
                     "cannot initialize variable '{}' of type {} with {}",

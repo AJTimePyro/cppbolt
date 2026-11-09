@@ -133,6 +133,7 @@ classes_oop/methods/derived_member_hiding
 classes_oop/methods/function_pointer_comparator
 classes_oop/methods/member_reference_return
 classes_oop/methods/ref_qualified_methods
+classes_oop/move_semantics_basic
 classes_oop/move_semantics_types
 classes_oop/operators/chained_compound_assign
 classes_oop/operators/const_subscript
@@ -201,6 +202,7 @@ classes_oop_variant/methods/const_methods
 classes_oop_variant/methods/derived_member_hiding
 classes_oop_variant/methods/function_pointer_comparator
 classes_oop_variant/methods/member_reference_return
+classes_oop_variant/move_semantics_basic_variant
 classes_oop_variant/operators/chained_compound_assign
 classes_oop_variant/operators/const_subscript
 classes_oop_variant/operators/contextual_bool_comprehensive
@@ -385,6 +387,7 @@ negative/reference_call_temporary
 negative/reference_temporary_bind
 negative/ref_qualifier_lvalue_mismatch
 negative/reinterpret_cast_rvalue_ref
+negative/rvalue_ref_bind_lvalue
 negative/scalar_excess_elements
 negative/scoped_enum_call_arg
 negative/scoped_enum_implicit_conversion
