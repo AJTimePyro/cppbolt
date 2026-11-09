@@ -102,7 +102,7 @@ impl<'a> Codegen<'a> {
                 code,
             );
         }
-        if let Some((func_idx, sig)) = self.find_function(name, arg_types) {
+        if let Some((func_idx, sig)) = self.find_function_with_args(name, arg_types, Some(args)) {
             for (i, a) in args.iter().enumerate() {
                 let param_ty = sig.param_types.get(i);
                 self.compile_call_arg(a, param_ty, ctx, code)?;
@@ -208,7 +208,7 @@ impl<'a> Codegen<'a> {
             self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
             return Ok(());
         }
-        if let Some((func_idx, sig)) = self.find_function(name, arg_types) {
+        if let Some((func_idx, sig)) = self.find_function_with_args(name, arg_types, Some(args)) {
             for (i, a) in args.iter().enumerate() {
                 let param_ty = sig.param_types.get(i);
                 self.compile_call_arg(a, param_ty, ctx, code)?;

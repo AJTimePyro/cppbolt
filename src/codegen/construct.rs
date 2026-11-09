@@ -132,7 +132,8 @@ impl<'a> Codegen<'a> {
             }
             // Only the given arguments are scored; the omitted ones have
             // default values.
-            let Some(score) = self.score_overload_params(&params[..arg_types.len()], arg_types)
+            let Some(score) =
+                self.score_overload_params(&params[..arg_types.len()], arg_types, None)
             else {
                 continue;
             };

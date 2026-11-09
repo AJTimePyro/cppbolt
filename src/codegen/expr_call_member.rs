@@ -51,8 +51,8 @@ impl<'a> Codegen<'a> {
             &sname,
             member,
             &arg_types,
-            receiver_const,
-            receiver_is_lvalue,
+            Some(args),
+            (receiver_const, receiver_is_lvalue),
         ) {
             self.compile_member_call_direct(site, &sig, m_idx, ctx, code)?;
         } else {
