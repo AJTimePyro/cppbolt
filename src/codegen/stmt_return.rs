@@ -116,9 +116,12 @@ impl<'a> Codegen<'a> {
             write_u32(code, ctx.scratch1);
 
             let expr_ty = self.get_expr_type(expr, ctx);
+            let raw_ty = self.get_expr_type_raw(expr, ctx);
             let is_const = expr_ty.strip_reference().is_const();
             let is_local_var = if let Expr::Identifier(name) = expr {
                 ctx.var_offsets.contains_key(name)
+                    && !raw_ty.is_reference()
+                    && !is_const
             } else {
                 false
             };

@@ -19,6 +19,7 @@ mod overload;
 mod stmt;
 mod stmt_decl;
 mod stmt_range_for;
+mod stmt_return;
 mod stmt_structured_binding;
 mod synthesize;
 mod synthesize_ops;

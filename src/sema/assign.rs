@@ -91,12 +91,13 @@ impl Sema {
         if let Some(ok) = self.can_assign_reference(target, value, expr) {
             return ok;
         }
+        let is_lvalue_val = expr.is_some_and(Expr::is_lvalue) || value.is_lvalue_reference();
         let target = strip_assign_type(target);
         let value = strip_assign_type(value);
         if target == value {
             if let Type::Struct(sname) = target.strip_const()
                 && self.is_move_only_struct(sname)
-                && (expr.is_none() || expr.is_some_and(Expr::is_lvalue))
+                && (expr.is_none() || is_lvalue_val)
             {
                 return false;
             }

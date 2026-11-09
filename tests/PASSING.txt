@@ -420,6 +420,7 @@ negative/template_explicit_instantiation
 negative/template_explicit_specialization
 negative/template_func_arg_incompatible
 negative/template_instantiation_depth
+negative/template_method_arg_incompatible
 negative/template_nontype_param
 negative/template_template_param
 negative/template_variadic
@@ -431,8 +432,11 @@ negative/undeclared_var
 negative/undefined_func
 negative/unique_ptr_assign
 negative/unique_ptr_copy
+negative/unique_ptr_copy_from_call_ref
 negative/unique_ptr_direct_copy
 negative/unique_ptr_pass_by_val
+negative/unique_ptr_return_const_local
+negative/unique_ptr_return_ref_param
 negative/unterminated_if
 negative/virtual_inheritance
 runtime_trap/malloc_beyond_max

@@ -2,10 +2,12 @@ use super::*;
 
 impl Sema {
     pub(super) fn analyze_function(&mut self, func: &mut FunctionDecl) -> Result<(), CompileError> {
+        let prev_func_return_type = self.current_func_return_type.take();
+        let prev_func_name = self.current_func_name.take();
+        let prev_func_const = self.current_func_is_const;
         self.current_func_return_type =
             (func.return_type != Type::Auto).then(|| func.return_type.clone());
         self.current_func_name = Some(func.name.clone());
-        let prev_func_const = self.current_func_is_const;
         self.current_func_is_const = func.is_const;
         self.current_frame_size = 0;
         self.enter_scope();
@@ -45,10 +47,9 @@ impl Sema {
         self.current_func_is_const = prev_func_const;
         if func.return_type == Type::Auto {
             func.return_type = self.current_func_return_type.take().unwrap_or(Type::Void);
-        } else {
-            self.current_func_return_type = None;
         }
-        self.current_func_name = None;
+        self.current_func_return_type = prev_func_return_type;
+        self.current_func_name = prev_func_name;
         Ok(())
     }
 
@@ -312,85 +313,6 @@ impl Sema {
                 line,
                 col,
             ));
-        }
-        Ok(())
-    }
-
-    /// Checks the returned expression against the current return type.
-    fn analyze_return(
-        &mut self,
-        expr_opt: &mut Option<Expr>,
-        line: usize,
-        col: usize,
-    ) -> Result<(), CompileError> {
-        if let Some(expr) = expr_opt {
-            let mut ret_ty = match expr {
-                Expr::InitializerList { elements, pos } => {
-                    let Some(expected) = self.current_func_return_type.clone() else {
-                        return Err(CompileError::new(
-                            "cannot deduce return type from initializer list",
-                            line,
-                            col,
-                        ));
-                    };
-                    self.resolve_list_init(
-                        &expected,
-                        elements,
-                        InitContext::CopyListInitReturn,
-                        *pos,
-                    )?
-                }
-                Expr::TypedInitList {
-                    ty: explicit_ty,
-                    elements,
-                    pos,
-                } => {
-                    self.resolve_list_init(explicit_ty, elements, InitContext::DirectList, *pos)?
-                }
-                _ => self.analyze_expr_keeping_reference(expr)?,
-            };
-            if let Some(expected) = &self.current_func_return_type {
-                if !matches!(
-                    expr,
-                    Expr::InitializerList { .. } | Expr::TypedInitList { .. }
-                ) {
-                    if let Type::Struct(sname) = ret_ty.strip_reference().strip_const() {
-                        let is_const = ret_ty.strip_reference().is_const();
-                        if let Some(sig) = self.find_conversion_to(sname, expected, is_const) {
-                            Self::wrap_conversion_call(expr, &sig.name, ExprPos::new(line, col));
-                            ret_ty = expected.clone();
-                        }
-                    }
-                    let is_same_struct = match (expected.strip_reference().strip_const(), ret_ty.strip_reference().strip_const()) {
-                        (Type::Struct(s1), Type::Struct(s2)) => QualifiedName::new(s1).matches(QualifiedName::new(s2)),
-                        _ => false,
-                    };
-                    let is_local_var = if let Expr::Identifier(name) = expr {
-                        self.scopes.iter().rev().any(|s| s.vars.contains_key(name))
-                    } else {
-                        false
-                    };
-                    let can_ret = if is_local_var && is_same_struct && !expected.is_reference() {
-                        true
-                    } else {
-                        self.can_assign_expr(expected, &ret_ty, Some(expr))
-                    };
-                    if !can_ret {
-                        return Err(CompileError::new(
-                            format!(
-                                "Return type mismatch: expected {}, found {}",
-                                expected.to_c_type(),
-                                ret_ty.to_c_type()
-                            ),
-                            line,
-                            col,
-                        ));
-                    }
-                }
-            } else {
-                self.current_func_return_type =
-                    Some(ret_ty.strip_reference().strip_const().clone());
-            }
         }
         Ok(())
     }

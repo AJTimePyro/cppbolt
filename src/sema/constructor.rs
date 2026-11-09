@@ -251,7 +251,7 @@ fn score_copy_init_param(param: &Type, arg_ty: &Type, arg_expr: Option<&Expr>) -
     if !is_copy_param {
         return None;
     }
-    let is_lval = arg_expr.map_or_else(|| arg_ty.is_lvalue_reference(), Expr::is_lvalue);
+    let is_lval = arg_expr.is_some_and(Expr::is_lvalue) || arg_ty.is_lvalue_reference();
     if param.is_rvalue_reference() {
         if is_lval {
             return None;
@@ -408,6 +408,14 @@ impl Sema {
                     is_explicit: spec_func.is_explicit,
                     ref_qualifier: spec_func.ref_qualifier,
                 };
+                let call_params = if !spec_func.is_static {
+                    &sig.param_types[1..]
+                } else {
+                    &sig.param_types[..]
+                };
+                if self.score_arguments(call_params, arg_types, Some(args)).is_err() {
+                    continue;
+                }
                 return Ok(Some(sig));
             }
         }

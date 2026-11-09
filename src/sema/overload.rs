@@ -108,7 +108,8 @@ impl Sema {
             } else if p_base == a_base {
                 if let Type::Struct(sname) = p_base
                     && self.is_move_only_struct(sname)
-                    && args.and_then(|a| a.get(i)).is_some_and(Expr::is_lvalue)
+                    && (args.and_then(|a| a.get(i)).is_some_and(Expr::is_lvalue)
+                        || arg_ty.is_lvalue_reference())
                 {
                     return Err(ConversionFailure {
                         index: i,
