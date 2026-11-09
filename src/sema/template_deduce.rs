@@ -23,6 +23,7 @@ pub fn parse_types_list(s: &str, known_templates: &[String]) -> Result<Vec<Type>
     let mut lexer = crate::lexer::Lexer::new(s);
     let tokens = lexer.tokenize()?;
     let mut parser = crate::parser::Parser::new(tokens);
+    parser.allow_unknown_types = true;
     for t in known_templates {
         parser.register_template_name(t);
     }

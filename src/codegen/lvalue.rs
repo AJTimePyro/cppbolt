@@ -13,10 +13,10 @@ impl<'a> Codegen<'a> {
                 if let Type::Struct(sname) = ty.strip_reference().strip_const()
                     && let Some((_, sig)) = self.find_method(sname, "operator*", &[])
                 {
-                    return sig.return_type.is_reference();
+                    return sig.return_type.is_lvalue_reference();
                 }
                 if let Some((_, sig)) = self.find_free_operator("operator*", &ty) {
-                    return sig.return_type.is_reference();
+                    return sig.return_type.is_lvalue_reference();
                 }
                 true
             }
@@ -26,14 +26,14 @@ impl<'a> Codegen<'a> {
                     args.iter().map(|a| self.get_expr_type(a, ctx)).collect();
                 if let Expr::Identifier(name) = &**callee {
                     if let Some((_, sig)) = self.find_function(name, &arg_types) {
-                        return sig.return_type.is_reference();
+                        return sig.return_type.is_lvalue_reference();
                     }
                 } else if let Expr::MemberAccess { object, member, .. } = &**callee {
                     let obj_ty = self.get_expr_type(object, ctx);
                     if let Type::Struct(sname) = obj_ty.strip_const().strip_reference()
                         && let Some((_, sig)) = self.find_method(sname, member, &arg_types)
                     {
-                        return sig.return_type.is_reference();
+                        return sig.return_type.is_lvalue_reference();
                     }
                 }
                 false

@@ -256,6 +256,7 @@ mini_stl/iostream_cin
 mini_stl/iostream_precision_after_fixed
 mini_stl/iostream_width_double
 mini_stl/map_basic
+mini_stl/move_utility
 mini_stl/pair_basic
 mini_stl/range_for_string
 mini_stl/rounding_evidence
@@ -287,6 +288,7 @@ mini_stl_variant/iostream_basic
 mini_stl_variant/iostream_cin
 mini_stl_variant/iostream_precision_after_fixed
 mini_stl_variant/iostream_width_double
+mini_stl_variant/move_utility_variant
 mini_stl_variant/pair_basic
 mini_stl_variant/rounding_evidence
 mini_stl_variant/stream_edge_cases

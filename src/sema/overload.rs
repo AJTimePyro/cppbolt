@@ -134,7 +134,7 @@ impl Sema {
         Ok(score)
     }
 
-    fn score_reference_conversion(
+    pub(super) fn score_reference_conversion(
         &self,
         p: &Type,
         arg_ty: &Type,

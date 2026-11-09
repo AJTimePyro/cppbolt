@@ -214,10 +214,10 @@ impl Sema {
                 score += 1;
                 continue;
             }
-            if param.is_reference()
-                && param.deref_type().map(|d| d.strip_all_const()) == Some(arg_ty.strip_all_const())
-            {
-                score += 1;
+            if param.is_reference() {
+                score += self
+                    .score_reference_conversion(param, arg_ty, args.and_then(|a| a.get(index)))
+                    .ok()?;
                 continue;
             }
             let is_null_ptr_const = args

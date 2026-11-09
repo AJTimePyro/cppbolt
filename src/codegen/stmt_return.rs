@@ -102,7 +102,10 @@ impl<'a> Codegen<'a> {
             .get(sname)
             .copied()
             .ok_or_else(|| self.internal_error("missing struct layout"))?;
-        if self.is_struct_lvalue(expr, ctx) {
+        let raw_ty = self.get_expr_type_raw(expr, ctx);
+        let is_xvalue = raw_ty.is_rvalue_reference()
+            || matches!(expr, Expr::Cast { target_type, .. } if target_type.is_rvalue_reference());
+        if self.is_struct_lvalue(expr, ctx) || is_xvalue {
             code.push(OP_I32_CONST);
             write_i32(code, size as i32);
             code.push(OP_CALL);
@@ -116,7 +119,13 @@ impl<'a> Codegen<'a> {
 
             let expr_ty = self.get_expr_type(expr, ctx);
             let is_const = expr_ty.strip_reference().is_const();
-            if let Some(ctor_idx) = self.find_copy_constructor(sname, is_const) {
+            let ctor = if is_xvalue {
+                self.find_move_constructor(sname)
+                    .or_else(|| self.find_copy_constructor(sname, is_const))
+            } else {
+                self.find_copy_constructor(sname, is_const)
+            };
+            if let Some(ctor_idx) = ctor {
                 code.push(OP_LOCAL_GET);
                 write_u32(code, ctx.ret_temp_i32);
                 code.push(OP_LOCAL_GET);

@@ -42,6 +42,7 @@ pub struct Parser {
     pub namespace_aliases: HashMap<String, String>,
     pub known_namespaces: HashSet<String>,
     pub active_struct_scopes: Vec<String>,
+    pub allow_unknown_types: bool,
     nesting: DepthCounters,
     nesting_exceeded: Cell<bool>,
 }
@@ -98,6 +99,7 @@ impl Parser {
             namespace_aliases: HashMap::new(),
             known_namespaces: HashSet::new(),
             active_struct_scopes: Vec::new(),
+            allow_unknown_types: false,
             nesting: DepthCounters::new(),
             nesting_exceeded: Cell::new(false),
         }

@@ -28,7 +28,9 @@ impl Parser {
                 }
             }
             TokenKind::Ident(id) => {
-                if self.peek_ahead(1) == &TokenKind::ColonColon {
+                if self.allow_unknown_types {
+                    true
+                } else if self.peek_ahead(1) == &TokenKind::ColonColon {
                     if let TokenKind::Ident(sub) = self.peek_ahead(2) {
                         let full = format!("{}::{}", id, sub);
                         sub == "size_t"
@@ -388,7 +390,8 @@ impl Parser {
                             self.current().col,
                         ));
                     }
-                } else if is_typename
+                } else if self.allow_unknown_types
+                    || is_typename
                     || self.known_types.contains(&format!("std::{}", id))
                     || self.is_template_member_type(&id)
                 {
