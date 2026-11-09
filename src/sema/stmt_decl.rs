@@ -174,6 +174,17 @@ impl Sema {
                 ExprPos::new(line, col),
             )? {
                 self.instantiate_pending_method(&sig.mangled_name)?;
+            } else {
+                return Err(CompileError::new(
+                    format!(
+                        "cannot initialize variable '{}' of type {} with {}",
+                        name,
+                        ty.to_c_type(),
+                        init_ty.to_c_type()
+                    ),
+                    line,
+                    col,
+                ));
             }
         }
         Ok(())

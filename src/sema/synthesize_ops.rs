@@ -8,8 +8,29 @@ pub(crate) fn synthesize_copy_operations(
     fields: &[StructFieldDecl],
     methods: &mut Vec<FunctionDecl>,
 ) {
+    if is_copy_suppressed(name, methods) {
+        return;
+    }
     synthesize_copy_constructor(name, base_classes, fields, methods);
     synthesize_copy_assignment(name, base_classes, fields, methods);
+}
+
+fn is_copy_suppressed(name: &str, methods: &[FunctionDecl]) -> bool {
+    let short = QualifiedName::new(name).class_short_name();
+    methods.iter().any(|m| {
+        let is_ctor = (m.name == name
+            || m.name == short
+            || QualifiedName::new(&m.name).class_short_name() == short)
+            && m.params.len() == 1;
+        let is_assign = m.name == "operator=" && m.params.len() == 1;
+        (is_ctor || is_assign)
+            && matches!(
+                m.params[0].ty.strip_const(),
+                Type::RvalueReference(inner)
+                    if matches!(inner.strip_const(), Type::Struct(s)
+                        if QualifiedName::new(s).class_short_name() == short)
+            )
+    })
 }
 
 pub(crate) fn synthesize_move_operations(
@@ -26,16 +47,20 @@ pub(crate) fn synthesize_move_operations(
 }
 
 fn is_move_suppressed(name: &str, methods: &[FunctionDecl]) -> bool {
-    let short = name.rsplit("::").next().unwrap_or(name);
+    let short = QualifiedName::new(name).class_short_name();
     let has_custom_dtor = methods.iter().any(|m| m.name.starts_with('~'));
     let has_copy_or_move_op = methods.iter().any(|m| {
-        let is_ctor = (m.name == name || m.name == short) && m.params.len() == 1;
+        let is_ctor = (m.name == name
+            || m.name == short
+            || QualifiedName::new(&m.name).class_short_name() == short)
+            && m.params.len() == 1;
         let is_assign = m.name == "operator=" && m.params.len() == 1;
         (is_ctor || is_assign)
             && matches!(
                 m.params[0].ty.strip_const(),
                 Type::Reference(inner) | Type::RvalueReference(inner)
-                    if matches!(inner.strip_const(), Type::Struct(s) if s == name || s == short)
+                    if matches!(inner.strip_const(), Type::Struct(s)
+                        if QualifiedName::new(s).class_short_name() == short)
             )
     });
     has_custom_dtor || has_copy_or_move_op
@@ -47,11 +72,15 @@ fn synthesize_copy_constructor(
     fields: &[StructFieldDecl],
     methods: &mut Vec<FunctionDecl>,
 ) {
-    let short = name.rsplit("::").next().unwrap_or(name);
+    let short = QualifiedName::new(name).class_short_name();
     let has_copy_ctor = methods.iter().any(|m| {
-        (m.name == name || m.name == short)
+        (m.name == name
+            || m.name == short
+            || QualifiedName::new(&m.name).class_short_name() == short)
             && m.params.len() == 1
-            && matches!(m.params[0].ty.strip_const(), Type::Reference(inner) if matches!(inner.strip_const(), Type::Struct(s) if s == name || s == short))
+            && matches!(m.params[0].ty.strip_const(), Type::Reference(inner)
+                if matches!(inner.strip_const(), Type::Struct(s)
+                    if QualifiedName::new(s).class_short_name() == short))
     });
     if !has_copy_ctor {
         let param_ty = Type::Reference(Box::new(Type::Const(Box::new(Type::Struct(
@@ -158,11 +187,13 @@ fn synthesize_copy_assignment(
     fields: &[StructFieldDecl],
     methods: &mut Vec<FunctionDecl>,
 ) {
-    let short = name.rsplit("::").next().unwrap_or(name);
+    let short = QualifiedName::new(name).class_short_name();
     let has_copy_assign = methods.iter().any(|m| {
         m.name == "operator="
             && m.params.len() == 1
-            && matches!(m.params[0].ty.strip_const(), Type::Reference(inner) if matches!(inner.strip_const(), Type::Struct(s) if s == name || s == short))
+            && matches!(m.params[0].ty.strip_const(), Type::Reference(inner)
+                if matches!(inner.strip_const(), Type::Struct(s)
+                    if QualifiedName::new(s).class_short_name() == short))
     });
     if !has_copy_assign {
         let param_ty = Type::Reference(Box::new(Type::Const(Box::new(Type::Struct(

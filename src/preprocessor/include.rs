@@ -31,6 +31,7 @@ fn embedded_header(name: &str) -> Option<&'static str> {
         "new" => Some(include_str!("../../stdlib/new")),
         "initializer_list" => Some(include_str!("../../stdlib/initializer_list")),
         "utility" => Some(include_str!("../../stdlib/utility")),
+        "memory" => Some(include_str!("../../stdlib/memory")),
         "vector" => Some(include_str!("../../stdlib/vector")),
         "algorithm" => Some(include_str!("../../stdlib/algorithm")),
         "map" => Some(include_str!("../../stdlib/map")),

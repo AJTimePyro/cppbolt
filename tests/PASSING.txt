@@ -266,6 +266,7 @@ mini_stl/stream_edge_cases
 mini_stl/stream_operator_overload
 mini_stl/string_basic
 mini_stl/string_comprehensive
+mini_stl/unique_ptr_basic
 mini_stl/vector_aliasing
 mini_stl/vector_basic
 mini_stl/vector_brace_init
@@ -296,6 +297,7 @@ mini_stl_variant/stream_edge_cases
 mini_stl_variant/stream_operator_overload
 mini_stl_variant/string_basic
 mini_stl_variant/string_comprehensive
+mini_stl_variant/unique_ptr_basic_variant
 mini_stl_variant/vector_basic
 mini_stl_variant/vector_brace_init_variant
 mini_stl_variant/vector_move_variant
