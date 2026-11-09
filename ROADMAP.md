@@ -11,7 +11,7 @@ For current baseline results, see [`tests/PASSING.txt`](tests/PASSING.txt) and r
 - [ ] **Arena-Based Semantic State**: Replace string-keyed semantic symbol tables with typed arena IDs (`FileId`, `DeclId`, `TypeId`) to eliminate redundant allocations and accelerate symbol resolution.
 - [ ] **Macro Source-Map Fidelity**: Complete source-map span tracking through nested macro expansions so compiler diagnostics point to expansion invocation sites as well as definition locations.
 - [ ] **Per-Function Stack Frame Layouts**: Replace conservative frame/scratch allocations in [`src/codegen/function_context.rs`](src/codegen/function_context.rs) with measured per-function layouts based on live variable analysis.
-- [ ] **Value Category Normalization**: Formally represent C++17 value categories (prvalue, xvalue, lvalue) in the typed AST to further refine temporary object lifecycles and move semantics.
+- [x] **Value Category Normalization**: Formally represent C++17 value categories (prvalue, xvalue, lvalue) in expression analysis to refine temporary object lifecycles and move semantics.
 
 ---
 
@@ -19,6 +19,7 @@ For current baseline results, see [`tests/PASSING.txt`](tests/PASSING.txt) and r
 
 These features build naturally on existing language constructs without requiring a full template engine:
 
+- [x] **Move Semantics & Smart Pointers**: Rvalue references (`T&&`), value categories, move constructors, move assignment operators, forwarding references, reference collapsing, `std::move`, `std::forward`, `std::vector` move operations, and `std::unique_ptr` in `<memory>`.
 - [x] **Range-Based `for` Loops**: Lower `for (decl : range)` into standard iterator loops using `begin()` / `end()` or pointer intervals across fixed-size 1D/multidimensional arrays and container classes (e.g. `std::string`).
 - [x] **List Initialization & Aggregates**: Direct-list and copy-list initialization, value initialization with empty braces (`{}`), aggregate base subobjects and brace elision, narrowing conversion checks, dynamic array allocations (`new T[n]{...}`), and typed temporaries.
 - [x] **Additional Operator Overloads**:
