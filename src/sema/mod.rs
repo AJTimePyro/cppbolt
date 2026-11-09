@@ -21,6 +21,7 @@ mod stmt_decl;
 mod stmt_range_for;
 mod stmt_structured_binding;
 mod synthesize;
+mod synthesize_ops;
 pub mod template_deduce;
 mod template_func;
 mod template_nested;
@@ -172,6 +173,7 @@ pub struct Sema {
     pub instantiation_depth: usize,
     pub instantiation_stack: Vec<String>,
     pub structs_with_dtor: HashSet<String>,
+    pub structs_with_move: HashSet<String>,
     depth: crate::depth::DepthCounters,
 }
 
@@ -207,6 +209,7 @@ impl Sema {
             instantiation_depth: 0,
             instantiation_stack: Vec::new(),
             structs_with_dtor: HashSet::new(),
+            structs_with_move: HashSet::new(),
             current_class: None,
             current_func_name: None,
             open_namespaces: Vec::new(),

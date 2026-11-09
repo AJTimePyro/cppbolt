@@ -1,0 +1,7 @@
+-- move HasDtor --
+has_dtor copy ctor
+-- move HasCopyCtor --
+has_copy copy ctor
+done
+dtor
+dtor

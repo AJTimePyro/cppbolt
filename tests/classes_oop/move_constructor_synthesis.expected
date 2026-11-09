@@ -1,0 +1,7 @@
+s2: 1 2
+-- moving composite --
+move ctor
+c2 id: 42, c1 id: 0
+-- move assigning composite --
+move assign
+c3 id: 42, c2 id: 0

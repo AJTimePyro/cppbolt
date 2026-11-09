@@ -337,7 +337,7 @@ impl Sema {
 
 fn strip_assign_type(ty: &Type) -> &Type {
     let ty = ty.strip_const();
-    if let Type::Reference(inner) = ty {
+    if let Type::Reference(inner) | Type::RvalueReference(inner) = ty {
         inner.strip_const()
     } else {
         ty

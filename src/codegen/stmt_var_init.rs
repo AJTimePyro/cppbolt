@@ -102,7 +102,9 @@ impl<'a> Codegen<'a> {
         {
             return self.compile_aggregate_struct_value(sname, only, offset, ctx, code);
         }
-        let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types) else {
+        let Some((ctor_idx, sig)) =
+            self.find_constructor_sig_with_args(sname, &arg_types, Some(args))
+        else {
             return Ok(());
         };
         self.emit_local_address(offset, ctx, code);
@@ -127,7 +129,9 @@ impl<'a> Codegen<'a> {
             .iter()
             .map(|arg| self.get_expr_type(arg, ctx))
             .collect();
-        if let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types) {
+        if let Some((ctor_idx, sig)) =
+            self.find_constructor_sig_with_args(sname, &arg_types, Some(list))
+        {
             self.emit_local_address(offset, ctx, code);
             for (i, item) in list.iter().enumerate() {
                 let param_ty = sig.param_types.get(i + 1);
@@ -260,40 +264,32 @@ impl<'a> Codegen<'a> {
             init_ty.strip_const().strip_reference(),
             Type::Struct(other) if other == sname
         ) {
-            if self.is_struct_lvalue(init, ctx) {
-                let is_const = init_ty.strip_reference().is_const();
-                if let Some(ctor_idx) = self.find_copy_constructor(sname, is_const) {
-                    self.emit_local_address(offset, ctx, code);
-                    self.compile_lvalue_addr(init, ctx, code)?;
-                    code.push(OP_CALL);
-                    write_u32(code, ctor_idx);
-                } else {
-                    self.compile_lvalue_addr(init, ctx, code)?;
-                    code.push(OP_LOCAL_SET);
-                    write_u32(code, ctx.scratch1);
-                    self.emit_copy_struct(sname, offset, ctx, code)?;
+            let raw_ty = self.get_expr_type_raw(init, ctx);
+            let is_rvalue = raw_ty.is_rvalue_reference()
+                || matches!(init, Expr::Cast { target_type, .. } if target_type.is_rvalue_reference());
+            let is_const = init_ty.strip_reference().is_const();
+            if is_rvalue {
+                if let Some(ctor_idx) = self.find_move_constructor(sname) {
+                    return self.emit_init_ctor_call(ctor_idx, init, offset, ctx, code);
                 }
-            } else {
-                let temp_count_before = ctx.temp_objects.len();
-                self.compile_expr(init, ctx, code)?;
-                code.push(OP_LOCAL_SET);
-                write_u32(code, ctx.scratch1);
-                self.emit_copy_struct(sname, offset, ctx, code)?;
-                // The prvalue's heap storage is copied into the local, so it
-                // can be freed immediately.
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.scratch1);
-                code.push(OP_CALL);
-                write_u32(code, self.func_indices["free"]);
-                // Drop the temporary from the cleanup list so statement-end
-                // RAII does not double-free it.
-                ctx.temp_objects.truncate(temp_count_before);
+                if let Some(ctor_idx) = self.find_copy_constructor(sname, is_const) {
+                    return self.emit_init_ctor_call(ctor_idx, init, offset, ctx, code);
+                }
+                return self.emit_init_struct_copy(sname, init, offset, ctx, code);
             }
-            return Ok(());
+            if self.is_struct_lvalue(init, ctx) {
+                if let Some(ctor_idx) = self.find_copy_constructor(sname, is_const) {
+                    return self.emit_init_ctor_call(ctor_idx, init, offset, ctx, code);
+                }
+                return self.emit_init_struct_copy(sname, init, offset, ctx, code);
+            }
+            return self.emit_init_prvalue_copy(sname, init, offset, ctx, code);
         }
 
         let arg_types = vec![init_ty.clone()];
-        if let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types) {
+        if let Some((ctor_idx, sig)) =
+            self.find_constructor_sig_with_args(sname, &arg_types, Some(std::slice::from_ref(init)))
+        {
             self.emit_local_address(offset, ctx, code);
             self.compile_call_arg(init, sig.param_types.get(1), ctx, code)?;
             code.push(OP_CALL);
@@ -308,6 +304,56 @@ impl<'a> Codegen<'a> {
             self.current_line,
             self.current_col,
         ))
+    }
+
+    fn emit_init_ctor_call(
+        &mut self,
+        ctor_idx: u32,
+        init: &Expr,
+        offset: u32,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        self.emit_local_address(offset, ctx, code);
+        self.compile_lvalue_addr(init, ctx, code)?;
+        code.push(OP_CALL);
+        write_u32(code, ctor_idx);
+        Ok(())
+    }
+
+    fn emit_init_struct_copy(
+        &mut self,
+        sname: &str,
+        init: &Expr,
+        offset: u32,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        self.compile_lvalue_addr(init, ctx, code)?;
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.scratch1);
+        self.emit_copy_struct(sname, offset, ctx, code)
+    }
+
+    fn emit_init_prvalue_copy(
+        &mut self,
+        sname: &str,
+        init: &Expr,
+        offset: u32,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        let temp_count_before = ctx.temp_objects.len();
+        self.compile_expr(init, ctx, code)?;
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.scratch1);
+        self.emit_copy_struct(sname, offset, ctx, code)?;
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch1);
+        code.push(OP_CALL);
+        write_u32(code, self.func_indices["free"]);
+        ctx.temp_objects.truncate(temp_count_before);
+        Ok(())
     }
 
     pub(super) fn compile_aggregate_array(

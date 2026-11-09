@@ -204,13 +204,7 @@ impl Sema {
         for (index, arg_ty) in arg_types.iter().enumerate() {
             let param = &params[index];
             if is_copy_init {
-                let is_copy_param = param.is_reference()
-                    && param.deref_type().map(|d| d.strip_all_const())
-                        == Some(arg_ty.strip_all_const());
-                if !is_copy_param {
-                    return None;
-                }
-                score += 1;
+                score += score_copy_init_param(param, arg_ty, args.and_then(|a| a.get(index)))?;
                 continue;
             }
             if param.strip_const() == arg_ty.strip_const() {
@@ -243,6 +237,36 @@ impl Sema {
         score += (params.len() - arg_types.len()) * 100;
         Some(score)
     }
+}
+
+fn score_copy_init_param(param: &Type, arg_ty: &Type, arg_expr: Option<&Expr>) -> Option<usize> {
+    let is_copy_param = param.is_reference()
+        && param.deref_type().map(|d| d.strip_all_const()) == Some(arg_ty.strip_all_const());
+    if !is_copy_param {
+        return None;
+    }
+    let is_lval = arg_ty.is_lvalue_reference()
+        || arg_expr.map_or(!arg_ty.is_rvalue_reference(), Expr::is_lvalue);
+    if param.is_rvalue_reference() {
+        if is_lval {
+            return None;
+        }
+        Some(1)
+    } else if let Some(inner) = param.deref_type() {
+        if !inner.is_const() {
+            if !is_lval {
+                return None;
+            }
+            Some(1)
+        } else {
+            Some(if is_lval { 2 } else { 3 })
+        }
+    } else {
+        None
+    }
+}
+
+impl Sema {
 
     /// Returns true when the arguments describe a copy initialization.
     ///
