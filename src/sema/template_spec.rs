@@ -79,6 +79,23 @@ impl Sema {
         if self.struct_layouts.contains_key(sname) {
             return;
         }
+        let plain = QualifiedName::new(sname).plain();
+        if let Some(Type::TemplateInstance { name, args }) = self
+            .type_aliases
+            .get(sname)
+            .or_else(|| self.type_aliases.get(plain))
+            .cloned()
+        {
+            let mut args = args;
+            for arg in &mut args {
+                let _ = self.resolve_and_instantiate_type(arg, line, col);
+            }
+            if let Ok(inst) = self.instantiate_class_template(&name, &args, line, col) {
+                self.alias_static_fields(&inst, sname);
+                self.alias_static_fields(&inst, plain);
+            }
+            return;
+        }
         if let Some((base, args_str)) = super::template_deduce::split_template_call_name(sname) {
             let mut known: Vec<String> = self.class_templates.keys().cloned().collect();
             known.extend(self.alias_templates.keys().cloned());
@@ -88,6 +105,25 @@ impl Sema {
                 }
                 let _ = self.instantiate_class_template(base, &args, line, col);
             }
+        }
+    }
+
+    pub fn alias_static_fields(&mut self, source: &str, target: &str) {
+        let prefix = format!("{source}::");
+        let matching: Vec<(String, VarSymbol)> = self
+            .global_vars
+            .iter()
+            .filter(|(k, _)| k.starts_with(&prefix))
+            .map(|(k, v)| (k[prefix.len()..].to_string(), v.clone()))
+            .collect();
+        for (fld, var) in matching {
+            let qual = format!("{target}::{fld}");
+            self.global_vars.insert(qual.clone(), VarSymbol {
+                name: var.name.clone(),
+                ty: var.ty.clone(),
+                is_global: true,
+                stack_offset: 0,
+            });
         }
     }
 }

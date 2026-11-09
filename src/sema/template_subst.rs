@@ -165,6 +165,8 @@ pub fn substitute_expr(
         Expr::Identifier(name) => {
             if let Some(Type::NonType(val)) = mapping.get(name) {
                 *expr = Expr::IntLiteral(*val as i64, Type::Int);
+            } else if name.contains('<') {
+                *name = substitute_template_name(name, mapping);
             }
         }
         _ => {}

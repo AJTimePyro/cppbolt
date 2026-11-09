@@ -309,7 +309,7 @@ impl Sema {
             col,
         })?;
 
-        self.register_instantiated_static_fields(inst_name, static_fields);
+        self.register_instantiated_static_fields(inst_name, static_fields, base_classes, line, col);
         self.register_instantiated_member_aliases(&template_class.name, inst_name, &mapping);
         let all_methods = std::mem::take(methods);
         self.synthesized_decls.push(struct_decl);
@@ -321,6 +321,9 @@ impl Sema {
         &mut self,
         inst_name: &str,
         static_fields: &[(String, Type, Option<Expr>)],
+        base_classes: &[String],
+        line: usize,
+        col: usize,
     ) {
         for sf in static_fields.iter() {
             let qual_name = format!("{}::{}", inst_name, sf.0);
@@ -333,6 +336,10 @@ impl Sema {
                     stack_offset: 0,
                 },
             );
+        }
+        for base in base_classes {
+            self.ensure_class_instantiated(base, line, col);
+            self.alias_static_fields(base, inst_name);
         }
     }
 

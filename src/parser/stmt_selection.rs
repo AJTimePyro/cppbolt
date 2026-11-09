@@ -14,10 +14,20 @@ impl Parser {
         }
 
         if self.is_type_start() {
-            let decl = self.parse_var_decl()?;
-            let cond = self.parse_expr()?;
-            self.expect(TokenKind::RParen)?;
-            return Ok((Some(Box::new(decl)), cond));
+            let saved_pos = self.pos;
+            match self.parse_var_decl() {
+                Ok(decl) => {
+                    let cond = self.parse_expr()?;
+                    self.expect(TokenKind::RParen)?;
+                    return Ok((Some(Box::new(decl)), cond));
+                }
+                Err(error) => {
+                    if self.nesting_exceeded.get() {
+                        return Err(error);
+                    }
+                    self.pos = saved_pos;
+                }
+            }
         }
 
         let first = self.parse_expr()?;

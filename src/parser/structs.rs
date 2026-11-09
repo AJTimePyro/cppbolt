@@ -142,8 +142,6 @@ impl Parser {
             self.advance();
             self.expect(TokenKind::Lt)?;
             let params = self.parse_template_params()?;
-            let param_names: HashSet<String> = params.iter().map(|p| p.name.clone()).collect();
-            self.active_type_params.push(param_names);
             Some(params)
         } else {
             None
@@ -355,7 +353,7 @@ impl Parser {
                 | TokenKind::KwSigned
                 | TokenKind::KwShort
                 | TokenKind::KwVoid
-        ) || matches!(next_tok, TokenKind::Ident(id) if self.known_types.contains(id) || self.type_aliases.contains_key(id));
+        ) || matches!(next_tok, TokenKind::Ident(id) if self.known_types.contains(id) || self.type_aliases.contains_key(id) || self.is_active_type_param(id));
         if !is_conv_type {
             return Ok(false);
         }

@@ -240,6 +240,7 @@ memory_model_variant/malloc_zero
 memory_model_variant/vector_growth_64mb
 mini_stl/algorithm_basic
 mini_stl/algorithm_sort
+mini_stl/array_basic
 mini_stl/cin_getline_newline
 mini_stl/cmath_basic
 mini_stl/combined_integration
@@ -269,6 +270,7 @@ mini_stl/stream_edge_cases
 mini_stl/stream_operator_overload
 mini_stl/string_basic
 mini_stl/string_comprehensive
+mini_stl/type_traits_basic
 mini_stl/unique_ptr_basic
 mini_stl/unique_ptr_return_local
 mini_stl/unique_ptr_self_reset
@@ -279,6 +281,7 @@ mini_stl/vector_move
 mini_stl/vector_objects
 mini_stl/vector_size_ctor
 mini_stl_variant/algorithm_sort_variant
+mini_stl_variant/array_basic_variant
 mini_stl_variant/cin_getline_newline
 mini_stl_variant/combined_integration_variant
 mini_stl_variant/cout_float_format
@@ -302,6 +305,7 @@ mini_stl_variant/stream_edge_cases
 mini_stl_variant/stream_operator_overload
 mini_stl_variant/string_basic
 mini_stl_variant/string_comprehensive
+mini_stl_variant/type_traits_basic_variant
 mini_stl_variant/unique_ptr_basic_variant
 mini_stl_variant/vector_basic
 mini_stl_variant/vector_brace_init_variant

@@ -275,6 +275,9 @@ impl Sema {
             return self.analyze_global_identifier(name, global_name);
         }
         self.check_ambiguous_name(name)?;
+        if let Some((class_part, _)) = name.rsplit_once("::") {
+            self.ensure_class_instantiated(class_part, self.current_line, self.current_col);
+        }
         if let Some(var) = self.lookup_var(name) {
             Ok(var.ty.clone())
         } else if let Some(&val) = self.enum_values.get(name) {

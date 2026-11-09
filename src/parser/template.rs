@@ -21,6 +21,7 @@ impl Parser {
 
         if self.peek() == &TokenKind::Gt {
             self.advance();
+            self.active_type_params.push(HashSet::new());
             return self.parse_template_body(Vec::new(), t_line, t_col, declarations);
         }
 
@@ -30,6 +31,19 @@ impl Parser {
 
     pub(super) fn parse_template_params(&mut self) -> Result<Vec<TemplateParam>, CompileError> {
         let mut params = Vec::new();
+        self.active_type_params.push(HashSet::new());
+        let res = self.parse_template_params_inner(&mut params);
+        if res.is_err() {
+            self.active_type_params.pop();
+        }
+        res?;
+        Ok(params)
+    }
+
+    fn parse_template_params_inner(
+        &mut self,
+        params: &mut Vec<TemplateParam>,
+    ) -> Result<(), CompileError> {
         while self.peek() != &TokenKind::Gt && self.peek() != &TokenKind::Shr {
             let p_line = self.current().line;
             let p_col = self.current().col;
@@ -68,6 +82,9 @@ impl Parser {
                 TokenKind::Ident(id) => id,
                 _ => return Err(CompileError::new("expected identifier", p_line, p_col)),
             };
+            if let Some(set) = self.active_type_params.last_mut() {
+                set.insert(name.clone());
+            }
             let default_type = if self.peek() == &TokenKind::Assign {
                 self.advance();
                 if param_type.is_some() {
@@ -94,8 +111,7 @@ impl Parser {
                 break;
             }
         }
-        self.consume_template_closing_gt()?;
-        Ok(params)
+        self.consume_template_closing_gt()
     }
 
     pub(super) fn consume_template_closing_gt(&mut self) -> Result<(), CompileError> {
@@ -122,9 +138,6 @@ impl Parser {
         t_col: usize,
         declarations: &mut Vec<Decl>,
     ) -> Result<(), CompileError> {
-        let param_names: HashSet<String> = params.iter().map(|p| p.name.clone()).collect();
-        self.active_type_params.push(param_names);
-
         let result = if self.peek() == &TokenKind::KwUsing {
             self.parse_template_alias(params, t_line, t_col)
         } else if self.peek() == &TokenKind::KwStruct || self.peek() == &TokenKind::KwClass {
