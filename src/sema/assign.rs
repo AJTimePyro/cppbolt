@@ -25,6 +25,27 @@ impl Sema {
         }
     }
 
+    pub(super) fn instantiate_assign_operator(
+        &mut self,
+        target_ty: &Type,
+        value_ty: &Type,
+        value: &Expr,
+        pos: ExprPos,
+    ) -> Result<(), CompileError> {
+        if let Type::Struct(sname) = target_ty.strip_reference().strip_const()
+            && let Some(sig) = self.select_member_overload(
+                (sname, "operator="),
+                (false, true),
+                std::slice::from_ref(value_ty),
+                Some(std::slice::from_ref(value)),
+                pos,
+            )?
+        {
+            self.instantiate_pending_method(&sig.mangled_name)?;
+        }
+        Ok(())
+    }
+
     fn can_assign_reference(
         &self,
         target: &Type,

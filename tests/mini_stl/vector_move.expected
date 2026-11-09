@@ -1,0 +1,8 @@
+item move: 1
+item move: 2
+item move: 1
+-- moving vector --
+v size: 0, v2 size: 2
+-- exiting main --
+item dtor: 1
+item dtor: 2

@@ -85,7 +85,21 @@ impl<'a> Codegen<'a> {
         } else {
             clean.is_scalar()
         };
-        if target_is_scalar {
+        let struct_name = if access.is_arrow {
+            if let Type::Pointer(inner) = clean {
+                inner.strip_reference().strip_const()
+            } else {
+                clean
+            }
+        } else {
+            clean
+        };
+        let has_no_dtor = if let Type::Struct(sname) = struct_name {
+            self.find_destructor_sig(sname, access.member).is_none()
+        } else {
+            false
+        };
+        if target_is_scalar || has_no_dtor {
             let ty = self.get_expr_type(access.object, ctx);
             self.compile_expr(access.object, ctx, code)?;
             if ty != Type::Void {

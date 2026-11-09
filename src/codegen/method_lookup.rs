@@ -94,7 +94,7 @@ impl<'a> Codegen<'a> {
     }
 
     /// Resolves a destructor call, which has no overloads.
-    fn find_destructor_sig(
+    pub(super) fn find_destructor_sig(
         &self,
         class_name: &str,
         method_name: &str,

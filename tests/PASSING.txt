@@ -269,6 +269,7 @@ mini_stl/string_comprehensive
 mini_stl/vector_aliasing
 mini_stl/vector_basic
 mini_stl/vector_brace_init
+mini_stl/vector_move
 mini_stl/vector_objects
 mini_stl/vector_size_ctor
 mini_stl_variant/algorithm_sort_variant
@@ -297,6 +298,7 @@ mini_stl_variant/string_basic
 mini_stl_variant/string_comprehensive
 mini_stl_variant/vector_basic
 mini_stl_variant/vector_brace_init_variant
+mini_stl_variant/vector_move_variant
 mini_stl_variant/vector_size_ctor_variant
 negative/aggregate_excess_elements
 negative/ambiguous_overload_call

@@ -40,7 +40,9 @@ impl<'a> Codegen<'a> {
                 .iter()
                 .map(|a| self.get_expr_type(a, ctx))
                 .collect();
-            let Some((ctor_idx, sig)) = self.find_constructor_sig(cls, &arg_types) else {
+            let Some((ctor_idx, sig)) =
+                self.find_constructor_sig_with_args(cls, &arg_types, Some(target_args))
+            else {
                 return Err(CompileError::new(
                     format!("no matching target constructor found in class '{cls}'"),
                     f.line,
@@ -102,7 +104,9 @@ impl<'a> Codegen<'a> {
                 .iter()
                 .map(|a| self.get_expr_type(a, ctx))
                 .collect();
-            if let Some((b_idx, sig)) = self.find_constructor_sig(base_name, &arg_types) {
+            if let Some((b_idx, sig)) =
+                self.find_constructor_sig_with_args(base_name, &arg_types, Some(base_args))
+            {
                 code.push(OP_LOCAL_GET);
                 write_u32(code, 0); // this
                 if *base_offset != 0 {

@@ -240,8 +240,14 @@ impl Sema {
 }
 
 fn score_copy_init_param(param: &Type, arg_ty: &Type, arg_expr: Option<&Expr>) -> Option<usize> {
-    let is_copy_param = param.is_reference()
-        && param.deref_type().map(|d| d.strip_all_const()) == Some(arg_ty.strip_all_const());
+    let clean_param = param.deref_type()?.strip_all_const();
+    let clean_arg = arg_ty.strip_reference().strip_all_const();
+    let is_copy_param = match (clean_param, clean_arg) {
+        (Type::Struct(p), Type::Struct(a)) => {
+            QualifiedName::new(p.as_str()).matches(QualifiedName::new(a.as_str()))
+        }
+        (p, a) => p == a,
+    };
     if !is_copy_param {
         return None;
     }

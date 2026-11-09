@@ -341,7 +341,9 @@ impl<'a> Codegen<'a> {
                     code,
                 );
             }
-        } else if let Some((ctor_idx, sig)) = self.find_constructor_sig(name, &arg_types) {
+        } else if let Some((ctor_idx, sig)) =
+            self.find_constructor_sig_with_args(name, &arg_types, Some(args))
+        {
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.fp_local);
             code.push(OP_I32_LOAD);
