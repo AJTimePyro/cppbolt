@@ -102,9 +102,7 @@ impl<'a> Codegen<'a> {
             .get(sname)
             .copied()
             .ok_or_else(|| self.internal_error("missing struct layout"))?;
-        let raw_ty = self.get_expr_type_raw(expr, ctx);
-        let is_xvalue = raw_ty.is_rvalue_reference()
-            || matches!(expr, Expr::Cast { target_type, .. } if target_type.is_rvalue_reference());
+        let is_xvalue = self.is_expr_xvalue(expr, ctx);
         if self.is_struct_lvalue(expr, ctx) || is_xvalue {
             code.push(OP_I32_CONST);
             write_i32(code, size as i32);

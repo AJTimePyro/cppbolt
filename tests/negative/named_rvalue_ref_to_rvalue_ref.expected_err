@@ -1,0 +1,1 @@
+tests/negative/named_rvalue_ref_to_rvalue_ref.cpp:6:5: error: cannot bind rvalue reference of type 'int &&' to lvalue of type 'int &&'

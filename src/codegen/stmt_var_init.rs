@@ -264,9 +264,7 @@ impl<'a> Codegen<'a> {
             init_ty.strip_const().strip_reference(),
             Type::Struct(other) if other == sname
         ) {
-            let raw_ty = self.get_expr_type_raw(init, ctx);
-            let is_rvalue = raw_ty.is_rvalue_reference()
-                || matches!(init, Expr::Cast { target_type, .. } if target_type.is_rvalue_reference());
+            let is_rvalue = self.is_expr_xvalue(init, ctx);
             let is_const = init_ty.strip_reference().is_const();
             if is_rvalue {
                 if let Some(ctor_idx) = self.find_move_constructor(sname) {

@@ -202,9 +202,7 @@ impl<'a> Codegen<'a> {
                 };
                 if is_same {
                     let is_const = aty.strip_reference().is_const();
-                    let raw_ty = self.get_expr_type_raw(a, ctx);
-                    let is_xval = raw_ty.is_rvalue_reference()
-                        || matches!(a, Expr::Cast { target_type, .. } if target_type.is_rvalue_reference());
+                    let is_xval = self.is_expr_xvalue(a, ctx);
                     if is_xval {
                         let ctor = self
                             .find_move_constructor(psname)

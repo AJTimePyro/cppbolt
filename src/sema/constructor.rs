@@ -251,8 +251,7 @@ fn score_copy_init_param(param: &Type, arg_ty: &Type, arg_expr: Option<&Expr>) -
     if !is_copy_param {
         return None;
     }
-    let is_lval = arg_ty.is_lvalue_reference()
-        || arg_expr.map_or(!arg_ty.is_rvalue_reference(), Expr::is_lvalue);
+    let is_lval = arg_expr.map_or_else(|| arg_ty.is_lvalue_reference(), Expr::is_lvalue);
     if param.is_rvalue_reference() {
         if is_lval {
             return None;

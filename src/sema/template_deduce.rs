@@ -87,7 +87,7 @@ pub fn deduce_template_arguments(
         .iter()
         .zip(arg_types.iter().zip(args.iter()))
     {
-        let is_lval = arg_expr.is_lvalue();
+        let is_lval = arg_expr.is_lvalue() || arg_ty.is_lvalue_reference();
         let adjusted_arg_ty = if !p.ty.is_reference() {
             arg_ty.strip_reference().decay_array()
         } else {

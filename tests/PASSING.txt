@@ -138,6 +138,7 @@ classes_oop/move_overload_ranking
 classes_oop/move_semantics_basic
 classes_oop/move_semantics_types
 classes_oop/move_suppression_rules
+classes_oop/named_rvalue_ref_is_lvalue
 classes_oop/operators/chained_compound_assign
 classes_oop/operators/const_subscript
 classes_oop/operators/contextual_bool_comprehensive
@@ -362,6 +363,7 @@ negative/method_struct_argument
 negative/method_too_many_arguments
 negative/multiple_inheritance
 negative/multiple_inheritance_access
+negative/named_rvalue_ref_to_rvalue_ref
 negative/namespace_alias
 negative/namespace_alias_block_redefinition
 negative/narrowing_constant_overflow
@@ -443,6 +445,7 @@ templates_operators/template_deduce_ref
 templates_operators/template_default_arg_deduce
 templates_operators/template_field_and_func
 templates_operators/template_forwarding_ref
+templates_operators/template_forwarding_ref_call_lvalue
 templates_operators/template_func_basic
 templates_operators/template_func_multi
 templates_operators/template_lazy_member

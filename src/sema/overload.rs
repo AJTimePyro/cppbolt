@@ -140,8 +140,7 @@ impl Sema {
         arg_ty: &Type,
         arg_expr: Option<&Expr>,
     ) -> Result<usize, ()> {
-        let is_lvalue = arg_ty.is_lvalue_reference()
-            || (!arg_ty.is_rvalue_reference() && arg_expr.is_some_and(Expr::is_lvalue));
+        let is_lvalue = arg_expr.is_some_and(Expr::is_lvalue) || arg_ty.is_lvalue_reference();
         if let Type::RvalueReference(inner) = p {
             let matches_type = self.reference_types_compatible(
                 inner.strip_const(),

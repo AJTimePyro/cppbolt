@@ -53,9 +53,7 @@ impl Sema {
         expr: Option<&Expr>,
     ) -> Option<bool> {
         if let Type::RvalueReference(inner) = target {
-            if value.is_lvalue_reference()
-                || (!value.is_rvalue_reference() && expr.is_some_and(|e| e.is_lvalue()))
-            {
+            if expr.is_some_and(Expr::is_lvalue) || value.is_lvalue_reference() {
                 return Some(false);
             }
             if value.strip_reference().is_const() && !inner.is_const() {
