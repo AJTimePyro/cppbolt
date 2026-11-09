@@ -269,6 +269,7 @@ mini_stl/string_basic
 mini_stl/string_comprehensive
 mini_stl/unique_ptr_basic
 mini_stl/unique_ptr_return_local
+mini_stl/unique_ptr_self_reset
 mini_stl/vector_aliasing
 mini_stl/vector_basic
 mini_stl/vector_brace_init
@@ -417,6 +418,7 @@ negative/template_alias
 negative/template_deduction_conflict
 negative/template_explicit_instantiation
 negative/template_explicit_specialization
+negative/template_func_arg_incompatible
 negative/template_instantiation_depth
 negative/template_nontype_param
 negative/template_template_param

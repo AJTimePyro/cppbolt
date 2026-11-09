@@ -48,7 +48,7 @@ namespace std {
         void reset(T* p = nullptr) noexcept {
             T* old = _ptr;
             _ptr = p;
-            if (old) {
+            if (old && old != p) {
                 delete old;
             }
         }

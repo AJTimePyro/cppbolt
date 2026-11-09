@@ -51,6 +51,16 @@ impl Sema {
                             template_decl,
                             pos,
                         )?;
+                        if let Err(failure) =
+                            self.score_arguments(&sig.param_types, arg_types, Some(args))
+                        {
+                            last_err = Some(self.no_matching_conversion(
+                                &template_decl.name,
+                                &failure,
+                                pos,
+                            ));
+                            continue;
+                        }
                         return Ok(Some(sig));
                     }
                     Err(e) => last_err = Some(e),
