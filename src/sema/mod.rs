@@ -28,6 +28,7 @@ mod template_alias;
 mod template_func;
 mod template_nested;
 mod template_registry;
+mod template_spec;
 pub mod template_subst;
 #[cfg(test)]
 mod tests;
@@ -167,6 +168,7 @@ pub struct Sema {
     pub synthesized_decls: Vec<Decl>,
     pub current_func_is_const: bool,
     pub class_templates: HashMap<String, (TemplateClass, Vec<TemplateParam>)>,
+    pub class_specializations: HashMap<String, TemplateClass>,
     pub function_templates: HashMap<String, Vec<(FunctionDecl, Vec<TemplateParam>)>>,
     pub alias_templates: HashMap<String, (Vec<TemplateParam>, Type)>,
     pub instantiated_classes: HashSet<String>,
@@ -204,6 +206,7 @@ impl Sema {
             synthesized_decls: Vec::new(),
             current_func_is_const: false,
             class_templates: HashMap::new(),
+            class_specializations: HashMap::new(),
             function_templates: HashMap::new(),
             alias_templates: HashMap::new(),
             instantiated_classes: HashSet::new(),

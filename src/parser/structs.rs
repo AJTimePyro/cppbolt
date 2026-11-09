@@ -43,6 +43,15 @@ impl Parser {
             }
         };
         name = self.qualify_name(name);
+        if self.peek() == &TokenKind::Lt {
+            let args = self.parse_template_args()?;
+            let canonical_args = args
+                .iter()
+                .map(|a| a.to_c_type())
+                .collect::<Vec<_>>()
+                .join(", ");
+            name = format!("{}<{}>", name, canonical_args);
+        }
         self.known_types.insert(name.clone());
         if let Some(short) = name.split("::").last() {
             self.known_types.insert(short.to_string());

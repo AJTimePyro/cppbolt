@@ -133,7 +133,11 @@ impl Sema {
                 }
                 Decl::Template(t) => match &t.kind {
                     TemplateKind::Class(c) => {
-                        self.register_class_template(c.clone(), t.params.clone());
+                        if t.params.is_empty() && c.name.contains('<') {
+                            self.register_class_specialization(c.clone(), (t.line, t.col))?;
+                        } else {
+                            self.register_class_template(c.clone(), t.params.clone());
+                        }
                     }
                     TemplateKind::Function(f) => {
                         if f.name.contains("::") {

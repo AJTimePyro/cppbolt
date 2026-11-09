@@ -236,8 +236,12 @@ impl Sema {
         self.instantiation_stack.push(inst_name.clone());
         self.instantiation_depth += 1;
 
+        let target_class = self
+            .lookup_class_specialization(&inst_name)
+            .unwrap_or(template_class);
+
         let result = self.execute_class_instantiation(
-            &template_class,
+            &target_class,
             &template_params,
             &effective_args,
             &inst_name,

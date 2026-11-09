@@ -20,11 +20,8 @@ impl Parser {
         self.advance(); // consume '<'
 
         if self.peek() == &TokenKind::Gt {
-            return Err(CompileError::new(
-                "explicit template specialization is not supported yet",
-                t_line,
-                t_col,
-            ));
+            self.advance();
+            return self.parse_template_body(Vec::new(), t_line, t_col, declarations);
         }
 
         let params = self.parse_template_params()?;
