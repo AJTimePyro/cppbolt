@@ -15,10 +15,9 @@ export { AsyncCppBoltRunner } from "./node-worker.js";
 registerAsyncRunnerFactory((host) => new AsyncCppBoltRunner(host));
 
 /**
- * Load cppbolt.wasm and return a CppBoltCompiler.
- *
- * Defaults to `wasm/cppbolt.wasm` in the package directory. An optional file
- * path, file/http URL, or WebAssembly bytecode buffer can be provided.
+ * Instantiates a `CppBoltCompiler` in Node.js environments.
+ * Resolves `wasm/cppbolt.wasm` from the package directory by default, or loads from a
+ * specified file path, URL, or preloaded `BufferSource`.
  */
 export async function createCompiler(
 	wasmLocation?: string | URL | BufferSource,

@@ -12,15 +12,12 @@ async function testBrowserBuild() {
     const mjsContent = fs.readFileSync(browserMjsPath, "utf8");
     const jsContent = fs.readFileSync(browserJsPath, "utf8");
 
-    // Ensure browser bundles do not link Node worker_threads.
     assert.ok(!mjsContent.includes("node:worker_threads"), "Browser MJS bundle must not import node:worker_threads");
     assert.ok(!jsContent.includes("node:worker_threads"), "Browser JS bundle must not import node:worker_threads");
 
-    // Ensure __WORKER_BUNDLE__ was replaced and not left as an unbound identifier.
     assert.ok(!mjsContent.includes("__WORKER_BUNDLE__"), "Browser MJS bundle must not contain unreplaced __WORKER_BUNDLE__");
     assert.ok(!jsContent.includes("__WORKER_BUNDLE__"), "Browser JS bundle must not contain unreplaced __WORKER_BUNDLE__");
 
-    // Ensure the embedded worker bundle contains the host implementation.
     assert.ok(mjsContent.includes("createWasmHost"), "Browser MJS bundle must contain embedded worker with createWasmHost");
     assert.ok(jsContent.includes("createWasmHost"), "Browser JS bundle must contain embedded worker with createWasmHost");
 

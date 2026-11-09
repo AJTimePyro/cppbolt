@@ -94,14 +94,12 @@ async function runTests() {
         const host = CppBolt.createWasmHost({});
         const runner = new CppBolt.AsyncCppBoltRunner(host);
 
-        // Test 1: Normal execution
         const res1 = await runner.run(normalWasmBytes, { timeoutMs: 1000 });
         if (res1.exitCode !== 42) {
             throw new Error("Expected exitCode 42, got " + res1.exitCode);
         }
         results.push("Normal execution: PASS");
 
-        // Test 2: Infinite loop timeout
         let threwTimeout = false;
         try {
             await runner.run(infiniteLoopWasmBytes, { timeoutMs: 150 });
@@ -116,7 +114,6 @@ async function runTests() {
         }
         results.push("Timeout execution: PASS");
 
-        // Test 3: Abort execution
         const controller = new AbortController();
         setTimeout(() => controller.abort(), 80);
         let threwAbort = false;
@@ -133,7 +130,6 @@ async function runTests() {
         }
         results.push("Abort execution: PASS");
 
-        // Test 4: CSP restriction diagnostics
         const cspResult = await new Promise((resolve) => {
             window.addEventListener("message", function onMsg(e) {
                 if (e.data && e.data.type === "csp-result") {
@@ -151,7 +147,6 @@ async function runTests() {
         }
         results.push("CSP restriction diagnostics: PASS");
 
-        // Test 5: Rejection of invalid wasm
         let threwInvalid = false;
         try {
             await runner.run(new Uint8Array([0, 1, 2, 3]));
@@ -163,7 +158,6 @@ async function runTests() {
         }
         results.push("Invalid wasm rejection: PASS");
 
-        // Test 6: Optional host constructor
         const runnerNoHost = new CppBolt.AsyncCppBoltRunner();
         const resNoHost = await runnerNoHost.run(normalWasmBytes);
         if (resNoHost.exitCode !== 42) {
@@ -171,14 +165,12 @@ async function runTests() {
         }
         results.push("Optional host constructor: PASS");
 
-        // Test 7: Stdin forwarding
         const resStdin = await runner.run(readStdinWasmBytes, { stdin: "Z" });
         if (resStdin.exitCode !== 90) {
             throw new Error("Expected stdin exitCode 90, got: " + resStdin.exitCode);
         }
         results.push("Stdin forwarding: PASS");
 
-        // Test 8: Streaming onStdout callback
         const chunks = [];
         const resStdout = await runner.run(printStdoutWasmBytes, {
             onStdout: (c) => chunks.push(c)

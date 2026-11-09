@@ -2,14 +2,13 @@ import type { CppBoltCompiler } from "./compiler.js";
 import { createWasmHost, type WasmHost, type WasmHostOptions } from "./host.js";
 import { CppBoltRunner, type RunOptions, type RunResult } from "./runner.js";
 
-// Shared public surface, re-exported by each environment entry point.
 export { CompileError, CppBoltCompiler } from "./compiler.js";
 export type { WasmHost, WasmHostOptions } from "./host.js";
 export { createWasmHost, isWasmExit, WasmExit } from "./host.js";
 export type { RunOptions, RunResult } from "./runner.js";
 export { CppBoltRunner, TimeoutError } from "./runner.js";
 
-/** Runner interface implemented by sync and async runners. */
+/** Common runner interface supporting synchronous and worker-isolated execution. */
 export interface RunnerInstance {
 	run(wasmBytes: Uint8Array, options?: RunOptions): Promise<RunResult>;
 }
@@ -39,7 +38,8 @@ export async function compileAndRun(
 }
 
 /**
- * Compiles `source` and executes the module in an isolated worker with timeout support.
+ * Compiles C++ source and executes the emitted WebAssembly module in an isolated
+ * worker with timeout, abort, and I/O streaming support.
  */
 export async function compileAndRunAsync(
 	compiler: CppBoltCompiler,

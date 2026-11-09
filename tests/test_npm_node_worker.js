@@ -91,16 +91,13 @@ async function testNodeWorker() {
     }
     assert.strictEqual(invalidThrew, true, "Invalid wasm must reject Promise");
 
-    // Test no-argument constructor
     const runnerNoHost = new pkg.AsyncCppBoltRunner();
     const resNoHost = await runnerNoHost.run(normalWasmBytes);
     assert.strictEqual(resNoHost.exitCode, 42);
 
-    // Test stdin forwarding
     const resStdin = await runner.run(readStdinWasmBytes, { stdin: "Z" });
     assert.strictEqual(resStdin.exitCode, 90, "stdin 'Z' (90) must be read by wasm");
 
-    // Test streaming onStdout callback
     const chunks = [];
     const resStdout = await runner.run(printStdoutWasmBytes, {
         onStdout: (c) => chunks.push(c)

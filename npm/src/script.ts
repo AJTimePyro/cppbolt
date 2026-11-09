@@ -7,8 +7,7 @@ export { AsyncCppBoltRunner } from "./browser-worker.js";
 
 registerAsyncRunnerFactory((host) => new AsyncCppBoltRunner(host));
 
-// Captured while the classic script is evaluating: by the time callers invoke
-// createCompiler(), document.currentScript is null again.
+// Preserved at script evaluation time; document.currentScript is null during subsequent calls.
 const scriptSrc: string | null =
 	typeof document !== "undefined" &&
 	document.currentScript instanceof HTMLScriptElement
@@ -16,10 +15,8 @@ const scriptSrc: string | null =
 		: null;
 
 /**
- * Fetch cppbolt.wasm and return a CppBoltCompiler.
- *
- * This is the classic `<script>` entry point. The wasm binary is resolved
- * relative to the script URL.
+ * Instantiates a `CppBoltCompiler` in classic browser script environments.
+ * Resolves `wasm/cppbolt.wasm` relative to the script URL.
  */
 export async function createCompiler(): Promise<CppBoltCompiler> {
 	if (!scriptSrc) {

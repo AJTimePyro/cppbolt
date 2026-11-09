@@ -5,10 +5,8 @@ import { type RunOptions, type RunResult, TimeoutError } from "./runner.js";
 
 export class AsyncCppBoltRunner {
 	/**
-	 * Creates an isolated worker runner.
-	 *
-	 * Note: Execution runs in an isolated worker thread with a dedicated host.
-	 * Configure stdin and streaming stdout through `RunOptions` in `run()`.
+	 * Executes WebAssembly modules inside a dedicated Node.js `worker_threads` instance.
+	 * Host I/O configuration (stdin, streaming stdout) is passed per invocation via `RunOptions`.
 	 */
 	constructor(readonly host?: WasmHost) {}
 

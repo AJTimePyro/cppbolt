@@ -8,12 +8,8 @@ export { AsyncCppBoltRunner } from "./browser-worker.js";
 registerAsyncRunnerFactory((host) => new AsyncCppBoltRunner(host));
 
 /**
- * Fetch cppbolt.wasm and return a CppBoltCompiler.
- *
- * This is the browser ES module entry point. By default the wasm binary is
- * resolved relative to this module, which works both from a CDN and through a
- * bundler that understands `new URL(..., import.meta.url)`. Pass `wasmUrl` to
- * load it from somewhere else.
+ * Instantiates a `CppBoltCompiler` in browser ES module and bundler environments.
+ * Resolves `wasm/cppbolt.wasm` relative to the module URL by default, or fetches from `wasmUrl`.
  */
 export async function createCompiler(
 	wasmUrl: string | URL = new URL("../wasm/cppbolt.wasm", import.meta.url),

@@ -12,9 +12,7 @@ export interface RunResult {
 	elapsedMs?: number;
 }
 
-/**
- * Options configuring program execution.
- */
+/** Execution parameters for running compiled WebAssembly modules. */
 export interface RunOptions {
 	/** Optional execution timeout in milliseconds. Supported only by `AsyncCppBoltRunner`. */
 	timeoutMs?: number;
@@ -26,9 +24,7 @@ export interface RunOptions {
 	onStdout?: (chunk: string) => void;
 }
 
-/**
- * Error thrown when execution exceeds timeout limit or is cancelled.
- */
+/** Error raised when execution exceeds `timeoutMs` or receives an abort signal. */
 export class TimeoutError extends Error {
 	readonly stdout: string;
 	readonly elapsedMs: number;
