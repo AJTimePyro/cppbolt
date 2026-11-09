@@ -23,7 +23,7 @@ jobs:
       - name: Install mdBook (pinned version)
         uses: taiki-e/install-action@v2
         with:
-          tool: mdbook@0.4.40
+          tool: mdbook
 
       - name: Set up Python
         uses: actions/setup-python@v5
