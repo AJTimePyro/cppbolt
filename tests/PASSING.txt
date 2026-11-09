@@ -424,6 +424,7 @@ negative/typename_unqualified
 negative/unary_plus_invalid_struct
 negative/undeclared_var
 negative/undefined_func
+negative/unique_ptr_copy
 negative/unterminated_if
 negative/virtual_inheritance
 runtime_trap/malloc_beyond_max

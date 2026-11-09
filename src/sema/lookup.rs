@@ -217,6 +217,9 @@ impl Sema {
                 }
             }
         }
+        if method_name == "operator=" && !out.is_empty() {
+            return;
+        }
         if let Some(layout) = self.struct_layouts.get(class_name) {
             for base in &layout.base_classes {
                 self.collect_method_overloads(base, method_name, receiver_const, out, visited);

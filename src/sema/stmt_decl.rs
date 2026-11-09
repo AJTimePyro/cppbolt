@@ -161,6 +161,10 @@ impl Sema {
             ));
         }
         if let Type::Struct(sname) = ty.strip_const() {
+            let is_same_struct = matches!(
+                init_ty.strip_reference().strip_const(),
+                Type::Struct(init_s) if QualifiedName::new(init_s).matches(QualifiedName::new(sname))
+            );
             if let Some(sig) = self.find_constructor_for(
                 sname,
                 std::slice::from_ref(&init_ty),
@@ -174,7 +178,7 @@ impl Sema {
                 ExprPos::new(line, col),
             )? {
                 self.instantiate_pending_method(&sig.mangled_name)?;
-            } else {
+            } else if is_same_struct && init_expr.is_lvalue() && self.is_move_only_struct(sname) {
                 return Err(CompileError::new(
                     format!(
                         "cannot initialize variable '{}' of type {} with {}",

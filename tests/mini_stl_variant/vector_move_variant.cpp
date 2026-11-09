@@ -13,6 +13,7 @@ struct Tracked {
         printf("move assign: %d\n", val);
         return *this;
     }
+    ~Tracked() {}
 };
 
 int main() {

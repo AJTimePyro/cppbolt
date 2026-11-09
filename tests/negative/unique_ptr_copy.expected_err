@@ -1,1 +1,1 @@
-cannot initialize variable
+tests/negative/unique_ptr_copy.cpp:5:5: error: cannot initialize variable 'p2' of type unique_ptr<int> with unique_ptr<int>

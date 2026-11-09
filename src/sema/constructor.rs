@@ -278,6 +278,45 @@ impl Sema {
     ///
     /// A single argument of the class itself is initialized with the copy
     /// constructor, whether or not the class declares one.
+    pub(super) fn is_move_only_struct(&self, sname: &str) -> bool {
+        let qname = QualifiedName::new(sname);
+        let short = qname.class_short_name();
+        let alternate = qname.alternate();
+        let mut has_move_ctor = false;
+        let mut has_copy_ctor = false;
+        for name in [
+            format!("{sname}::{short}"),
+            format!("{sname}::{sname}"),
+            format!("{alternate}::{short}"),
+            format!("{alternate}::{alternate}"),
+        ] {
+            if let Some(sigs) = self.functions.get(&name) {
+                for sig in sigs {
+                    let params = if sig.param_types.is_empty() {
+                        &[][..]
+                    } else {
+                        &sig.param_types[1..]
+                    };
+                    if params.len() == 1 {
+                        let param_clean = params[0].strip_const();
+                        if let Type::RvalueReference(inner) = param_clean
+                            && let Type::Struct(s) = inner.strip_const()
+                            && QualifiedName::new(s).class_short_name() == short
+                        {
+                            has_move_ctor = true;
+                        } else if let Type::Reference(inner) = param_clean
+                            && let Type::Struct(s) = inner.strip_const()
+                            && QualifiedName::new(s).class_short_name() == short
+                        {
+                            has_copy_ctor = true;
+                        }
+                    }
+                }
+            }
+        }
+        has_move_ctor && !has_copy_ctor
+    }
+
     pub(super) fn is_copy_initialization(&self, class_name: &str, arg_types: &[Type]) -> bool {
         arg_types.len() == 1
             && matches!(arg_types[0].strip_const(), Type::Struct(other) if *other == class_name)
