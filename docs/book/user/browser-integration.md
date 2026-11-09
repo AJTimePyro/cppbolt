@@ -159,6 +159,8 @@ The runner cleanly distinguishes instantiation errors, execution traps, and norm
 - Malformed or incompatible WebAssembly bytecode rejects the returned promise with the underlying `CompileError` or `LinkError`.
 - WebAssembly traps (`WebAssembly.RuntimeError` or stack overflow `RangeError`) resolve with exit status `134` (`SIGABRT`), matching the behavior of the synchronous runner.
 - The constructor `new AsyncCppBoltRunner()` accepts an optional host; omitting it uses the default runtime host within the worker.
+- Abnormal worker exits (such as unhandled terminations) reject the run promise with the exit code.
+- Browser environments can import `dist/index.browser.mjs` directly or use the `"cppbolt/browser"` package export.
 
 ### Shareable URLs
 The playground supports URL query parameters so interactive code snippets can be shared:

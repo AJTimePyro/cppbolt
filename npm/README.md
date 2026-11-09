@@ -13,16 +13,15 @@ npm install cppbolt
 The package provides three entry points. Node.js and bundlers select the right
 one automatically; native browsers and classic scripts use the file directly.
 
-| Environment                            | Entry point               | How to load it                                                           |
-| -------------------------------------- | ------------------------- | ------------------------------------------------------------------------ |
-| Node.js (CommonJS or ES modules)       | `dist/index.js`           | `require("cppbolt")` or `import ... from "cppbolt"`                      |
-| Browser bundlers and native ES modules | `dist/index.browser.mjs`  | `import ... from "cppbolt"` (bundler) or the module URL (native browser) |
-| Classic browser `<script>`             | `dist/cppbolt.browser.js` | `<script src="..."></script>`, then use the global `CppBolt`             |
+| Environment                            | Entry point               | How to load it                                                    |
+| -------------------------------------- | ------------------------- | ----------------------------------------------------------------- |
+| Node.js (CommonJS or ES modules)       | `dist/index.js`           | `require("cppbolt")` or `import ... from "cppbolt"`               |
+| Browser bundlers and native ES modules | `dist/index.browser.mjs`  | `import ... from "cppbolt"` or `"cppbolt/browser"`, or module URL |
+| Classic browser `<script>`             | `dist/cppbolt.browser.js` | `<script src="..."></script>`, then use the global `CppBolt`      |
 
 ### Node.js
 
-`createCompiler()` loads `wasm/cppbolt.wasm` from the installed package. The API
-is identical from CommonJS and ES modules:
+`createCompiler()` loads `wasm/cppbolt.wasm` from the installed package directory. You can also pass an optional file path, file or HTTP URL, or WebAssembly bytecode buffer (`BufferSource`). The API is identical from CommonJS and ES modules:
 
 ```js
 // CommonJS
@@ -179,16 +178,18 @@ not `file://`, so it can fetch the wasm binary next to it.
 `CppBolt.createCompiler()` resolves `wasm/cppbolt.wasm` relative to the script
 URL.
 
-### How the entry points are selected
+### How entry points and subpaths are selected
 
-The npm manifest uses conditional exports, evaluated in declaration order:
+The npm manifest exposes package exports evaluated by Node.js and bundlers:
 
-| Condition | Entry point              | Selected by                      |
-| --------- | ------------------------ | -------------------------------- |
-| `types`   | `dist/index.d.ts`        | TypeScript                       |
-| `browser` | `dist/index.browser.mjs` | Browser-targeting bundlers       |
-| `node`    | `dist/index.js`          | Node.js (`require` and `import`) |
-| `default` | `dist/index.browser.mjs` | Other ES module environments     |
+| Export subpath        | Entry point              | Selected by                      |
+| --------------------- | ------------------------ | -------------------------------- |
+| `.`                   | `dist/index.d.ts`        | TypeScript declaration lookup    |
+| `.`                   | `dist/index.browser.mjs` | Browser-targeting bundlers       |
+| `.`                   | `dist/index.js`          | Node.js (`require` and `import`) |
+| `.`                   | `dist/index.browser.mjs` | Default ES module fallback       |
+| `./browser`           | `dist/index.browser.mjs` | Direct browser ESM import        |
+| `./wasm/cppbolt.wasm` | `wasm/cppbolt.wasm`      | Static compiler WebAssembly asset|
 
 ## Compiler API
 
