@@ -37,9 +37,9 @@ jobs:
           key: pages-wasm
 
       - name: Install mdBook (pinned version)
-        uses: peaceiris/actions-mdbook@v2
+        uses: taiki-e/install-action@v2
         with:
-          mdbook-version: '0.4.40'
+          tool: mdbook@0.4.40
 
       - name: Set up Python
         uses: actions/setup-python@v5
