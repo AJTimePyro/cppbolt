@@ -19,6 +19,11 @@
 			"node": "./dist/index.js",
 			"default": "./dist/index.browser.mjs"
 		},
+		"./browser": {
+			"types": "./dist/index.d.ts",
+			"browser": "./dist/index.browser.mjs",
+			"default": "./dist/index.browser.mjs"
+		},
 		"./wasm/cppbolt.wasm": "./wasm/cppbolt.wasm"
 	},
 	"scripts": {
