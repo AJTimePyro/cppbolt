@@ -41,14 +41,20 @@ impl Parser {
                     p_col,
                 ));
             }
-            if self.peek() != &TokenKind::KwTypename && self.peek() != &TokenKind::KwClass {
+            let param_type = if self.peek() == &TokenKind::KwTypename
+                || self.peek() == &TokenKind::KwClass
+            {
+                self.advance();
+                None
+            } else if self.is_type_start() {
+                Some(self.parse_type()?)
+            } else {
                 return Err(CompileError::new(
-                    "non-type template parameters are not supported yet",
+                    "expected template parameter declaration",
                     p_line,
                     p_col,
                 ));
-            }
-            self.advance();
+            };
 
             if self.peek() == &TokenKind::Dot {
                 return Err(CompileError::new(
@@ -64,13 +70,20 @@ impl Parser {
             };
             let default_type = if self.peek() == &TokenKind::Assign {
                 self.advance();
-                Some(self.parse_type()?)
+                if param_type.is_some() {
+                    let expr = self.parse_expr()?;
+                    let val = crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None)?;
+                    Some(Type::NonType(val))
+                } else {
+                    Some(self.parse_type()?)
+                }
             } else {
                 None
             };
             params.push(TemplateParam {
                 name,
                 default_type,
+                param_type,
                 line: p_line,
                 col: p_col,
             });
@@ -233,7 +246,7 @@ impl Parser {
         self.expect(TokenKind::Lt)?;
         let mut args = Vec::new();
         while self.peek() != &TokenKind::Gt && self.peek() != &TokenKind::Shr {
-            let ty = self.parse_type()?;
+            let ty = self.parse_template_arg_type()?;
             args.push(ty);
             if self.peek() == &TokenKind::Comma {
                 self.advance();
@@ -243,6 +256,26 @@ impl Parser {
         }
         self.consume_template_closing_gt()?;
         Ok(args)
+    }
+
+    pub fn parse_template_arg_type(&mut self) -> Result<Type, CompileError> {
+        if self.is_type_start() {
+            let saved_pos = self.pos;
+            if let Ok(ty) = self.parse_type() {
+                return Ok(ty);
+            }
+            self.pos = saved_pos;
+        }
+        let saved_in_template = self.in_template_arg;
+        let saved_depth = self.template_arg_paren_depth;
+        self.in_template_arg = true;
+        self.template_arg_paren_depth = 0;
+        let expr_res = self.parse_expr();
+        self.in_template_arg = saved_in_template;
+        self.template_arg_paren_depth = saved_depth;
+        let expr = expr_res?;
+        let val = crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None)?;
+        Ok(Type::NonType(val))
     }
 
     pub(super) fn is_template_qualifier_ahead(&self) -> bool {

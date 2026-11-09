@@ -1,0 +1,1 @@
+tests/negative/template_nttp_type_mismatch.cpp:7:5: error: template argument for non-type parameter must be a constant expression

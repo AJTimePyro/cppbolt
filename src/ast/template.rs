@@ -6,6 +6,7 @@ use super::types::Type;
 pub struct TemplateParam {
     pub name: String,
     pub default_type: Option<Type>,
+    pub param_type: Option<Type>,
     pub line: usize,
     pub col: usize,
 }
@@ -46,12 +47,14 @@ mod tests {
         let p1 = TemplateParam {
             name: "T".to_string(),
             default_type: None,
+            param_type: None,
             line: 1,
             col: 10,
         };
         let p2 = TemplateParam {
             name: "T".to_string(),
             default_type: None,
+            param_type: None,
             line: 1,
             col: 10,
         };

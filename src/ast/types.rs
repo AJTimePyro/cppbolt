@@ -33,6 +33,8 @@ pub enum Type {
     Reference(Box<Type>),
     RvalueReference(Box<Type>),
     Array(Box<Type>, usize),
+    DependentArray(Box<Type>, String),
+    NonType(i128),
     Struct(String),
     Enum(String),
     TypeParam(String),
@@ -113,6 +115,9 @@ impl Type {
                 Type::RvalueReference(Box::new(inner.strip_all_const()))
             }
             Type::Array(inner, size) => Type::Array(Box::new(inner.strip_all_const()), *size),
+            Type::DependentArray(inner, param) => {
+                Type::DependentArray(Box::new(inner.strip_all_const()), param.clone())
+            }
             Type::TemplateInstance { name, args } => Type::TemplateInstance {
                 name: name.clone(),
                 args: args.iter().map(|a| a.strip_all_const()).collect(),
@@ -297,7 +302,7 @@ impl Type {
                 .get(name)
                 .or_else(|| struct_sizes.get(QualifiedName::new(name).plain()))
                 .unwrap_or(&4),
-            Type::TypeParam(_) => 4,
+            Type::TypeParam(_) | Type::NonType(_) | Type::DependentArray(_, _) => 4,
             Type::Function { .. } => 4,
             Type::Const(_) => unreachable!(),
         }
@@ -324,7 +329,7 @@ impl Type {
                 .get(name)
                 .or_else(|| struct_aligns.get(QualifiedName::new(name).plain()))
                 .unwrap_or(&4),
-            Type::TypeParam(_) => 4,
+            Type::TypeParam(_) | Type::NonType(_) | Type::DependentArray(_, _) => 4,
             Type::Function { .. } => 4,
             Type::Const(_) => unreachable!(),
         }
@@ -355,6 +360,8 @@ impl Type {
             | Type::Struct(_)
             | Type::TemplateInstance { .. }
             | Type::TypeParam(_)
+            | Type::NonType(_)
+            | Type::DependentArray(_, _)
             | Type::Function { .. } => Some(WasmType::I32),
             Type::Const(_) => unreachable!(),
         }
@@ -384,6 +391,8 @@ impl Type {
             Type::Reference(inner) => format!("{} &", inner.to_c_type()),
             Type::RvalueReference(inner) => format!("{} &&", inner.to_c_type()),
             Type::Array(inner, n) => format!("{}[{}]", inner.to_c_type(), n),
+            Type::DependentArray(inner, param) => format!("{}[{}]", inner.to_c_type(), param),
+            Type::NonType(n) => n.to_string(),
             Type::TypeParam(name) => name.clone(),
             Type::TemplateInstance { name, args } => {
                 let formatted = args

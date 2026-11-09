@@ -43,6 +43,8 @@ pub struct Parser {
     pub known_namespaces: HashSet<String>,
     pub active_struct_scopes: Vec<String>,
     pub allow_unknown_types: bool,
+    pub in_template_arg: bool,
+    pub template_arg_paren_depth: usize,
     nesting: DepthCounters,
     nesting_exceeded: Cell<bool>,
 }
@@ -100,6 +102,8 @@ impl Parser {
             known_namespaces: HashSet::new(),
             active_struct_scopes: Vec::new(),
             allow_unknown_types: false,
+            in_template_arg: false,
+            template_arg_paren_depth: 0,
             nesting: DepthCounters::new(),
             nesting_exceeded: Cell::new(false),
         }

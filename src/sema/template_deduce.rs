@@ -37,7 +37,7 @@ pub fn parse_types_list_with_params(
     }
     let mut types = Vec::new();
     while parser.peek() != &TokenKind::Eof {
-        types.push(parser.parse_type()?);
+        types.push(parser.parse_template_arg_type()?);
         if parser.peek() == &TokenKind::Comma {
             parser.advance();
         } else {
@@ -176,6 +176,15 @@ pub fn fill_default_template_args(
         let subst_ty = crate::sema::template_subst::substitute_type(def_ty, &mapping, None);
         mapping.insert(param.name.clone(), subst_ty.clone());
         result.push(subst_ty);
+    }
+    for (param, arg) in template_params.iter().zip(result.iter()) {
+        if param.param_type.is_some() && !matches!(arg, Type::NonType(_) | Type::TypeParam(_)) {
+            return Err(CompileError::new(
+                "template argument for non-type parameter must be a constant expression",
+                pos.0,
+                pos.1,
+            ));
+        }
     }
     Ok(result)
 }

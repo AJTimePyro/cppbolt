@@ -15,32 +15,7 @@ pub fn substitute_type(
 ) -> Type {
     match ty {
         Type::TypeParam(name) => mapping.get(name).cloned().unwrap_or_else(|| ty.clone()),
-        Type::Struct(name) => {
-            if let Some((c, target_ty)) = injected_class {
-                let short_c = c.rsplit_once("::").map(|(_, s)| s).unwrap_or(c);
-                if (name == c
-                    || name == short_c
-                    || crate::QualifiedName::new(c).matches(crate::QualifiedName::new(name)))
-                    && (!name.contains('<') || c.contains('<'))
-                {
-                    return target_ty.clone();
-                }
-            }
-            if let Some(target) = mapping.get(name) {
-                return target.clone();
-            }
-            if let Some((target, member)) = name
-                .split_once("::")
-                .and_then(|(base, member)| mapping.get(base).map(|target| (target, member)))
-            {
-                let base_str = target.to_c_type();
-                return Type::Struct(format!("{}::{}", base_str, member));
-            }
-            if name.contains('<') {
-                return Type::Struct(substitute_template_name(name, mapping));
-            }
-            ty.clone()
-        }
+        Type::Struct(name) => substitute_struct_type(name, mapping, injected_class),
         Type::TemplateInstance { name, args } => {
             let subst_args = args
                 .iter()
@@ -74,6 +49,14 @@ pub fn substitute_type(
             Box::new(substitute_type(inner, mapping, injected_class)),
             *size,
         ),
+        Type::DependentArray(inner, param_name) => {
+            let subst_inner = substitute_type(inner, mapping, injected_class);
+            let size = match mapping.get(param_name) {
+                Some(Type::NonType(n)) => *n as usize,
+                _ => 0,
+            };
+            Type::Array(Box::new(subst_inner), size)
+        }
         Type::Function {
             return_type,
             param_types,
@@ -86,6 +69,37 @@ pub fn substitute_type(
         },
         _ => ty.clone(),
     }
+}
+
+fn substitute_struct_type(
+    name: &str,
+    mapping: &HashMap<String, Type>,
+    injected_class: Option<(&str, &Type)>,
+) -> Type {
+    if let Some((c, target_ty)) = injected_class {
+        let short_c = c.rsplit_once("::").map(|(_, s)| s).unwrap_or(c);
+        if (name == c
+            || name == short_c
+            || crate::QualifiedName::new(c).matches(crate::QualifiedName::new(name)))
+            && (!name.contains('<') || c.contains('<'))
+        {
+            return target_ty.clone();
+        }
+    }
+    if let Some(target) = mapping.get(name) {
+        return target.clone();
+    }
+    if let Some((target, member)) = name
+        .split_once("::")
+        .and_then(|(base, member)| mapping.get(base).map(|target| (target, member)))
+    {
+        let base_str = target.to_c_type();
+        return Type::Struct(format!("{}::{}", base_str, member));
+    }
+    if name.contains('<') {
+        return Type::Struct(substitute_template_name(name, mapping));
+    }
+    Type::Struct(name.to_string())
 }
 
 pub fn substitute_expr(
@@ -146,6 +160,11 @@ pub fn substitute_expr(
         Expr::InitializerList { elements, .. } => {
             for el in elements {
                 substitute_expr(el, mapping, injected_class);
+            }
+        }
+        Expr::Identifier(name) => {
+            if let Some(Type::NonType(val)) = mapping.get(name) {
+                *expr = Expr::IntLiteral(*val as i64, Type::Int);
             }
         }
         _ => {}
