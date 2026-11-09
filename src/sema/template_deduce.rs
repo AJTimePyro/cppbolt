@@ -98,15 +98,73 @@ pub fn deduce_template_arguments(
 
     for param in template_params {
         if !deduced.contains_key(&param.name) {
-            return Err(CompileError::new(
-                format!("could not deduce template argument for '{}'", param.name),
-                pos.line,
-                pos.col,
-            ));
+            if let Some(ref def_ty) = param.default_type {
+                let subst_def =
+                    crate::sema::template_subst::substitute_type(def_ty, &deduced, None);
+                deduced.insert(param.name.clone(), subst_def);
+            } else {
+                return Err(CompileError::new(
+                    format!("could not deduce template argument for '{}'", param.name),
+                    pos.line,
+                    pos.col,
+                ));
+            }
         }
     }
 
     Ok(deduced)
+}
+
+/// Pads missing template arguments from parameter default types.
+pub fn fill_default_template_args(
+    name: &str,
+    template_params: &[TemplateParam],
+    args: &[Type],
+    pos: (usize, usize),
+) -> Result<Vec<Type>, CompileError> {
+    let min_args = template_params
+        .iter()
+        .take_while(|p| p.default_type.is_none())
+        .count();
+    if args.len() < min_args || args.len() > template_params.len() {
+        let expected_str = if min_args == template_params.len() {
+            format!("{}", template_params.len())
+        } else {
+            format!("at least {}", min_args)
+        };
+        return Err(CompileError::new(
+            format!(
+                "wrong number of template arguments for '{}': expected {}, found {}",
+                name,
+                expected_str,
+                args.len()
+            ),
+            pos.0,
+            pos.1,
+        ));
+    }
+
+    let mut result = args.to_vec();
+    let mut mapping = HashMap::new();
+    for (param, arg) in template_params.iter().zip(args.iter()) {
+        mapping.insert(param.name.clone(), arg.clone());
+    }
+    for param in &template_params[args.len()..] {
+        let Some(def_ty) = param.default_type.as_ref() else {
+            return Err(CompileError::new(
+                format!(
+                    "missing default argument for template parameter '{}'",
+                    param.name
+                ),
+                pos.0,
+                pos.1,
+            ));
+        };
+        let subst_ty = crate::sema::template_subst::substitute_type(def_ty, &mapping, None);
+        mapping.insert(param.name.clone(), subst_ty.clone());
+        result.push(subst_ty);
+    }
+    Ok(result)
 }
 
 fn deduce_type(

@@ -65,8 +65,15 @@ impl Parser {
                 TokenKind::Ident(id) => id,
                 _ => return Err(CompileError::new("expected identifier", p_line, p_col)),
             };
+            let default_type = if self.peek() == &TokenKind::Assign {
+                self.advance();
+                Some(self.parse_type()?)
+            } else {
+                None
+            };
             params.push(TemplateParam {
                 name,
+                default_type,
                 line: p_line,
                 col: p_col,
             });

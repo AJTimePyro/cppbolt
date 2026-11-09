@@ -194,18 +194,12 @@ impl Sema {
                 CompileError::new(format!("Template '{}' not found", name), line, col)
             })?;
 
-        if args.len() != template_params.len() {
-            return Err(CompileError::new(
-                format!(
-                    "wrong number of template arguments for '{}': expected {}, found {}",
-                    name,
-                    template_params.len(),
-                    args.len()
-                ),
-                line,
-                col,
-            ));
-        }
+        let effective_args = super::template_deduce::fill_default_template_args(
+            name,
+            &template_params,
+            args,
+            (line, col),
+        )?;
 
         if self.instantiation_depth >= 500 {
             return Err(CompileError::new(
@@ -215,7 +209,7 @@ impl Sema {
             ));
         }
 
-        let canonical_args = args
+        let canonical_args = effective_args
             .iter()
             .map(|a| a.to_c_type())
             .collect::<Vec<_>>()
@@ -234,7 +228,7 @@ impl Sema {
         let result = self.execute_class_instantiation(
             &template_class,
             &template_params,
-            args,
+            &effective_args,
             &inst_name,
             (line, col),
         );
