@@ -26,6 +26,7 @@ pub struct TemplateClass {
 pub enum TemplateKind {
     Class(TemplateClass),
     Function(Box<FunctionDecl>),
+    Alias(String, Type),
 }
 
 #[derive(Debug, Clone, PartialEq)]

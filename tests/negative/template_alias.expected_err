@@ -1,1 +1,0 @@
-tests/negative/template_alias.cpp:2:1: error: alias templates are not supported yet

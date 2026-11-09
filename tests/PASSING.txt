@@ -306,6 +306,7 @@ mini_stl_variant/vector_brace_init_variant
 mini_stl_variant/vector_move_variant
 mini_stl_variant/vector_size_ctor_variant
 negative/aggregate_excess_elements
+negative/alias_template_arg_mismatch
 negative/ambiguous_overload_call
 negative/ambiguous_using_directives
 negative/ambiguous_using_name
@@ -414,7 +415,6 @@ negative/structured_binding_count_mismatch
 negative/subscript_non_array
 negative/switch_case_non_constant
 negative/syntax_error
-negative/template_alias
 negative/template_deduction_conflict
 negative/template_default_args_missing
 negative/template_explicit_instantiation
@@ -446,6 +446,7 @@ runtime_trap/null_function_pointer
 runtime_trap/pure_virtual
 runtime_trap/pure_virtual_nonvoid
 runtime_trap/stack_overflow
+templates_operators/alias_templates_basic
 templates_operators/op_overload_binary
 templates_operators/op_overload_chain
 templates_operators/op_overload_subscript
@@ -469,6 +470,7 @@ templates_operators/template_ops_dtor
 templates_operators/template_pair
 templates_operators/template_ptr_const_ref
 templates_operators/typename_dependent_syntax
+templates_operators_variant/alias_templates_basic_variant
 templates_operators_variant/template_class_methods_variant
 templates_operators_variant/template_default_args_variant
 templates_operators_variant/template_forwarding_ref_variant

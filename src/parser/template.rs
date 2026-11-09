@@ -112,21 +112,12 @@ impl Parser {
         t_col: usize,
         declarations: &mut Vec<Decl>,
     ) -> Result<(), CompileError> {
-        let b_line = self.current().line;
-        let b_col = self.current().col;
-
-        if self.peek() == &TokenKind::KwUsing {
-            return Err(CompileError::new(
-                "alias templates are not supported yet",
-                b_line,
-                b_col,
-            ));
-        }
-
         let param_names: HashSet<String> = params.iter().map(|p| p.name.clone()).collect();
         self.active_type_params.push(param_names);
 
-        let result = if self.peek() == &TokenKind::KwStruct || self.peek() == &TokenKind::KwClass {
+        let result = if self.peek() == &TokenKind::KwUsing {
+            self.parse_template_alias(params, t_line, t_col)
+        } else if self.peek() == &TokenKind::KwStruct || self.peek() == &TokenKind::KwClass {
             self.parse_template_class(params, t_line, t_col)
         } else {
             self.parse_template_function(params, t_line, t_col)
@@ -174,6 +165,30 @@ impl Parser {
         Ok(vec![Decl::Template(TemplateDecl {
             params,
             kind: TemplateKind::Class(template_class),
+            line: t_line,
+            col: t_col,
+        })])
+    }
+
+    fn parse_template_alias(
+        &mut self,
+        params: Vec<TemplateParam>,
+        t_line: usize,
+        t_col: usize,
+    ) -> Result<Vec<Decl>, CompileError> {
+        self.advance();
+        let (id_line, id_col) = (self.current().line, self.current().col);
+        let name = match self.advance().kind.clone() {
+            TokenKind::Ident(id) => id,
+            _ => return Err(CompileError::new("expected identifier", id_line, id_col)),
+        };
+        self.register_template_name(&name);
+        self.expect(TokenKind::Assign)?;
+        let ty = self.parse_type()?;
+        self.expect(TokenKind::Semi)?;
+        Ok(vec![Decl::Template(TemplateDecl {
+            params,
+            kind: TemplateKind::Alias(name, ty),
             line: t_line,
             col: t_col,
         })])

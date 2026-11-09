@@ -108,6 +108,10 @@ impl Sema {
                 for arg in args.iter_mut() {
                     self.resolve_and_instantiate_type(arg, line, col)?;
                 }
+                if let Some(expanded) = self.expand_alias_template(name, args, line, col)? {
+                    *ty = expanded;
+                    return Ok(());
+                }
                 let inst_name = self.instantiate_class_template(name, args, line, col)?;
                 *ty = Type::Struct(inst_name);
             }
@@ -182,6 +186,13 @@ impl Sema {
         line: usize,
         col: usize,
     ) -> Result<String, CompileError> {
+        if let Some(expanded) = self.expand_alias_template(name, args, line, col)? {
+            if let Type::Struct(sname) = expanded {
+                return Ok(sname);
+            }
+            return Ok(expanded.to_c_type());
+        }
+
         let (template_class, template_params) = self
             .class_templates
             .get(name)

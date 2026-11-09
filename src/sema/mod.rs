@@ -24,6 +24,7 @@ mod stmt_structured_binding;
 mod synthesize;
 mod synthesize_ops;
 pub mod template_deduce;
+mod template_alias;
 mod template_func;
 mod template_nested;
 mod template_registry;
@@ -167,6 +168,7 @@ pub struct Sema {
     pub current_func_is_const: bool,
     pub class_templates: HashMap<String, (TemplateClass, Vec<TemplateParam>)>,
     pub function_templates: HashMap<String, Vec<(FunctionDecl, Vec<TemplateParam>)>>,
+    pub alias_templates: HashMap<String, (Vec<TemplateParam>, Type)>,
     pub instantiated_classes: HashSet<String>,
     pub instantiated_functions: HashSet<String>,
     pub pending_template_methods: HashMap<String, (String, FunctionDecl)>,
@@ -203,6 +205,7 @@ impl Sema {
             current_func_is_const: false,
             class_templates: HashMap::new(),
             function_templates: HashMap::new(),
+            alias_templates: HashMap::new(),
             instantiated_classes: HashSet::new(),
             instantiated_functions: HashSet::new(),
             pending_template_methods: HashMap::new(),

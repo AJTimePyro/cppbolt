@@ -142,6 +142,9 @@ impl Sema {
                             self.register_function_template((**f).clone(), t.params.clone());
                         }
                     }
+                    TemplateKind::Alias(name, ty) => {
+                        self.register_alias_template(name.clone(), ty.clone(), t.params.clone());
+                    }
                 },
                 _ => {}
             }
