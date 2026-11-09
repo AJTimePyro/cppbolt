@@ -117,7 +117,12 @@ impl<'a> Codegen<'a> {
 
             let expr_ty = self.get_expr_type(expr, ctx);
             let is_const = expr_ty.strip_reference().is_const();
-            let ctor = if is_xvalue {
+            let is_local_var = if let Expr::Identifier(name) = expr {
+                ctx.var_offsets.contains_key(name)
+            } else {
+                false
+            };
+            let ctor = if is_xvalue || is_local_var {
                 self.find_move_constructor(sname)
                     .or_else(|| self.find_copy_constructor(sname, is_const))
             } else {
@@ -130,7 +135,7 @@ impl<'a> Codegen<'a> {
                 write_u32(code, ctx.scratch1);
                 code.push(OP_CALL);
                 write_u32(code, ctor_idx);
-            } else {
+            } else if !self.sema.is_move_only_struct(sname) {
                 super::raii::emit_struct_byte_copy(
                     size,
                     0,
@@ -144,6 +149,8 @@ impl<'a> Codegen<'a> {
                     },
                     code,
                 );
+            } else {
+                return Err(self.internal_error("cannot copy move-only struct on return"));
             }
             self.emit_clean_temporaries(ctx, code);
             return Ok(());

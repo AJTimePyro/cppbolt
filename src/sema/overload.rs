@@ -106,6 +106,16 @@ impl Sema {
                     }
                 }
             } else if p_base == a_base {
+                if let Type::Struct(sname) = p_base
+                    && self.is_move_only_struct(sname)
+                    && args.and_then(|a| a.get(i)).is_some_and(Expr::is_lvalue)
+                {
+                    return Err(ConversionFailure {
+                        index: i,
+                        from: arg_ty.clone(),
+                        to: p.clone(),
+                    });
+                }
                 // Exact matches add no conversion penalty.
             } else if self.check_pointer_conversion(&p_decay, &a_decay) {
                 score += 1;

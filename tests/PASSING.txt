@@ -268,6 +268,7 @@ mini_stl/stream_operator_overload
 mini_stl/string_basic
 mini_stl/string_comprehensive
 mini_stl/unique_ptr_basic
+mini_stl/unique_ptr_return_local
 mini_stl/vector_aliasing
 mini_stl/vector_basic
 mini_stl/vector_brace_init
@@ -426,7 +427,10 @@ negative/typename_unqualified
 negative/unary_plus_invalid_struct
 negative/undeclared_var
 negative/undefined_func
+negative/unique_ptr_assign
 negative/unique_ptr_copy
+negative/unique_ptr_direct_copy
+negative/unique_ptr_pass_by_val
 negative/unterminated_if
 negative/virtual_inheritance
 runtime_trap/malloc_beyond_max

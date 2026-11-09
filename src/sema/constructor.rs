@@ -277,7 +277,7 @@ impl Sema {
     ///
     /// A single argument of the class itself is initialized with the copy
     /// constructor, whether or not the class declares one.
-    pub(super) fn is_move_only_struct(&self, sname: &str) -> bool {
+    pub fn is_move_only_struct(&self, sname: &str) -> bool {
         let qname = QualifiedName::new(sname);
         let short = qname.class_short_name();
         let alternate = qname.alternate();
@@ -319,6 +319,7 @@ impl Sema {
     pub(super) fn is_copy_initialization(&self, class_name: &str, arg_types: &[Type]) -> bool {
         arg_types.len() == 1
             && matches!(arg_types[0].strip_const(), Type::Struct(other) if *other == class_name)
+            && !self.is_move_only_struct(class_name)
     }
 
     /// Fills in the default arguments of a constructor call.

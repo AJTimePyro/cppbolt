@@ -361,7 +361,21 @@ impl Sema {
                             ret_ty = expected.clone();
                         }
                     }
-                    if !self.can_assign_expr(expected, &ret_ty, Some(expr)) {
+                    let is_same_struct = match (expected.strip_reference().strip_const(), ret_ty.strip_reference().strip_const()) {
+                        (Type::Struct(s1), Type::Struct(s2)) => QualifiedName::new(s1).matches(QualifiedName::new(s2)),
+                        _ => false,
+                    };
+                    let is_local_var = if let Expr::Identifier(name) = expr {
+                        self.scopes.iter().rev().any(|s| s.vars.contains_key(name))
+                    } else {
+                        false
+                    };
+                    let can_ret = if is_local_var && is_same_struct && !expected.is_reference() {
+                        true
+                    } else {
+                        self.can_assign_expr(expected, &ret_ty, Some(expr))
+                    };
+                    if !can_ret {
                         return Err(CompileError::new(
                             format!(
                                 "Return type mismatch: expected {}, found {}",
