@@ -19,13 +19,21 @@ pub fn split_template_call_name(name: &str) -> Option<(&str, &str)> {
 }
 
 /// Parses a comma-separated list of types using the compiler's lexer and parser.
-pub fn parse_types_list(s: &str, known_templates: &[String]) -> Result<Vec<Type>, CompileError> {
+pub fn parse_types_list_with_params(
+    s: &str,
+    known_templates: &[String],
+    type_params: &[String],
+) -> Result<Vec<Type>, CompileError> {
     let mut lexer = crate::lexer::Lexer::new(s);
     let tokens = lexer.tokenize()?;
     let mut parser = crate::parser::Parser::new(tokens);
     parser.allow_unknown_types = true;
     for t in known_templates {
         parser.register_template_name(t);
+    }
+    if !type_params.is_empty() {
+        let set: std::collections::HashSet<String> = type_params.iter().cloned().collect();
+        parser.active_type_params.push(set);
     }
     let mut types = Vec::new();
     while parser.peek() != &TokenKind::Eof {
@@ -37,6 +45,11 @@ pub fn parse_types_list(s: &str, known_templates: &[String]) -> Result<Vec<Type>
         }
     }
     Ok(types)
+}
+
+/// Convenience wrapper for parsing type lists without active type parameters.
+pub fn parse_types_list(s: &str, known_templates: &[String]) -> Result<Vec<Type>, CompileError> {
+    parse_types_list_with_params(s, known_templates, &[])
 }
 
 /// Deduces template arguments for a function template call.

@@ -5,6 +5,14 @@ use crate::ast::template::TemplateClass;
 use crate::diagnostics::CompileError;
 use crate::name::QualifiedName;
 
+pub struct InstantiationTarget<'a> {
+    pub name: &'a str,
+    pub inst_name: &'a str,
+    pub template_params: &'a [TemplateParam],
+    pub effective_args: &'a [Type],
+    pub pos: (usize, usize),
+}
+
 impl Sema {
     pub fn register_class_specialization(
         &mut self,
@@ -35,6 +43,36 @@ impl Sema {
             let plain = QualifiedName::new(name).plain();
             self.class_specializations.get(plain).cloned()
         })
+    }
+
+    pub fn resolve_instantiation_target(
+        &mut self,
+        target: InstantiationTarget<'_>,
+        template_class: TemplateClass,
+    ) -> Result<(TemplateClass, HashMap<String, Type>), CompileError> {
+        if let Some(spec) = self.lookup_class_specialization(target.inst_name) {
+            let m = self.prepare_instantiation_mapping(
+                &spec,
+                target.template_params,
+                target.effective_args,
+                target.inst_name,
+                target.pos,
+            );
+            Ok((spec, m))
+        } else if let Some((spec, m)) =
+            self.select_partial_specialization(target.name, target.effective_args, target.pos)?
+        {
+            Ok((spec, m))
+        } else {
+            let m = self.prepare_instantiation_mapping(
+                &template_class,
+                target.template_params,
+                target.effective_args,
+                target.inst_name,
+                target.pos,
+            );
+            Ok((template_class, m))
+        }
     }
 
     pub fn ensure_class_instantiated(&mut self, sname: &str, line: usize, col: usize) {

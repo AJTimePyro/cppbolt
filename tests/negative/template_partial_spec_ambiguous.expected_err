@@ -1,0 +1,1 @@
+tests/negative/template_partial_spec_ambiguous.cpp:17:5: error: ambiguous partial specializations for 'Ambiguous<int, int>'

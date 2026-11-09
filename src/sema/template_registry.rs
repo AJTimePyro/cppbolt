@@ -236,14 +236,20 @@ impl Sema {
         self.instantiation_stack.push(inst_name.clone());
         self.instantiation_depth += 1;
 
-        let target_class = self
-            .lookup_class_specialization(&inst_name)
-            .unwrap_or(template_class);
+        let (target_class, mapping) = self.resolve_instantiation_target(
+            super::template_spec::InstantiationTarget {
+                name,
+                inst_name: &inst_name,
+                template_params: &template_params,
+                effective_args: &effective_args,
+                pos: (line, col),
+            },
+            template_class,
+        )?;
 
         let result = self.execute_class_instantiation(
             &target_class,
-            &template_params,
-            &effective_args,
+            mapping,
             &inst_name,
             (line, col),
         );
@@ -256,19 +262,11 @@ impl Sema {
     fn execute_class_instantiation(
         &mut self,
         template_class: &TemplateClass,
-        template_params: &[TemplateParam],
-        args: &[Type],
+        mapping: HashMap<String, Type>,
         inst_name: &str,
         pos: (usize, usize),
     ) -> Result<(), CompileError> {
         let (line, col) = pos;
-        let mapping = self.prepare_instantiation_mapping(
-            template_class,
-            template_params,
-            args,
-            inst_name,
-            pos,
-        );
         self.instantiate_nested_structs(template_class, inst_name, &mapping, pos)?;
 
         let mut struct_decl = substitute_struct(template_class, &mapping, inst_name, line, col);

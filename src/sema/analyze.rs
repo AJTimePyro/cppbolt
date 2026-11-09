@@ -135,6 +135,12 @@ impl Sema {
                     TemplateKind::Class(c) => {
                         if t.params.is_empty() && c.name.contains('<') {
                             self.register_class_specialization(c.clone(), (t.line, t.col))?;
+                        } else if !t.params.is_empty() && c.name.contains('<') {
+                            self.register_partial_specialization(
+                                c.clone(),
+                                t.params.clone(),
+                                (t.line, t.col),
+                            )?;
                         } else {
                             self.register_class_template(c.clone(), t.params.clone());
                         }
