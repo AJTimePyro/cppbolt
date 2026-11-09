@@ -133,6 +133,7 @@ classes_oop/methods/derived_member_hiding
 classes_oop/methods/function_pointer_comparator
 classes_oop/methods/member_reference_return
 classes_oop/methods/ref_qualified_methods
+classes_oop/move_semantics_types
 classes_oop/operators/chained_compound_assign
 classes_oop/operators/const_subscript
 classes_oop/operators/contextual_bool_comprehensive

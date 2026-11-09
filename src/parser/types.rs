@@ -183,9 +183,18 @@ impl Parser {
                     self.advance();
                     ty = Type::Pointer(Box::new(ty));
                 }
+                TokenKind::AndAnd => {
+                    self.advance();
+                    ty = Type::RvalueReference(Box::new(ty));
+                }
                 TokenKind::Amp => {
                     self.advance();
-                    ty = Type::Reference(Box::new(ty));
+                    if self.peek() == &TokenKind::Amp {
+                        self.advance();
+                        ty = Type::RvalueReference(Box::new(ty));
+                    } else {
+                        ty = Type::Reference(Box::new(ty));
+                    }
                 }
                 TokenKind::KwConst => {
                     self.advance();

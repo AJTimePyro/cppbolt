@@ -136,32 +136,7 @@ impl Sema {
                 init_ty = ty.clone();
             }
         }
-        if *ty == Type::Auto {
-            *ty = init_ty.strip_reference().decay_array();
-        } else if let Type::Const(inner) = ty
-            && **inner == Type::Auto
-        {
-            *ty = Type::Const(Box::new(init_ty.strip_reference().decay_array()));
-        } else if let Type::Pointer(inner) = ty
-            && **inner == Type::Auto
-        {
-            *ty = Type::Pointer(Box::new(
-                init_ty
-                    .deref_type()
-                    .cloned()
-                    .unwrap_or_else(|| init_ty.strip_reference().clone()),
-            ));
-        } else if let Type::Reference(inner) = ty {
-            if **inner == Type::Auto {
-                *ty = Type::Reference(Box::new(init_ty.strip_reference().clone()));
-            } else if let Type::Const(c_inner) = &**inner
-                && **c_inner == Type::Auto
-            {
-                *ty = Type::Reference(Box::new(Type::Const(Box::new(
-                    init_ty.strip_reference().clone(),
-                ))));
-            }
-        }
+        deduce_auto_type(ty, &init_ty);
         if !is_list_init && !self.can_assign_expr(ty, &init_ty, Some(init_expr)) {
             return Err(CompileError::new(
                 format!(
@@ -248,5 +223,44 @@ impl Sema {
         };
         scope.vars.insert(name.to_string(), sym);
         Ok(())
+    }
+}
+
+fn deduce_auto_type(ty: &mut Type, init_ty: &Type) {
+    if *ty == Type::Auto {
+        *ty = init_ty.strip_reference().decay_array();
+    } else if let Type::Const(inner) = ty
+        && **inner == Type::Auto
+    {
+        *ty = Type::Const(Box::new(init_ty.strip_reference().decay_array()));
+    } else if let Type::Pointer(inner) = ty
+        && **inner == Type::Auto
+    {
+        *ty = Type::Pointer(Box::new(
+            init_ty
+                .deref_type()
+                .cloned()
+                .unwrap_or_else(|| init_ty.strip_reference().clone()),
+        ));
+    } else if let Type::Reference(inner) = ty {
+        if **inner == Type::Auto {
+            *ty = Type::Reference(Box::new(init_ty.strip_reference().clone()));
+        } else if let Type::Const(c_inner) = &**inner
+            && **c_inner == Type::Auto
+        {
+            *ty = Type::Reference(Box::new(Type::Const(Box::new(
+                init_ty.strip_reference().clone(),
+            ))));
+        }
+    } else if let Type::RvalueReference(inner) = ty {
+        if **inner == Type::Auto {
+            *ty = Type::RvalueReference(Box::new(init_ty.strip_reference().clone()));
+        } else if let Type::Const(c_inner) = &**inner
+            && **c_inner == Type::Auto
+        {
+            *ty = Type::RvalueReference(Box::new(Type::Const(Box::new(
+                init_ty.strip_reference().clone(),
+            ))));
+        }
     }
 }

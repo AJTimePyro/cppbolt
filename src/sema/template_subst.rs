@@ -60,6 +60,9 @@ pub fn substitute_type(
         Type::Reference(inner) => {
             Type::Reference(Box::new(substitute_type(inner, mapping, injected_class)))
         }
+        Type::RvalueReference(inner) => {
+            Type::RvalueReference(Box::new(substitute_type(inner, mapping, injected_class)))
+        }
         Type::Array(inner, size) => Type::Array(
             Box::new(substitute_type(inner, mapping, injected_class)),
             *size,

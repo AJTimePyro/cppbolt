@@ -123,6 +123,7 @@ impl Sema {
             }
             Type::Pointer(inner)
             | Type::Reference(inner)
+            | Type::RvalueReference(inner)
             | Type::Const(inner)
             | Type::Array(inner, _) => {
                 self.resolve_and_instantiate_type(inner, line, col)?;

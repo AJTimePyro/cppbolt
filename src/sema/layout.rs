@@ -411,6 +411,7 @@ impl Sema {
                 Type::Nullptr => s.push_str("Dn"),
                 Type::Pointer(inner) => s.push_str(&format!("P{:?}", inner)),
                 Type::Reference(inner) => s.push_str(&format!("R{:?}", inner)),
+                Type::RvalueReference(inner) => s.push_str(&format!("RR{:?}", inner)),
                 Type::Struct(name) => s.push_str(&format!("S{}", name)),
                 Type::Enum(name) => s.push_str(&format!("E{}", name)),
                 Type::Array(elem, n) => s.push_str(&format!("A{}_{:?}", n, elem)),

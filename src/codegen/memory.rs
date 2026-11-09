@@ -26,6 +26,7 @@ impl<'a> Codegen<'a> {
             | Type::UnsignedLong
             | Type::Pointer(_)
             | Type::Reference(_)
+            | Type::RvalueReference(_)
             | Type::Enum(_) => {
                 code.push(OP_I32_STORE);
                 write_u32(code, 2);
@@ -211,6 +212,7 @@ impl<'a> Codegen<'a> {
             | Type::UnsignedLong
             | Type::Pointer(_)
             | Type::Reference(_)
+            | Type::RvalueReference(_)
             | Type::Enum(_) => {
                 code.push(OP_I32_LOAD);
                 write_u32(code, 2);

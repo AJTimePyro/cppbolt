@@ -99,7 +99,9 @@ pub(crate) struct ConversionFailure {
 pub(crate) fn receiver_is_const_type(ty: &Type) -> bool {
     match ty {
         Type::Const(_) => true,
-        Type::Reference(inner) | Type::Pointer(inner) => receiver_is_const_type(inner),
+        Type::Reference(inner)
+        | Type::RvalueReference(inner)
+        | Type::Pointer(inner) => receiver_is_const_type(inner),
         _ => false,
     }
 }

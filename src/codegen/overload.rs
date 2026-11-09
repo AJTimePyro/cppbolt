@@ -29,7 +29,7 @@ impl<'a> Codegen<'a> {
                 score += 1;
             } else if p_is_ptr && (a.is_integer() || *a == Type::Nullptr) {
                 score += 20;
-            } else if let Type::Reference(inner) = p {
+            } else if let Type::Reference(inner) | Type::RvalueReference(inner) = p {
                 let matches_type = self.sema.reference_types_compatible(
                     inner.strip_const(),
                     a.strip_reference().strip_const(),

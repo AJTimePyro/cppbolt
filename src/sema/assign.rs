@@ -25,24 +25,52 @@ impl Sema {
         }
     }
 
-    pub fn can_assign_expr(&self, target: &Type, value: &Type, expr: Option<&Expr>) -> bool {
+    fn can_assign_reference(
+        &self,
+        target: &Type,
+        value: &Type,
+        expr: Option<&Expr>,
+    ) -> Option<bool> {
+        if let Type::RvalueReference(inner) = target {
+            if value.is_lvalue_reference()
+                || (!value.is_rvalue_reference() && expr.is_some_and(|e| e.is_lvalue()))
+            {
+                return Some(false);
+            }
+            if value.strip_reference().is_const() && !inner.is_const() {
+                return Some(false);
+            }
+            return Some(
+                self.reference_types_compatible(
+                    inner.strip_const(),
+                    value.strip_reference().strip_const(),
+                ) || self.can_assign(inner.strip_const(), value.strip_reference().strip_const()),
+            );
+        }
         if let Type::Reference(inner) = target {
             if inner.is_const() {
-                return self.can_assign_expr(inner.strip_const(), value, expr);
+                return Some(self.can_assign_expr(inner.strip_const(), value, expr));
             }
-            if let Some(e) = expr
-                && !value.is_reference()
-                && !e.is_lvalue()
-            {
-                return false;
+            if value.is_rvalue_reference() {
+                return Some(false);
+            }
+            if let Some(e) = expr && !value.is_reference() && !e.is_lvalue() {
+                return Some(false);
             }
             if value.strip_reference().is_const() {
-                return false;
+                return Some(false);
             }
-            return self.reference_types_compatible(
+            return Some(self.reference_types_compatible(
                 inner.strip_const(),
                 value.strip_reference().strip_const(),
-            );
+            ));
+        }
+        None
+    }
+
+    pub fn can_assign_expr(&self, target: &Type, value: &Type, expr: Option<&Expr>) -> bool {
+        if let Some(ok) = self.can_assign_reference(target, value, expr) {
+            return ok;
         }
         let target = strip_assign_type(target);
         let value = strip_assign_type(value);

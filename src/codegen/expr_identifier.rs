@@ -120,7 +120,7 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         if let Some(fld) = self.sema.find_field_in_class(cls, name) {
-            if let Type::Reference(inner) = &fld.ty {
+            if let Type::Reference(inner) | Type::RvalueReference(inner) = &fld.ty {
                 code.push(OP_LOCAL_GET);
                 write_u32(code, 0); // this
                 code.push(OP_I32_LOAD);

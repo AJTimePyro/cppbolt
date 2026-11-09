@@ -69,7 +69,10 @@ impl Sema {
     ) -> Result<(String, bool), CompileError> {
         if is_arrow {
             let stripped = obj_ty.strip_const();
-            if let Type::Pointer(inner) | Type::Reference(inner) = stripped {
+            if let Type::Pointer(inner)
+            | Type::Reference(inner)
+            | Type::RvalueReference(inner) = stripped
+            {
                 match inner.strip_reference().strip_const() {
                     Type::Struct(s) => Ok((s.clone(), inner.strip_reference().is_const())),
                     _ => Err(CompileError::new(
@@ -90,7 +93,9 @@ impl Sema {
             }
         } else {
             let stripped = obj_ty.strip_const();
-            let target_ty = if let Type::Reference(inner) = stripped {
+            let target_ty = if let Type::Reference(inner)
+            | Type::RvalueReference(inner) = stripped
+            {
                 inner.strip_const()
             } else {
                 stripped
@@ -144,7 +149,7 @@ impl Sema {
                 if let Type::Struct(target) = inner.strip_reference().strip_const() {
                     return Ok((target.clone(), inner.strip_reference().is_const()));
                 }
-            } else if let Type::Reference(inner) = ret {
+            } else if let Type::Reference(inner) | Type::RvalueReference(inner) = ret {
                 let clean = inner.strip_const();
                 if let Type::Pointer(ptr_inner) = clean {
                     if let Type::Struct(target) = ptr_inner.strip_reference().strip_const() {
