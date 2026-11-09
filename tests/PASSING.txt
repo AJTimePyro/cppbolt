@@ -28,6 +28,7 @@ c_basics/misc/lvalue_matrix
 c_basics/misc/malloc_failure
 c_basics/misc/multi_declarator
 c_basics/pointers_arrays/array_parameter_decay
+c_basics/pointers_arrays/constexpr_fold_basic
 c_basics/pointers_arrays/multidim_arrays
 c_basics/pointers_arrays/multidim_pointer_deref
 c_basics/pointers_arrays/pointers_arrays
@@ -73,6 +74,7 @@ c_basics_variant/io_printf/printf_octal
 c_basics_variant/io_printf/printf_return
 c_basics_variant/misc/large_local_frame
 c_basics_variant/misc/lvalue_matrix
+c_basics_variant/pointers_arrays/constexpr_fold_basic_variant
 c_basics_variant/pointers_arrays/multidim_arrays
 c_basics_variant/pointers_arrays/pointers_arrays
 c_basics_variant/pointers_arrays/regress_char_ptr_assign
@@ -318,6 +320,7 @@ negative/call_non_function
 negative/const_assign
 negative/const_method_call_on_const
 negative/const_overload_unsupported
+negative/constexpr_division_by_zero
 negative/constructor_default_argument_undefined
 negative/constructor_string_argument
 negative/constructor_struct_argument

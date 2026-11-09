@@ -1,0 +1,1 @@
+tests/negative/constexpr_division_by_zero.cpp:2:12: error: division by zero in constant expression

@@ -5,6 +5,7 @@
 mod analyze;
 mod assign;
 mod constructor;
+pub mod constexpr_eval;
 mod expr;
 mod expr_call;
 mod expr_call_member;

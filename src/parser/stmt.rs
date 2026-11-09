@@ -140,7 +140,9 @@ impl Parser {
             match self.parse_var_decl() {
                 Ok(stmt) => return Ok(stmt),
                 Err(error) => {
-                    if self.nesting_exceeded.get() {
+                    if error.message.contains("constant expression")
+                        || self.nesting_exceeded.get()
+                    {
                         return Err(error);
                     }
                     self.pos = saved_pos;

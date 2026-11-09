@@ -412,17 +412,23 @@ impl Parser {
     pub(super) fn parse_array_suffix(&mut self, elem_type: Type) -> Result<Type, CompileError> {
         let mut dimensions = Vec::new();
         while self.peek() == &TokenKind::LBracket {
+            let bracket_pos = self.current_pos();
             self.advance();
             let size = if self.peek() != &TokenKind::RBracket {
                 let expr = self.parse_expr()?;
-                match expr {
-                    Expr::IntLiteral(n, _) if n >= 0 => n as usize,
-                    _ => {
+                match crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None) {
+                    Ok(n) if n >= 0 => n as usize,
+                    Ok(_) => {
                         return Err(CompileError::new(
                             "Array dimension must be non-negative integer constant",
-                            self.current().line,
-                            self.current().col,
+                            bracket_pos.line,
+                            bracket_pos.col,
                         ));
+                    }
+                    Err(mut err) => {
+                        err.line = bracket_pos.line;
+                        err.col = bracket_pos.col;
+                        return Err(err);
                     }
                 }
             } else {
