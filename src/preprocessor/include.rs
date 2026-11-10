@@ -63,6 +63,15 @@ fn embedded_header(name: &str) -> Option<&'static str> {
         "detail/algorithms/modifying.h" => {
             Some(include_str!("../../stdlib/detail/algorithms/modifying.h"))
         }
+        "detail/algorithms/binary_search.h" => {
+            Some(include_str!("../../stdlib/detail/algorithms/binary_search.h"))
+        }
+        "detail/algorithms/partition.h" => {
+            Some(include_str!("../../stdlib/detail/algorithms/partition.h"))
+        }
+        "detail/algorithms/permutation.h" => {
+            Some(include_str!("../../stdlib/detail/algorithms/permutation.h"))
+        }
         "compat/config/platform.h" => Some(include_str!("../../stdlib/compat/config/platform.h")),
         "compat/compiler/compiler.h" => {
             Some(include_str!("../../stdlib/compat/compiler/compiler.h"))

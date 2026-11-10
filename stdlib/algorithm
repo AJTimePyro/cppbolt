@@ -9,6 +9,9 @@
 #include <detail/algorithms/heap.h>
 #include <detail/algorithms/non_modifying.h>
 #include <detail/algorithms/modifying.h>
+#include <detail/algorithms/binary_search.h>
+#include <detail/algorithms/partition.h>
+#include <detail/algorithms/permutation.h>
 
 namespace std {
 
