@@ -1,0 +1,4 @@
+move buf
+b1 size: 0, b2 size: 3
+move assign buf
+b2 size: 0, b3 size: 3

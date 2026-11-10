@@ -1,0 +1,1 @@
+tests/negative/unique_ptr_direct_copy.cpp:5:5: error: no matching constructor for initialization of 'unique_ptr<int>'

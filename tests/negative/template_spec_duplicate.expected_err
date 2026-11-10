@@ -1,0 +1,1 @@
+tests/negative/template_spec_duplicate.cpp:11:1: error: redefinition of explicit template specialization 'DupSpec<int>'

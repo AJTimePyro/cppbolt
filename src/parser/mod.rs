@@ -42,6 +42,10 @@ pub struct Parser {
     pub namespace_aliases: HashMap<String, String>,
     pub known_namespaces: HashSet<String>,
     pub active_struct_scopes: Vec<String>,
+    pub allow_unknown_types: bool,
+    pub in_template_arg: bool,
+    pub template_arg_paren_depth: usize,
+    pub(super) shr_splits: Vec<usize>,
     nesting: DepthCounters,
     nesting_exceeded: Cell<bool>,
 }
@@ -98,9 +102,24 @@ impl Parser {
             namespace_aliases: HashMap::new(),
             known_namespaces: HashSet::new(),
             active_struct_scopes: Vec::new(),
+            allow_unknown_types: false,
+            in_template_arg: false,
+            template_arg_paren_depth: 0,
+            shr_splits: Vec::new(),
             nesting: DepthCounters::new(),
             nesting_exceeded: Cell::new(false),
         }
+    }
+
+    pub(super) fn rollback_pos(&mut self, saved_pos: usize, saved_splits: usize) {
+        while self.shr_splits.len() > saved_splits {
+            if let Some(pos) = self.shr_splits.pop()
+                && pos < self.tokens.len()
+            {
+                self.tokens[pos].kind = TokenKind::Shr;
+            }
+        }
+        self.pos = saved_pos;
     }
 
     /// Reserves one level of the counter of one nesting construct.

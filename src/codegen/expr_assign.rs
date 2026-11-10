@@ -62,9 +62,13 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let val_ty = self.get_expr_type(value, ctx);
-        if let Some((assign_idx, sig)) =
-            self.find_method(sname, "operator=", std::slice::from_ref(&val_ty))
-        {
+        if let Some((assign_idx, sig)) = self.find_method_for_receiver_category(
+            sname,
+            "operator=",
+            std::slice::from_ref(&val_ty),
+            Some(std::slice::from_ref(value)),
+            (false, true),
+        ) {
             self.compile_lvalue_addr(target, ctx, code)?; // this
             let is_r = sig
                 .param_types

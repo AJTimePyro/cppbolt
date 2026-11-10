@@ -128,6 +128,12 @@ fn run_one(compiler: &str, work: &Path, feature: &str, name: &str, cpp: &Path) -
         };
     }
 
+    if feature == "mini_stl" && name == "unique_ptr_self_reset" {
+        // In standard C++, p.reset(p.get()) is undefined behavior (precondition violation),
+        // but cppbolt's mini-STL guards against self-reset.
+        return OracleResult::Skipped;
+    }
+
     match compare_output(&output, feature, name) {
         Ok(()) => OracleResult::Passed,
         Err(message) => OracleResult::Failed(message),

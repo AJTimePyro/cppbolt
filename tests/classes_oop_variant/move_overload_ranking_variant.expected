@@ -1,0 +1,3 @@
+mutable lvalue: 1
+const lvalue: 2
+rvalue: 3

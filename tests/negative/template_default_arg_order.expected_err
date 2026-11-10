@@ -1,0 +1,1 @@
+tests/negative/template_default_arg_order.cpp:2:29: error: template parameter without default follows parameter with default

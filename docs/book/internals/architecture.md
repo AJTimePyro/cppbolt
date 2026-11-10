@@ -45,10 +45,10 @@ The compiler follows a direct, five-stage pipeline:
  +-----------------------------------------------------------------+
  | 4. Semantic Analysis (src/sema/)                                |
  |    - Scopes, symbol registration, using/typedef aliases         |
- |    - Inheritance & vtable slot calculation                      |
- |    - Record layout computation (alignment & padding)            |
- |    - Overload resolution ranking & type checking                |
- |    - C++17 copy elision tagging                                 |
+ |    - Templates (classes, functions, aliases, specializations)   |
+ |    - Value category tracking (lvalue, prvalue, xvalue)          |
+ |    - Overload resolution, move semantics, constexpr evaluation  |
+ |    - Inheritance, vtables, layout computation (ILP32)           |
  +-----------------------------------------------------------------+
                                   │
                                   ▼ ast::Program + sema::Sema
@@ -91,10 +91,10 @@ A fundamental architectural decision in `cppbolt` is the **complete absence of a
 |---|---|---|---|---|---|---|
 | **Preprocessor** | `src/preprocessor/` | Macro expansion, include resolution, `#if` evaluation | `&str`, `&dyn IncludeProvider` | `PreprocessedSource` | `MacroDef`, `HideSet`, `LineOrigin` | Include recursion capped at 128; macro recursion terminates via hide sets; origins accurately track header lines |
 | **Lexer** | `src/lexer/` | Tokenizes preprocessed text into lexemes | `&str` | `Vec<Token>` | `Token`, `TokenKind`, `Span`, `FileId` | Every token carries an exact non-fabricated source span |
-| **Parser & AST** | `src/parser/`, `src/ast/` | Parses grammar into typed AST | `Vec<Token>` | `ast::Program` | `Program`, `Decl`, `Stmt`, `Expr`, `Type` | Validates supported features first; nesting depth bounded per construct via `depth.rs` |
-| **Semantic Analysis** | `src/sema/` | Scope analysis, type checking, vtables, layouts, overloads | `&mut ast::Program` | `sema::Sema` | `Sema`, `StructDef`, `FunctionSig`, `RecordLayout` | Mutates AST with resolved types; rejects multiple/virtual inheritance; catches ambiguous overloads |
+| **Parser & AST** | `src/parser/`, `src/ast/` | Parses grammar into typed AST | `Vec<Token>` | `ast::Program` | `Program`, `Decl`, `Stmt`, `Expr`, `Type` | Validates supported features first; nesting depth bounded per construct via `depth.rs`; tracks template angle depths |
+| **Semantic Analysis** | `src/sema/` | Scope analysis, type checking, vtables, layouts, overloads, move semantics, constexpr folding, templates | `&mut ast::Program` | `sema::Sema` | `Sema`, `StructDef`, `FunctionSig`, `RecordLayout` | Mutates AST with resolved types; rejects multiple/virtual inheritance; catches ambiguous overloads/specializations |
 | **WASM Codegen** | `src/codegen/`, `src/wasm/` | Lowers AST to WebAssembly binary sections | `&ast::Program`, `&sema::Sema` | `Vec<u8>` | `Codegen<'a>`, `FunctionContext`, `WasmModule` | Fixed-width LEB128 frame patches; stack allocation traps on guard page entry; RAII cleanups on all exits |
-| **Runtime** | `src/runtime/`, `stdlib/` | In-module allocator, printf runtime, embedded headers | N/A (Emitted or included) | Wasm opcodes | `memory_layout`, `allocator`, `format` | ILP32 32-bit addresses; stack top at `0x810000`; heap grows upward; slot 0 traps |
+| **Runtime** | `src/runtime/`, `stdlib/` | In-module allocator, printf runtime, embedded headers (`<vector>`, `<memory>`, `<array>`, etc.) | N/A (Emitted or included) | Wasm opcodes | `memory_layout`, `allocator`, `format` | ILP32 32-bit addresses; stack top at `0x810000`; heap grows upward; slot 0 traps |
 
 ---
 

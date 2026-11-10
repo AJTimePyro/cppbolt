@@ -15,32 +15,7 @@ pub fn substitute_type(
 ) -> Type {
     match ty {
         Type::TypeParam(name) => mapping.get(name).cloned().unwrap_or_else(|| ty.clone()),
-        Type::Struct(name) => {
-            if let Some((c, target_ty)) = injected_class {
-                let short_c = c.rsplit_once("::").map(|(_, s)| s).unwrap_or(c);
-                if (name == c
-                    || name == short_c
-                    || crate::QualifiedName::new(c).matches(crate::QualifiedName::new(name)))
-                    && (!name.contains('<') || c.contains('<'))
-                {
-                    return target_ty.clone();
-                }
-            }
-            if let Some(target) = mapping.get(name) {
-                return target.clone();
-            }
-            if let Some((target, member)) = name
-                .split_once("::")
-                .and_then(|(base, member)| mapping.get(base).map(|target| (target, member)))
-            {
-                let base_str = target.to_c_type();
-                return Type::Struct(format!("{}::{}", base_str, member));
-            }
-            if name.contains('<') {
-                return Type::Struct(substitute_template_name(name, mapping));
-            }
-            ty.clone()
-        }
+        Type::Struct(name) => substitute_struct_type(name, mapping, injected_class),
         Type::TemplateInstance { name, args } => {
             let subst_args = args
                 .iter()
@@ -52,18 +27,37 @@ pub fn substitute_type(
             }
         }
         Type::Const(inner) => {
-            Type::Const(Box::new(substitute_type(inner, mapping, injected_class)))
+            let subst_inner = substitute_type(inner, mapping, injected_class);
+            if subst_inner.is_reference() {
+                subst_inner
+            } else {
+                Type::Const(Box::new(subst_inner))
+            }
         }
         Type::Pointer(inner) => {
             Type::Pointer(Box::new(substitute_type(inner, mapping, injected_class)))
         }
         Type::Reference(inner) => {
-            Type::Reference(Box::new(substitute_type(inner, mapping, injected_class)))
+            let subst_inner = substitute_type(inner, mapping, injected_class);
+            collapse_reference(false, subst_inner)
+        }
+        Type::RvalueReference(inner) => {
+            let subst_inner = substitute_type(inner, mapping, injected_class);
+            collapse_reference(true, subst_inner)
         }
         Type::Array(inner, size) => Type::Array(
             Box::new(substitute_type(inner, mapping, injected_class)),
             *size,
         ),
+        Type::DependentArray(inner, param_name) => {
+            let subst_inner = substitute_type(inner, mapping, injected_class);
+            let size = match mapping.get(param_name) {
+                Some(Type::NonType(n)) if *n >= 0 => *n as usize,
+                Some(Type::NonType(_)) => usize::MAX,
+                _ => 0,
+            };
+            Type::Array(Box::new(subst_inner), size)
+        }
         Type::Function {
             return_type,
             param_types,
@@ -76,6 +70,37 @@ pub fn substitute_type(
         },
         _ => ty.clone(),
     }
+}
+
+fn substitute_struct_type(
+    name: &str,
+    mapping: &HashMap<String, Type>,
+    injected_class: Option<(&str, &Type)>,
+) -> Type {
+    if let Some((c, target_ty)) = injected_class {
+        let short_c = c.rsplit_once("::").map(|(_, s)| s).unwrap_or(c);
+        if (name == c
+            || name == short_c
+            || crate::QualifiedName::new(c).matches(crate::QualifiedName::new(name)))
+            && (!name.contains('<') || c.contains('<'))
+        {
+            return target_ty.clone();
+        }
+    }
+    if let Some(target) = mapping.get(name) {
+        return target.clone();
+    }
+    if let Some((target, member)) = name
+        .split_once("::")
+        .and_then(|(base, member)| mapping.get(base).map(|target| (target, member)))
+    {
+        let base_str = target.to_c_type();
+        return Type::Struct(format!("{}::{}", base_str, member));
+    }
+    if name.contains('<') {
+        return Type::Struct(substitute_template_name(name, mapping));
+    }
+    Type::Struct(name.to_string())
 }
 
 pub fn substitute_expr(
@@ -136,6 +161,18 @@ pub fn substitute_expr(
         Expr::InitializerList { elements, .. } => {
             for el in elements {
                 substitute_expr(el, mapping, injected_class);
+            }
+        }
+        Expr::Identifier(name) => {
+            if let Some(Type::NonType(val)) = mapping.get(name) {
+                let ty = if (*val as i32 as i128) == *val {
+                    Type::Int
+                } else {
+                    Type::LongLong
+                };
+                *expr = Expr::IntLiteral(*val as i64, ty);
+            } else if name.contains('<') {
+                *name = substitute_template_name(name, mapping);
             }
         }
         _ => {}
@@ -440,5 +477,23 @@ pub fn substitute_struct(
         nested_structs: Vec::new(),
         line,
         col,
+    }
+}
+
+pub fn collapse_reference(outer_is_rvalue: bool, inner: Type) -> Type {
+    if inner.is_reference() {
+        if let Some(target) = inner.deref_type() {
+            if !outer_is_rvalue || inner.is_lvalue_reference() {
+                Type::Reference(Box::new(target.clone()))
+            } else {
+                Type::RvalueReference(Box::new(target.clone()))
+            }
+        } else {
+            inner
+        }
+    } else if outer_is_rvalue {
+        Type::RvalueReference(Box::new(inner))
+    } else {
+        Type::Reference(Box::new(inner))
     }
 }

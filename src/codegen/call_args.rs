@@ -200,9 +200,20 @@ impl<'a> Codegen<'a> {
                 } else {
                     false
                 };
-                if is_same && self.is_struct_lvalue(a, ctx) {
+                if is_same {
                     let is_const = aty.strip_reference().is_const();
-                    if let Some(ctor_idx) = self.find_copy_constructor(psname, is_const) {
+                    let is_xval = self.is_expr_xvalue(a, ctx);
+                    if is_xval {
+                        let ctor = self
+                            .find_move_constructor(psname)
+                            .or_else(|| self.find_copy_constructor(psname, is_const));
+                        if let Some(ctor_idx) = ctor {
+                            self.compile_call_arg_byval_temp(a, psname, ctor_idx, ctx, code)?;
+                            return Ok(());
+                        }
+                    } else if self.is_struct_lvalue(a, ctx)
+                        && let Some(ctor_idx) = self.find_copy_constructor(psname, is_const)
+                    {
                         self.compile_call_arg_byval_temp(a, psname, ctor_idx, ctx, code)?;
                         return Ok(());
                     }

@@ -19,16 +19,25 @@ pub fn split_template_call_name(name: &str) -> Option<(&str, &str)> {
 }
 
 /// Parses a comma-separated list of types using the compiler's lexer and parser.
-pub fn parse_types_list(s: &str, known_templates: &[String]) -> Result<Vec<Type>, CompileError> {
+pub fn parse_types_list_with_params(
+    s: &str,
+    known_templates: &[String],
+    type_params: &[String],
+) -> Result<Vec<Type>, CompileError> {
     let mut lexer = crate::lexer::Lexer::new(s);
     let tokens = lexer.tokenize()?;
     let mut parser = crate::parser::Parser::new(tokens);
+    parser.allow_unknown_types = true;
     for t in known_templates {
         parser.register_template_name(t);
     }
+    if !type_params.is_empty() {
+        let set: std::collections::HashSet<String> = type_params.iter().cloned().collect();
+        parser.active_type_params.push(set);
+    }
     let mut types = Vec::new();
     while parser.peek() != &TokenKind::Eof {
-        types.push(parser.parse_type()?);
+        types.push(parser.parse_template_arg_type()?);
         if parser.peek() == &TokenKind::Comma {
             parser.advance();
         } else {
@@ -36,6 +45,11 @@ pub fn parse_types_list(s: &str, known_templates: &[String]) -> Result<Vec<Type>
         }
     }
     Ok(types)
+}
+
+/// Convenience wrapper for parsing type lists without active type parameters.
+pub fn parse_types_list(s: &str, known_templates: &[String]) -> Result<Vec<Type>, CompileError> {
+    parse_types_list_with_params(s, known_templates, &[])
 }
 
 /// Deduces template arguments for a function template call.
@@ -86,7 +100,7 @@ pub fn deduce_template_arguments(
         .iter()
         .zip(arg_types.iter().zip(args.iter()))
     {
-        let is_lval = arg_expr.is_lvalue();
+        let is_lval = arg_expr.is_lvalue() || arg_ty.is_lvalue_reference();
         let adjusted_arg_ty = if !p.ty.is_reference() {
             arg_ty.strip_reference().decay_array()
         } else {
@@ -97,15 +111,92 @@ pub fn deduce_template_arguments(
 
     for param in template_params {
         if !deduced.contains_key(&param.name) {
-            return Err(CompileError::new(
-                format!("could not deduce template argument for '{}'", param.name),
-                pos.line,
-                pos.col,
-            ));
+            if let Some(ref def_ty) = param.default_type {
+                let subst_def =
+                    crate::sema::template_subst::substitute_type(def_ty, &deduced, None);
+                deduced.insert(param.name.clone(), subst_def);
+            } else {
+                return Err(CompileError::new(
+                    format!("could not deduce template argument for '{}'", param.name),
+                    pos.line,
+                    pos.col,
+                ));
+            }
         }
     }
 
     Ok(deduced)
+}
+
+/// Pads missing template arguments from parameter default types.
+pub fn fill_default_template_args(
+    name: &str,
+    template_params: &[TemplateParam],
+    args: &[Type],
+    pos: (usize, usize),
+) -> Result<Vec<Type>, CompileError> {
+    let min_args = template_params
+        .iter()
+        .take_while(|p| p.default_type.is_none())
+        .count();
+    if args.len() < min_args || args.len() > template_params.len() {
+        let expected_str = if min_args == template_params.len() {
+            format!("{}", template_params.len())
+        } else {
+            format!("at least {}", min_args)
+        };
+        return Err(CompileError::new(
+            format!(
+                "wrong number of template arguments for '{}': expected {}, found {}",
+                name,
+                expected_str,
+                args.len()
+            ),
+            pos.0,
+            pos.1,
+        ));
+    }
+
+    let mut result = args.to_vec();
+    let mut mapping = HashMap::new();
+    for (param, arg) in template_params.iter().zip(args.iter()) {
+        mapping.insert(param.name.clone(), arg.clone());
+    }
+    for param in &template_params[args.len()..] {
+        let Some(def_ty) = param.default_type.as_ref() else {
+            return Err(CompileError::new(
+                format!(
+                    "missing default argument for template parameter '{}'",
+                    param.name
+                ),
+                pos.0,
+                pos.1,
+            ));
+        };
+        let subst_ty = crate::sema::template_subst::substitute_type(def_ty, &mapping, None);
+        mapping.insert(param.name.clone(), subst_ty.clone());
+        result.push(subst_ty);
+    }
+    for (param, arg) in template_params.iter().zip(result.iter()) {
+        if param.param_type.is_some() && !matches!(arg, Type::NonType(_) | Type::TypeParam(_)) {
+            return Err(CompileError::new(
+                "template argument for non-type parameter must be a constant expression",
+                pos.0,
+                pos.1,
+            ));
+        }
+        if param.param_type.is_none() && matches!(arg, Type::NonType(_)) {
+            return Err(CompileError::new(
+                format!(
+                    "type template parameter '{}' cannot take non-type argument",
+                    param.name
+                ),
+                pos.0,
+                pos.1,
+            ));
+        }
+    }
+    Ok(result)
 }
 
 fn deduce_type(
@@ -141,6 +232,25 @@ fn deduce_type(
                 let deduced_arg = arg_ty.strip_reference().clone();
                 record_deduced(name, deduced_arg, deduced, pos)?;
                 return Ok(());
+            }
+            deduce_type(inner, arg_ty.strip_reference(), deduced, is_lvalue, pos)?;
+        }
+        Type::RvalueReference(inner) => {
+            if let Type::TypeParam(name) = &**inner {
+                let deduced_arg = if is_lvalue {
+                    Type::Reference(Box::new(arg_ty.strip_reference().clone()))
+                } else {
+                    arg_ty.strip_reference().clone()
+                };
+                record_deduced(name, deduced_arg, deduced, pos)?;
+                return Ok(());
+            }
+            if is_lvalue {
+                return Err(CompileError::new(
+                    "cannot bind rvalue reference to an lvalue".to_string(),
+                    pos.line,
+                    pos.col,
+                ));
             }
             deduce_type(inner, arg_ty.strip_reference(), deduced, is_lvalue, pos)?;
         }

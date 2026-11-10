@@ -4,6 +4,55 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-10: Template Specialization, Non-Type Parameters, and Alias Templates
+
+Implemented class template explicit and partial specialization, non-type template parameters (NTTP), compile-time constant expression evaluation, alias templates, and standard `<array>` and `<type_traits>` headers.
+
+### Summary of Work
+
+1. Implemented class template explicit (full) specialization (`template <> struct S<T> { ... }`) in `src/sema/template_spec.rs` and `src/sema/template_registry.rs`, prioritizing exact specialized definitions over primary templates during instantiation.
+2. Implemented class template partial specialization (`template <Params> struct S<Pattern> { ... }`) with pattern matching and specificity scoring in `src/sema/template_spec.rs`, registering nested structs and member aliases into the specialization scope.
+3. Added non-type template parameters (`template <typename T, int N>`) in `src/ast/template.rs` and `src/parser/template.rs`, supporting default parameter expressions and rejecting non-type arguments passed to type parameters.
+4. Built a compile-time constant expression evaluator in `src/sema/constexpr_eval.rs` supporting integral and boolean literals, unary, binary arithmetic, bitwise operations, shifts, comparisons, conditionals, and `sizeof`, with division-by-zero, shift-count range checks, and source diagnostic locations.
+5. Added alias templates (`template <Params> using Name = Target;`) in `src/parser/template.rs` and `src/sema/template_registry.rs`, substituting type arguments and resolving dependent aliases during type lookup.
+6. Hardened template angle-bracket parsing in `src/parser/template.rs` and `src/parser/expr.rs`, tracking nested argument depths, splitting `>>` tokens, and preserving token state across speculative parsing backtracks.
+7. Added `<array>` (`std::array<T, N>`) and `<type_traits>` (`std::integral_constant`, `std::true_type`, `std::false_type`, `std::is_same`, `std::remove_reference`, `std::remove_reference_t`) in `stdlib/`.
+8. Added unit, integration, variant, and negative diagnostic tests across `tests/templates_operators/`, `tests/mini_stl/`, and `tests/negative/`.
+
+### Verification Results
+
+- Unit and integration tests: 501 corpus tests on disk, 501 executed, 501 passed, 0 failures. All negative tests passed.
+- Golden baseline: all 359 entries match `tests/golden.txt`.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
+## 2026-11-09: Move Semantics, Value Categories, and Smart Pointers
+
+Implemented rvalue references (`T&&`), C++17 value category tracking, implicit move constructor and assignment synthesis, copy suppression for move-only types, forwarding references, reference collapsing, and standard library headers `<memory>` and `<utility>`.
+
+### Summary of Work
+
+1. Added `Type::RvalueReference` in `src/ast/types.rs` and parser support for `&&` type declarators in `src/parser/types.rs`.
+2. Implemented value category tracking (prvalue, xvalue, lvalue) across expression analysis in `src/sema/`, classifying identifiers and named rvalue reference parameters as lvalues, and temporary returns and casts as xvalues or prvalues.
+3. Added overload resolution ranking in `src/sema/overload.rs` favoring rvalue references for rvalue arguments, while keeping `const T&` bindings viable for lvalues and rvalues.
+4. Implemented implicit move constructor and move assignment operator synthesis in `src/sema/synthesize.rs` and `src/sema/synthesize_ops.rs`, and suppressed implicit copy operations for classes declaring move operations.
+5. Added forwarding reference deduction (`template <typename T> void f(T&&)`) in `src/sema/template_deduce.rs` and reference collapsing rules (`&` + `&&` -> `&`, `&&` + `&&` -> `&&`).
+6. Enforced copy suppression in `src/sema/constructor.rs`, `src/sema/assign.rs`, `src/sema/stmt_return.rs`, and `src/codegen/` across direct initialization, assignment, call arguments, and return statements.
+7. Added `<memory>` providing `std::unique_ptr<T>` with single-owner semantics, custom deleters, `reset`, `release`, self-reset protection, and `std::make_unique`.
+8. Added `std::move`, `std::forward`, and `std::swap` to `<utility>`, and added move constructor, move assignment, `push_back(T&&)`, and move-based buffer reallocation to `<vector>`.
+9. Added corpus tests across `tests/c_basics/types/`, `tests/classes_oop/`, `tests/templates_operators/`, `tests/mini_stl/`, and `tests/negative/`.
+
+### Verification Results
+
+- Unit and integration tests: 469 corpus tests executed, 469 passed, 0 failures.
+- Golden baseline: 339 entries match `tests/golden.txt`.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
 ## 2026-11-08: Member Structured Bindings, Range-For Loops, and Template Array Decay
 
 Fixed structured binding and range-based for lowering in non-template member functions, added array-to-pointer decay for function template argument deduction, and fixed array member initialization from initializer lists.

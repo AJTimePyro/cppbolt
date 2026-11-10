@@ -1,0 +1,73 @@
+#ifndef _MINI_STL_ARRAY_
+#define _MINI_STL_ARRAY_
+
+#include <cstddef>
+#include <initializer_list>
+
+namespace std {
+
+template <typename T, size_t N>
+struct array {
+    T _elements[N];
+
+    typedef T value_type;
+    typedef size_t size_type;
+    typedef ptrdiff_t difference_type;
+    typedef T& reference;
+    typedef const T& const_reference;
+    typedef T* pointer;
+    typedef const T* const_pointer;
+    typedef T* iterator;
+    typedef const T* const_iterator;
+
+    array() {}
+
+    array(initializer_list<T> list) {
+        size_t i = 0;
+        for (const T* it = list.begin(); it != list.end(); ++it) {
+            if (i < N) {
+                _elements[i] = *it;
+                ++i;
+            }
+        }
+    }
+
+    size_type size() const { return N; }
+    size_type max_size() const { return N; }
+    bool empty() const { return N == 0; }
+
+    T& operator[](size_type idx) { return _elements[idx]; }
+    const T& operator[](size_type idx) const { return _elements[idx]; }
+
+    T& front() { return _elements[0]; }
+    const T& front() const { return _elements[0]; }
+
+    T& back() { return _elements[N - 1]; }
+    const T& back() const { return _elements[N - 1]; }
+
+    T* data() { return _elements; }
+    const T* data() const { return _elements; }
+
+    T* begin() { return _elements; }
+    const T* begin() const { return _elements; }
+    T* end() { return _elements + N; }
+    const T* end() const { return _elements + N; }
+
+    void fill(const T& val) {
+        for (size_t i = 0; i < N; ++i) {
+            _elements[i] = val;
+        }
+    }
+
+    void swap(array& other) {
+        for (size_t i = 0; i < N; ++i) {
+            T tmp = _elements[i];
+            _elements[i] = other._elements[i];
+            other._elements[i] = tmp;
+        }
+    }
+};
+
+} // namespace std
+
+#endif // _MINI_STL_ARRAY_

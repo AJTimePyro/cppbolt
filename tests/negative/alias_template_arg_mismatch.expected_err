@@ -1,0 +1,1 @@
+tests/negative/alias_template_arg_mismatch.cpp:5:5: error: wrong number of template arguments for 'SingleAlias': expected 1, found 2

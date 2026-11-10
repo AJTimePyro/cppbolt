@@ -1,0 +1,1 @@
+tests/negative/unique_ptr_assign.cpp:6:5: error: Type mismatch in assignment: cannot assign unique_ptr<int> to unique_ptr<int>

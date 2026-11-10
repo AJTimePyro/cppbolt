@@ -62,14 +62,14 @@ impl Sema {
 
     /// Resolves the class and pointee constness of a member access target.
     pub(super) fn member_struct_name(
-        &self,
+        &mut self,
         obj_ty: &Type,
         is_arrow: bool,
         pos: ExprPos,
     ) -> Result<(String, bool), CompileError> {
         if is_arrow {
-            let stripped = obj_ty.strip_const();
-            if let Type::Pointer(inner) | Type::Reference(inner) = stripped {
+            let stripped = obj_ty.strip_reference().strip_const();
+            if let Type::Pointer(inner) = stripped {
                 match inner.strip_reference().strip_const() {
                     Type::Struct(s) => Ok((s.clone(), inner.strip_reference().is_const())),
                     _ => Err(CompileError::new(
@@ -80,6 +80,7 @@ impl Sema {
                 }
             } else if let Type::Struct(sname) = stripped {
                 let receiver_const = receiver_is_const_type(obj_ty);
+                self.instantiate_arrow_chain(sname, receiver_const)?;
                 self.resolve_arrow_struct_name(sname, receiver_const, pos)
             } else {
                 Err(CompileError::new(
@@ -90,7 +91,8 @@ impl Sema {
             }
         } else {
             let stripped = obj_ty.strip_const();
-            let target_ty = if let Type::Reference(inner) = stripped {
+            let target_ty = if let Type::Reference(inner) | Type::RvalueReference(inner) = stripped
+            {
                 inner.strip_const()
             } else {
                 stripped
@@ -104,6 +106,44 @@ impl Sema {
                 )),
             }
         }
+    }
+
+    pub(super) fn instantiate_arrow_chain(
+        &mut self,
+        initial_class: &str,
+        initial_const: bool,
+    ) -> Result<(), CompileError> {
+        let mut current_class = initial_class.to_string();
+        let mut current_const = initial_const;
+        let mut visited: Vec<String> = Vec::new();
+        while !visited.iter().any(|v| v == &current_class) && visited.len() < 128 {
+            visited.push(current_class.clone());
+            let Some(sig) =
+                self.find_method_in_class_for_receiver(&current_class, "operator->", current_const)
+            else {
+                break;
+            };
+            let mangled = sig.mangled_name.clone();
+            self.instantiate_pending_method(&mangled)?;
+            let ret = sig.return_type.strip_const();
+            if let Type::Pointer(_) = ret {
+                break;
+            } else if let Type::Reference(inner) | Type::RvalueReference(inner) = ret {
+                let clean = inner.strip_const();
+                if let Type::Struct(next) = clean {
+                    current_class = next.clone();
+                    current_const = inner.is_const();
+                    continue;
+                }
+                break;
+            } else if let Type::Struct(next) = ret {
+                current_class = next.clone();
+                current_const = sig.return_type.is_const();
+                continue;
+            }
+            break;
+        }
+        Ok(())
     }
 
     pub(crate) fn resolve_arrow_struct_name(
@@ -144,7 +184,7 @@ impl Sema {
                 if let Type::Struct(target) = inner.strip_reference().strip_const() {
                     return Ok((target.clone(), inner.strip_reference().is_const()));
                 }
-            } else if let Type::Reference(inner) = ret {
+            } else if let Type::Reference(inner) | Type::RvalueReference(inner) = ret {
                 let clean = inner.strip_const();
                 if let Type::Pointer(ptr_inner) = clean {
                     if let Type::Struct(target) = ptr_inner.strip_reference().strip_const() {

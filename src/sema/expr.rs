@@ -98,8 +98,9 @@ impl Sema {
         if let Type::Struct(sname) = expr_ty.strip_reference().strip_const() {
             let conv_name = format!("operator {}", target_type.to_c_type());
             let is_const = expr_ty.strip_reference().is_const();
-            if let Some(_sig) = self.find_method_in_class_for_receiver(sname, &conv_name, is_const)
-            {
+            if let Some(sig) = self.find_method_in_class_for_receiver(sname, &conv_name, is_const) {
+                let mangled = sig.mangled_name.clone();
+                self.instantiate_pending_method(&mangled)?;
                 let old_expr = expr.clone();
                 let pos = ExprPos::new(self.current_line, self.current_col);
                 *expr = Expr::Call {
@@ -273,6 +274,9 @@ impl Sema {
             return self.analyze_global_identifier(name, global_name);
         }
         self.check_ambiguous_name(name)?;
+        if let Some((class_part, _)) = name.rsplit_once("::") {
+            self.ensure_class_instantiated(class_part, self.current_line, self.current_col);
+        }
         if let Some(var) = self.lookup_var(name) {
             Ok(var.ty.clone())
         } else if let Some(&val) = self.enum_values.get(name) {

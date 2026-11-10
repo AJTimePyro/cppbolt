@@ -58,7 +58,9 @@ impl<'a> Codegen<'a> {
                 write_u32(code, 0);
             }
             let arg_types: Vec<Type> = args.iter().map(|a| self.get_expr_type(a, ctx)).collect();
-            if let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types) {
+            if let Some((ctor_idx, sig)) =
+                self.find_constructor_sig_with_args(sname, &arg_types, Some(args))
+            {
                 code.push(OP_LOCAL_GET);
                 write_u32(code, ctx.fp_local);
                 code.push(OP_I32_LOAD);

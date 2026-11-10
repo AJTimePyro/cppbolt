@@ -1,0 +1,1 @@
+tests/negative/unique_ptr_return_ref_param.cpp:6:5: error: Return type mismatch: expected unique_ptr<int>, found unique_ptr<int> &

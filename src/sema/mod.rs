@@ -4,6 +4,7 @@
 
 mod analyze;
 mod assign;
+pub mod constexpr_eval;
 mod constructor;
 mod expr;
 mod expr_call;
@@ -19,12 +20,17 @@ mod overload;
 mod stmt;
 mod stmt_decl;
 mod stmt_range_for;
+mod stmt_return;
 mod stmt_structured_binding;
 mod synthesize;
+mod synthesize_ops;
+mod template_alias;
 pub mod template_deduce;
 mod template_func;
+mod template_match;
 mod template_nested;
 mod template_registry;
+mod template_spec;
 pub mod template_subst;
 #[cfg(test)]
 mod tests;
@@ -99,7 +105,9 @@ pub(crate) struct ConversionFailure {
 pub(crate) fn receiver_is_const_type(ty: &Type) -> bool {
     match ty {
         Type::Const(_) => true,
-        Type::Reference(inner) | Type::Pointer(inner) => receiver_is_const_type(inner),
+        Type::Reference(inner) | Type::RvalueReference(inner) | Type::Pointer(inner) => {
+            receiver_is_const_type(inner)
+        }
         _ => false,
     }
 }
@@ -162,7 +170,10 @@ pub struct Sema {
     pub synthesized_decls: Vec<Decl>,
     pub current_func_is_const: bool,
     pub class_templates: HashMap<String, (TemplateClass, Vec<TemplateParam>)>,
+    pub class_specializations: HashMap<String, TemplateClass>,
+    pub partial_specializations: HashMap<String, Vec<template_match::PartialSpec>>,
     pub function_templates: HashMap<String, Vec<(FunctionDecl, Vec<TemplateParam>)>>,
+    pub alias_templates: HashMap<String, (Vec<TemplateParam>, Type)>,
     pub instantiated_classes: HashSet<String>,
     pub instantiated_functions: HashSet<String>,
     pub pending_template_methods: HashMap<String, (String, FunctionDecl)>,
@@ -170,6 +181,7 @@ pub struct Sema {
     pub instantiation_depth: usize,
     pub instantiation_stack: Vec<String>,
     pub structs_with_dtor: HashSet<String>,
+    pub structs_with_move: HashSet<String>,
     depth: crate::depth::DepthCounters,
 }
 
@@ -197,7 +209,10 @@ impl Sema {
             synthesized_decls: Vec::new(),
             current_func_is_const: false,
             class_templates: HashMap::new(),
+            class_specializations: HashMap::new(),
+            partial_specializations: HashMap::new(),
             function_templates: HashMap::new(),
+            alias_templates: HashMap::new(),
             instantiated_classes: HashSet::new(),
             instantiated_functions: HashSet::new(),
             pending_template_methods: HashMap::new(),
@@ -205,6 +220,7 @@ impl Sema {
             instantiation_depth: 0,
             instantiation_stack: Vec::new(),
             structs_with_dtor: HashSet::new(),
+            structs_with_move: HashSet::new(),
             current_class: None,
             current_func_name: None,
             open_namespaces: Vec::new(),

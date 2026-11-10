@@ -5,6 +5,8 @@ use super::types::Type;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TemplateParam {
     pub name: String,
+    pub default_type: Option<Type>,
+    pub param_type: Option<Type>,
     pub line: usize,
     pub col: usize,
 }
@@ -25,6 +27,7 @@ pub struct TemplateClass {
 pub enum TemplateKind {
     Class(TemplateClass),
     Function(Box<FunctionDecl>),
+    Alias(String, Type),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -43,11 +46,15 @@ mod tests {
     fn test_template_param_equality() {
         let p1 = TemplateParam {
             name: "T".to_string(),
+            default_type: None,
+            param_type: None,
             line: 1,
             col: 10,
         };
         let p2 = TemplateParam {
             name: "T".to_string(),
+            default_type: None,
+            param_type: None,
             line: 1,
             col: 10,
         };

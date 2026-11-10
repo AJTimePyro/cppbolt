@@ -1,1 +1,1 @@
-vector:231:17: error: Method '~Abstract' not found in class 'Abstract'
+vector:270:17: error: Method '~Abstract' not found in class 'Abstract'

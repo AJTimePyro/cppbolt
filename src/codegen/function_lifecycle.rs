@@ -40,7 +40,9 @@ impl<'a> Codegen<'a> {
                 .iter()
                 .map(|a| self.get_expr_type(a, ctx))
                 .collect();
-            let Some((ctor_idx, sig)) = self.find_constructor_sig(cls, &arg_types) else {
+            let Some((ctor_idx, sig)) =
+                self.find_constructor_sig_with_args(cls, &arg_types, Some(target_args))
+            else {
                 return Err(CompileError::new(
                     format!("no matching target constructor found in class '{cls}'"),
                     f.line,
@@ -102,7 +104,9 @@ impl<'a> Codegen<'a> {
                 .iter()
                 .map(|a| self.get_expr_type(a, ctx))
                 .collect();
-            if let Some((b_idx, sig)) = self.find_constructor_sig(base_name, &arg_types) {
+            if let Some((b_idx, sig)) =
+                self.find_constructor_sig_with_args(base_name, &arg_types, Some(base_args))
+            {
                 code.push(OP_LOCAL_GET);
                 write_u32(code, 0); // this
                 if *base_offset != 0 {
@@ -223,18 +227,20 @@ impl<'a> Codegen<'a> {
         let arg_types: Vec<Type> = init_args
             .map(|args| args.iter().map(|a| self.get_expr_type(a, ctx)).collect())
             .unwrap_or_default();
-        if let Some((ctor_idx, sig)) = self.find_constructor_sig(sname, &arg_types) {
+        if let Some((ctor_idx, sig)) =
+            self.find_constructor_sig_with_args(sname, &arg_types, init_args)
+        {
             code.push(OP_LOCAL_GET);
             write_u32(code, 0); // this
             code.push(OP_I32_CONST);
             write_i32(code, fld_offset as i32);
             code.push(OP_I32_ADD);
-            if let Some(args) = init_args {
-                let full_args = self.constructor_arguments(&sig, args);
-                for (i, a) in full_args.iter().enumerate() {
-                    let param_ty = sig.param_types.get(i + 1);
-                    self.compile_call_arg(a, param_ty, ctx, code)?;
-                }
+            let empty = [];
+            let args = init_args.unwrap_or(&empty);
+            let full_args = self.constructor_arguments(&sig, args);
+            for (i, a) in full_args.iter().enumerate() {
+                let param_ty = sig.param_types.get(i + 1);
+                self.compile_call_arg(a, param_ty, ctx, code)?;
             }
             code.push(OP_CALL);
             write_u32(code, ctor_idx);

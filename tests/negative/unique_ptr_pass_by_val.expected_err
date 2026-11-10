@@ -1,0 +1,1 @@
+tests/negative/unique_ptr_pass_by_val.cpp:9:5: error: no matching conversion for argument 1 of 'sink': cannot convert 'unique_ptr<int>' to 'unique_ptr<int>'

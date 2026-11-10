@@ -11,7 +11,7 @@ For current baseline results, see [`tests/PASSING.txt`](tests/PASSING.txt) and r
 - [ ] **Arena-Based Semantic State**: Replace string-keyed semantic symbol tables with typed arena IDs (`FileId`, `DeclId`, `TypeId`) to eliminate redundant allocations and accelerate symbol resolution.
 - [ ] **Macro Source-Map Fidelity**: Complete source-map span tracking through nested macro expansions so compiler diagnostics point to expansion invocation sites as well as definition locations.
 - [ ] **Per-Function Stack Frame Layouts**: Replace conservative frame/scratch allocations in [`src/codegen/function_context.rs`](src/codegen/function_context.rs) with measured per-function layouts based on live variable analysis.
-- [ ] **Value Category Normalization**: Formally represent C++17 value categories (prvalue, xvalue, lvalue) in the typed AST to further refine temporary object lifecycles and move semantics.
+- [x] **Value Category Normalization**: Formally represent C++17 value categories (prvalue, xvalue, lvalue) in expression analysis to refine temporary object lifecycles and move semantics.
 
 ---
 
@@ -19,6 +19,7 @@ For current baseline results, see [`tests/PASSING.txt`](tests/PASSING.txt) and r
 
 These features build naturally on existing language constructs without requiring a full template engine:
 
+- [x] **Move Semantics & Smart Pointers**: Rvalue references (`T&&`), value categories, move constructors, move assignment operators, forwarding references, reference collapsing, `std::move`, `std::forward`, `std::vector` move operations, and `std::unique_ptr` in `<memory>`.
 - [x] **Range-Based `for` Loops**: Lower `for (decl : range)` into standard iterator loops using `begin()` / `end()` or pointer intervals across fixed-size 1D/multidimensional arrays and container classes (e.g. `std::string`).
 - [x] **List Initialization & Aggregates**: Direct-list and copy-list initialization, value initialization with empty braces (`{}`), aggregate base subobjects and brace elision, narrowing conversion checks, dynamic array allocations (`new T[n]{...}`), and typed temporaries.
 - [x] **Additional Operator Overloads**:
@@ -36,17 +37,15 @@ These features build naturally on existing language constructs without requiring
 
 ## 3. Standard Library & Templates (Post-v1)
 
-Templates and standard containers remain the primary boundary between the v1 compiler subset and full C++17 support:
+Templates and standard containers implemented in cppbolt:
 
-- [ ] **Template Support**:
-  - Function templates and class templates with type parameters (`template <typename T>`).
-  - Template specialization and method instantiation.
-  - `std::initializer_list<T>` constructors and overload resolution priority.
-  - *Target*: Resolve expected failures currently tracked in [`tests/templates_operators`](tests/templates_operators/).
-- [ ] **Standard Containers & Algorithms**:
-  - Full templated implementations of `<vector>`, `<map>`, `<set>`, and `<utility>` (`std::pair`).
-  - `<algorithm>` support (`std::sort`, `std::find`, `std::min`, `std::max`).
-  - *Target*: Resolve expected container failures currently tracked in [`tests/mini_stl`](tests/mini_stl/).
+- [x] **Template Core & Instantiation**: Function templates and class templates with type parameters (`template <typename T>`), lazy member instantiation, and default template arguments.
+- [x] **Specialization & NTTP**: Class template explicit (full) and partial specialization, non-type template parameters (NTTP), compile-time constant expression folding, and alias templates.
+- [x] **Initializer Lists**: `std::initializer_list<T>` constructors, brace initialization, and aggregate deduction.
+- [x] **Standard Containers**: Templated implementations of `<vector>`, `<map>`, `<set>`, `<array>`, and `<utility>` (`std::pair`).
+- [x] **Algorithms & Traits**: `<algorithm>` (`std::sort`, `std::find`, `std::min`, `std::max`, `std::copy`, `std::reverse`) and `<type_traits>` (`std::integral_constant`, `std::is_same`, `std::remove_reference`).
+- [ ] **Variadic Templates**: Parameter packs (`template <typename... Args>`) and pack expansions.
+- [ ] **Template Template Parameters**: Templated parameters (`template <template <typename> class C>`).
 
 ---
 

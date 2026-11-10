@@ -192,8 +192,9 @@ impl Parser {
     fn parse_parenthesized_expr(&mut self) -> Result<Expr, CompileError> {
         // One parenthesis costs one level of the parenthesis budget.
         let _guard = self.enter_parenthesis()?;
+        self.template_arg_paren_depth += 1;
         let start = self.current_pos();
-        if self.is_cast_ahead() {
+        let res = if self.is_cast_ahead() {
             let saved_pos = self.pos;
             self.advance();
             let cast_res = (|| -> Result<Expr, CompileError> {
@@ -224,7 +225,9 @@ impl Parser {
             let expr = self.parse_expr()?;
             self.expect(TokenKind::RParen)?;
             self.parse_postfix(expr, start)
-        }
+        };
+        self.template_arg_paren_depth -= 1;
+        res
     }
 
     pub(super) fn is_cast_ahead(&self) -> bool {

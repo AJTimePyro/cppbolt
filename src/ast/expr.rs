@@ -283,6 +283,24 @@ fn take_expr_children(expr: &mut Expr, out: &mut Vec<Expr>) {
 }
 
 impl Expr {
+    pub fn pos(&self) -> ExprPos {
+        match self {
+            Expr::Binary { pos, .. }
+            | Expr::Unary { pos, .. }
+            | Expr::Assign { pos, .. }
+            | Expr::CompoundAssign { pos, .. }
+            | Expr::Call { pos, .. }
+            | Expr::ArraySubscript { pos, .. }
+            | Expr::MemberAccess { pos, .. }
+            | Expr::InitializerList { pos, .. }
+            | Expr::TypedInitList { pos, .. }
+            | Expr::Lambda { pos, .. } => *pos,
+            Expr::Ternary { cond, .. } => cond.pos(),
+            Expr::Cast { expr, .. } | Expr::SizeofExpr(expr) => expr.pos(),
+            _ => ExprPos::default(),
+        }
+    }
+
     pub fn is_lvalue(&self) -> bool {
         match self {
             Expr::Identifier(_) | Expr::ArraySubscript { .. } => true,
@@ -292,7 +310,7 @@ impl Expr {
             Expr::Unary {
                 op: UnaryOp::Deref, ..
             } => true,
-            Expr::Cast { target_type, .. } => target_type.is_reference(),
+            Expr::Cast { target_type, .. } => target_type.is_lvalue_reference(),
             _ => false,
         }
     }

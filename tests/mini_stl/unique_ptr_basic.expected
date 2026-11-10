@@ -1,0 +1,9 @@
+create Node: 42
+Node ping: 42
+deref: 42
+p1 is null: 1, p2 is non-null: 1
+Node ping: 42
+create Node: 99
+destroy Node: 42
+-- exiting scope --
+destroy Node: 99

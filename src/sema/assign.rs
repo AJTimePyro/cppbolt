@@ -25,28 +25,85 @@ impl Sema {
         }
     }
 
-    pub fn can_assign_expr(&self, target: &Type, value: &Type, expr: Option<&Expr>) -> bool {
+    pub(super) fn instantiate_assign_operator(
+        &mut self,
+        target_ty: &Type,
+        value_ty: &Type,
+        value: &Expr,
+        pos: ExprPos,
+    ) -> Result<(), CompileError> {
+        if let Type::Struct(sname) = target_ty.strip_reference().strip_const()
+            && let Some(sig) = self.select_member_overload(
+                (sname, "operator="),
+                (false, true),
+                std::slice::from_ref(value_ty),
+                Some(std::slice::from_ref(value)),
+                pos,
+            )?
+        {
+            self.instantiate_pending_method(&sig.mangled_name)?;
+        }
+        Ok(())
+    }
+
+    fn can_assign_reference(
+        &self,
+        target: &Type,
+        value: &Type,
+        expr: Option<&Expr>,
+    ) -> Option<bool> {
+        if let Type::RvalueReference(inner) = target {
+            if expr.is_some_and(Expr::is_lvalue) || value.is_lvalue_reference() {
+                return Some(false);
+            }
+            if value.strip_reference().is_const() && !inner.is_const() {
+                return Some(false);
+            }
+            return Some(
+                self.reference_types_compatible(
+                    inner.strip_const(),
+                    value.strip_reference().strip_const(),
+                ) || self.can_assign(inner.strip_const(), value.strip_reference().strip_const()),
+            );
+        }
         if let Type::Reference(inner) = target {
             if inner.is_const() {
-                return self.can_assign_expr(inner.strip_const(), value, expr);
+                return Some(self.can_assign_expr(inner.strip_const(), value, expr));
+            }
+            if value.is_rvalue_reference() {
+                return Some(false);
             }
             if let Some(e) = expr
                 && !value.is_reference()
                 && !e.is_lvalue()
             {
-                return false;
+                return Some(false);
             }
             if value.strip_reference().is_const() {
-                return false;
+                return Some(false);
             }
-            return self.reference_types_compatible(
+            return Some(self.reference_types_compatible(
                 inner.strip_const(),
                 value.strip_reference().strip_const(),
-            );
+            ));
         }
+        None
+    }
+
+    pub fn can_assign_expr(&self, target: &Type, value: &Type, expr: Option<&Expr>) -> bool {
+        if let Some(ok) = self.can_assign_reference(target, value, expr) {
+            return ok;
+        }
+        let is_lvalue_val = expr.is_some_and(Expr::is_lvalue) || value.is_lvalue_reference();
         let target = strip_assign_type(target);
         let value = strip_assign_type(value);
         if target == value {
+            if let Type::Struct(sname) = target.strip_const()
+                && self.is_move_only_struct(sname)
+                && (expr.is_none() || is_lvalue_val)
+            {
+                return false;
+            }
             return true;
         }
         if matches!(target.strip_const(), Type::Nullptr)
@@ -309,7 +366,7 @@ impl Sema {
 
 fn strip_assign_type(ty: &Type) -> &Type {
     let ty = ty.strip_const();
-    if let Type::Reference(inner) = ty {
+    if let Type::Reference(inner) | Type::RvalueReference(inner) = ty {
         inner.strip_const()
     } else {
         ty

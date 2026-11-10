@@ -268,7 +268,7 @@ export interface WasmHostOptions {
  * retrieve the accumulated output after the program finishes.
  */
 export interface WasmHost {
-	/** The WebAssembly import object — provide this to `WebAssembly.instantiate`. */
+	/** The WebAssembly import object passed to `WebAssembly.instantiate`. */
 	imports: WebAssembly.Imports;
 	/** Returns all stdout output accumulated since the host was created. */
 	getStdout(): string;

@@ -102,7 +102,8 @@ impl<'a> Codegen<'a> {
             .get(sname)
             .copied()
             .ok_or_else(|| self.internal_error("missing struct layout"))?;
-        if self.is_struct_lvalue(expr, ctx) {
+        let is_xvalue = self.is_expr_xvalue(expr, ctx);
+        if self.is_struct_lvalue(expr, ctx) || is_xvalue {
             code.push(OP_I32_CONST);
             write_i32(code, size as i32);
             code.push(OP_CALL);
@@ -115,15 +116,27 @@ impl<'a> Codegen<'a> {
             write_u32(code, ctx.scratch1);
 
             let expr_ty = self.get_expr_type(expr, ctx);
+            let raw_ty = self.get_expr_type_raw(expr, ctx);
             let is_const = expr_ty.strip_reference().is_const();
-            if let Some(ctor_idx) = self.find_copy_constructor(sname, is_const) {
+            let is_local_var = if let Expr::Identifier(name) = expr {
+                ctx.var_offsets.contains_key(name) && !raw_ty.is_reference() && !is_const
+            } else {
+                false
+            };
+            let ctor = if is_xvalue || is_local_var {
+                self.find_move_constructor(sname)
+                    .or_else(|| self.find_copy_constructor(sname, is_const))
+            } else {
+                self.find_copy_constructor(sname, is_const)
+            };
+            if let Some(ctor_idx) = ctor {
                 code.push(OP_LOCAL_GET);
                 write_u32(code, ctx.ret_temp_i32);
                 code.push(OP_LOCAL_GET);
                 write_u32(code, ctx.scratch1);
                 code.push(OP_CALL);
                 write_u32(code, ctor_idx);
-            } else {
+            } else if !self.sema.is_move_only_struct(sname) {
                 super::raii::emit_struct_byte_copy(
                     size,
                     0,
@@ -137,6 +150,8 @@ impl<'a> Codegen<'a> {
                     },
                     code,
                 );
+            } else {
+                return Err(self.internal_error("cannot copy move-only struct on return"));
             }
             self.emit_clean_temporaries(ctx, code);
             return Ok(());

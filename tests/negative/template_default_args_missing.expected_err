@@ -1,0 +1,1 @@
+tests/negative/template_default_args_missing.cpp:8:5: error: wrong number of template arguments for 'PairDef': expected at least 1, found 0

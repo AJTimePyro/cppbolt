@@ -17,14 +17,12 @@ impl Parser {
                 t_col,
             ));
         }
-        self.advance(); // consume '<'
+        self.advance();
 
         if self.peek() == &TokenKind::Gt {
-            return Err(CompileError::new(
-                "explicit template specialization is not supported yet",
-                t_line,
-                t_col,
-            ));
+            self.advance();
+            self.active_type_params.push(HashSet::new());
+            return self.parse_template_body(Vec::new(), t_line, t_col, declarations);
         }
 
         let params = self.parse_template_params()?;
@@ -33,6 +31,20 @@ impl Parser {
 
     pub(super) fn parse_template_params(&mut self) -> Result<Vec<TemplateParam>, CompileError> {
         let mut params = Vec::new();
+        self.active_type_params.push(HashSet::new());
+        let res = self.parse_template_params_inner(&mut params);
+        if res.is_err() {
+            self.active_type_params.pop();
+        }
+        res?;
+        Ok(params)
+    }
+
+    fn parse_template_params_inner(
+        &mut self,
+        params: &mut Vec<TemplateParam>,
+    ) -> Result<(), CompileError> {
+        let mut seen_default = false;
         while self.peek() != &TokenKind::Gt && self.peek() != &TokenKind::Shr {
             let p_line = self.current().line;
             let p_col = self.current().col;
@@ -44,14 +56,19 @@ impl Parser {
                     p_col,
                 ));
             }
-            if self.peek() != &TokenKind::KwTypename && self.peek() != &TokenKind::KwClass {
-                return Err(CompileError::new(
-                    "non-type template parameters are not supported yet",
-                    p_line,
-                    p_col,
-                ));
-            }
-            self.advance();
+            let param_type =
+                if self.peek() == &TokenKind::KwTypename || self.peek() == &TokenKind::KwClass {
+                    self.advance();
+                    None
+                } else if self.is_type_start() {
+                    Some(self.parse_type()?)
+                } else {
+                    return Err(CompileError::new(
+                        "expected template parameter declaration",
+                        p_line,
+                        p_col,
+                    ));
+                };
 
             if self.peek() == &TokenKind::Dot {
                 return Err(CompileError::new(
@@ -65,8 +82,23 @@ impl Parser {
                 TokenKind::Ident(id) => id,
                 _ => return Err(CompileError::new("expected identifier", p_line, p_col)),
             };
+            if let Some(set) = self.active_type_params.last_mut() {
+                set.insert(name.clone());
+            }
+            let default_type = self.parse_template_param_default(param_type.as_ref())?;
+            if default_type.is_some() {
+                seen_default = true;
+            } else if seen_default {
+                return Err(CompileError::new(
+                    "template parameter without default follows parameter with default",
+                    p_line,
+                    p_col,
+                ));
+            }
             params.push(TemplateParam {
                 name,
+                default_type,
+                param_type,
                 line: p_line,
                 col: p_col,
             });
@@ -77,8 +109,35 @@ impl Parser {
                 break;
             }
         }
-        self.consume_template_closing_gt()?;
-        Ok(params)
+        self.consume_template_closing_gt()
+    }
+
+    fn parse_template_param_default(
+        &mut self,
+        param_type: Option<&Type>,
+    ) -> Result<Option<Type>, CompileError> {
+        if self.peek() != &TokenKind::Assign {
+            return Ok(None);
+        }
+        self.advance();
+        if param_type.is_some() {
+            Ok(Some(self.parse_nttp_const_arg()?))
+        } else {
+            Ok(Some(self.parse_type()?))
+        }
+    }
+
+    fn parse_nttp_const_arg(&mut self) -> Result<Type, CompileError> {
+        let saved_in_template = self.in_template_arg;
+        let saved_depth = self.template_arg_paren_depth;
+        self.in_template_arg = true;
+        self.template_arg_paren_depth = 0;
+        let expr_res = self.parse_expr_prec(2);
+        self.in_template_arg = saved_in_template;
+        self.template_arg_paren_depth = saved_depth;
+        let expr = expr_res?;
+        let val = crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None)?;
+        Ok(Type::NonType(val))
     }
 
     pub(super) fn consume_template_closing_gt(&mut self) -> Result<(), CompileError> {
@@ -87,6 +146,7 @@ impl Parser {
             Ok(())
         } else if self.peek() == &TokenKind::Shr {
             // Split >> into > followed by >
+            self.shr_splits.push(self.pos);
             self.tokens[self.pos].kind = TokenKind::Gt;
             Ok(())
         } else {
@@ -105,21 +165,9 @@ impl Parser {
         t_col: usize,
         declarations: &mut Vec<Decl>,
     ) -> Result<(), CompileError> {
-        let b_line = self.current().line;
-        let b_col = self.current().col;
-
-        if self.peek() == &TokenKind::KwUsing {
-            return Err(CompileError::new(
-                "alias templates are not supported yet",
-                b_line,
-                b_col,
-            ));
-        }
-
-        let param_names: HashSet<String> = params.iter().map(|p| p.name.clone()).collect();
-        self.active_type_params.push(param_names);
-
-        let result = if self.peek() == &TokenKind::KwStruct || self.peek() == &TokenKind::KwClass {
+        let result = if self.peek() == &TokenKind::KwUsing {
+            self.parse_template_alias(params, t_line, t_col)
+        } else if self.peek() == &TokenKind::KwStruct || self.peek() == &TokenKind::KwClass {
             self.parse_template_class(params, t_line, t_col)
         } else {
             self.parse_template_function(params, t_line, t_col)
@@ -172,6 +220,30 @@ impl Parser {
         })])
     }
 
+    fn parse_template_alias(
+        &mut self,
+        params: Vec<TemplateParam>,
+        t_line: usize,
+        t_col: usize,
+    ) -> Result<Vec<Decl>, CompileError> {
+        self.advance();
+        let (id_line, id_col) = (self.current().line, self.current().col);
+        let name = match self.advance().kind.clone() {
+            TokenKind::Ident(id) => id,
+            _ => return Err(CompileError::new("expected identifier", id_line, id_col)),
+        };
+        self.register_template_name(&name);
+        self.expect(TokenKind::Assign)?;
+        let ty = self.parse_type()?;
+        self.expect(TokenKind::Semi)?;
+        Ok(vec![Decl::Template(TemplateDecl {
+            params,
+            kind: TemplateKind::Alias(name, ty),
+            line: t_line,
+            col: t_col,
+        })])
+    }
+
     fn parse_template_function(
         &mut self,
         params: Vec<TemplateParam>,
@@ -214,7 +286,7 @@ impl Parser {
         self.expect(TokenKind::Lt)?;
         let mut args = Vec::new();
         while self.peek() != &TokenKind::Gt && self.peek() != &TokenKind::Shr {
-            let ty = self.parse_type()?;
+            let ty = self.parse_template_arg_type()?;
             args.push(ty);
             if self.peek() == &TokenKind::Comma {
                 self.advance();
@@ -224,6 +296,18 @@ impl Parser {
         }
         self.consume_template_closing_gt()?;
         Ok(args)
+    }
+
+    pub fn parse_template_arg_type(&mut self) -> Result<Type, CompileError> {
+        if self.is_type_start() {
+            let saved_pos = self.pos;
+            let saved_splits = self.shr_splits.len();
+            if let Ok(ty) = self.parse_type() {
+                return Ok(ty);
+            }
+            self.rollback_pos(saved_pos, saved_splits);
+        }
+        self.parse_nttp_const_arg()
     }
 
     pub(super) fn is_template_qualifier_ahead(&self) -> bool {
@@ -246,10 +330,13 @@ impl Parser {
                     }
                 }
                 TokenKind::Shr => {
-                    if depth <= 2 {
+                    if depth == 2 {
                         return Some(idx + 1);
+                    } else if depth > 2 {
+                        depth -= 2;
+                    } else {
+                        return None;
                     }
-                    depth -= 2;
                 }
                 TokenKind::Semi | TokenKind::LBrace | TokenKind::RBrace | TokenKind::Eof => {
                     return None;

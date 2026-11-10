@@ -362,15 +362,12 @@ impl Sema {
         let target_ty = target_ty.strip_reference().clone();
         if target_ty.is_const() {
             let name = match &**target {
-                Expr::Identifier(n) => n.clone(),
-                Expr::MemberAccess { member, .. } => member.clone(),
-                _ => "variable".to_string(),
+                Expr::Identifier(n) => n.as_str(),
+                Expr::MemberAccess { member, .. } => member.as_str(),
+                _ => "variable",
             };
             return Err(CompileError::new(
-                format!(
-                    "Cannot assign to variable '{}' with const-qualified type",
-                    name
-                ),
+                format!("Cannot assign to variable '{name}' with const-qualified type"),
                 pos.line,
                 pos.col,
             ));
@@ -395,6 +392,7 @@ impl Sema {
             );
             return Err(CompileError::new(msg, pos.line, pos.col));
         }
+        self.instantiate_assign_operator(&target_ty, &value_ty, value, *pos)?;
         Ok(target_ty)
     }
 

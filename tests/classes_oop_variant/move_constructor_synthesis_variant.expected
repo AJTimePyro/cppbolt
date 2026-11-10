@@ -1,0 +1,8 @@
+-- move pair --
+res move
+res move
+p2: 11 22, p1: -1 -1
+-- move assign pair --
+res move assign
+res move assign
+p3: 11 22, p2: -1 -1

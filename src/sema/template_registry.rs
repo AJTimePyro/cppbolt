@@ -30,13 +30,21 @@ impl Sema {
     }
 
     pub fn register_function_template(&mut self, decl: FunctionDecl, params: Vec<TemplateParam>) {
-        let name = decl.name.clone();
-        let short = name.split("::").last().unwrap_or(&name).to_string();
-        let qualified = QualifiedName::new(&name);
-        let std_name = qualified.std_name().into_owned();
-        let plain = qualified.plain().to_string();
+        let short = decl
+            .name
+            .rsplit("::")
+            .next()
+            .unwrap_or(&decl.name)
+            .to_string();
+        let q = QualifiedName::new(&decl.name);
+        let keys = [
+            decl.name.clone(),
+            short,
+            q.plain().to_string(),
+            q.std_name().into_owned(),
+        ];
         let item = (decl, params);
-        for key in [name, short, std_name, plain] {
+        for key in keys {
             let list = self.function_templates.entry(key).or_default();
             if let Some((existing_decl, _)) = list.iter_mut().find(|(d, _)| {
                 d.params.len() == item.0.params.len()
@@ -54,49 +62,6 @@ impl Sema {
         }
     }
 
-    pub fn attach_out_of_class_template_method(
-        &mut self,
-        func: FunctionDecl,
-        params: &[TemplateParam],
-    ) {
-        let Some((class_part, method_name)) = func.name.rsplit_once("::") else {
-            self.register_function_template(func, params.to_vec());
-            return;
-        };
-        let class_name = class_part.split('<').next().unwrap_or(class_part);
-        let plain_class = QualifiedName::new(class_name).plain();
-        let short_method = method_name.to_string();
-
-        let mut matched = false;
-        for (key, (template_class, _)) in self.class_templates.iter_mut() {
-            if QualifiedName::new(key).plain() == plain_class {
-                matched = true;
-                if let Some(existing) = template_class.methods.iter_mut().find(|m| {
-                    m.name == short_method
-                        && m.params.len() == func.params.len()
-                        && m.is_const == func.is_const
-                        && m.body.is_none()
-                        && m.params
-                            .iter()
-                            .zip(&func.params)
-                            .all(|(p1, p2)| p1.ty == p2.ty)
-                }) {
-                    existing.body = func.body.clone();
-                    if !func.ctor_initializers.is_empty() {
-                        existing.ctor_initializers = func.ctor_initializers.clone();
-                    }
-                } else {
-                    let mut m = func.clone();
-                    m.name = short_method.clone();
-                    template_class.methods.push(m);
-                }
-            }
-        }
-        if !matched {
-            self.register_function_template(func, params.to_vec());
-        }
-    }
-
     pub fn resolve_and_instantiate_type(
         &mut self,
         ty: &mut Type,
@@ -107,6 +72,10 @@ impl Sema {
             Type::TemplateInstance { name, args } => {
                 for arg in args.iter_mut() {
                     self.resolve_and_instantiate_type(arg, line, col)?;
+                }
+                if let Some(expanded) = self.expand_alias_template(name, args, line, col)? {
+                    *ty = expanded;
+                    return Ok(());
                 }
                 let inst_name = self.instantiate_class_template(name, args, line, col)?;
                 *ty = Type::Struct(inst_name);
@@ -123,8 +92,18 @@ impl Sema {
             }
             Type::Pointer(inner)
             | Type::Reference(inner)
-            | Type::Const(inner)
-            | Type::Array(inner, _) => {
+            | Type::RvalueReference(inner)
+            | Type::Const(inner) => {
+                self.resolve_and_instantiate_type(inner, line, col)?;
+            }
+            Type::Array(inner, size) => {
+                if *size == usize::MAX {
+                    return Err(CompileError::new(
+                        "Array dimension must be non-negative integer constant",
+                        line,
+                        col,
+                    ));
+                }
                 self.resolve_and_instantiate_type(inner, line, col)?;
             }
             _ => {}
@@ -154,19 +133,29 @@ impl Sema {
         {
             let inst_part = &sname[..gt_pos + 1];
             if let Some((tmpl_name, args_str)) = split_template_call_name(inst_part) {
-                let known: Vec<String> = self.class_templates.keys().cloned().collect();
+                let known: Vec<String> = self
+                    .class_templates
+                    .keys()
+                    .chain(self.alias_templates.keys())
+                    .cloned()
+                    .collect();
                 if let Ok(mut args) = parse_types_list(args_str, &known) {
                     for arg in &mut args {
                         self.resolve_and_instantiate_type(arg, line, col)?;
                     }
-                    let _ = self.instantiate_class_template(tmpl_name, &args, line, col)?;
+                    let inst = self.instantiate_class_template(tmpl_name, &args, line, col)?;
+                    let member = &sname[gt_pos + 3..];
+                    let canon = format!("{inst}::{member}");
                     if let Some(alias) = self
                         .type_aliases
-                        .get(sname)
+                        .get(&canon)
                         .cloned()
+                        .or_else(|| self.type_aliases.get(sname).cloned())
                         .or_else(|| self.type_aliases.get(plain).cloned())
                     {
                         *ty = alias;
+                    } else if self.struct_layouts.contains_key(&canon) {
+                        *ty = Type::Struct(canon);
                     }
                 }
             }
@@ -181,6 +170,13 @@ impl Sema {
         line: usize,
         col: usize,
     ) -> Result<String, CompileError> {
+        if let Some(expanded) = self.expand_alias_template(name, args, line, col)? {
+            if let Type::Struct(sname) = expanded {
+                return Ok(sname);
+            }
+            return Ok(expanded.to_c_type());
+        }
+
         let (template_class, template_params) = self
             .class_templates
             .get(name)
@@ -193,18 +189,12 @@ impl Sema {
                 CompileError::new(format!("Template '{}' not found", name), line, col)
             })?;
 
-        if args.len() != template_params.len() {
-            return Err(CompileError::new(
-                format!(
-                    "wrong number of template arguments for '{}': expected {}, found {}",
-                    name,
-                    template_params.len(),
-                    args.len()
-                ),
-                line,
-                col,
-            ));
-        }
+        let effective_args = super::template_deduce::fill_default_template_args(
+            name,
+            &template_params,
+            args,
+            (line, col),
+        )?;
 
         if self.instantiation_depth >= 500 {
             return Err(CompileError::new(
@@ -214,7 +204,7 @@ impl Sema {
             ));
         }
 
-        let canonical_args = args
+        let canonical_args = effective_args
             .iter()
             .map(|a| a.to_c_type())
             .collect::<Vec<_>>()
@@ -230,13 +220,19 @@ impl Sema {
         self.instantiation_stack.push(inst_name.clone());
         self.instantiation_depth += 1;
 
-        let result = self.execute_class_instantiation(
-            &template_class,
-            &template_params,
-            args,
-            &inst_name,
-            (line, col),
-        );
+        let (target_class, mapping) = self.resolve_instantiation_target(
+            super::template_spec::InstantiationTarget {
+                name,
+                inst_name: &inst_name,
+                template_params: &template_params,
+                effective_args: &effective_args,
+                pos: (line, col),
+            },
+            template_class,
+        )?;
+
+        let result =
+            self.execute_class_instantiation(&target_class, mapping, &inst_name, (line, col));
 
         self.instantiation_stack.pop();
         self.instantiation_depth -= 1;
@@ -246,19 +242,11 @@ impl Sema {
     fn execute_class_instantiation(
         &mut self,
         template_class: &TemplateClass,
-        template_params: &[TemplateParam],
-        args: &[Type],
+        mapping: HashMap<String, Type>,
         inst_name: &str,
         pos: (usize, usize),
     ) -> Result<(), CompileError> {
         let (line, col) = pos;
-        let mapping = self.prepare_instantiation_mapping(
-            template_class,
-            template_params,
-            args,
-            inst_name,
-            pos,
-        );
         self.instantiate_nested_structs(template_class, inst_name, &mapping, pos)?;
 
         let mut struct_decl = substitute_struct(template_class, &mapping, inst_name, line, col);
@@ -301,7 +289,7 @@ impl Sema {
             col,
         })?;
 
-        self.register_instantiated_static_fields(inst_name, static_fields);
+        self.register_instantiated_static_fields(inst_name, static_fields, base_classes, line, col);
         self.register_instantiated_member_aliases(&template_class.name, inst_name, &mapping);
         let all_methods = std::mem::take(methods);
         self.synthesized_decls.push(struct_decl);
@@ -313,6 +301,9 @@ impl Sema {
         &mut self,
         inst_name: &str,
         static_fields: &[(String, Type, Option<Expr>)],
+        base_classes: &[String],
+        line: usize,
+        col: usize,
     ) {
         for sf in static_fields.iter() {
             let qual_name = format!("{}::{}", inst_name, sf.0);
@@ -325,6 +316,10 @@ impl Sema {
                     stack_offset: 0,
                 },
             );
+        }
+        for base in base_classes {
+            self.ensure_class_instantiated(base, line, col);
+            self.alias_static_fields(base, inst_name);
         }
     }
 
@@ -462,14 +457,14 @@ impl Sema {
             }
             if !found {
                 self.synthesized_decls.push(Decl::StructDecl {
-                    name: class_name.clone(),
+                    name: class_name,
                     is_class: false,
-                    base_classes: Vec::new(),
-                    fields: Vec::new(),
+                    base_classes: vec![],
+                    fields: vec![],
                     methods: vec![method_decl],
-                    static_fields: Vec::new(),
-                    private_members: Vec::new(),
-                    nested_structs: Vec::new(),
+                    static_fields: vec![],
+                    private_members: vec![],
+                    nested_structs: vec![],
                     line: 0,
                     col: 0,
                 });

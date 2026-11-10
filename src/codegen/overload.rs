@@ -12,12 +12,13 @@ impl<'a> Codegen<'a> {
         &self,
         params: &[Type],
         arg_types: &[Type],
+        args: Option<&[Expr]>,
     ) -> Option<usize> {
         if params.len() != arg_types.len() {
             return None;
         }
         let mut score = 0;
-        for (p, a) in params.iter().zip(arg_types) {
+        for (i, (p, a)) in params.iter().zip(arg_types).enumerate() {
             let p_decay = p.decay_array();
             let a_decay = a.decay_array();
             let p_is_ptr = p_decay.is_pointer();
@@ -29,19 +30,38 @@ impl<'a> Codegen<'a> {
                 score += 1;
             } else if p_is_ptr && (a.is_integer() || *a == Type::Nullptr) {
                 score += 20;
-            } else if let Type::Reference(inner) = p {
+            } else if p.is_reference()
+                && let Some(inner) = p.deref_type()
+            {
+                let is_lval = if let Some(arg_expr) = args.and_then(|s| s.get(i)) {
+                    a.is_lvalue_reference() || arg_expr.is_lvalue()
+                } else {
+                    !a.is_rvalue_reference()
+                };
                 let matches_type = self.sema.reference_types_compatible(
                     inner.strip_const(),
                     a.strip_reference().strip_const(),
                 );
-                if !inner.is_const() {
-                    if a.strip_reference().is_const() || !matches_type {
+                if p.is_rvalue_reference() {
+                    if is_lval
+                        || (a.strip_reference().is_const() && !inner.is_const())
+                        || !matches_type
+                    {
+                        return None;
+                    }
+                    score += 1;
+                } else if !inner.is_const() {
+                    if !is_lval || a.strip_reference().is_const() || !matches_type {
                         return None;
                     }
                     score += 1;
                 } else if matches_type {
-                    let const_bonus = usize::from(!a.strip_reference().is_const());
-                    score += 1 + const_bonus;
+                    let penalty = if is_lval {
+                        usize::from(!a.strip_reference().is_const())
+                    } else {
+                        1
+                    };
+                    score += 1 + penalty;
                 } else if self.sema.can_assign(inner.strip_const(), a) {
                     score += 3;
                 } else {

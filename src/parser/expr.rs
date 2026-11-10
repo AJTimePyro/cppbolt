@@ -85,10 +85,22 @@ impl Parser {
             TokenKind::BangEq => Some((BinaryOpChoice::Binary(BinaryOp::Ne), 9, false)),
             TokenKind::Lt => Some((BinaryOpChoice::Binary(BinaryOp::Lt), 10, false)),
             TokenKind::LtEq => Some((BinaryOpChoice::Binary(BinaryOp::Le), 10, false)),
-            TokenKind::Gt => Some((BinaryOpChoice::Binary(BinaryOp::Gt), 10, false)),
+            TokenKind::Gt => {
+                if self.in_template_arg && self.template_arg_paren_depth == 0 {
+                    None
+                } else {
+                    Some((BinaryOpChoice::Binary(BinaryOp::Gt), 10, false))
+                }
+            }
             TokenKind::GtEq => Some((BinaryOpChoice::Binary(BinaryOp::Ge), 10, false)),
             TokenKind::Shl => Some((BinaryOpChoice::Binary(BinaryOp::Shl), 11, false)),
-            TokenKind::Shr => Some((BinaryOpChoice::Binary(BinaryOp::Shr), 11, false)),
+            TokenKind::Shr => {
+                if self.in_template_arg && self.template_arg_paren_depth == 0 {
+                    None
+                } else {
+                    Some((BinaryOpChoice::Binary(BinaryOp::Shr), 11, false))
+                }
+            }
             TokenKind::Plus => Some((BinaryOpChoice::Binary(BinaryOp::Add), 12, false)),
             TokenKind::Minus => Some((BinaryOpChoice::Binary(BinaryOp::Sub), 12, false)),
             TokenKind::Star => Some((BinaryOpChoice::Binary(BinaryOp::Mul), 13, false)),

@@ -51,8 +51,8 @@ impl<'a> Codegen<'a> {
             &sname,
             member,
             &arg_types,
-            receiver_const,
-            receiver_is_lvalue,
+            Some(args),
+            (receiver_const, receiver_is_lvalue),
         ) {
             self.compile_member_call_direct(site, &sig, m_idx, ctx, code)?;
         } else {
@@ -150,7 +150,7 @@ impl<'a> Codegen<'a> {
                     if matches!(inner.strip_reference().strip_const(), Type::Struct(_)) {
                         return Ok(());
                     }
-                } else if let Type::Reference(inner) = ret {
+                } else if let Type::Reference(inner) | Type::RvalueReference(inner) = ret {
                     let clean_inner = inner.strip_const();
                     if let Type::Pointer(ptr_inner) = clean_inner {
                         if matches!(ptr_inner.strip_reference().strip_const(), Type::Struct(_)) {

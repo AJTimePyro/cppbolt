@@ -204,13 +204,7 @@ impl Sema {
         for (index, arg_ty) in arg_types.iter().enumerate() {
             let param = &params[index];
             if is_copy_init {
-                let is_copy_param = param.is_reference()
-                    && param.deref_type().map(|d| d.strip_all_const())
-                        == Some(arg_ty.strip_all_const());
-                if !is_copy_param {
-                    return None;
-                }
-                score += 1;
+                score += score_copy_init_param(param, arg_ty, args.and_then(|a| a.get(index)))?;
                 continue;
             }
             if param.strip_const() == arg_ty.strip_const() {
@@ -220,10 +214,10 @@ impl Sema {
                 score += 1;
                 continue;
             }
-            if param.is_reference()
-                && param.deref_type().map(|d| d.strip_all_const()) == Some(arg_ty.strip_all_const())
-            {
-                score += 1;
+            if param.is_reference() {
+                score += self
+                    .score_reference_conversion(param, arg_ty, args.and_then(|a| a.get(index)))
+                    .ok()?;
                 continue;
             }
             let is_null_ptr_const = args
@@ -243,14 +237,88 @@ impl Sema {
         score += (params.len() - arg_types.len()) * 100;
         Some(score)
     }
+}
 
+fn score_copy_init_param(param: &Type, arg_ty: &Type, arg_expr: Option<&Expr>) -> Option<usize> {
+    let clean_param = param.deref_type()?.strip_all_const();
+    let clean_arg = arg_ty.strip_reference().strip_all_const();
+    let is_copy_param = match (clean_param, clean_arg) {
+        (Type::Struct(p), Type::Struct(a)) => {
+            QualifiedName::new(p.as_str()).matches(QualifiedName::new(a.as_str()))
+        }
+        (p, a) => p == a,
+    };
+    if !is_copy_param {
+        return None;
+    }
+    let is_lval = arg_expr.is_some_and(Expr::is_lvalue) || arg_ty.is_lvalue_reference();
+    if param.is_rvalue_reference() {
+        if is_lval {
+            return None;
+        }
+        Some(1)
+    } else if let Some(inner) = param.deref_type() {
+        if !inner.is_const() {
+            if !is_lval {
+                return None;
+            }
+            Some(1)
+        } else {
+            Some(if is_lval { 2 } else { 3 })
+        }
+    } else {
+        None
+    }
+}
+
+impl Sema {
     /// Returns true when the arguments describe a copy initialization.
     ///
     /// A single argument of the class itself is initialized with the copy
     /// constructor, whether or not the class declares one.
+    pub fn is_move_only_struct(&self, sname: &str) -> bool {
+        let qname = QualifiedName::new(sname);
+        let short = qname.class_short_name();
+        let alternate = qname.alternate();
+        let mut has_move_ctor = false;
+        let mut has_copy_ctor = false;
+        for name in [
+            format!("{sname}::{short}"),
+            format!("{sname}::{sname}"),
+            format!("{alternate}::{short}"),
+            format!("{alternate}::{alternate}"),
+        ] {
+            if let Some(sigs) = self.functions.get(&name) {
+                for sig in sigs {
+                    let params = if sig.param_types.is_empty() {
+                        &[][..]
+                    } else {
+                        &sig.param_types[1..]
+                    };
+                    if params.len() == 1 {
+                        let param_clean = params[0].strip_const();
+                        if let Type::RvalueReference(inner) = param_clean
+                            && let Type::Struct(s) = inner.strip_const()
+                            && QualifiedName::new(s).class_short_name() == short
+                        {
+                            has_move_ctor = true;
+                        } else if let Type::Reference(inner) = param_clean
+                            && let Type::Struct(s) = inner.strip_const()
+                            && QualifiedName::new(s).class_short_name() == short
+                        {
+                            has_copy_ctor = true;
+                        }
+                    }
+                }
+            }
+        }
+        has_move_ctor && !has_copy_ctor
+    }
+
     pub(super) fn is_copy_initialization(&self, class_name: &str, arg_types: &[Type]) -> bool {
         arg_types.len() == 1
             && matches!(arg_types[0].strip_const(), Type::Struct(other) if *other == class_name)
+            && !self.is_move_only_struct(class_name)
     }
 
     /// Fills in the default arguments of a constructor call.
@@ -274,6 +342,20 @@ impl Sema {
         Ok(())
     }
 
+    fn resolve_member_template_target<'a>(
+        &self,
+        class_name: &'a str,
+    ) -> Option<(Vec<FunctionDecl>, &'a str)> {
+        let short = QualifiedName::new(class_name).class_short_name();
+        let plain = QualifiedName::new(class_name).plain();
+        let templates = self
+            .member_templates
+            .get(class_name)
+            .cloned()
+            .or_else(|| self.member_templates.get(plain).cloned())?;
+        Some((templates, short))
+    }
+
     pub(super) fn try_instantiate_member_template(
         &mut self,
         class_name: &str,
@@ -282,16 +364,10 @@ impl Sema {
         args: &[Expr],
         pos: ExprPos,
     ) -> Result<Option<FunctionSig>, CompileError> {
-        let short = QualifiedName::new(class_name).class_short_name();
-        let plain = QualifiedName::new(class_name).plain();
-        let templates = self
-            .member_templates
-            .get(class_name)
-            .cloned()
-            .or_else(|| self.member_templates.get(plain).cloned());
-        let Some(templates) = templates else {
+        let Some((templates, short)) = self.resolve_member_template_target(class_name) else {
             return Ok(None);
         };
+        let plain = QualifiedName::new(class_name).plain();
 
         for cand in templates {
             let matches_name = match method_name {
@@ -321,10 +397,10 @@ impl Sema {
                     params.insert(0, this_param(class_name, spec_func.is_const));
                 }
                 let mut mangled = self.mangle_name(&qual_name, &params);
-                match spec_func.ref_qualifier {
-                    RefQualifier::LValue => mangled.push_str("_R"),
-                    RefQualifier::RValue => mangled.push_str("_O"),
-                    RefQualifier::None => {}
+                if spec_func.ref_qualifier == RefQualifier::LValue {
+                    mangled.push_str("_R");
+                } else if spec_func.ref_qualifier == RefQualifier::RValue {
+                    mangled.push_str("_O");
                 }
                 self.pending_template_methods
                     .insert(mangled.clone(), (class_name.to_string(), spec_func.clone()));
@@ -339,6 +415,17 @@ impl Sema {
                     is_explicit: spec_func.is_explicit,
                     ref_qualifier: spec_func.ref_qualifier,
                 };
+                let call_params = if !spec_func.is_static {
+                    &sig.param_types[1..]
+                } else {
+                    &sig.param_types[..]
+                };
+                if self
+                    .score_arguments(call_params, arg_types, Some(args))
+                    .is_err()
+                {
+                    continue;
+                }
                 return Ok(Some(sig));
             }
         }

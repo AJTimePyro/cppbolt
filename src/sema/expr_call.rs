@@ -103,6 +103,7 @@ impl Sema {
             return Ok(Some((ty, Some(replacement))));
         }
         if let Some(sname) = self.class_named(&name, pos.line, pos.col) {
+            *raw_name = sname.clone();
             let elided = match self.analyze_constructor_call(&sname, args, arg_types, pos)? {
                 ConstructorCall::Elided(inner) => Some(inner),
                 ConstructorCall::Selected => None,

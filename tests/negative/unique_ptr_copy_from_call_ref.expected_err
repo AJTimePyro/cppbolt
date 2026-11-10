@@ -1,0 +1,1 @@
+tests/negative/unique_ptr_copy_from_call_ref.cpp:11:5: error: cannot initialize variable 'p' of type unique_ptr<int> with unique_ptr<int> &

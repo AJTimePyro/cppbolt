@@ -31,7 +31,10 @@ pub enum Type {
     Const(Box<Type>),
     Pointer(Box<Type>),
     Reference(Box<Type>),
+    RvalueReference(Box<Type>),
     Array(Box<Type>, usize),
+    DependentArray(Box<Type>, String),
+    NonType(i128),
     Struct(String),
     Enum(String),
     TypeParam(String),
@@ -108,7 +111,13 @@ impl Type {
             Type::Const(inner) => inner.strip_all_const(),
             Type::Pointer(inner) => Type::Pointer(Box::new(inner.strip_all_const())),
             Type::Reference(inner) => Type::Reference(Box::new(inner.strip_all_const())),
+            Type::RvalueReference(inner) => {
+                Type::RvalueReference(Box::new(inner.strip_all_const()))
+            }
             Type::Array(inner, size) => Type::Array(Box::new(inner.strip_all_const()), *size),
+            Type::DependentArray(inner, param) => {
+                Type::DependentArray(Box::new(inner.strip_all_const()), param.clone())
+            }
             Type::TemplateInstance { name, args } => Type::TemplateInstance {
                 name: name.clone(),
                 args: args.iter().map(|a| a.strip_all_const()).collect(),
@@ -119,7 +128,7 @@ impl Type {
 
     pub fn strip_reference(&self) -> &Type {
         match self {
-            Type::Reference(inner) => inner.strip_reference(),
+            Type::Reference(inner) | Type::RvalueReference(inner) => inner.strip_reference(),
             _ => self,
         }
     }
@@ -128,7 +137,9 @@ impl Type {
         let mut curr = self;
         loop {
             match curr {
-                Type::Const(inner) | Type::Reference(inner) => curr = inner,
+                Type::Const(inner) | Type::Reference(inner) | Type::RvalueReference(inner) => {
+                    curr = inner
+                }
                 _ => return curr,
             }
         }
@@ -233,7 +244,18 @@ impl Type {
     }
 
     pub fn is_reference(&self) -> bool {
+        matches!(
+            self.strip_const(),
+            Type::Reference(_) | Type::RvalueReference(_)
+        )
+    }
+
+    pub fn is_lvalue_reference(&self) -> bool {
         matches!(self.strip_const(), Type::Reference(_))
+    }
+
+    pub fn is_rvalue_reference(&self) -> bool {
+        matches!(self.strip_const(), Type::RvalueReference(_))
     }
 
     pub fn is_array(&self) -> bool {
@@ -249,7 +271,10 @@ impl Type {
 
     pub fn deref_type(&self) -> Option<&Type> {
         match self.strip_const() {
-            Type::Pointer(inner) | Type::Reference(inner) | Type::Array(inner, _) => Some(inner),
+            Type::Pointer(inner)
+            | Type::Reference(inner)
+            | Type::RvalueReference(inner)
+            | Type::Array(inner, _) => Some(inner),
             _ => None,
         }
     }
@@ -266,8 +291,8 @@ impl Type {
             Type::LongLong | Type::UnsignedLongLong => 8,
             Type::Float => 4,
             Type::Double => 8,
-            Type::Pointer(_) | Type::Reference(_) => 4, // 32-bit WASM pointers
-            Type::Array(elem, len) => elem.size_of(struct_sizes) * len,
+            Type::Pointer(_) | Type::Reference(_) | Type::RvalueReference(_) => 4, // 32-bit WASM pointers
+            Type::Array(elem, len) => elem.size_of(struct_sizes).saturating_mul(*len),
             Type::Struct(name) => *struct_sizes
                 .get(name)
                 .or_else(|| struct_sizes.get(QualifiedName::new(name).plain()))
@@ -277,7 +302,7 @@ impl Type {
                 .get(name)
                 .or_else(|| struct_sizes.get(QualifiedName::new(name).plain()))
                 .unwrap_or(&4),
-            Type::TypeParam(_) => 4,
+            Type::TypeParam(_) | Type::NonType(_) | Type::DependentArray(_, _) => 4,
             Type::Function { .. } => 4,
             Type::Const(_) => unreachable!(),
         }
@@ -293,7 +318,7 @@ impl Type {
             Type::LongLong | Type::UnsignedLongLong => 8,
             Type::Float => 4,
             Type::Double => 8,
-            Type::Pointer(_) | Type::Reference(_) => 4,
+            Type::Pointer(_) | Type::Reference(_) | Type::RvalueReference(_) => 4,
             Type::Array(elem, _) => elem.align_of(struct_aligns),
             Type::Struct(name) => *struct_aligns
                 .get(name)
@@ -304,7 +329,7 @@ impl Type {
                 .get(name)
                 .or_else(|| struct_aligns.get(QualifiedName::new(name).plain()))
                 .unwrap_or(&4),
-            Type::TypeParam(_) => 4,
+            Type::TypeParam(_) | Type::NonType(_) | Type::DependentArray(_, _) => 4,
             Type::Function { .. } => 4,
             Type::Const(_) => unreachable!(),
         }
@@ -326,7 +351,8 @@ impl Type {
             | Type::UnsignedLong
             | Type::Enum(_)
             | Type::Pointer(_)
-            | Type::Reference(_) => Some(WasmType::I32),
+            | Type::Reference(_)
+            | Type::RvalueReference(_) => Some(WasmType::I32),
             Type::LongLong | Type::UnsignedLongLong => Some(WasmType::I64),
             Type::Float => Some(WasmType::F32),
             Type::Double => Some(WasmType::F64),
@@ -334,6 +360,8 @@ impl Type {
             | Type::Struct(_)
             | Type::TemplateInstance { .. }
             | Type::TypeParam(_)
+            | Type::NonType(_)
+            | Type::DependentArray(_, _)
             | Type::Function { .. } => Some(WasmType::I32),
             Type::Const(_) => unreachable!(),
         }
@@ -361,7 +389,10 @@ impl Type {
             Type::Double => "double".to_string(),
             Type::Pointer(inner) => format!("{} *", inner.to_c_type()),
             Type::Reference(inner) => format!("{} &", inner.to_c_type()),
+            Type::RvalueReference(inner) => format!("{} &&", inner.to_c_type()),
             Type::Array(inner, n) => format!("{}[{}]", inner.to_c_type(), n),
+            Type::DependentArray(inner, param) => format!("{}[{}]", inner.to_c_type(), param),
+            Type::NonType(n) => n.to_string(),
             Type::TypeParam(name) => name.clone(),
             Type::TemplateInstance { name, args } => {
                 let formatted = args

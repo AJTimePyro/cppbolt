@@ -136,33 +136,19 @@ impl Sema {
                 init_ty = ty.clone();
             }
         }
-        if *ty == Type::Auto {
-            *ty = init_ty.strip_reference().decay_array();
-        } else if let Type::Const(inner) = ty
-            && **inner == Type::Auto
-        {
-            *ty = Type::Const(Box::new(init_ty.strip_reference().decay_array()));
-        } else if let Type::Pointer(inner) = ty
-            && **inner == Type::Auto
-        {
-            *ty = Type::Pointer(Box::new(
-                init_ty
-                    .deref_type()
-                    .cloned()
-                    .unwrap_or_else(|| init_ty.strip_reference().clone()),
-            ));
-        } else if let Type::Reference(inner) = ty {
-            if **inner == Type::Auto {
-                *ty = Type::Reference(Box::new(init_ty.strip_reference().clone()));
-            } else if let Type::Const(c_inner) = &**inner
-                && **c_inner == Type::Auto
-            {
-                *ty = Type::Reference(Box::new(Type::Const(Box::new(
-                    init_ty.strip_reference().clone(),
-                ))));
-            }
-        }
+        deduce_auto_type(ty, &init_ty);
         if !is_list_init && !self.can_assign_expr(ty, &init_ty, Some(init_expr)) {
+            if ty.is_rvalue_reference() {
+                return Err(CompileError::new(
+                    format!(
+                        "cannot bind rvalue reference of type '{}' to lvalue of type '{}'",
+                        ty.to_c_type(),
+                        init_ty.to_c_type()
+                    ),
+                    line,
+                    col,
+                ));
+            }
             return Err(CompileError::new(
                 format!(
                     "cannot initialize variable '{}' of type {} with {}",
@@ -175,6 +161,10 @@ impl Sema {
             ));
         }
         if let Type::Struct(sname) = ty.strip_const() {
+            let is_same_struct = matches!(
+                init_ty.strip_reference().strip_const(),
+                Type::Struct(init_s) if QualifiedName::new(init_s).matches(QualifiedName::new(sname))
+            );
             if let Some(sig) = self.find_constructor_for(
                 sname,
                 std::slice::from_ref(&init_ty),
@@ -188,6 +178,17 @@ impl Sema {
                 ExprPos::new(line, col),
             )? {
                 self.instantiate_pending_method(&sig.mangled_name)?;
+            } else if is_same_struct && init_expr.is_lvalue() && self.is_move_only_struct(sname) {
+                return Err(CompileError::new(
+                    format!(
+                        "cannot initialize variable '{}' of type {} with {}",
+                        name,
+                        ty.to_c_type(),
+                        init_ty.to_c_type()
+                    ),
+                    line,
+                    col,
+                ));
             }
         }
         Ok(())
@@ -248,5 +249,44 @@ impl Sema {
         };
         scope.vars.insert(name.to_string(), sym);
         Ok(())
+    }
+}
+
+fn deduce_auto_type(ty: &mut Type, init_ty: &Type) {
+    if *ty == Type::Auto {
+        *ty = init_ty.strip_reference().decay_array();
+    } else if let Type::Const(inner) = ty
+        && **inner == Type::Auto
+    {
+        *ty = Type::Const(Box::new(init_ty.strip_reference().decay_array()));
+    } else if let Type::Pointer(inner) = ty
+        && **inner == Type::Auto
+    {
+        *ty = Type::Pointer(Box::new(
+            init_ty
+                .deref_type()
+                .cloned()
+                .unwrap_or_else(|| init_ty.strip_reference().clone()),
+        ));
+    } else if let Type::Reference(inner) = ty {
+        if **inner == Type::Auto {
+            *ty = Type::Reference(Box::new(init_ty.strip_reference().clone()));
+        } else if let Type::Const(c_inner) = &**inner
+            && **c_inner == Type::Auto
+        {
+            *ty = Type::Reference(Box::new(Type::Const(Box::new(
+                init_ty.strip_reference().clone(),
+            ))));
+        }
+    } else if let Type::RvalueReference(inner) = ty {
+        if **inner == Type::Auto {
+            *ty = Type::RvalueReference(Box::new(init_ty.strip_reference().clone()));
+        } else if let Type::Const(c_inner) = &**inner
+            && **c_inner == Type::Auto
+        {
+            *ty = Type::RvalueReference(Box::new(Type::Const(Box::new(
+                init_ty.strip_reference().clone(),
+            ))));
+        }
     }
 }

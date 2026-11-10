@@ -4,7 +4,7 @@ A dependency-free C++ to WebAssembly subset compiler written in Rust.
 
 `cppbolt` compiles a defined subset of C++17 directly into WebAssembly (`.wasm`) binaries without relying on LLVM, Emscripten, or external native toolchains. It is built to run both natively as a CLI and in the browser (via a WebAssembly build of the compiler itself and a minimal JavaScript host runtime).
 
-The compiler is correctness-focused and implements an explicit, predictable language subset. It avoids complex features like templates, standard containers and algorithms, exceptions, and RTTI, choosing deterministic compilation speed and small binary size.
+The compiler is correctness-focused and implements an explicit, predictable C++17 language subset. It supports classes, templates, move semantics, standard containers, and algorithms, while omitting exceptions and RTTI to maintain deterministic compilation speed and small binary size.
 
 ---
 
@@ -169,16 +169,16 @@ The browser playground runs the compiler in a dedicated Web Worker to ensure UI 
 
 Comprehensive project documentation is published via mdBook at [https://ajtimepyro.is-a.dev/cppbolt/book/](https://ajtimepyro.is-a.dev/cppbolt/book/):
 
-- **[Getting Started](docs/book/user/getting-started.md)** — Guide to installing, building, and using the compiler.
-- **[Supported C++ Subset](docs/book/user/supported-cpp.md)** — Full feature matrix with test links and known limitations.
-- **[Browser Integration](docs/book/user/browser-integration.md)** — WebAssembly C ABI, host JavaScript runtime, and worker architecture.
-- **[Diagnostics & Errors](docs/book/user/errors.md)** — Compiler diagnostics catalog with real trigger examples.
-- **[Compiler Architecture](docs/book/internals/architecture.md)** — Pipeline architecture, stages, and data flows.
-- **[Stage Internals](docs/book/internals/lexer.md)** — Deep dives into the [Preprocessor](docs/book/internals/preprocessor.md), [Lexer](docs/book/internals/lexer.md), [Parser & AST](docs/book/internals/parser-and-ast.md), [Semantic Analysis](docs/book/internals/semantic-analysis.md), [WASM Codegen](docs/book/internals/wasm-codegen.md), and [Runtime](docs/book/internals/runtime.md).
-- **[Testing System](docs/book/internals/testing.md)** — Test runner, golden baseline, variant tests, and native compiler oracle.
-- **[Architecture Decision Records (ADRs)](docs/adr/template.md)** — Accepted architectural and ABI decisions.
-- **[Contributing Guide](docs/contributing.md)** — How to contribute, verify changes, and add language features.
-- **[Development Log](docs/devlog.md)** — Ongoing development notes.
+- **[Getting Started](docs/book/user/getting-started.md)**: Guide to installing, building, and using the compiler.
+- **[Supported C++ Subset](docs/book/user/supported-cpp.md)**: Feature matrix with test links and known limitations.
+- **[Browser Integration](docs/book/user/browser-integration.md)**: WebAssembly C ABI, host JavaScript runtime, and worker architecture.
+- **[Diagnostics & Errors](docs/book/user/errors.md)**: Compiler diagnostics catalog with real trigger examples.
+- **[Compiler Architecture](docs/book/internals/architecture.md)**: Pipeline architecture, stages, and data flows.
+- **[Stage Internals](docs/book/internals/lexer.md)**: Reference documentation for the [Preprocessor](docs/book/internals/preprocessor.md), [Lexer](docs/book/internals/lexer.md), [Parser & AST](docs/book/internals/parser-and-ast.md), [Semantic Analysis](docs/book/internals/semantic-analysis.md), [WASM Codegen](docs/book/internals/wasm-codegen.md), and [Runtime](docs/book/internals/runtime.md).
+- **[Testing System](docs/book/internals/testing.md)**: Test runner, golden baseline, variant tests, and native compiler oracle.
+- **[Architecture Decision Records (ADRs)](docs/adr/template.md)**: Accepted architectural and ABI decisions.
+- **[Contributing Guide](docs/contributing.md)**: How to contribute, verify changes, and add language features.
+- **[Development Log](docs/devlog.md)**: Ongoing development notes.
 
 ---
 

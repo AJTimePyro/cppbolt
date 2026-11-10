@@ -84,7 +84,11 @@ impl Sema {
 
         let pure_virtuals = self.collect_pure_virtuals(input.base_classes, input.methods);
         let is_abstract = !pure_virtuals.is_empty();
-        let has_user_declared_constructors = input.methods.iter().any(|m| m.name == input.name);
+        let short = QualifiedName::new(input.name).class_short_name();
+        let has_user_declared_constructors = input
+            .methods
+            .iter()
+            .any(|m| (m.name == input.name || m.name == short) && (m.line != 0 || m.col != 0));
 
         let layout = StructLayout {
             is_class: input.is_class,
@@ -411,6 +415,7 @@ impl Sema {
                 Type::Nullptr => s.push_str("Dn"),
                 Type::Pointer(inner) => s.push_str(&format!("P{:?}", inner)),
                 Type::Reference(inner) => s.push_str(&format!("R{:?}", inner)),
+                Type::RvalueReference(inner) => s.push_str(&format!("RR{:?}", inner)),
                 Type::Struct(name) => s.push_str(&format!("S{}", name)),
                 Type::Enum(name) => s.push_str(&format!("E{}", name)),
                 Type::Array(elem, n) => s.push_str(&format!("A{}_{:?}", n, elem)),

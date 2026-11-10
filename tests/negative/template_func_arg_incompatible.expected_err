@@ -1,0 +1,1 @@
+tests/negative/template_func_arg_incompatible.cpp:9:5: error: no matching conversion for argument 2 of 'func': cannot convert 'int' to 'const char *'

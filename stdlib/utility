@@ -5,15 +5,30 @@
 
 namespace std {
     template<typename T>
-    T& move(T& t) noexcept {
-        return t;
+    constexpr T&& move(T& t) noexcept {
+        return static_cast<T&&>(t);
+    }
+
+    template<typename T>
+    constexpr T&& move(T&& t) noexcept {
+        return static_cast<T&&>(t);
+    }
+
+    template<typename T>
+    constexpr T&& forward(T& t) noexcept {
+        return static_cast<T&&>(t);
+    }
+
+    template<typename T>
+    constexpr T&& forward(T&& t) noexcept {
+        return static_cast<T&&>(t);
     }
 
     template<typename T>
     void swap(T& a, T& b) {
-        T tmp = a;
-        a = b;
-        b = tmp;
+        T tmp = static_cast<T&&>(a);
+        a = static_cast<T&&>(b);
+        b = static_cast<T&&>(tmp);
     }
 
     template<typename T1, typename T2>
@@ -23,9 +38,27 @@ namespace std {
 
         pair() : first(), second() {}
         pair(const T1& a, const T2& b) : first(a), second(b) {}
+        pair(T1&& a, T2&& b) : first(static_cast<T1&&>(a)), second(static_cast<T2&&>(b)) {}
+        pair(const T1& a, T2&& b) : first(a), second(static_cast<T2&&>(b)) {}
+        pair(T1&& a, const T2& b) : first(static_cast<T1&&>(a)), second(b) {}
 
         template<typename U1, typename U2>
         pair(const pair<U1, U2>& p) : first(p.first), second(p.second) {}
+
+        pair(const pair& o) : first(o.first), second(o.second) {}
+        pair(pair&& o) noexcept : first(static_cast<T1&&>(o.first)), second(static_cast<T2&&>(o.second)) {}
+
+        pair& operator=(const pair& o) {
+            first = o.first;
+            second = o.second;
+            return *this;
+        }
+
+        pair& operator=(pair&& o) noexcept {
+            first = static_cast<T1&&>(o.first);
+            second = static_cast<T2&&>(o.second);
+            return *this;
+        }
 
         bool operator==(const pair& o) const {
             return first == o.first && second == o.second;

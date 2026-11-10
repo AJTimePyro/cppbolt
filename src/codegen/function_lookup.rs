@@ -4,6 +4,15 @@ impl<'a> Codegen<'a> {
     /// Resolves a free-function call, including ADL and the implicit `std`
     /// alias, selecting the lowest-cost overload.
     pub fn find_function(&self, name: &str, arg_types: &[Type]) -> Option<(u32, FunctionSig)> {
+        self.find_function_with_args(name, arg_types, None)
+    }
+
+    pub fn find_function_with_args(
+        &self,
+        name: &str,
+        arg_types: &[Type],
+        args: Option<&[Expr]>,
+    ) -> Option<(u32, FunctionSig)> {
         for q in candidate_function_names(name, arg_types) {
             let Some(sigs) = self.sema.functions.get(&q) else {
                 continue;
@@ -11,7 +20,8 @@ impl<'a> Codegen<'a> {
             let mut best_sig = None;
             let mut best_score = usize::MAX;
             for sig in sigs {
-                let Some(score) = self.score_overload_params(&sig.param_types, arg_types) else {
+                let Some(score) = self.score_overload_params(&sig.param_types, arg_types, args)
+                else {
                     continue;
                 };
                 if score < best_score {

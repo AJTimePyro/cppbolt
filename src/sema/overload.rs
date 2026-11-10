@@ -94,36 +94,29 @@ impl Sema {
             let is_null_ptr_const = args
                 .and_then(|a| a.get(i))
                 .is_some_and(Sema::is_null_pointer_constant);
-            if let Type::Reference(inner) = p {
-                let is_lvalue = arg_ty.is_reference()
-                    || args.and_then(|a| a.get(i)).is_some_and(Expr::is_lvalue);
-                let matches_type = self.reference_types_compatible(
-                    inner.strip_const(),
-                    arg_ty.strip_reference().strip_const(),
-                );
-                if !inner.is_const() {
-                    if !is_lvalue || arg_ty.strip_reference().is_const() || !matches_type {
+            if p.is_reference() {
+                match self.score_reference_conversion(p, arg_ty, args.and_then(|a| a.get(i))) {
+                    Ok(s) => score += s,
+                    Err(_) => {
                         return Err(ConversionFailure {
                             index: i,
                             from: arg_ty.clone(),
                             to: p.clone(),
                         });
                     }
-                    score += 1;
-                } else if matches_type {
-                    let const_penalty =
-                        usize::from(is_lvalue && !arg_ty.strip_reference().is_const());
-                    score += 1 + const_penalty;
-                } else if self.can_assign(inner.strip_const(), arg_ty) {
-                    score += 3;
-                } else {
+                }
+            } else if p_base == a_base {
+                if let Type::Struct(sname) = p_base
+                    && self.is_move_only_struct(sname)
+                    && (args.and_then(|a| a.get(i)).is_some_and(Expr::is_lvalue)
+                        || arg_ty.is_lvalue_reference())
+                {
                     return Err(ConversionFailure {
                         index: i,
                         from: arg_ty.clone(),
                         to: p.clone(),
                     });
                 }
-            } else if p_base == a_base {
                 // Exact matches add no conversion penalty.
             } else if self.check_pointer_conversion(&p_decay, &a_decay) {
                 score += 1;
@@ -150,6 +143,52 @@ impl Sema {
             }
         }
         Ok(score)
+    }
+
+    pub(super) fn score_reference_conversion(
+        &self,
+        p: &Type,
+        arg_ty: &Type,
+        arg_expr: Option<&Expr>,
+    ) -> Result<usize, ()> {
+        let is_lvalue = arg_expr.is_some_and(Expr::is_lvalue) || arg_ty.is_lvalue_reference();
+        if let Type::RvalueReference(inner) = p {
+            let matches_type = self.reference_types_compatible(
+                inner.strip_const(),
+                arg_ty.strip_reference().strip_const(),
+            );
+            if is_lvalue
+                || (arg_ty.strip_reference().is_const() && !inner.is_const())
+                || !matches_type
+            {
+                return Err(());
+            }
+            Ok(1)
+        } else if let Type::Reference(inner) = p {
+            let matches_type = self.reference_types_compatible(
+                inner.strip_const(),
+                arg_ty.strip_reference().strip_const(),
+            );
+            if !inner.is_const() {
+                if !is_lvalue || arg_ty.strip_reference().is_const() || !matches_type {
+                    return Err(());
+                }
+                Ok(1)
+            } else if matches_type {
+                let penalty = if is_lvalue {
+                    usize::from(!arg_ty.strip_reference().is_const())
+                } else {
+                    1
+                };
+                Ok(1 + penalty)
+            } else if self.can_assign(inner.strip_const(), arg_ty) {
+                Ok(3)
+            } else {
+                Err(())
+            }
+        } else {
+            Err(())
+        }
     }
 
     pub(super) fn find_call_candidates(
@@ -189,6 +228,9 @@ impl Sema {
         if candidates.is_none()
             && let Some((class_name, method_name)) = name.rsplit_once("::")
         {
+            if class_name.contains('<') {
+                self.ensure_class_instantiated(class_name, self.current_line, self.current_col);
+            }
             let static_methods = self.find_static_methods_in_class(class_name, method_name);
             if !static_methods.is_empty() {
                 candidates = Some(static_methods);

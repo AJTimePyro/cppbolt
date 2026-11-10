@@ -173,6 +173,8 @@ impl Sema {
                 ));
             }
             return self.resolve_list_init(inner, init_elements, InitContext::DirectList, pos);
+        } else if let Type::RvalueReference(inner) = target_ty {
+            return self.resolve_list_init(inner, init_elements, InitContext::DirectList, pos);
         }
 
         if clean_target == Type::Auto {

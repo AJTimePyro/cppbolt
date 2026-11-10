@@ -11,12 +11,20 @@ impl<'a> Codegen<'a> {
         class_name: &str,
         arg_types: &[Type],
     ) -> Option<(u32, FunctionSig)> {
+        self.find_constructor_sig_with_args(class_name, arg_types, None)
+    }
+
+    pub fn find_constructor_sig_with_args(
+        &self,
+        class_name: &str,
+        arg_types: &[Type],
+        args: Option<&[Expr]>,
+    ) -> Option<(u32, FunctionSig)> {
         let short_name = QualifiedName::new(class_name).class_short_name();
         let q1 = format!("{}::{}", class_name, short_name);
         let q2 = format!(
-            "{}::{}",
-            QualifiedName::new(class_name).alternate(),
-            short_name
+            "{}::{short_name}",
+            QualifiedName::new(class_name).alternate()
         );
         let mut saw_declared_constructor = false;
         for qual_name in &[&q1, &q2] {
@@ -24,7 +32,8 @@ impl<'a> Codegen<'a> {
                 continue;
             };
             saw_declared_constructor = true;
-            let Some(sig) = self.best_constructor_overload(class_name, sigs, arg_types) else {
+            let Some(sig) = self.best_constructor_overload(class_name, sigs, arg_types, args)
+            else {
                 continue;
             };
             if let Some(&idx) = self.func_indices.get(&sig.mangled_name) {
@@ -90,6 +99,33 @@ impl<'a> Codegen<'a> {
         best_idx
     }
 
+    /// Finds an explicit or synthesized move constructor for `class_name`.
+    pub fn find_move_constructor(&self, class_name: &str) -> Option<u32> {
+        let short_name = QualifiedName::new(class_name).class_short_name();
+        let q1 = format!("{class_name}::{short_name}");
+        let q2 = format!(
+            "{}::{short_name}",
+            QualifiedName::new(class_name).alternate()
+        );
+        for qual_name in [&q1, &q2] {
+            let Some(sigs) = self.sema.functions.get(qual_name) else {
+                continue;
+            };
+            for sig in sigs {
+                if !move_constructor_matches(sig, class_name) {
+                    continue;
+                }
+                if let Some(&idx) = self.func_indices.get(&sig.mangled_name) {
+                    return Some(idx);
+                }
+                if let Some(&idx) = self.func_indices.get(&format!("{class_name}_{short_name}")) {
+                    return Some(idx);
+                }
+            }
+        }
+        None
+    }
+
     /// Picks the lowest-cost constructor overload.
     ///
     /// A constructor may take fewer arguments than it has parameters when the
@@ -99,6 +135,7 @@ impl<'a> Codegen<'a> {
         class_name: &str,
         sigs: &[FunctionSig],
         arg_types: &[Type],
+        args: Option<&[Expr]>,
     ) -> Option<FunctionSig> {
         let is_copy_init = arg_types.len() == 1
             && matches!(
@@ -108,7 +145,10 @@ impl<'a> Codegen<'a> {
         let mut best_sig = None;
         let mut best_score = usize::MAX;
         for sig in sigs {
-            if is_copy_init && copy_constructor_param_const(sig, class_name).is_none() {
+            if is_copy_init
+                && copy_constructor_param_const(sig, class_name).is_none()
+                && !move_constructor_matches(sig, class_name)
+            {
                 continue;
             }
             let params = if !sig.param_types.is_empty() {
@@ -132,7 +172,8 @@ impl<'a> Codegen<'a> {
             }
             // Only the given arguments are scored; the omitted ones have
             // default values.
-            let Some(score) = self.score_overload_params(&params[..arg_types.len()], arg_types)
+            let Some(score) =
+                self.score_overload_params(&params[..arg_types.len()], arg_types, args)
             else {
                 continue;
             };
@@ -272,7 +313,7 @@ pub(super) fn unpack_single_element_init(expr: &Expr) -> &Expr {
 
 /// Returns `Some(is_const)` if `sig` is a copy constructor for `class_name`.
 fn copy_constructor_param_const(sig: &FunctionSig, class_name: &str) -> Option<bool> {
-    if sig.param_types.len() < 2 || !sig.param_types[1].is_reference() {
+    if sig.param_types.len() < 2 || !sig.param_types[1].is_lvalue_reference() {
         return None;
     }
     let inner = sig.param_types[1].deref_type()?;
@@ -291,4 +332,28 @@ fn copy_constructor_param_const(sig: &FunctionSig, class_name: &str) -> Option<b
         return None;
     }
     Some(inner.is_const())
+}
+
+fn move_constructor_matches(sig: &FunctionSig, class_name: &str) -> bool {
+    if sig.param_types.len() < 2 || !sig.param_types[1].is_rvalue_reference() {
+        return false;
+    }
+    let Some(inner) = sig.param_types[1].deref_type() else {
+        return false;
+    };
+    if !matches!(
+        inner.strip_const(),
+        Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(class_name))
+    ) {
+        return false;
+    }
+    let defaults = sig.default_args.get(1..).unwrap_or_default();
+    if defaults.len() < sig.param_types.len() - 1
+        || defaults
+            .get(1..)
+            .is_some_and(|rest| !rest.iter().all(|d| d.is_some()))
+    {
+        return false;
+    }
+    true
 }

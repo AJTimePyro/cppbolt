@@ -33,6 +33,8 @@
 - [ADR 0008: String Representation](adr/0008-string-representation.md)
 - [ADR 0009: C ABI and JS Interop](adr/0009-c-abi-and-js-interop.md)
 - [ADR 0010: Template Instantiation Model](adr/0010-template-instantiation-model.md)
+- [ADR 0011: Move Semantics, Value Categories, and Smart Pointers](adr/0011-move-semantics-and-value-categories.md)
+- [ADR 0012: Template Specialization, Non-Type Parameters, and Alias Templates](adr/0012-template-specialization-nttp-aliases.md)
 
 # Development
 

@@ -133,7 +133,17 @@ impl Sema {
                 }
                 Decl::Template(t) => match &t.kind {
                     TemplateKind::Class(c) => {
-                        self.register_class_template(c.clone(), t.params.clone());
+                        if t.params.is_empty() && c.name.contains('<') {
+                            self.register_class_specialization(c.clone(), (t.line, t.col))?;
+                        } else if !t.params.is_empty() && c.name.contains('<') {
+                            self.register_partial_specialization(
+                                c.clone(),
+                                t.params.clone(),
+                                (t.line, t.col),
+                            )?;
+                        } else {
+                            self.register_class_template(c.clone(), t.params.clone());
+                        }
                     }
                     TemplateKind::Function(f) => {
                         if f.name.contains("::") {
@@ -141,6 +151,9 @@ impl Sema {
                         } else {
                             self.register_function_template((**f).clone(), t.params.clone());
                         }
+                    }
+                    TemplateKind::Alias(name, ty) => {
+                        self.register_alias_template(name.clone(), ty.clone(), t.params.clone());
                     }
                 },
                 _ => {}
