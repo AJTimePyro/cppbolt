@@ -58,8 +58,8 @@ Headers under `stdlib/` are embedded into the compiler binary at compile time us
 
 ```text
 stdlib/
-├── algorithm         # std::sort, std::reverse, std::min, std::max
-├── array             # std::array with bounds checking and iterators
+├── algorithm         # std::sort, std::reverse, std::min, std::max, std::equal, std::fill_n, std::lexicographical_compare
+├── array             # Upstream LLVM libc++ 23.1.5 std::array with aggregate brace elision and iterators
 ├── cmath             # sqrt, sin, cos, abs, etc.
 ├── cstddef           # size_t, ptrdiff_t, NULL
 ├── cstdio            # printf, sprintf, snprintf, puts, getchar, scanf
@@ -79,13 +79,14 @@ stdlib/
 ├── utility           # std::move, std::forward, std::pair, std::swap
 ├── vector            # std::vector with move operations and dynamic resizing
 ├── detail/           # Internal headers
-│   └── containers/
-│       └── avl_tree.h # std::detail::AVLTree backing map and set
+│   ├── containers/
+│   │   └── avl_tree.h # std::detail::AVLTree backing map and set
+│   └── reverse_iterator.h # std::reverse_iterator adapter
 └── compat/           # Compiler and platform shims
     ├── compiler/
-    │   └── compiler.h # Warning controls
+    │   └── compiler.h # libc++ compatibility macros and warning controls
     ├── runtime/
-    │   └── runtime.h  # Runtime hooks and libc shims
+    │   └── runtime.h  # Runtime hooks, libc shims, std::__throw_out_of_range
     └── config/
         └── platform.h # Platform target configuration
 ```
@@ -96,8 +97,8 @@ Public headers live directly under `stdlib/` (`<iostream>`, `<string>`, `<vector
 
 Internal components split across two subdirectories:
 
-- `stdlib/detail/`: Shared data structures. `detail/containers/avl_tree.h` provides the balanced tree for `map` and `set`.
-- `stdlib/compat/`: Platform and toolchain shims. `compiler/compiler.h` controls warning diagnostics, `runtime/runtime.h` provides runtime hooks and libc declarations, and `config/platform.h` defines target platform macros.
+- `stdlib/detail/`: Shared data structures and iterator adapters. `detail/containers/avl_tree.h` provides the balanced tree for `map` and `set`. `detail/reverse_iterator.h` implements `std::reverse_iterator`.
+- `stdlib/compat/`: Platform and toolchain shims. `compiler/compiler.h` provides libc++ macro definitions and compiler controls. `runtime/runtime.h` provides runtime hooks, libc declarations, and `std::__throw_out_of_range`. `config/platform.h` defines target platform macros.
 
 ### Supported Embedded Headers
 The embedded library includes:
