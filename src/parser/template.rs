@@ -44,6 +44,7 @@ impl Parser {
         &mut self,
         params: &mut Vec<TemplateParam>,
     ) -> Result<(), CompileError> {
+        let mut seen_default = false;
         while self.peek() != &TokenKind::Gt && self.peek() != &TokenKind::Shr {
             let p_line = self.current().line;
             let p_col = self.current().col;
@@ -85,18 +86,16 @@ impl Parser {
             if let Some(set) = self.active_type_params.last_mut() {
                 set.insert(name.clone());
             }
-            let default_type = if self.peek() == &TokenKind::Assign {
-                self.advance();
-                if param_type.is_some() {
-                    let expr = self.parse_expr()?;
-                    let val = crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None)?;
-                    Some(Type::NonType(val))
-                } else {
-                    Some(self.parse_type()?)
-                }
-            } else {
-                None
-            };
+            let default_type = self.parse_template_param_default(param_type.as_ref())?;
+            if default_type.is_some() {
+                seen_default = true;
+            } else if seen_default {
+                return Err(CompileError::new(
+                    "template parameter without default follows parameter with default",
+                    p_line,
+                    p_col,
+                ));
+            }
             params.push(TemplateParam {
                 name,
                 default_type,
@@ -114,12 +113,37 @@ impl Parser {
         self.consume_template_closing_gt()
     }
 
+    fn parse_template_param_default(
+        &mut self,
+        param_type: Option<&Type>,
+    ) -> Result<Option<Type>, CompileError> {
+        if self.peek() != &TokenKind::Assign {
+            return Ok(None);
+        }
+        self.advance();
+        if param_type.is_some() {
+            let saved_in_template = self.in_template_arg;
+            let saved_depth = self.template_arg_paren_depth;
+            self.in_template_arg = true;
+            self.template_arg_paren_depth = 0;
+            let expr_res = self.parse_expr_prec(2);
+            self.in_template_arg = saved_in_template;
+            self.template_arg_paren_depth = saved_depth;
+            let expr = expr_res?;
+            let val = crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None)?;
+            Ok(Some(Type::NonType(val)))
+        } else {
+            Ok(Some(self.parse_type()?))
+        }
+    }
+
     pub(super) fn consume_template_closing_gt(&mut self) -> Result<(), CompileError> {
         if self.peek() == &TokenKind::Gt {
             self.advance();
             Ok(())
         } else if self.peek() == &TokenKind::Shr {
             // Split >> into > followed by >
+            self.shr_splits.push(self.pos);
             self.tokens[self.pos].kind = TokenKind::Gt;
             Ok(())
         } else {
@@ -274,16 +298,17 @@ impl Parser {
     pub fn parse_template_arg_type(&mut self) -> Result<Type, CompileError> {
         if self.is_type_start() {
             let saved_pos = self.pos;
+            let saved_splits = self.shr_splits.len();
             if let Ok(ty) = self.parse_type() {
                 return Ok(ty);
             }
-            self.pos = saved_pos;
+            self.rollback_pos(saved_pos, saved_splits);
         }
         let saved_in_template = self.in_template_arg;
         let saved_depth = self.template_arg_paren_depth;
         self.in_template_arg = true;
         self.template_arg_paren_depth = 0;
-        let expr_res = self.parse_expr();
+        let expr_res = self.parse_expr_prec(2);
         self.in_template_arg = saved_in_template;
         self.template_arg_paren_depth = saved_depth;
         let expr = expr_res?;
@@ -311,10 +336,13 @@ impl Parser {
                     }
                 }
                 TokenKind::Shr => {
-                    if depth <= 2 {
+                    if depth == 2 {
                         return Some(idx + 1);
+                    } else if depth > 2 {
+                        depth -= 2;
+                    } else {
+                        return None;
                     }
-                    depth -= 2;
                 }
                 TokenKind::Semi | TokenKind::LBrace | TokenKind::RBrace | TokenKind::Eof => {
                     return None;
