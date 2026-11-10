@@ -1,0 +1,25 @@
+all_even: 1
+all_even_mix: 0
+any_even_mix: 1
+none_gt_10: 1
+for_each: 2 4 6 
+for_each_n: 2 4 6 8 
+count_2: 4
+count_even: 5
+find_3: 3
+find_gt_10: 1
+find_if_not_even: 1
+adjacent_find: 3
+adjacent_find_custom: 3
+search_idx: 1
+find_end_idx: 5
+find_first_of: 3
+search_n_idx: 1
+search_n_fail: 1
+mismatch3: 3 9
+mismatch4: 3 9
+equal3: 1
+equal4_same: 1
+equal4_diff_len: 0
+lex_comp_less: 1
+lex_comp_custom: 0
