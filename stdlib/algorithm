@@ -12,6 +12,10 @@
 #include <detail/algorithms/binary_search.h>
 #include <detail/algorithms/partition.h>
 #include <detail/algorithms/permutation.h>
+#include <detail/algorithms/merge.h>
+#include <detail/algorithms/set_ops.h>
+#include <detail/algorithms/selection.h>
+#include <detail/algorithms/random.h>
 
 namespace std {
 

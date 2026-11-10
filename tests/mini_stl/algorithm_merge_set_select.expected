@@ -1,0 +1,16 @@
+merge: 1 2 3 4 5 6 7 8
+inplace_merge: 1 2 3 4 5 6
+includes_true: 1
+includes_false: 0
+set_union: 1 2 3 4 5 6 7
+set_intersection: 3 4 5
+set_difference: 1 2
+set_symmetric_difference: 1 2 6 7
+partial_sort: 1 2 3 4
+partial_sort_copy: 1 2 5
+nth_element_at_3: 4
+stable_sort: 1 2 3 4 5 6 7 8 9
+shuffle_is_permutation: 1
+shuffle_changed_order: 1
+sample_count: 4
+sample_all_elements_valid: 1
