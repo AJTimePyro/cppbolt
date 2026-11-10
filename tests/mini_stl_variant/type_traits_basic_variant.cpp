@@ -13,7 +13,9 @@ void print_comparison() {
 int main() {
     print_comparison<float, float>();
     print_comparison<int, const int>();
-    std::remove_reference<const char*&>::type msg = "hello traits";
-    std::cout << msg << std::endl;
+    std::remove_reference<const char*&>::type msg1 = "hello traits";
+    std::remove_reference_t<const char*&> msg2 = "alias traits";
+    std::remove_reference_t<int&> val = 42;
+    std::cout << msg1 << " " << msg2 << " " << val << std::endl;
     return 0;
 }
