@@ -1,0 +1,1 @@
+tests/negative/constexpr_division_overflow.cpp:2:8: error: integer overflow in constant expression division

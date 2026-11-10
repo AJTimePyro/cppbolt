@@ -1,0 +1,1 @@
+tests/negative/constexpr_shift_overflow.cpp:2:8: error: shift count out of range in constant expression

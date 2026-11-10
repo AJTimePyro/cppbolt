@@ -325,6 +325,8 @@ negative/const_assign
 negative/const_method_call_on_const
 negative/const_overload_unsupported
 negative/constexpr_division_by_zero
+negative/constexpr_division_overflow
+negative/constexpr_shift_overflow
 negative/constructor_default_argument_undefined
 negative/constructor_string_argument
 negative/constructor_struct_argument

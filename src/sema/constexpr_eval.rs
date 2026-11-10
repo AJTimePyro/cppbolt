@@ -35,10 +35,11 @@ pub fn eval_integral_constexpr_with_env(
             if let Some(val) = env.constants.and_then(|c| c.get(name)) {
                 Ok(*val)
             } else {
+                let pos = expr.pos();
                 Err(CompileError::new(
                     "expression is not an integer constant expression",
-                    0,
-                    0,
+                    pos.line,
+                    pos.col,
                 ))
             }
         }
@@ -59,11 +60,14 @@ pub fn eval_integral_constexpr_with_env(
             Ok(ty.size_of(sizes) as i128)
         }
         Expr::SizeofExpr(inner) => eval_sizeof_expr(inner, env.struct_sizes),
-        _ => Err(CompileError::new(
-            "expression is not an integer constant expression",
-            0,
-            0,
-        )),
+        _ => {
+            let pos = expr.pos();
+            Err(CompileError::new(
+                "expression is not an integer constant expression",
+                pos.line,
+                pos.col,
+            ))
+        }
     }
 }
 
@@ -117,6 +121,13 @@ fn eval_binary_values(
                     pos.col,
                 ));
             }
+            if l == i128::MIN && r == -1 {
+                return Err(CompileError::new(
+                    "integer overflow in constant expression division",
+                    pos.line,
+                    pos.col,
+                ));
+            }
             Ok(l / r)
         }
         BinaryOp::Rem => {
@@ -127,13 +138,38 @@ fn eval_binary_values(
                     pos.col,
                 ));
             }
+            if l == i128::MIN && r == -1 {
+                return Err(CompileError::new(
+                    "integer overflow in constant expression division",
+                    pos.line,
+                    pos.col,
+                ));
+            }
             Ok(l % r)
         }
         BinaryOp::BitAnd => Ok(l & r),
         BinaryOp::BitOr => Ok(l | r),
         BinaryOp::BitXor => Ok(l ^ r),
-        BinaryOp::Shl => Ok(l << (r as u32)),
-        BinaryOp::Shr => Ok(l >> (r as u32)),
+        BinaryOp::Shl => {
+            if !(0..128).contains(&r) {
+                return Err(CompileError::new(
+                    "shift count out of range in constant expression",
+                    pos.line,
+                    pos.col,
+                ));
+            }
+            Ok(l.wrapping_shl(r as u32))
+        }
+        BinaryOp::Shr => {
+            if !(0..128).contains(&r) {
+                return Err(CompileError::new(
+                    "shift count out of range in constant expression",
+                    pos.line,
+                    pos.col,
+                ));
+            }
+            Ok(l.wrapping_shr(r as u32))
+        }
         BinaryOp::LogicalAnd => Ok(if l != 0 && r != 0 { 1 } else { 0 }),
         BinaryOp::LogicalOr => Ok(if l != 0 || r != 0 { 1 } else { 0 }),
         BinaryOp::Eq => Ok(if l == r { 1 } else { 0 }),
