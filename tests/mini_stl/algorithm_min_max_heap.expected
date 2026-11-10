@@ -1,0 +1,13 @@
+clamp: 15 10 20
+clamp_comp: 10
+min_val: 10, max_val: 20
+min_comp: 20, max_comp: 10
+minmax: 17 42
+minmax_comp: 42 17
+min_elem: 1, max_elem: 9
+minmax_elem: 1 9
+is_heap: 1
+heap_top: 30
+after_push top: 40
+popped: 40, new_top: 30
+sort_heap: 5 10 15 20 30

@@ -5,17 +5,10 @@
 #include <utility>
 #include <detail/iterator.h>
 #include <detail/algorithms/comp.h>
+#include <detail/algorithms/min_max.h>
+#include <detail/algorithms/heap.h>
 
 namespace std {
-    template<typename T>
-    const T& min(const T& a, const T& b) {
-        return (b < a) ? b : a;
-    }
-
-    template<typename T>
-    const T& max(const T& a, const T& b) {
-        return (a < b) ? b : a;
-    }
 
     template<typename Iter>
     void reverse(Iter first, Iter last) {

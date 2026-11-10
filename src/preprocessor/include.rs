@@ -51,6 +51,12 @@ fn embedded_header(name: &str) -> Option<&'static str> {
         "detail/algorithms/comp.h" => {
             Some(include_str!("../../stdlib/detail/algorithms/comp.h"))
         }
+        "detail/algorithms/min_max.h" => {
+            Some(include_str!("../../stdlib/detail/algorithms/min_max.h"))
+        }
+        "detail/algorithms/heap.h" => {
+            Some(include_str!("../../stdlib/detail/algorithms/heap.h"))
+        }
         "compat/config/platform.h" => Some(include_str!("../../stdlib/compat/config/platform.h")),
         "compat/compiler/compiler.h" => {
             Some(include_str!("../../stdlib/compat/compiler/compiler.h"))
