@@ -78,4 +78,11 @@ extern "C" {
 }
 #endif
 
+namespace std {
+inline void __throw_out_of_range(const char* msg) {
+    printf("std::out_of_range: %s\n", msg ? msg : "");
+    exit(1);
+}
+}
+
 #endif

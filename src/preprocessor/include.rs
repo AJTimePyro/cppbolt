@@ -41,6 +41,9 @@ fn embedded_header(name: &str) -> Option<&'static str> {
         "detail/containers/avl_tree.h" | "detail_avl_tree.h" => {
             Some(include_str!("../../stdlib/detail/containers/avl_tree.h"))
         }
+        "detail/reverse_iterator.h" => {
+            Some(include_str!("../../stdlib/detail/reverse_iterator.h"))
+        }
         "compat/config/platform.h" => Some(include_str!("../../stdlib/compat/config/platform.h")),
         "compat/compiler/compiler.h" => {
             Some(include_str!("../../stdlib/compat/compiler/compiler.h"))

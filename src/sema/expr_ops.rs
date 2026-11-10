@@ -430,28 +430,21 @@ impl Sema {
             let _ = self.instantiate_pending_method(&sig.mangled_name);
             return Some(sig.return_type.clone());
         }
-        let op_cands = self.find_call_candidates(op_str, &[lty.clone(), rty.clone()]);
-        if let Some(sigs) = op_cands {
-            return Some(sigs[0].return_type.clone());
+        let args = [lty.clone(), rty.clone()];
+        if let Some(sigs) = self.find_call_candidates(op_str, &args) {
+            if let Some(sig) = sigs
+                .iter()
+                .find(|s| self.score_call_candidate(s, &args, None).is_ok())
+            {
+                return Some(sig.return_type.clone());
+            }
         }
         let pos = ExprPos::new(self.current_line, self.current_col);
-        let res_plain = self.try_resolve_function_template_call(
-            op_str,
-            &[lty.clone(), rty.clone()],
-            &[],
-            pos,
-        );
-        if let Ok(Some(sig)) = res_plain {
+        if let Ok(Some(sig)) = self.try_resolve_function_template_call(op_str, &args, &[], pos) {
             return Some(sig.return_type);
         }
         let std_op = format!("std::{}", op_str);
-        let res_std = self.try_resolve_function_template_call(
-            &std_op,
-            &[lty.clone(), rty.clone()],
-            &[],
-            pos,
-        );
-        if let Ok(Some(sig)) = res_std {
+        if let Ok(Some(sig)) = self.try_resolve_function_template_call(&std_op, &args, &[], pos) {
             return Some(sig.return_type);
         }
         None

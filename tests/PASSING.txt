@@ -243,6 +243,7 @@ memory_model_variant/vector_growth_64mb
 mini_stl/algorithm_basic
 mini_stl/algorithm_sort
 mini_stl/array_basic
+mini_stl/array_comprehensive
 mini_stl/cin_getline_newline
 mini_stl/cmath_basic
 mini_stl/combined_integration
@@ -284,6 +285,7 @@ mini_stl/vector_objects
 mini_stl/vector_size_ctor
 mini_stl_variant/algorithm_sort_variant
 mini_stl_variant/array_basic_variant
+mini_stl_variant/array_comprehensive_variant
 mini_stl_variant/cin_getline_newline
 mini_stl_variant/combined_integration_variant
 mini_stl_variant/cout_float_format
