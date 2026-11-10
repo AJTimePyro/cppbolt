@@ -244,6 +244,7 @@ mini_stl/algorithm_basic
 mini_stl/algorithm_infra
 mini_stl/algorithm_min_max_heap
 mini_stl/algorithm_non_modifying
+mini_stl/algorithm_modifying
 mini_stl/algorithm_sort
 mini_stl/array_basic
 mini_stl/array_comprehensive

@@ -8,19 +8,9 @@
 #include <detail/algorithms/min_max.h>
 #include <detail/algorithms/heap.h>
 #include <detail/algorithms/non_modifying.h>
+#include <detail/algorithms/modifying.h>
 
 namespace std {
-
-    template<typename Iter>
-    void reverse(Iter first, Iter last) {
-        if (first == last) return;
-        --last;
-        while (first < last) {
-            std::swap(*first, *last);
-            ++first;
-            --last;
-        }
-    }
 
     namespace detail {
         template<typename Iter, typename Comp>
@@ -128,14 +118,6 @@ namespace std {
             int depth = detail::calc_depth_limit(last - first);
             detail::introsort_loop(first, last, depth, comp);
         }
-    }
-
-    template <typename OutputIt, typename Size, typename T>
-    inline OutputIt fill_n(OutputIt first, Size count, const T& value) {
-        for (Size i = 0; i < count; ++i, ++first) {
-            *first = value;
-        }
-        return first;
     }
 }
 
