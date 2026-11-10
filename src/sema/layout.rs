@@ -84,7 +84,10 @@ impl Sema {
 
         let pure_virtuals = self.collect_pure_virtuals(input.base_classes, input.methods);
         let is_abstract = !pure_virtuals.is_empty();
-        let has_user_declared_constructors = input.methods.iter().any(|m| m.name == input.name);
+        let short = QualifiedName::new(input.name).class_short_name();
+        let has_user_declared_constructors = input.methods.iter().any(|m| {
+            (m.name == input.name || m.name == short) && (m.line != 0 || m.col != 0)
+        });
 
         let layout = StructLayout {
             is_class: input.is_class,

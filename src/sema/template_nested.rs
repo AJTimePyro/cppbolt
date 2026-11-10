@@ -19,20 +19,14 @@ struct NestedStructParams<'a> {
 }
 
 impl Sema {
-    pub(super) fn prepare_instantiation_mapping(
+    pub(super) fn register_instantiation_nested_and_aliases(
         &mut self,
         template_class: &TemplateClass,
-        template_params: &[TemplateParam],
-        args: &[Type],
         inst_name: &str,
+        mapping: &mut HashMap<String, Type>,
         pos: (usize, usize),
-    ) -> HashMap<String, Type> {
+    ) {
         let (line, col) = pos;
-        let mut mapping = HashMap::new();
-        for (param, arg) in template_params.iter().zip(args.iter()) {
-            mapping.insert(param.name.clone(), arg.clone());
-        }
-
         for nested in &template_class.nested_structs {
             if let Decl::StructDecl { name, .. } = nested {
                 let short = name.rsplit_once("::").map(|(_, s)| s).unwrap_or(name);
@@ -48,9 +42,29 @@ impl Sema {
         self.populate_instantiation_member_aliases(
             template_class,
             inst_name,
-            &mut mapping,
+            mapping,
             line,
             col,
+        );
+    }
+
+    pub(super) fn prepare_instantiation_mapping(
+        &mut self,
+        template_class: &TemplateClass,
+        template_params: &[TemplateParam],
+        args: &[Type],
+        inst_name: &str,
+        pos: (usize, usize),
+    ) -> HashMap<String, Type> {
+        let mut mapping = HashMap::new();
+        for (param, arg) in template_params.iter().zip(args.iter()) {
+            mapping.insert(param.name.clone(), arg.clone());
+        }
+        self.register_instantiation_nested_and_aliases(
+            template_class,
+            inst_name,
+            &mut mapping,
+            pos,
         );
         mapping
     }

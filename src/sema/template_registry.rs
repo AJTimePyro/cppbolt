@@ -176,14 +176,19 @@ impl Sema {
                     for arg in &mut args {
                         self.resolve_and_instantiate_type(arg, line, col)?;
                     }
-                    let _ = self.instantiate_class_template(tmpl_name, &args, line, col)?;
+                    let inst = self.instantiate_class_template(tmpl_name, &args, line, col)?;
+                    let member = &sname[gt_pos + 3..];
+                    let canon = format!("{inst}::{member}");
                     if let Some(alias) = self
                         .type_aliases
-                        .get(sname)
+                        .get(&canon)
                         .cloned()
+                        .or_else(|| self.type_aliases.get(sname).cloned())
                         .or_else(|| self.type_aliases.get(plain).cloned())
                     {
                         *ty = alias;
+                    } else if self.struct_layouts.contains_key(&canon) {
+                        *ty = Type::Struct(canon);
                     }
                 }
             }
