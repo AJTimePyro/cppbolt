@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Template Specialization, Non-Type Parameters & Alias Templates
+- Added class template explicit (full) specialization (`template <> struct S<int> { ... };`) replacing primary template definitions on exact argument matches.
+- Added class template partial specialization (`template <typename T> struct S<T*> { ... };`) with pattern matching and specificity scoring.
+- Added non-type template parameters (NTTP) for integral and boolean types (`template <typename T, int N>`), supporting default NTTP expressions and rejecting non-type arguments passed to type parameters.
+- Implemented compile-time constant expression evaluation in semantic analysis for arithmetic, bitwise, comparison, logical, ternary, and `sizeof` expressions, with overflow, division-by-zero, and shift-range validation.
+- Added alias templates (`template <typename T> using Name = Target;`) with dependent alias substitution.
+- Added `<array>` header providing `std::array<T, N>` with bounds checking, iterators, and initializer-list construction.
+- Added `<type_traits>` header providing `integral_constant`, `true_type`, `false_type`, `is_same`, `is_same_v`, `remove_reference`, and `remove_reference_t`.
+- Hardened template angle-bracket parsing with nested depth tracking, `>>` token splitting, and backtracking rollback.
+
 ## [1.1.0] - 2026-11-09
 
 ### Member Structured Bindings, Range-For Loops & Template Array Decay

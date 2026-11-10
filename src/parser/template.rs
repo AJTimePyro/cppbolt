@@ -17,7 +17,7 @@ impl Parser {
                 t_col,
             ));
         }
-        self.advance(); // consume '<'
+        self.advance();
 
         if self.peek() == &TokenKind::Gt {
             self.advance();
