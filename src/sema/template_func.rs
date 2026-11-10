@@ -34,7 +34,12 @@ impl Sema {
                     .filter(|p| p.default_val.is_none())
                     .count();
                 let max_args = template_decl.params.len();
-                if args.len() < min_args || args.len() > max_args {
+                let num_args = if args.is_empty() {
+                    arg_types.len()
+                } else {
+                    args.len()
+                };
+                if num_args < min_args || num_args > max_args {
                     continue;
                 }
                 match deduce_template_arguments(
@@ -182,6 +187,12 @@ impl Sema {
                 .entry(template_decl.name.clone())
                 .or_default()
                 .push(sig.clone());
+            if let Some(alias) = QualifiedName::new(&template_decl.name).implicit_alias() {
+                self.functions
+                    .entry(alias.into_owned())
+                    .or_default()
+                    .push(sig.clone());
+            }
         }
 
         Ok(sig)

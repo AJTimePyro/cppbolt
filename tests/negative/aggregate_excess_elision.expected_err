@@ -1,0 +1,1 @@
+tests/negative/aggregate_excess_elision.cpp:6:16: error: too many initializers for aggregate 'ArrayWrap'

@@ -302,7 +302,8 @@ impl<'a> Codegen<'a> {
                             if QualifiedName::new(a).matches(QualifiedName::new(call_target)) {
                                 return true;
                             }
-                            if call_target.starts_with("operator") && a.contains(call_target) {
+                            let plain_target = QualifiedName::new(call_target).plain();
+                            if plain_target.starts_with("operator") && a.contains(plain_target) {
                                 return true;
                             }
                             false

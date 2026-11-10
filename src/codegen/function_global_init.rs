@@ -134,7 +134,7 @@ impl<'a> Codegen<'a> {
         if self.compile_global_list_ctor(global, sname, ctx, code)? {
             return Ok(());
         }
-        if self.compile_global_default_ctor(global, sname, code)? {
+        if global.init.is_none() && self.compile_global_default_ctor(global, sname, code)? {
             return Ok(());
         }
         self.compile_global_field_init(global, sname, ctx, code)
@@ -231,19 +231,115 @@ impl<'a> Codegen<'a> {
             | Some(Expr::TypedInitList { elements, .. }) => elements,
             _ => return Ok(()),
         };
-        let Some(layout) = self.sema.struct_layouts.get(sname) else {
+        let Some(layout) = self.sema.struct_layouts.get(sname).cloned() else {
             return Ok(());
         };
-        for (i, item) in list.iter().enumerate() {
-            if let Some(fld) = layout.fields.get(i) {
-                let item_ty = self.get_expr_type(item, ctx);
+        let mut cursor = GlobalCursor { list, idx: 0 };
+        for fld in &layout.fields {
+            let field_offset = global.offset + fld.offset as u32;
+            if !cursor.is_empty() {
+                self.compile_global_field_elided(&fld.ty, &mut cursor, field_offset, ctx, code)?;
+            } else if let Some(default_init) = &fld.default_init {
+                let item_ty = self.get_expr_type(default_init, ctx);
                 code.push(OP_I32_CONST);
-                write_i32(code, (global.offset + fld.offset as u32) as i32);
-                self.compile_expr(item, ctx, code)?;
+                write_i32(code, field_offset as i32);
+                self.compile_expr(default_init, ctx, code)?;
                 self.emit_conversion(&item_ty, &fld.ty, code);
+                self.emit_store(&fld.ty, 0, code);
+            } else {
+                code.push(OP_I32_CONST);
+                write_i32(code, field_offset as i32);
+                self.emit_zero_value(&fld.ty, code);
                 self.emit_store(&fld.ty, 0, code);
             }
         }
         Ok(())
+    }
+
+    fn compile_global_field_elided(
+        &mut self,
+        target_ty: &Type,
+        cursor: &mut GlobalCursor<'_>,
+        offset: u32,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        if cursor.is_empty() {
+            code.push(OP_I32_CONST);
+            write_i32(code, offset as i32);
+            self.emit_zero_value(target_ty, code);
+            self.emit_store(target_ty, 0, code);
+            return Ok(());
+        }
+        if let Some(
+            Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. },
+        ) = cursor.peek()
+        {
+            let mut sub = GlobalCursor { list: elements, idx: 0 };
+            if let Type::Array(elem_ty, len) = target_ty.strip_const() {
+                let elem_size = elem_ty.size_of(&self.sema.struct_sizes) as u32;
+                for i in 0..*len {
+                    let elem_offset = offset + (i as u32) * elem_size;
+                    self.compile_global_field_elided(elem_ty, &mut sub, elem_offset, ctx, code)?;
+                }
+            } else if let Type::Struct(sname) = target_ty.strip_const()
+                && let Some(layout) = self.sema.struct_layouts.get(sname).cloned()
+            {
+                for fld in &layout.fields {
+                    let fld_offset = offset + fld.offset as u32;
+                    self.compile_global_field_elided(&fld.ty, &mut sub, fld_offset, ctx, code)?;
+                }
+            }
+            cursor.next();
+            return Ok(());
+        }
+        if let Type::Array(elem_ty, len) = target_ty.strip_const() {
+            let elem_size = elem_ty.size_of(&self.sema.struct_sizes) as u32;
+            for i in 0..*len {
+                let elem_offset = offset + (i as u32) * elem_size;
+                self.compile_global_field_elided(elem_ty, cursor, elem_offset, ctx, code)?;
+            }
+            return Ok(());
+        }
+        if let Type::Struct(sname) = target_ty.strip_const()
+            && self.sema.is_cxx17_aggregate(sname)
+            && let Some(layout) = self.sema.struct_layouts.get(sname).cloned()
+        {
+            for fld in &layout.fields {
+                let fld_offset = offset + fld.offset as u32;
+                self.compile_global_field_elided(&fld.ty, cursor, fld_offset, ctx, code)?;
+            }
+            return Ok(());
+        }
+        if let Some(item) = cursor.next() {
+            let item_ty = self.get_expr_type(item, ctx);
+            code.push(OP_I32_CONST);
+            write_i32(code, offset as i32);
+            self.compile_expr(item, ctx, code)?;
+            self.emit_conversion(&item_ty, target_ty, code);
+            self.emit_store(target_ty, 0, code);
+        }
+        Ok(())
+    }
+}
+
+struct GlobalCursor<'a> {
+    list: &'a [Expr],
+    idx: usize,
+}
+
+impl<'a> GlobalCursor<'a> {
+    fn is_empty(&self) -> bool {
+        self.idx >= self.list.len()
+    }
+
+    fn peek(&self) -> Option<&'a Expr> {
+        self.list.get(self.idx)
+    }
+
+    fn next(&mut self) -> Option<&'a Expr> {
+        let item = self.list.get(self.idx)?;
+        self.idx += 1;
+        Some(item)
     }
 }

@@ -350,31 +350,13 @@ impl Sema {
 
         while elem_idx < init_elements.len() && field_idx < fields.len() {
             let fld = &fields[field_idx];
-            let elem = &mut init_elements[elem_idx];
-
-            if let Expr::InitializerList {
-                elements: sub_elements,
-                pos: sub_pos,
-            } = elem
-            {
-                self.resolve_list_init(&fld.ty, sub_elements, context, *sub_pos)?;
-            } else {
-                let elem_ty = self.analyze_expr(elem)?;
-                self.check_narrowing(elem, &elem_ty, &fld.ty, pos)?;
-                if !self.can_assign_expr(&fld.ty, &elem_ty, Some(elem)) {
-                    return Err(CompileError::new(
-                        format!(
-                            "cannot initialize field '{}' of type '{}' with expression of type '{}'",
-                            fld.name,
-                            fld.ty.to_c_type(),
-                            elem_ty.to_c_type()
-                        ),
-                        pos.line,
-                        pos.col,
-                    ));
-                }
-            }
-            elem_idx += 1;
+            self.resolve_aggregate_field_elided(
+                &fld.ty,
+                init_elements,
+                &mut elem_idx,
+                context,
+                pos,
+            )?;
             field_idx += 1;
         }
 
@@ -387,6 +369,65 @@ impl Sema {
         }
 
         Ok(Type::Struct(sname.to_string()))
+    }
+
+    fn resolve_aggregate_field_elided(
+        &mut self,
+        target_ty: &Type,
+        init_elements: &mut [Expr],
+        elem_idx: &mut usize,
+        context: InitContext,
+        pos: ExprPos,
+    ) -> Result<(), CompileError> {
+        if *elem_idx >= init_elements.len() {
+            return Ok(());
+        }
+        if let Expr::InitializerList {
+            elements: sub_elements,
+            pos: sub_pos,
+        } = &mut init_elements[*elem_idx]
+        {
+            self.resolve_list_init(target_ty, sub_elements, context, *sub_pos)?;
+            *elem_idx += 1;
+            return Ok(());
+        }
+        if let Type::Array(elem_ty, len) = target_ty.strip_const() {
+            for _ in 0..*len {
+                if *elem_idx >= init_elements.len() {
+                    break;
+                }
+                self.resolve_aggregate_field_elided(elem_ty, init_elements, elem_idx, context, pos)?;
+            }
+            return Ok(());
+        }
+        if let Type::Struct(sname) = target_ty.strip_const()
+            && self.is_cxx17_aggregate(sname)
+            && let Some(layout) = self.struct_layouts.get(sname).cloned()
+        {
+            for fld in &layout.fields {
+                if *elem_idx >= init_elements.len() {
+                    break;
+                }
+                self.resolve_aggregate_field_elided(&fld.ty, init_elements, elem_idx, context, pos)?;
+            }
+            return Ok(());
+        }
+        let elem = &mut init_elements[*elem_idx];
+        *elem_idx += 1;
+        let elem_ty = self.analyze_expr(elem)?;
+        self.check_narrowing(elem, &elem_ty, target_ty, pos)?;
+        if !self.can_assign_expr(target_ty, &elem_ty, Some(elem)) {
+            return Err(CompileError::new(
+                format!(
+                    "cannot initialize field of type '{}' with expression of type '{}'",
+                    target_ty.to_c_type(),
+                    elem_ty.to_c_type()
+                ),
+                pos.line,
+                pos.col,
+            ));
+        }
+        Ok(())
     }
 
     /// Determines if a class is an aggregate under C++17 rules ([dcl.init.aggr]).

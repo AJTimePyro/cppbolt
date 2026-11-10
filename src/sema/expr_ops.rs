@@ -13,15 +13,8 @@ impl Sema {
             || matches!(clean_rty, Type::Struct(_) | Type::Enum(_)))
             && let Some(op_str) = op.op_name()
         {
-            if let Type::Struct(sname) = clean_lty
-                && let Some(sig) = self.find_method_in_class(sname, op_str)
-            {
-                let _ = self.instantiate_pending_method(&sig.mangled_name);
-                return sig.return_type.clone();
-            }
-            let op_cands = self.find_call_candidates(op_str, &[lty.clone(), rty.clone()]);
-            if let Some(sigs) = op_cands {
-                return sigs[0].return_type.clone();
+            if let Some(res) = self.resolve_overloaded_binary_type(op_str, lty, rty, clean_lty) {
+                return res;
             }
         }
 
@@ -258,7 +251,7 @@ impl Sema {
     }
 
     fn analyze_unary_incdec(
-        &self,
+        &mut self,
         op: &UnaryOp,
         ty: &Type,
         pos: ExprPos,
@@ -278,6 +271,7 @@ impl Sema {
             if let Some(sig) =
                 self.find_method_with_param_count(sname, m_name, count, receiver_const)
             {
+                let _ = self.instantiate_pending_method(&sig.mangled_name);
                 return Ok(sig.return_type);
             }
             return Err(CompileError::new(
@@ -423,76 +417,43 @@ impl Sema {
         Ok(target_ty.strip_reference().clone())
     }
 
-    pub(super) fn analyze_subscript(&mut self, expr: &mut Expr) -> Result<Type, CompileError> {
-        let Expr::ArraySubscript { array, index, pos } = expr else {
-            return Err(crate::internal_error!(
-                self.current_line,
-                self.current_col,
-                "unexpected expression kind"
-            ));
-        };
-
-        let arr_ty = self.analyze_expr(array)?;
-        let _idx_ty = self.analyze_expr(index)?;
-        let receiver_const = receiver_is_const_type(&arr_ty);
-        let clean_ty = arr_ty.strip_const();
-        if let Type::Struct(sname) = clean_ty
-            && let Some(sig) =
-                self.find_method_in_class_for_receiver(sname, "operator[]", receiver_const)
+    fn resolve_overloaded_binary_type(
+        &mut self,
+        op_str: &str,
+        lty: &Type,
+        rty: &Type,
+        clean_lty: &Type,
+    ) -> Option<Type> {
+        if let Type::Struct(sname) = clean_lty
+            && let Some(sig) = self.find_method_in_class(sname, op_str)
         {
-            self.instantiate_pending_method(&sig.mangled_name)?;
-            return Ok(sig.return_type.strip_reference().clone());
+            let _ = self.instantiate_pending_method(&sig.mangled_name);
+            return Some(sig.return_type.clone());
         }
-        if let Some(inner) = clean_ty.deref_type() {
-            Ok(inner.strip_reference().clone())
-        } else {
-            let ty_name = arr_ty.to_c_type();
-            Err(CompileError::new(
-                format!("Subscripted value is not an array or pointer: {ty_name}"),
-                pos.line,
-                pos.col,
-            ))
+        let op_cands = self.find_call_candidates(op_str, &[lty.clone(), rty.clone()]);
+        if let Some(sigs) = op_cands {
+            return Some(sigs[0].return_type.clone());
         }
-    }
-
-    pub(super) fn analyze_ternary(&mut self, expr: &mut Expr) -> Result<Type, CompileError> {
-        let Expr::Ternary {
-            cond,
-            then_expr,
-            else_expr,
-        } = expr
-        else {
-            return Err(crate::internal_error!(
-                self.current_line,
-                self.current_col,
-                "unexpected expression kind"
-            ));
-        };
-
-        self.analyze_expr(cond)?;
-        let t_ty = self.analyze_expr(then_expr)?;
-        let e_ty = self.analyze_expr(else_expr)?;
-        Ok(t_ty.conditional_result_type(&e_ty))
-    }
-
-    /// Returns true when an expression names a storage location that an
-    /// assignment may modify.
-    pub(super) fn is_assignable_target(&mut self, expr: &Expr, ty: &Type) -> bool {
-        if ty.is_reference() {
-            return true;
+        let pos = ExprPos::new(self.current_line, self.current_col);
+        let res_plain = self.try_resolve_function_template_call(
+            op_str,
+            &[lty.clone(), rty.clone()],
+            &[],
+            pos,
+        );
+        if let Ok(Some(sig)) = res_plain {
+            return Some(sig.return_type);
         }
-        match expr {
-            Expr::Identifier(_) | Expr::MemberAccess { .. } | Expr::ArraySubscript { .. } => true,
-            Expr::Unary {
-                op: UnaryOp::Deref,
-                expr: inner,
-                ..
-            } => {
-                let mut e = (**inner).clone();
-                !matches!(self.analyze_expr(&mut e), Ok(t) if matches!(t.strip_reference().strip_const(), Type::Struct(_)))
-            }
-            Expr::CompoundAssign { target, .. } => self.is_assignable_target(target, ty),
-            _ => false,
+        let std_op = format!("std::{}", op_str);
+        let res_std = self.try_resolve_function_template_call(
+            &std_op,
+            &[lty.clone(), rty.clone()],
+            &[],
+            pos,
+        );
+        if let Ok(Some(sig)) = res_std {
+            return Some(sig.return_type);
         }
+        None
     }
 }

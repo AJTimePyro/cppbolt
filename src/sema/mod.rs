@@ -12,6 +12,7 @@ mod expr_call_member;
 mod expr_lambda;
 mod expr_member;
 mod expr_ops;
+mod expr_subscript;
 mod init;
 mod init_list;
 mod layout;

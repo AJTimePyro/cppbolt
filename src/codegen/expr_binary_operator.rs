@@ -103,9 +103,6 @@ impl<'a> Codegen<'a> {
             .or_else(|| {
                 self.find_function(&format!("std::{}", op_name), &[lty.clone(), rty.clone()])
             })
-            .or_else(|| {
-                self.find_function(&format!("std::{}", op_name), &[lty.clone(), rty.clone()])
-            })
         else {
             return Ok(false);
         };
