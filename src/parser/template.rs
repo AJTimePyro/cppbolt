@@ -122,19 +122,23 @@ impl Parser {
         }
         self.advance();
         if param_type.is_some() {
-            let saved_in_template = self.in_template_arg;
-            let saved_depth = self.template_arg_paren_depth;
-            self.in_template_arg = true;
-            self.template_arg_paren_depth = 0;
-            let expr_res = self.parse_expr_prec(2);
-            self.in_template_arg = saved_in_template;
-            self.template_arg_paren_depth = saved_depth;
-            let expr = expr_res?;
-            let val = crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None)?;
-            Ok(Some(Type::NonType(val)))
+            Ok(Some(self.parse_nttp_const_arg()?))
         } else {
             Ok(Some(self.parse_type()?))
         }
+    }
+
+    fn parse_nttp_const_arg(&mut self) -> Result<Type, CompileError> {
+        let saved_in_template = self.in_template_arg;
+        let saved_depth = self.template_arg_paren_depth;
+        self.in_template_arg = true;
+        self.template_arg_paren_depth = 0;
+        let expr_res = self.parse_expr_prec(2);
+        self.in_template_arg = saved_in_template;
+        self.template_arg_paren_depth = saved_depth;
+        let expr = expr_res?;
+        let val = crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None)?;
+        Ok(Type::NonType(val))
     }
 
     pub(super) fn consume_template_closing_gt(&mut self) -> Result<(), CompileError> {
@@ -304,16 +308,7 @@ impl Parser {
             }
             self.rollback_pos(saved_pos, saved_splits);
         }
-        let saved_in_template = self.in_template_arg;
-        let saved_depth = self.template_arg_paren_depth;
-        self.in_template_arg = true;
-        self.template_arg_paren_depth = 0;
-        let expr_res = self.parse_expr_prec(2);
-        self.in_template_arg = saved_in_template;
-        self.template_arg_paren_depth = saved_depth;
-        let expr = expr_res?;
-        let val = crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None)?;
-        Ok(Type::NonType(val))
+        self.parse_nttp_const_arg()
     }
 
     pub(super) fn is_template_qualifier_ahead(&self) -> bool {

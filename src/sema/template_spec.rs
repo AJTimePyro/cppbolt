@@ -103,8 +103,12 @@ impl Sema {
             return;
         }
         if let Some((base, args_str)) = super::template_deduce::split_template_call_name(sname) {
-            let mut known: Vec<String> = self.class_templates.keys().cloned().collect();
-            known.extend(self.alias_templates.keys().cloned());
+            let known: Vec<String> = self
+                .class_templates
+                .keys()
+                .chain(self.alias_templates.keys())
+                .cloned()
+                .collect();
             if let Ok(mut args) = super::template_deduce::parse_types_list(args_str, &known) {
                 for arg in &mut args {
                     let _ = self.resolve_and_instantiate_type(arg, line, col);

@@ -103,6 +103,35 @@ fn eval_binary_op(
     eval_binary_values(op, l, r, pos)
 }
 
+fn check_div_rem(l: i128, r: i128, pos: ExprPos) -> Result<(), CompileError> {
+    if r == 0 {
+        return Err(CompileError::new(
+            "division by zero in constant expression",
+            pos.line,
+            pos.col,
+        ));
+    }
+    if l == i128::MIN && r == -1 {
+        return Err(CompileError::new(
+            "integer overflow in constant expression division",
+            pos.line,
+            pos.col,
+        ));
+    }
+    Ok(())
+}
+
+fn check_shift_count(r: i128, pos: ExprPos) -> Result<u32, CompileError> {
+    if !(0..128).contains(&r) {
+        return Err(CompileError::new(
+            "shift count out of range in constant expression",
+            pos.line,
+            pos.col,
+        ));
+    }
+    Ok(r as u32)
+}
+
 fn eval_binary_values(
     op: BinaryOp,
     l: i128,
@@ -114,62 +143,18 @@ fn eval_binary_values(
         BinaryOp::Sub => Ok(l.wrapping_sub(r)),
         BinaryOp::Mul => Ok(l.wrapping_mul(r)),
         BinaryOp::Div => {
-            if r == 0 {
-                return Err(CompileError::new(
-                    "division by zero in constant expression",
-                    pos.line,
-                    pos.col,
-                ));
-            }
-            if l == i128::MIN && r == -1 {
-                return Err(CompileError::new(
-                    "integer overflow in constant expression division",
-                    pos.line,
-                    pos.col,
-                ));
-            }
+            check_div_rem(l, r, pos)?;
             Ok(l / r)
         }
         BinaryOp::Rem => {
-            if r == 0 {
-                return Err(CompileError::new(
-                    "division by zero in constant expression",
-                    pos.line,
-                    pos.col,
-                ));
-            }
-            if l == i128::MIN && r == -1 {
-                return Err(CompileError::new(
-                    "integer overflow in constant expression division",
-                    pos.line,
-                    pos.col,
-                ));
-            }
+            check_div_rem(l, r, pos)?;
             Ok(l % r)
         }
         BinaryOp::BitAnd => Ok(l & r),
         BinaryOp::BitOr => Ok(l | r),
         BinaryOp::BitXor => Ok(l ^ r),
-        BinaryOp::Shl => {
-            if !(0..128).contains(&r) {
-                return Err(CompileError::new(
-                    "shift count out of range in constant expression",
-                    pos.line,
-                    pos.col,
-                ));
-            }
-            Ok(l.wrapping_shl(r as u32))
-        }
-        BinaryOp::Shr => {
-            if !(0..128).contains(&r) {
-                return Err(CompileError::new(
-                    "shift count out of range in constant expression",
-                    pos.line,
-                    pos.col,
-                ));
-            }
-            Ok(l.wrapping_shr(r as u32))
-        }
+        BinaryOp::Shl => Ok(l.wrapping_shl(check_shift_count(r, pos)?)),
+        BinaryOp::Shr => Ok(l.wrapping_shr(check_shift_count(r, pos)?)),
         BinaryOp::LogicalAnd => Ok(if l != 0 && r != 0 { 1 } else { 0 }),
         BinaryOp::LogicalOr => Ok(if l != 0 || r != 0 { 1 } else { 0 }),
         BinaryOp::Eq => Ok(if l == r { 1 } else { 0 }),
