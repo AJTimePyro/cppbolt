@@ -247,6 +247,7 @@ mini_stl/algorithm_non_modifying
 mini_stl/algorithm_modifying
 mini_stl/algorithm_binary_partition_perm
 mini_stl/algorithm_merge_set_select
+mini_stl/algorithm_comprehensive
 mini_stl/algorithm_sort
 mini_stl/array_basic
 mini_stl/array_comprehensive

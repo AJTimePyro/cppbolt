@@ -578,3 +578,28 @@ Validated and resolved four issues identified during C++17 pre-release testing: 
 - Unit tests: 89 passed in `src/lib.rs`.
 - Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
 - Diagnostic positions test: confirmed all corpus diagnostics name real source locations.
+
+---
+
+## 2026-11-10: C++17 <algorithm> Standard Library Integration
+
+Integrated the complete C++17 `<algorithm>` header family into cppbolt using LLVM libc++ 23.1.5 as the upstream implementation reference, without introducing ad-hoc compiler features or variable templates.
+
+### Summary of Work
+
+1. Designed modular algorithm headers under `stdlib/detail/algorithms/` and `stdlib/detail/iterator.h`, separating infrastructure from specific algorithm domains. Registered internal headers in `src/preprocessor/include.rs` and included them from `stdlib/algorithm`.
+2. Implemented standard iterator primitives in `stdlib/detail/iterator.h` and comparator functors in `stdlib/detail/algorithms/comp.h`, providing `iterator_traits`, `distance`, `advance`, `next`, `prev`, `iter_swap`, `__less<>`, `__equal_to`, and `__greater<>`.
+3. Integrated min/max and heap algorithms in `stdlib/detail/algorithms/min_max.h` and `stdlib/detail/algorithms/heap.h`: `min`, `max`, `minmax`, `clamp`, `min_element`, `max_element`, `minmax_element`, `make_heap`, `push_heap`, `pop_heap`, `sort_heap`, `is_heap`, and `is_heap_until`.
+4. Integrated non-modifying sequence algorithms in `stdlib/detail/algorithms/non_modifying.h`: `all_of`, `any_of`, `none_of`, `for_each`, `for_each_n`, `count`, `count_if`, `mismatch`, `find`, `find_if`, `find_if_not`, `adjacent_find`, `search`, `find_end`, `find_first_of`, `search_n`, `equal`, and `lexicographical_compare`.
+5. Integrated modifying sequence algorithms in `stdlib/detail/algorithms/modifying.h`: `copy`, `copy_n`, `copy_if`, `copy_backward`, `move`, `move_backward`, `fill`, `fill_n`, `transform`, `generate`, `generate_n`, `remove`, `remove_if`, `remove_copy`, `remove_copy_if`, `replace`, `replace_if`, `replace_copy`, `replace_copy_if`, `swap_ranges`, `reverse`, `reverse_copy`, `rotate`, `rotate_copy`, `unique`, and `unique_copy`.
+6. Integrated binary search, partitioning, and permutation algorithms in `stdlib/detail/algorithms/binary_search.h`, `stdlib/detail/algorithms/partition.h`, and `stdlib/detail/algorithms/permutation.h`: `lower_bound`, `upper_bound`, `equal_range`, `binary_search`, `is_sorted`, `is_sorted_until`, `is_partitioned`, `partition`, `partition_copy`, `partition_point`, `stable_partition`, `is_permutation`, `next_permutation`, and `prev_permutation`.
+7. Integrated merge, set operations, selection, and random sampling in `stdlib/detail/algorithms/merge.h`, `stdlib/detail/algorithms/set_ops.h`, `stdlib/detail/algorithms/selection.h`, and `stdlib/detail/algorithms/random.h`: `merge`, `inplace_merge`, `includes`, `set_union`, `set_intersection`, `set_difference`, `set_symmetric_difference`, `nth_element`, `partial_sort`, `partial_sort_copy`, `stable_sort`, `shuffle`, and `sample`.
+8. Preserved cppbolt's verified sorting loop (`introsort_loop`, `heap_sort`, `insertion_sort`) in `stdlib/algorithm`.
+9. Added comprehensive differential tests across all algorithm families (`algorithm_infra.cpp`, `algorithm_min_max_heap.cpp`, `algorithm_non_modifying.cpp`, `algorithm_modifying.cpp`, `algorithm_binary_partition_perm.cpp`, `algorithm_merge_set_select.cpp`, `algorithm_comprehensive.cpp`), validating custom functors, lambda predicates, stability invariants, URBGs, and empty/single-element ranges.
+
+### Verification Results
+
+- Corpus runner: 513 tests on disk, 513 executed, 513 passed, 0 failures.
+- Native oracle gate: all 50 mini_stl tests match native Clang and GCC byte-for-byte.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings with `-D warnings` across all targets.

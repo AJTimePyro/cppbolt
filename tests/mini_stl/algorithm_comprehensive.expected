@@ -1,0 +1,21 @@
+empty min_elem: 1
+empty max_elem: 1
+empty count: 0
+empty find: 1
+empty is_sorted: 1
+empty all_of: 1
+empty any_of: 0
+empty none_of: 1
+single min_elem: 42
+single is_sorted: 1
+single after reverse: 42
+descending sort: 9 5 4 3 1 1
+count > 3: 3
+stable_sort preserved order: (1,20) (1,40) (1,60) (2,10) (2,30) (2,50)
+clamp below: 10
+clamp inside: 15
+clamp above: 20
+lex_cmp shorter: 1
+lex_cmp longer: 0
+lex_cmp greater: 1
+unique: 1 2 3 2 4

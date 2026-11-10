@@ -6,7 +6,7 @@ struct SimpleURBG {
     typedef unsigned int result_type;
     unsigned int state;
     SimpleURBG(unsigned int s = 12345) : state(s) {}
-#ifdef __clang__
+#if defined(__clang__) || defined(__GNUC__)
     static constexpr unsigned int min() { return 0; }
     static constexpr unsigned int max() { return 4294967295U; }
 #else
