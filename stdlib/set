@@ -3,7 +3,7 @@
 
 #include <cstddef>
 #include <utility>
-#include "detail_avl_tree.h"
+#include <detail/containers/avl_tree.h>
 
 namespace std {
     template<typename Key>

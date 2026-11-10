@@ -58,24 +58,46 @@ Headers under `stdlib/` are embedded into the compiler binary at compile time us
 
 ```text
 stdlib/
-├── iostream          # std::cout, std::cin, streams
-├── string, string.h  # std::string implementation
-├── cstdio, stdio.h   # printf, sprintf, snprintf, puts
-├── cstdlib, stdlib.h # malloc, free, abs, exit
-├── cmath             # sqrt, sin, cos, abs, etc.
-├── iomanip           # std::setprecision, std::fixed, std::setw
-├── new               # operator new, placement new
-├── utility           # std::move, std::forward, std::pair, std::swap
-├── initializer_list  # std::initializer_list
-├── cstddef           # size_t, ptrdiff_t, NULL
-├── memory            # std::unique_ptr, std::make_unique
+├── algorithm         # std::sort, std::reverse, std::min, std::max
 ├── array             # std::array with bounds checking and iterators
+├── cmath             # sqrt, sin, cos, abs, etc.
+├── cstddef           # size_t, ptrdiff_t, NULL
+├── cstdio            # printf, sprintf, snprintf, puts, getchar, scanf
+├── cstdlib           # malloc, free, abs, exit
+├── initializer_list  # std::initializer_list
+├── iomanip           # std::setprecision, std::fixed, std::setw
+├── iostream          # std::cout, std::cin, streams
+├── map               # std::map associative container
+├── memory            # std::unique_ptr, std::make_unique
+├── new               # operator new, placement new
+├── set               # std::set associative container
+├── stdio.h           # C stdio declarations
+├── stdlib.h          # C stdlib declarations and memory functions
+├── string            # std::string implementation
+├── string.h          # C string declarations
 ├── type_traits       # integral_constant, is_same, remove_reference
+├── utility           # std::move, std::forward, std::pair, std::swap
 ├── vector            # std::vector with move operations and dynamic resizing
-├── map               # std::map associative container (detail_avl_tree.h)
-├── set               # std::set associative container (detail_avl_tree.h)
-└── algorithm         # std::sort, std::reverse, std::min, std::max
+├── detail/           # Internal headers
+│   └── containers/
+│       └── avl_tree.h # std::detail::AVLTree backing map and set
+└── compat/           # Compiler and platform shims
+    ├── compiler/
+    │   └── compiler.h # Warning controls
+    ├── runtime/
+    │   └── runtime.h  # Runtime hooks and libc shims
+    └── config/
+        └── platform.h # Platform target configuration
 ```
+
+### Directory Layout
+
+Public headers live directly under `stdlib/` (`<iostream>`, `<string>`, `<vector>`, `<map>`, `<stdlib.h>`).
+
+Internal components split across two subdirectories:
+
+- `stdlib/detail/`: Shared data structures. `detail/containers/avl_tree.h` provides the balanced tree for `map` and `set`.
+- `stdlib/compat/`: Platform and toolchain shims. `compiler/compiler.h` controls warning diagnostics, `runtime/runtime.h` provides runtime hooks and libc declarations, and `config/platform.h` defines target platform macros.
 
 ### Supported Embedded Headers
 The embedded library includes:

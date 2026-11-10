@@ -2,13 +2,10 @@
 #define _MINI_STL_CSTDIO_
 
 #include <stdarg.h>
+#include <cstddef>
+#include <compat/runtime/runtime.h>
 
 #ifdef __CPP_WASM__
-extern "C" {
-    void print_char(int c);
-    int read_char(void);
-    int printf(const char* format, ...);
-}
 
 inline int putchar(int c) {
     print_char(c);

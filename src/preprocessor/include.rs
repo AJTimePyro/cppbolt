@@ -38,7 +38,14 @@ fn embedded_header(name: &str) -> Option<&'static str> {
         "algorithm" => Some(include_str!("../../stdlib/algorithm")),
         "map" => Some(include_str!("../../stdlib/map")),
         "set" => Some(include_str!("../../stdlib/set")),
-        "detail_avl_tree.h" => Some(include_str!("../../stdlib/detail_avl_tree.h")),
+        "detail/containers/avl_tree.h" | "detail_avl_tree.h" => {
+            Some(include_str!("../../stdlib/detail/containers/avl_tree.h"))
+        }
+        "compat/config/platform.h" => Some(include_str!("../../stdlib/compat/config/platform.h")),
+        "compat/compiler/compiler.h" => {
+            Some(include_str!("../../stdlib/compat/compiler/compiler.h"))
+        }
+        "compat/runtime/runtime.h" => Some(include_str!("../../stdlib/compat/runtime/runtime.h")),
         "stdio.h" => Some(include_str!("../../stdlib/stdio.h")),
         "stdlib.h" => Some(include_str!("../../stdlib/stdlib.h")),
         "string.h" => Some(include_str!("../../stdlib/string.h")),
