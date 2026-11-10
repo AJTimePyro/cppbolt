@@ -3,6 +3,8 @@
 
 #include <cstddef>
 #include <utility>
+#include <detail/iterator.h>
+#include <detail/algorithms/comp.h>
 
 namespace std {
     template<typename T>

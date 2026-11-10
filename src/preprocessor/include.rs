@@ -34,6 +34,7 @@ fn embedded_header(name: &str) -> Option<&'static str> {
         "memory" => Some(include_str!("../../stdlib/memory")),
         "vector" => Some(include_str!("../../stdlib/vector")),
         "array" => Some(include_str!("../../stdlib/array")),
+        "iterator" => Some(include_str!("../../stdlib/iterator")),
         "type_traits" => Some(include_str!("../../stdlib/type_traits")),
         "algorithm" => Some(include_str!("../../stdlib/algorithm")),
         "map" => Some(include_str!("../../stdlib/map")),
@@ -43,6 +44,12 @@ fn embedded_header(name: &str) -> Option<&'static str> {
         }
         "detail/reverse_iterator.h" => {
             Some(include_str!("../../stdlib/detail/reverse_iterator.h"))
+        }
+        "detail/iterator.h" => {
+            Some(include_str!("../../stdlib/detail/iterator.h"))
+        }
+        "detail/algorithms/comp.h" => {
+            Some(include_str!("../../stdlib/detail/algorithms/comp.h"))
         }
         "compat/config/platform.h" => Some(include_str!("../../stdlib/compat/config/platform.h")),
         "compat/compiler/compiler.h" => {

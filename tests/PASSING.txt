@@ -241,6 +241,7 @@ memory_model_variant/large_global_4mb
 memory_model_variant/malloc_zero
 memory_model_variant/vector_growth_64mb
 mini_stl/algorithm_basic
+mini_stl/algorithm_infra
 mini_stl/algorithm_sort
 mini_stl/array_basic
 mini_stl/array_comprehensive
