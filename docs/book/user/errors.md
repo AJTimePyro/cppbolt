@@ -278,6 +278,113 @@ The following catalog lists diagnostics emitted by the compiler, paired with rea
   }
   ```
 
+### Move Semantics & Value Categories (`ErrorKind::Semantic`)
+
+#### `cannot bind rvalue reference of type '<type>' to lvalue of type '<type>'`
+- **Cause**: Attempting to bind an rvalue reference `T&&` directly to an lvalue, such as a named local variable or named rvalue reference parameter.
+- **Trigger** (`tests/negative/rvalue_ref_bind_lvalue.cpp`):
+  ```cpp
+  int main() {
+      int x = 42;
+      int&& r = x; // error: cannot bind rvalue reference of type 'int &&' to lvalue of type 'int'
+      return 0;
+  }
+  ```
+
+#### `cannot initialize variable '<name>' of type <target> with <source>` (Move-Only Type)
+- **Cause**: Copying an object whose class declares move operations, which suppresses implicit copy construction.
+- **Trigger** (`tests/negative/unique_ptr_copy.cpp`):
+  ```cpp
+  #include <memory>
+  int main() {
+      std::unique_ptr<int> p1(new int(42));
+      std::unique_ptr<int> p2 = p1; // error: cannot initialize variable 'p2' of type unique_ptr<int> with unique_ptr<int>
+      return 0;
+  }
+  ```
+
+#### `Type mismatch in assignment: cannot assign <source> to <target>`
+- **Cause**: Assigning an lvalue of a move-only type to another object of the same type via copy assignment.
+- **Trigger** (`tests/negative/unique_ptr_assign.cpp`):
+  ```cpp
+  #include <memory>
+  int main() {
+      std::unique_ptr<int> p1(new int(10));
+      std::unique_ptr<int> p2(new int(20));
+      p2 = p1; // error: Type mismatch in assignment: cannot assign unique_ptr<int> to unique_ptr<int>
+      return 0;
+  }
+  ```
+
+### Templates & Compile-Time Evaluation (`ErrorKind::Semantic`)
+
+#### `redefinition of explicit template specialization '<spec>'`
+- **Cause**: Declaring duplicate explicit (full) template specializations for identical argument types.
+- **Trigger** (`tests/negative/template_spec_duplicate.cpp`):
+  ```cpp
+  template <typename T> struct DupSpec { int value() { return 1; } };
+  template <> struct DupSpec<int> { int value() { return 2; } };
+  template <> struct DupSpec<int> { int value() { return 3; } }; // error: redefinition of explicit template specialization 'DupSpec<int>'
+  ```
+
+#### `ambiguous partial specializations for '<instantiation>'`
+- **Cause**: Two or more partial specializations match a template argument list with equal specificity scores.
+- **Trigger** (`tests/negative/template_partial_spec_ambiguous.cpp`):
+  ```cpp
+  template <typename T, typename U> struct Ambiguous { static int run() { return 0; } };
+  template <typename T> struct Ambiguous<T, int> { static int run() { return 1; } };
+  template <typename U> struct Ambiguous<int, U> { static int run() { return 2; } };
+  int main() {
+      return Ambiguous<int, int>::run(); // error: ambiguous partial specializations for 'Ambiguous<int, int>'
+  }
+  ```
+
+#### `type template parameter '<param>' cannot take non-type argument`
+- **Cause**: Passing a constant value or non-type argument to a template parameter declared as `typename` or `class`.
+- **Trigger** (`tests/negative/template_type_arg_mismatch.cpp`):
+  ```cpp
+  template <typename T> struct Box { T val; };
+  int main() {
+      Box<42> b; // error: type template parameter 'T' cannot take non-type argument
+      return 0;
+  }
+  ```
+
+#### `template argument for non-type parameter must be a constant expression`
+- **Cause**: Supplying a string literal or incompatible expression to an integral non-type template parameter.
+- **Trigger** (`tests/negative/template_nttp_type_mismatch.cpp`):
+  ```cpp
+  template <typename T, int N> struct Array { T data[N]; };
+  int main() {
+      Array<int, "hello"> a; // error: template argument for non-type parameter must be a constant expression
+      return 0;
+  }
+  ```
+
+#### `template parameter without default follows parameter with default`
+- **Cause**: Declaring a template parameter without a default argument after a parameter declaring a default argument.
+- **Trigger** (`tests/negative/template_default_arg_order.cpp`):
+  ```cpp
+  template <typename T = int, typename U> // error: template parameter without default follows parameter with default
+  struct InvalidOrder {};
+  ```
+
+#### `integer overflow in constant expression division`
+- **Cause**: Division by zero or integer overflow during compile-time constant expression folding.
+- **Trigger** (`tests/negative/constexpr_division_overflow.cpp`):
+  ```cpp
+  template <int N> struct C {};
+  C<(-2147483647 - 1) / -1> c; // error: integer overflow in constant expression division
+  ```
+
+#### `shift count out of range in constant expression`
+- **Cause**: Bitwise shift in a compile-time constant expression where the shift count is negative or exceeds the integer bit width.
+- **Trigger** (`tests/negative/constexpr_shift_overflow.cpp`):
+  ```cpp
+  template <int N> struct C {};
+  C<1 << 33> c; // error: shift count out of range in constant expression
+  ```
+
 ---
 
 ### Preprocessor & Lexical Errors (`ErrorKind::Lexical`)

@@ -28,6 +28,31 @@ Implemented class template explicit and partial specialization, non-type templat
 
 ---
 
+## 2026-11-09: Move Semantics, Value Categories, and Smart Pointers
+
+Implemented rvalue references (`T&&`), C++17 value category tracking, implicit move constructor and assignment synthesis, copy suppression for move-only types, forwarding references, reference collapsing, and standard library headers `<memory>` and `<utility>`.
+
+### Summary of Work
+
+1. Added `Type::RvalueReference` in `src/ast/types.rs` and parser support for `&&` type declarators in `src/parser/types.rs`.
+2. Implemented value category tracking (prvalue, xvalue, lvalue) across expression analysis in `src/sema/`, classifying identifiers and named rvalue reference parameters as lvalues, and temporary returns and casts as xvalues or prvalues.
+3. Added overload resolution ranking in `src/sema/overload.rs` favoring rvalue references for rvalue arguments, while keeping `const T&` bindings viable for lvalues and rvalues.
+4. Implemented implicit move constructor and move assignment operator synthesis in `src/sema/synthesize.rs` and `src/sema/synthesize_ops.rs`, and suppressed implicit copy operations for classes declaring move operations.
+5. Added forwarding reference deduction (`template <typename T> void f(T&&)`) in `src/sema/template_deduce.rs` and reference collapsing rules (`&` + `&&` -> `&`, `&&` + `&&` -> `&&`).
+6. Enforced copy suppression in `src/sema/constructor.rs`, `src/sema/assign.rs`, `src/sema/stmt_return.rs`, and `src/codegen/` across direct initialization, assignment, call arguments, and return statements.
+7. Added `<memory>` providing `std::unique_ptr<T>` with single-owner semantics, custom deleters, `reset`, `release`, self-reset protection, and `std::make_unique`.
+8. Added `std::move`, `std::forward`, and `std::swap` to `<utility>`, and added move constructor, move assignment, `push_back(T&&)`, and move-based buffer reallocation to `<vector>`.
+9. Added corpus tests across `tests/c_basics/types/`, `tests/classes_oop/`, `tests/templates_operators/`, `tests/mini_stl/`, and `tests/negative/`.
+
+### Verification Results
+
+- Unit and integration tests: 469 corpus tests executed, 469 passed, 0 failures.
+- Golden baseline: 339 entries match `tests/golden.txt`.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
 ## 2026-11-08: Member Structured Bindings, Range-For Loops, and Template Array Decay
 
 Fixed structured binding and range-based for lowering in non-template member functions, added array-to-pointer decay for function template argument deduction, and fixed array member initialization from initializer lists.

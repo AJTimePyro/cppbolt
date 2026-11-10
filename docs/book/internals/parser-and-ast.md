@@ -6,9 +6,9 @@ The parser transforms the flat token stream into a structured Abstract Syntax Tr
 
 ## 1. Role in the Pipeline
 
-1. **Unsupported Feature Fast-Reject**: Before executing the full grammar parser, `Parser::validate_supported_features` (`src/parser/unsupported.rs`) scans the token stream to detect explicitly unsupported C++ constructs (e.g. `operator()`, `operator->`, `operator*()`, `postfix ++/--`, namespace aliases, `const` ref method overloads) and returns clean diagnostics.
-2. **Grammar Parsing (Recursive Descent)**: Parses top-level declarations (functions, structs, classes, globals, enums, type aliases) and statements (`if`, `while`, `for`, `switch`, `return`, compound blocks). Recognizes out-of-class constructor and destructor definitions across nested namespace and class qualifiers without requiring return type specifiers.
-3. **Expression Parsing (Pratt Parser)**: Parses expressions using precedence climbing / Pratt parsing (`src/parser/expr.rs`), handling complex operator hierarchies, ternary conditionals, array subscripts, member access, casts, and object constructions.
+1. **Unsupported Feature Fast-Reject**: Before executing the full grammar parser, `Parser::validate_supported_features` (`src/parser/unsupported.rs`) scans the token stream to detect explicitly unsupported constructs (such as `const &` method ref-qualifiers) and returns clean diagnostics.
+2. **Grammar Parsing (Recursive Descent)**: Parses top-level declarations (functions, structs, classes, globals, enums, type aliases, templates, specializations) and statements (`if`, `while`, `for`, `switch`, `return`, compound blocks). Recognizes out-of-class constructor and destructor definitions across nested namespace and class qualifiers without requiring return type specifiers.
+3. **Expression Parsing (Pratt Parser)**: Parses expressions using precedence climbing and Pratt parsing (`src/parser/expr.rs`), handling operator hierarchies, ternary conditionals, array subscripts, member access, casts, lambdas, object constructions, and template argument angle-bracket disambiguation with `>>` token splitting and parenthesized operator depth tracking.
 4. **Per-Construct Recursion Budgeting**: To prevent thread stack exhaustion when compiling deep programs in WebAssembly engines, the parser tracks recursion limits via `DepthCounters` across expressions, parentheses, call arguments, statements, and blocks.
 
 ---
@@ -16,19 +16,21 @@ The parser transforms the flat token stream into a structured Abstract Syntax Tr
 ## 2. Key Data Structures
 
 - `Parser`: Holds the token slice, current token index, and active `DepthCounters`.
-- `ast::Program`: Root AST node containing a list of top-level declarations:
+- `ast::Program`: Root AST node containing declarations and file-scope type aliases:
   ```rust
   pub struct Program {
-      pub decls: Vec<Decl>,
+      pub declarations: Vec<Decl>,
+      pub type_aliases: HashMap<String, Type>,
   }
   ```
 - `ast::Decl`: Top-level declaration node:
   - `Function(FunctionDecl)`: Free functions, member methods, constructors, destructors.
   - `GlobalVar { name, ty, init, line, col }`: Global and namespace-level variables.
-  - `StructDecl { name, is_class, base_classes, fields, methods, constructors, destructor, ... }`: Class and struct definitions.
-  - `EnumDecl { name, variants }`: Enumerations.
-  - `TypeAlias { name, target_type }`: `typedef` and `using Alias = Type`.
-  - `NamespaceDecl { name, decls }`: Namespace scopes.
+  - `StructDecl { name, is_class, base_classes, fields, methods, ... }`: Class and struct definitions.
+  - `EnumDecl { name, is_scoped, variants }`: Enumerations.
+  - `NamespaceAlias { alias, target, line, col }`: C++17 namespace aliases.
+  - `UsingNamespace(String)`, `UsingDecl(String)`: Using directives and declarations.
+  - `Template(TemplateDecl)`: Function templates, class templates, and alias templates (`template <...> using Alias = Target;`).
 - `ast::Stmt`: Statement nodes:
   - `Expr(Expr)`, `Block(Vec<Stmt>)`, `If { cond, then_branch, else_branch }`, `While`, `DoWhile`, `For`, `RangeFor { decl, range, body }`, `Switch`, `Return(Option<Expr>)`, `Break`, `Continue`, `VarDecl`.
 - `ast::Expr`: Expression tree nodes:
@@ -37,9 +39,9 @@ The parser transforms the flat token stream into a structured Abstract Syntax Tr
   - `TypedInitList { ty, elements, pos }`: Explicitly-typed temporary and direct-list expressions `Type{ a, b, c }`.
   - Every `Expr` variant carries an `ExprPos` (`line`, `col`) recording the position of its leading token.
 - `ast::types::Type`: Representation of types:
-  - `Int`, `LongLong`, `Short`, `Char`, `Float`, `Double`, `Bool`, `Void`, `Nullptr` (`decltype(nullptr)`).
-  - `Pointer(Box<Type>, bool /* is_const */)`, `Reference(Box<Type>)`, `Array(Box<Type>, usize)`.
-  - `Struct(String)`, `Enum(String)`, `FunctionPointer { ret, params }`.
+  - Primitives: `Int`, `LongLong`, `Short`, `Char`, `Float`, `Double`, `Bool`, `Void`, `Nullptr` (`decltype(nullptr)`), and unsigned variants.
+  - Compounds: `Pointer(Box<Type>)`, `Reference(Box<Type>)` (lvalue ref `T&`), `RvalueReference(Box<Type>)` (rvalue ref `T&&`), `Array(Box<Type>, usize)`, `DependentArray(Box<Type>, String)`.
+  - Aggregates and Generics: `Struct(String)`, `Enum(String)`, `TypeParam(String)`, `NonType(i128)`, `TemplateInstance { name, args }`, `Function { return_type, params }`.
 
 ---
 

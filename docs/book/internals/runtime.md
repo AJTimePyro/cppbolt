@@ -59,20 +59,30 @@ Headers under `stdlib/` are embedded into the compiler binary at compile time us
 ```text
 stdlib/
 ├── iostream          # std::cout, std::cin, streams
-├── string            # std::string implementation
+├── string, string.h  # std::string implementation
 ├── cstdio, stdio.h   # printf, sprintf, snprintf, puts
 ├── cstdlib, stdlib.h # malloc, free, abs, exit
 ├── cmath             # sqrt, sin, cos, abs, etc.
 ├── iomanip           # std::setprecision, std::fixed, std::setw
 ├── new               # operator new, placement new
-├── utility           # std::move, std::forward
+├── utility           # std::move, std::forward, std::pair, std::swap
 ├── initializer_list  # std::initializer_list
-└── cstddef           # size_t, ptrdiff_t, NULL
+├── cstddef           # size_t, ptrdiff_t, NULL
+├── memory            # std::unique_ptr, std::make_unique
+├── array             # std::array with bounds checking and iterators
+├── type_traits       # integral_constant, is_same, remove_reference
+├── vector            # std::vector with move operations and dynamic resizing
+├── map               # std::map associative container (detail_avl_tree.h)
+├── set               # std::set associative container (detail_avl_tree.h)
+└── algorithm         # std::sort, std::reverse, std::min, std::max
 ```
 
-### Present vs. Supported Split
-- **Supported Headers**: Streams (`<iostream>`), string manipulation (`<string>`), C stdio (`<cstdio>`), math (`<cmath>`), manipulators (`<iomanip>`), and memory allocation (`<new>`, `<cstdlib>`). Fully covered by corpus tests.
-- **Partial Headers**: `<vector>`, `<map>`, `<set>`, and `<algorithm>`. These files are present in `stdlib/` to compile specific mini-STL test fixtures, but full template container functionality is outside the v1 subset (tracked as Planned).
+### Supported Embedded Headers
+The embedded library includes:
+- Streams (`<iostream>`), string manipulation (`<string>`), C stdio (`<cstdio>`, `<stdio.h>`), and manipulators (`<iomanip>`)
+- Dynamic allocation (`<new>`, `<cstdlib>`, `<stdlib.h>`), smart pointers (`<memory>`), and initializer lists (`<initializer_list>`)
+- Sequence and associative containers (`<vector>`, `<array>`, `<map>`, `<set>`) with iterators, element access, and move semantics
+- Move and forward primitives (`<utility>`), algorithms (`<algorithm>`), type traits (`<type_traits>`), C definitions (`<cstddef>`), and math intrinsics (`<cmath>`)
 
 ### Independent Native Header Verification
 All embedded headers are compiled and verified against host `g++` and `clang++` using `-nostdinc++` and AddressSanitizer/UndefinedBehaviorSanitizer via `tools/verify_mini_stl_gxx.py`.

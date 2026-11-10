@@ -18,6 +18,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added `<type_traits>` header providing `integral_constant`, `true_type`, `false_type`, `is_same`, `is_same_v`, `remove_reference`, and `remove_reference_t`.
 - Hardened template angle-bracket parsing with nested depth tracking, `>>` token splitting, and backtracking rollback.
 
+### Move Semantics, Value Categories & Smart Pointers
+- Added rvalue references (`T&&`) across AST, parser, and semantic analysis with value category classification (lvalue, prvalue, xvalue).
+- Implemented implicit synthesis of move constructors and move assignment operators, and enforced copy suppression for move-declared and move-only types across initialization, assignment, call, and return contexts.
+- Implemented move overload resolution ranking preferring rvalue references for rvalues and temporaries.
+- Implemented forwarding references (`template <typename T> void f(T&&)`) with reference collapsing rules (`&` + `&&` -> `&`, `&&` + `&&` -> `&&`).
+- Added `<memory>` header providing `std::unique_ptr<T>` with single-owner move semantics, `reset`, `release`, and `std::make_unique`.
+- Enhanced `<utility>` with `std::move`, `std::forward`, and move-enabled `std::pair`.
+- Enhanced `<vector>` with move construction, move assignment, `push_back(T&&)`, and move-based reallocation.
+
 ## [1.1.0] - 2026-11-09
 
 ### Member Structured Bindings, Range-For Loops & Template Array Decay
