@@ -185,6 +185,16 @@ pub fn fill_default_template_args(
                 pos.1,
             ));
         }
+        if param.param_type.is_none() && matches!(arg, Type::NonType(_)) {
+            return Err(CompileError::new(
+                format!(
+                    "type template parameter '{}' cannot take non-type argument",
+                    param.name
+                ),
+                pos.0,
+                pos.1,
+            ));
+        }
     }
     Ok(result)
 }

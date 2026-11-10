@@ -292,7 +292,7 @@ impl Type {
             Type::Float => 4,
             Type::Double => 8,
             Type::Pointer(_) | Type::Reference(_) | Type::RvalueReference(_) => 4, // 32-bit WASM pointers
-            Type::Array(elem, len) => elem.size_of(struct_sizes) * len,
+            Type::Array(elem, len) => elem.size_of(struct_sizes).saturating_mul(*len),
             Type::Struct(name) => *struct_sizes
                 .get(name)
                 .or_else(|| struct_sizes.get(QualifiedName::new(name).plain()))

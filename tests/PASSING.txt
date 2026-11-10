@@ -431,10 +431,12 @@ negative/template_explicit_instantiation
 negative/template_func_arg_incompatible
 negative/template_instantiation_depth
 negative/template_method_arg_incompatible
+negative/template_negative_array_bound
 negative/template_nttp_type_mismatch
 negative/template_partial_spec_ambiguous
 negative/template_spec_duplicate
 negative/template_template_param
+negative/template_type_arg_mismatch
 negative/template_variadic
 negative/throw_unsupported
 negative/type_mismatch

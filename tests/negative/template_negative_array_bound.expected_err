@@ -1,0 +1,1 @@
+tests/negative/template_negative_array_bound.cpp:8:5: error: Array dimension must be non-negative integer constant

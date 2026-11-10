@@ -30,13 +30,11 @@ impl Sema {
     }
 
     pub fn register_function_template(&mut self, decl: FunctionDecl, params: Vec<TemplateParam>) {
-        let name = decl.name.clone();
-        let short = name.split("::").last().unwrap_or(&name).to_string();
-        let qualified = QualifiedName::new(&name);
-        let std_name = qualified.std_name().into_owned();
-        let plain = qualified.plain().to_string();
+        let short = decl.name.rsplit("::").next().unwrap_or(&decl.name).to_string();
+        let q = QualifiedName::new(&decl.name);
+        let keys = [decl.name.clone(), short, q.plain().to_string(), q.std_name().into_owned()];
         let item = (decl, params);
-        for key in [name, short, std_name, plain] {
+        for key in keys {
             let list = self.function_templates.entry(key).or_default();
             if let Some((existing_decl, _)) = list.iter_mut().find(|(d, _)| {
                 d.params.len() == item.0.params.len()
@@ -128,8 +126,17 @@ impl Sema {
             Type::Pointer(inner)
             | Type::Reference(inner)
             | Type::RvalueReference(inner)
-            | Type::Const(inner)
-            | Type::Array(inner, _) => {
+            | Type::Const(inner) => {
+                self.resolve_and_instantiate_type(inner, line, col)?;
+            }
+            Type::Array(inner, size) => {
+                if *size == usize::MAX {
+                    return Err(CompileError::new(
+                        "Array dimension must be non-negative integer constant",
+                        line,
+                        col,
+                    ));
+                }
                 self.resolve_and_instantiate_type(inner, line, col)?;
             }
             _ => {}
@@ -159,7 +166,12 @@ impl Sema {
         {
             let inst_part = &sname[..gt_pos + 1];
             if let Some((tmpl_name, args_str)) = split_template_call_name(inst_part) {
-                let known: Vec<String> = self.class_templates.keys().cloned().collect();
+                let known: Vec<String> = self
+                    .class_templates
+                    .keys()
+                    .chain(self.alias_templates.keys())
+                    .cloned()
+                    .collect();
                 if let Ok(mut args) = parse_types_list(args_str, &known) {
                     for arg in &mut args {
                         self.resolve_and_instantiate_type(arg, line, col)?;
@@ -299,14 +311,8 @@ impl Sema {
         self.synthesize_instantiation_lifecycle(inst_name, base_classes, fields, methods);
 
         self.compute_struct_layout(RecordLayout {
-            name: inst_name,
-            is_class: *is_class,
-            base_classes,
-            fields,
-            methods,
-            private_members,
-            line,
-            col,
+            name: inst_name, is_class: *is_class, base_classes,
+            fields, methods, private_members, line, col,
         })?;
 
         self.register_instantiated_static_fields(inst_name, static_fields, base_classes, line, col);
@@ -477,16 +483,9 @@ impl Sema {
             }
             if !found {
                 self.synthesized_decls.push(Decl::StructDecl {
-                    name: class_name.clone(),
-                    is_class: false,
-                    base_classes: Vec::new(),
-                    fields: Vec::new(),
-                    methods: vec![method_decl],
-                    static_fields: Vec::new(),
-                    private_members: Vec::new(),
-                    nested_structs: Vec::new(),
-                    line: 0,
-                    col: 0,
+                    name: class_name, is_class: false, base_classes: vec![],
+                    fields: vec![], methods: vec![method_decl], static_fields: vec![],
+                    private_members: vec![], nested_structs: vec![], line: 0, col: 0,
                 });
             }
         }

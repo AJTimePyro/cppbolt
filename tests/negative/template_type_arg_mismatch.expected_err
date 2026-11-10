@@ -1,0 +1,1 @@
+tests/negative/template_type_arg_mismatch.cpp:6:5: error: type template parameter 'T' cannot take non-type argument

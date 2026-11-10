@@ -52,7 +52,8 @@ pub fn substitute_type(
         Type::DependentArray(inner, param_name) => {
             let subst_inner = substitute_type(inner, mapping, injected_class);
             let size = match mapping.get(param_name) {
-                Some(Type::NonType(n)) => *n as usize,
+                Some(Type::NonType(n)) if *n >= 0 => *n as usize,
+                Some(Type::NonType(_)) => usize::MAX,
                 _ => 0,
             };
             Type::Array(Box::new(subst_inner), size)
@@ -164,7 +165,8 @@ pub fn substitute_expr(
         }
         Expr::Identifier(name) => {
             if let Some(Type::NonType(val)) = mapping.get(name) {
-                *expr = Expr::IntLiteral(*val as i64, Type::Int);
+                let ty = if (*val as i32 as i128) == *val { Type::Int } else { Type::LongLong };
+                *expr = Expr::IntLiteral(*val as i64, ty);
             } else if name.contains('<') {
                 *name = substitute_template_name(name, mapping);
             }
