@@ -12,10 +12,9 @@ impl Sema {
         if (matches!(clean_lty, Type::Struct(_) | Type::Enum(_))
             || matches!(clean_rty, Type::Struct(_) | Type::Enum(_)))
             && let Some(op_str) = op.op_name()
+            && let Some(res) = self.resolve_overloaded_binary_type(op_str, lty, rty, clean_lty)
         {
-            if let Some(res) = self.resolve_overloaded_binary_type(op_str, lty, rty, clean_lty) {
-                return res;
-            }
+            return res;
         }
 
         if *op == BinaryOp::Comma {
@@ -431,13 +430,12 @@ impl Sema {
             return Some(sig.return_type.clone());
         }
         let args = [lty.clone(), rty.clone()];
-        if let Some(sigs) = self.find_call_candidates(op_str, &args) {
-            if let Some(sig) = sigs
+        if let Some(sigs) = self.find_call_candidates(op_str, &args)
+            && let Some(sig) = sigs
                 .iter()
                 .find(|s| self.score_call_candidate(s, &args, None).is_ok())
-            {
-                return Some(sig.return_type.clone());
-            }
+        {
+            return Some(sig.return_type.clone());
         }
         let pos = ExprPos::new(self.current_line, self.current_col);
         if let Ok(Some(sig)) = self.try_resolve_function_template_call(op_str, &args, &[], pos) {

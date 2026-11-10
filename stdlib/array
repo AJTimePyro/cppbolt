@@ -45,9 +45,9 @@ struct array {
 
   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX20 void swap(array& __a) _NOEXCEPT {
     for (size_type __i = 0; __i < _Size; ++__i) {
-      value_type __tmp = __elems_[__i];
-      __elems_[__i] = __a.__elems_[__i];
-      __a.__elems_[__i] = __tmp;
+      value_type __tmp = static_cast<value_type&&>(__elems_[__i]);
+      __elems_[__i] = static_cast<value_type&&>(__a.__elems_[__i]);
+      __a.__elems_[__i] = static_cast<value_type&&>(__tmp);
     }
   }
 

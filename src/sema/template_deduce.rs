@@ -96,7 +96,7 @@ pub fn deduce_template_arguments(
     }
 
     for (i, (p, arg_ty)) in func_decl.params.iter().zip(arg_types.iter()).enumerate() {
-        let is_lval = args.get(i).map_or(false, |e| e.is_lvalue()) || arg_ty.is_lvalue_reference();
+        let is_lval = args.get(i).is_some_and(|e| e.is_lvalue()) || arg_ty.is_lvalue_reference();
         let adjusted_arg_ty = if !p.ty.is_reference() {
             arg_ty.strip_reference().decay_array()
         } else {

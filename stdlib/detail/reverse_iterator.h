@@ -24,10 +24,10 @@ public:
         return *__tmp;
     }
 
-    _Iter operator->() const {
+    _Tp* operator->() const {
         _Iter __tmp = __current;
         --__tmp;
-        return __tmp;
+        return &(*__tmp);
     }
 
     reverse_iterator& operator++() {

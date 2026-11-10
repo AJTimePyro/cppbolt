@@ -255,6 +255,29 @@ impl Sema {
         ))
     }
 
+    pub fn is_subaggregate_element_init(&self, elem_ty: &Type, expr: &Expr) -> bool {
+        match expr {
+            Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } => {
+                self.is_subaggregate_element_elements(elem_ty, elements)
+            }
+            _ => false,
+        }
+    }
+
+    pub fn is_subaggregate_element_elements(&self, elem_ty: &Type, elements: &[Expr]) -> bool {
+        let is_elem_aggregate = match elem_ty.strip_const() {
+            Type::Array(..) => true,
+            Type::Struct(sname) => self.is_cxx17_aggregate(sname),
+            _ => false,
+        };
+        if !is_elem_aggregate {
+            return false;
+        }
+        !elements
+            .iter()
+            .any(|e| matches!(e, Expr::InitializerList { .. } | Expr::TypedInitList { .. }))
+    }
+
     fn resolve_array_list_init(
         &mut self,
         elem_ty: &Type,
@@ -263,35 +286,25 @@ impl Sema {
         context: InitContext,
         pos: ExprPos,
     ) -> Result<Type, CompileError> {
-        if array_len > 0 && init_elements.len() > array_len {
+        let mut elem_idx = 0;
+        for _ in 0..array_len {
+            if elem_idx >= init_elements.len() {
+                break;
+            }
+            self.resolve_aggregate_field_elided(
+                elem_ty,
+                init_elements,
+                &mut elem_idx,
+                context,
+                pos,
+            )?;
+        }
+        if elem_idx < init_elements.len() {
             return Err(CompileError::new(
                 "excess elements in array initializer list",
                 pos.line,
                 pos.col,
             ));
-        }
-        for elem in init_elements.iter_mut() {
-            if let Expr::InitializerList {
-                elements: sub_elements,
-                pos: sub_pos,
-            } = elem
-            {
-                self.resolve_list_init(elem_ty, sub_elements, context, *sub_pos)?;
-            } else {
-                let elem_actual_ty = self.analyze_expr(elem)?;
-                self.check_narrowing(elem, &elem_actual_ty, elem_ty, pos)?;
-                if !self.can_assign_expr(elem_ty, &elem_actual_ty, Some(elem)) {
-                    return Err(CompileError::new(
-                        format!(
-                            "cannot initialize array element of type '{}' with expression of type '{}'",
-                            elem_ty.to_c_type(),
-                            elem_actual_ty.to_c_type()
-                        ),
-                        pos.line,
-                        pos.col,
-                    ));
-                }
-            }
         }
         Ok(Type::Array(Box::new(elem_ty.clone()), array_len))
     }
@@ -387,6 +400,17 @@ impl Sema {
             pos: sub_pos,
         } = &mut init_elements[*elem_idx]
         {
+            if let Type::Array(elem_ty, len) = target_ty.strip_const()
+                && self.is_subaggregate_element_elements(elem_ty, sub_elements)
+            {
+                for _ in 0..*len {
+                    if *elem_idx >= init_elements.len() {
+                        break;
+                    }
+                    self.resolve_aggregate_field_elided(elem_ty, init_elements, elem_idx, context, pos)?;
+                }
+                return Ok(());
+            }
             self.resolve_list_init(target_ty, sub_elements, context, *sub_pos)?;
             *elem_idx += 1;
             return Ok(());

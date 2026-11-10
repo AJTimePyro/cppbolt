@@ -3,6 +3,14 @@ l_partial: 99 0 0
 g_full: 1 2 3
 g_partial: 42 0 0
 g_nested: 100 200 300 400 500
+g_derived: 10 20 30
+g_sub: 42 99
+g_pts: 1 2 3 4
+g_m: 1 2 3 4
 l_nested: 1 2 3 4 5
 l_nested_part: 7 8 0 0 0
 l_2d: 11 22 33 44 55 66
+l_derived: 15 25 35
+l_sub: 142 199
+l_pts: 10 20 30 40
+l_m: 5 6 7 8
