@@ -272,7 +272,6 @@ fn score_copy_init_param(param: &Type, arg_ty: &Type, arg_expr: Option<&Expr>) -
 }
 
 impl Sema {
-
     /// Returns true when the arguments describe a copy initialization.
     ///
     /// A single argument of the class itself is initialized with the copy
@@ -343,6 +342,20 @@ impl Sema {
         Ok(())
     }
 
+    fn resolve_member_template_target<'a>(
+        &self,
+        class_name: &'a str,
+    ) -> Option<(Vec<FunctionDecl>, &'a str)> {
+        let short = QualifiedName::new(class_name).class_short_name();
+        let plain = QualifiedName::new(class_name).plain();
+        let templates = self
+            .member_templates
+            .get(class_name)
+            .cloned()
+            .or_else(|| self.member_templates.get(plain).cloned())?;
+        Some((templates, short))
+    }
+
     pub(super) fn try_instantiate_member_template(
         &mut self,
         class_name: &str,
@@ -351,16 +364,10 @@ impl Sema {
         args: &[Expr],
         pos: ExprPos,
     ) -> Result<Option<FunctionSig>, CompileError> {
-        let short = QualifiedName::new(class_name).class_short_name();
-        let plain = QualifiedName::new(class_name).plain();
-        let templates = self
-            .member_templates
-            .get(class_name)
-            .cloned()
-            .or_else(|| self.member_templates.get(plain).cloned());
-        let Some(templates) = templates else {
+        let Some((templates, short)) = self.resolve_member_template_target(class_name) else {
             return Ok(None);
         };
+        let plain = QualifiedName::new(class_name).plain();
 
         for cand in templates {
             let matches_name = match method_name {
@@ -390,10 +397,10 @@ impl Sema {
                     params.insert(0, this_param(class_name, spec_func.is_const));
                 }
                 let mut mangled = self.mangle_name(&qual_name, &params);
-                match spec_func.ref_qualifier {
-                    RefQualifier::LValue => mangled.push_str("_R"),
-                    RefQualifier::RValue => mangled.push_str("_O"),
-                    RefQualifier::None => {}
+                if spec_func.ref_qualifier == RefQualifier::LValue {
+                    mangled.push_str("_R");
+                } else if spec_func.ref_qualifier == RefQualifier::RValue {
+                    mangled.push_str("_O");
                 }
                 self.pending_template_methods
                     .insert(mangled.clone(), (class_name.to_string(), spec_func.clone()));
@@ -413,7 +420,10 @@ impl Sema {
                 } else {
                     &sig.param_types[..]
                 };
-                if self.score_arguments(call_params, arg_types, Some(args)).is_err() {
+                if self
+                    .score_arguments(call_params, arg_types, Some(args))
+                    .is_err()
+                {
                     continue;
                 }
                 return Ok(Some(sig));

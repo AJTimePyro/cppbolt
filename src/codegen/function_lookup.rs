@@ -20,8 +20,7 @@ impl<'a> Codegen<'a> {
             let mut best_sig = None;
             let mut best_score = usize::MAX;
             for sig in sigs {
-                let Some(score) =
-                    self.score_overload_params(&sig.param_types, arg_types, args)
+                let Some(score) = self.score_overload_params(&sig.param_types, arg_types, args)
                 else {
                     continue;
                 };

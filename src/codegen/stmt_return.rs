@@ -119,9 +119,7 @@ impl<'a> Codegen<'a> {
             let raw_ty = self.get_expr_type_raw(expr, ctx);
             let is_const = expr_ty.strip_reference().is_const();
             let is_local_var = if let Expr::Identifier(name) = expr {
-                ctx.var_offsets.contains_key(name)
-                    && !raw_ty.is_reference()
-                    && !is_const
+                ctx.var_offsets.contains_key(name) && !raw_ty.is_reference() && !is_const
             } else {
                 false
             };

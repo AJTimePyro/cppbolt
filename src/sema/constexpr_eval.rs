@@ -43,9 +43,22 @@ pub fn eval_integral_constexpr_with_env(
                 ))
             }
         }
-        Expr::Unary { op, expr: inner, pos } => eval_unary_op(*op, inner, *pos, env),
-        Expr::Binary { op, left, right, pos } => eval_binary_op(*op, left, right, *pos, env),
-        Expr::Ternary { cond, then_expr, else_expr } => {
+        Expr::Unary {
+            op,
+            expr: inner,
+            pos,
+        } => eval_unary_op(*op, inner, *pos, env),
+        Expr::Binary {
+            op,
+            left,
+            right,
+            pos,
+        } => eval_binary_op(*op, left, right, *pos, env),
+        Expr::Ternary {
+            cond,
+            then_expr,
+            else_expr,
+        } => {
             let c = eval_integral_constexpr_with_env(cond, env)?;
             if c != 0 {
                 eval_integral_constexpr_with_env(then_expr, env)
@@ -132,12 +145,7 @@ fn check_shift_count(r: i128, pos: ExprPos) -> Result<u32, CompileError> {
     Ok(r as u32)
 }
 
-fn eval_binary_values(
-    op: BinaryOp,
-    l: i128,
-    r: i128,
-    pos: ExprPos,
-) -> Result<i128, CompileError> {
+fn eval_binary_values(op: BinaryOp, l: i128, r: i128, pos: ExprPos) -> Result<i128, CompileError> {
     match op {
         BinaryOp::Add => Ok(l.wrapping_add(r)),
         BinaryOp::Sub => Ok(l.wrapping_sub(r)),

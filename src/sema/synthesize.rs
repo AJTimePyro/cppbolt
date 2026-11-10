@@ -254,6 +254,4 @@ pub(crate) fn type_has_move(ty: &Type, structs_with_move: &HashSet<String>) -> b
     }
 }
 
-pub(crate) use super::synthesize_ops::{
-    synthesize_copy_operations, synthesize_move_operations,
-};
+pub(crate) use super::synthesize_ops::{synthesize_copy_operations, synthesize_move_operations};

@@ -91,8 +91,7 @@ impl Sema {
             }
         } else {
             let stripped = obj_ty.strip_const();
-            let target_ty = if let Type::Reference(inner)
-            | Type::RvalueReference(inner) = stripped
+            let target_ty = if let Type::Reference(inner) | Type::RvalueReference(inner) = stripped
             {
                 inner.strip_const()
             } else {

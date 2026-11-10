@@ -56,20 +56,19 @@ impl Parser {
                     p_col,
                 ));
             }
-            let param_type = if self.peek() == &TokenKind::KwTypename
-                || self.peek() == &TokenKind::KwClass
-            {
-                self.advance();
-                None
-            } else if self.is_type_start() {
-                Some(self.parse_type()?)
-            } else {
-                return Err(CompileError::new(
-                    "expected template parameter declaration",
-                    p_line,
-                    p_col,
-                ));
-            };
+            let param_type =
+                if self.peek() == &TokenKind::KwTypename || self.peek() == &TokenKind::KwClass {
+                    self.advance();
+                    None
+                } else if self.is_type_start() {
+                    Some(self.parse_type()?)
+                } else {
+                    return Err(CompileError::new(
+                        "expected template parameter declaration",
+                        p_line,
+                        p_col,
+                    ));
+                };
 
             if self.peek() == &TokenKind::Dot {
                 return Err(CompileError::new(

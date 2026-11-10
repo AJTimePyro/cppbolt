@@ -73,7 +73,10 @@ impl Sema {
             if value.is_rvalue_reference() {
                 return Some(false);
             }
-            if let Some(e) = expr && !value.is_reference() && !e.is_lvalue() {
+            if let Some(e) = expr
+                && !value.is_reference()
+                && !e.is_lvalue()
+            {
                 return Some(false);
             }
             if value.strip_reference().is_const() {

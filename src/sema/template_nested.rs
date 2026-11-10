@@ -39,13 +39,7 @@ impl Sema {
             }
         }
 
-        self.populate_instantiation_member_aliases(
-            template_class,
-            inst_name,
-            mapping,
-            line,
-            col,
-        );
+        self.populate_instantiation_member_aliases(template_class, inst_name, mapping, line, col);
     }
 
     pub(super) fn prepare_instantiation_mapping(

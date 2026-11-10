@@ -32,8 +32,7 @@ impl<'a> Codegen<'a> {
                 continue;
             };
             saw_declared_constructor = true;
-            let Some(sig) =
-                self.best_constructor_overload(class_name, sigs, arg_types, args)
+            let Some(sig) = self.best_constructor_overload(class_name, sigs, arg_types, args)
             else {
                 continue;
             };
@@ -119,10 +118,7 @@ impl<'a> Codegen<'a> {
                 if let Some(&idx) = self.func_indices.get(&sig.mangled_name) {
                     return Some(idx);
                 }
-                if let Some(&idx) = self
-                    .func_indices
-                    .get(&format!("{class_name}_{short_name}"))
-                {
+                if let Some(&idx) = self.func_indices.get(&format!("{class_name}_{short_name}")) {
                     return Some(idx);
                 }
             }

@@ -75,22 +75,14 @@ impl<'a> Codegen<'a> {
             let Some(sigs) = self.sema.functions.get(*qual_name) else {
                 continue;
             };
-            let Some(sig) =
-                self.best_method_overload(sigs, arg_types, args, receiver)
-            else {
+            let Some(sig) = self.best_method_overload(sigs, arg_types, args, receiver) else {
                 continue;
             };
             if let Some(idx) = self.resolve_method_index(class_name, method_name, &sig) {
                 return Some((idx, sig));
             }
         }
-        self.find_method_in_bases(
-            class_name,
-            method_name,
-            arg_types,
-            args,
-            receiver,
-        )
+        self.find_method_in_bases(class_name, method_name, arg_types, args, receiver)
     }
 
     /// Resolves a destructor call, which has no overloads.
@@ -233,13 +225,8 @@ impl<'a> Codegen<'a> {
             });
         let layout = layout?;
         if let Some(base) = layout.base_classes.first()
-            && let Some(result) = self.find_method_filtered(
-                base,
-                method_name,
-                arg_types,
-                args,
-                receiver,
-            )
+            && let Some(result) =
+                self.find_method_filtered(base, method_name, arg_types, args, receiver)
         {
             return Some(result);
         }

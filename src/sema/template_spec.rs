@@ -128,12 +128,15 @@ impl Sema {
             .collect();
         for (fld, var) in matching {
             let qual = format!("{target}::{fld}");
-            self.global_vars.insert(qual.clone(), VarSymbol {
-                name: var.name.clone(),
-                ty: var.ty.clone(),
-                is_global: true,
-                stack_offset: 0,
-            });
+            self.global_vars.insert(
+                qual.clone(),
+                VarSymbol {
+                    name: var.name.clone(),
+                    ty: var.ty.clone(),
+                    is_global: true,
+                    stack_offset: 0,
+                },
+            );
         }
     }
 }

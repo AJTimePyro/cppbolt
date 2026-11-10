@@ -165,7 +165,11 @@ pub fn substitute_expr(
         }
         Expr::Identifier(name) => {
             if let Some(Type::NonType(val)) = mapping.get(name) {
-                let ty = if (*val as i32 as i128) == *val { Type::Int } else { Type::LongLong };
+                let ty = if (*val as i32 as i128) == *val {
+                    Type::Int
+                } else {
+                    Type::LongLong
+                };
                 *expr = Expr::IntLiteral(*val as i64, ty);
             } else if name.contains('<') {
                 *name = substitute_template_name(name, mapping);

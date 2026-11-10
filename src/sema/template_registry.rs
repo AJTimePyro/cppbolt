@@ -30,9 +30,19 @@ impl Sema {
     }
 
     pub fn register_function_template(&mut self, decl: FunctionDecl, params: Vec<TemplateParam>) {
-        let short = decl.name.rsplit("::").next().unwrap_or(&decl.name).to_string();
+        let short = decl
+            .name
+            .rsplit("::")
+            .next()
+            .unwrap_or(&decl.name)
+            .to_string();
         let q = QualifiedName::new(&decl.name);
-        let keys = [decl.name.clone(), short, q.plain().to_string(), q.std_name().into_owned()];
+        let keys = [
+            decl.name.clone(),
+            short,
+            q.plain().to_string(),
+            q.std_name().into_owned(),
+        ];
         let item = (decl, params);
         for key in keys {
             let list = self.function_templates.entry(key).or_default();
@@ -49,49 +59,6 @@ impl Sema {
             } else {
                 list.push(item.clone());
             }
-        }
-    }
-
-    pub fn attach_out_of_class_template_method(
-        &mut self,
-        func: FunctionDecl,
-        params: &[TemplateParam],
-    ) {
-        let Some((class_part, method_name)) = func.name.rsplit_once("::") else {
-            self.register_function_template(func, params.to_vec());
-            return;
-        };
-        let class_name = class_part.split('<').next().unwrap_or(class_part);
-        let plain_class = QualifiedName::new(class_name).plain();
-        let short_method = method_name.to_string();
-
-        let mut matched = false;
-        for (key, (template_class, _)) in self.class_templates.iter_mut() {
-            if QualifiedName::new(key).plain() == plain_class {
-                matched = true;
-                if let Some(existing) = template_class.methods.iter_mut().find(|m| {
-                    m.name == short_method
-                        && m.params.len() == func.params.len()
-                        && m.is_const == func.is_const
-                        && m.body.is_none()
-                        && m.params
-                            .iter()
-                            .zip(&func.params)
-                            .all(|(p1, p2)| p1.ty == p2.ty)
-                }) {
-                    existing.body = func.body.clone();
-                    if !func.ctor_initializers.is_empty() {
-                        existing.ctor_initializers = func.ctor_initializers.clone();
-                    }
-                } else {
-                    let mut m = func.clone();
-                    m.name = short_method.clone();
-                    template_class.methods.push(m);
-                }
-            }
-        }
-        if !matched {
-            self.register_function_template(func, params.to_vec());
         }
     }
 
@@ -264,12 +231,8 @@ impl Sema {
             template_class,
         )?;
 
-        let result = self.execute_class_instantiation(
-            &target_class,
-            mapping,
-            &inst_name,
-            (line, col),
-        );
+        let result =
+            self.execute_class_instantiation(&target_class, mapping, &inst_name, (line, col));
 
         self.instantiation_stack.pop();
         self.instantiation_depth -= 1;
@@ -316,8 +279,14 @@ impl Sema {
         self.synthesize_instantiation_lifecycle(inst_name, base_classes, fields, methods);
 
         self.compute_struct_layout(RecordLayout {
-            name: inst_name, is_class: *is_class, base_classes,
-            fields, methods, private_members, line, col,
+            name: inst_name,
+            is_class: *is_class,
+            base_classes,
+            fields,
+            methods,
+            private_members,
+            line,
+            col,
         })?;
 
         self.register_instantiated_static_fields(inst_name, static_fields, base_classes, line, col);
@@ -488,9 +457,16 @@ impl Sema {
             }
             if !found {
                 self.synthesized_decls.push(Decl::StructDecl {
-                    name: class_name, is_class: false, base_classes: vec![],
-                    fields: vec![], methods: vec![method_decl], static_fields: vec![],
-                    private_members: vec![], nested_structs: vec![], line: 0, col: 0,
+                    name: class_name,
+                    is_class: false,
+                    base_classes: vec![],
+                    fields: vec![],
+                    methods: vec![method_decl],
+                    static_fields: vec![],
+                    private_members: vec![],
+                    nested_structs: vec![],
+                    line: 0,
+                    col: 0,
                 });
             }
         }

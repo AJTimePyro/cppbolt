@@ -4,8 +4,8 @@
 
 mod analyze;
 mod assign;
-mod constructor;
 pub mod constexpr_eval;
+mod constructor;
 mod expr;
 mod expr_call;
 mod expr_call_member;
@@ -24,8 +24,8 @@ mod stmt_return;
 mod stmt_structured_binding;
 mod synthesize;
 mod synthesize_ops;
-pub mod template_deduce;
 mod template_alias;
+pub mod template_deduce;
 mod template_func;
 mod template_match;
 mod template_nested;
@@ -105,9 +105,9 @@ pub(crate) struct ConversionFailure {
 pub(crate) fn receiver_is_const_type(ty: &Type) -> bool {
     match ty {
         Type::Const(_) => true,
-        Type::Reference(inner)
-        | Type::RvalueReference(inner)
-        | Type::Pointer(inner) => receiver_is_const_type(inner),
+        Type::Reference(inner) | Type::RvalueReference(inner) | Type::Pointer(inner) => {
+            receiver_is_const_type(inner)
+        }
         _ => false,
     }
 }

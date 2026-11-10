@@ -137,9 +137,9 @@ impl Type {
         let mut curr = self;
         loop {
             match curr {
-                Type::Const(inner)
-                | Type::Reference(inner)
-                | Type::RvalueReference(inner) => curr = inner,
+                Type::Const(inner) | Type::Reference(inner) | Type::RvalueReference(inner) => {
+                    curr = inner
+                }
                 _ => return curr,
             }
         }

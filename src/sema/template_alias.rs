@@ -9,20 +9,17 @@ use crate::name::QualifiedName;
 use std::collections::HashMap;
 
 impl Sema {
-    pub fn register_alias_template(
-        &mut self,
-        name: String,
-        ty: Type,
-        params: Vec<TemplateParam>,
-    ) {
+    pub fn register_alias_template(&mut self, name: String, ty: Type, params: Vec<TemplateParam>) {
         if let Some(short) = name.split("::").last() {
             self.alias_templates
                 .insert(short.to_string(), (params.clone(), ty.clone()));
         }
         let qualified = QualifiedName::new(&name);
         if qualified.is_global() {
-            self.alias_templates
-                .insert(qualified.std_name().into_owned(), (params.clone(), ty.clone()));
+            self.alias_templates.insert(
+                qualified.std_name().into_owned(),
+                (params.clone(), ty.clone()),
+            );
         } else if qualified.in_std() {
             self.alias_templates
                 .insert(qualified.plain().to_string(), (params.clone(), ty.clone()));

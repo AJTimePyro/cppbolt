@@ -1,8 +1,6 @@
 //! Partial specialization pattern matching and ranking.
 
-use super::template_deduce::{
-    parse_types_list_with_params, split_template_call_name,
-};
+use super::template_deduce::{parse_types_list_with_params, split_template_call_name};
 use super::*;
 use crate::ast::template::{TemplateClass, TemplateParam};
 use crate::ast::types::Type;
@@ -169,7 +167,10 @@ impl Sema {
                 .collect::<Vec<_>>()
                 .join(", ");
             return Err(CompileError::new(
-                format!("ambiguous partial specializations for '{}<{}>'", name, canon),
+                format!(
+                    "ambiguous partial specializations for '{}<{}>'",
+                    name, canon
+                ),
                 pos.0,
                 pos.1,
             ));
