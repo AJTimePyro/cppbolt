@@ -27,7 +27,6 @@ struct greater {
     }
 };
 
-// Backwards-compatible internal names for the public comparators.
 struct __equal_to {
     template <class _T1, class _T2>
     constexpr bool operator()(const _T1& __x, const _T2& __y) const {
