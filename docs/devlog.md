@@ -583,19 +583,19 @@ Validated and resolved four issues identified during C++17 pre-release testing: 
 
 ## 2026-11-10: C++17 <algorithm> Standard Library Integration
 
-Integrated the complete C++17 `<algorithm>` header family into cppbolt using LLVM libc++ 23.1.5 as the upstream implementation reference, without introducing ad-hoc compiler features or variable templates.
+Integrated C++17 `<algorithm>` into cppbolt based on LLVM libc++ 23.1.5, avoiding ad-hoc compiler extensions.
 
 ### Summary of Work
 
-1. Designed modular algorithm headers under `stdlib/detail/algorithms/` and `stdlib/detail/iterator.h`, separating infrastructure from specific algorithm domains. Registered internal headers in `src/preprocessor/include.rs` and included them from `stdlib/algorithm`.
-2. Implemented standard iterator primitives in `stdlib/detail/iterator.h` and comparator functors in `stdlib/detail/algorithms/comp.h`, providing `iterator_traits`, `distance`, `advance`, `next`, `prev`, `iter_swap`, `__less<>`, `__equal_to`, and `__greater<>`.
-3. Integrated min/max and heap algorithms in `stdlib/detail/algorithms/min_max.h` and `stdlib/detail/algorithms/heap.h`: `min`, `max`, `minmax`, `clamp`, `min_element`, `max_element`, `minmax_element`, `make_heap`, `push_heap`, `pop_heap`, `sort_heap`, `is_heap`, and `is_heap_until`.
+1. Added modular headers in `stdlib/detail/algorithms/` and `stdlib/detail/iterator.h`, separating iterator operations from algorithm families. Registered headers in `src/preprocessor/include.rs` and included them from `stdlib/algorithm`.
+2. Implemented iterator operations in `stdlib/detail/iterator.h` and comparators in `stdlib/detail/algorithms/comp.h`: `iterator_traits`, `distance`, `advance`, `next`, `prev`, `iter_swap`, `__less<>`, `__equal_to`, and `__greater<>`.
+3. Integrated min/max and heap functions in `stdlib/detail/algorithms/min_max.h` and `stdlib/detail/algorithms/heap.h`: `min`, `max`, `minmax`, `clamp`, `min_element`, `max_element`, `minmax_element`, `make_heap`, `push_heap`, `pop_heap`, `sort_heap`, `is_heap`, and `is_heap_until`.
 4. Integrated non-modifying sequence algorithms in `stdlib/detail/algorithms/non_modifying.h`: `all_of`, `any_of`, `none_of`, `for_each`, `for_each_n`, `count`, `count_if`, `mismatch`, `find`, `find_if`, `find_if_not`, `adjacent_find`, `search`, `find_end`, `find_first_of`, `search_n`, `equal`, and `lexicographical_compare`.
 5. Integrated modifying sequence algorithms in `stdlib/detail/algorithms/modifying.h`: `copy`, `copy_n`, `copy_if`, `copy_backward`, `move`, `move_backward`, `fill`, `fill_n`, `transform`, `generate`, `generate_n`, `remove`, `remove_if`, `remove_copy`, `remove_copy_if`, `replace`, `replace_if`, `replace_copy`, `replace_copy_if`, `swap_ranges`, `reverse`, `reverse_copy`, `rotate`, `rotate_copy`, `unique`, and `unique_copy`.
 6. Integrated binary search, partitioning, and permutation algorithms in `stdlib/detail/algorithms/binary_search.h`, `stdlib/detail/algorithms/partition.h`, and `stdlib/detail/algorithms/permutation.h`: `lower_bound`, `upper_bound`, `equal_range`, `binary_search`, `is_sorted`, `is_sorted_until`, `is_partitioned`, `partition`, `partition_copy`, `partition_point`, `stable_partition`, `is_permutation`, `next_permutation`, and `prev_permutation`.
 7. Integrated merge, set operations, selection, and random sampling in `stdlib/detail/algorithms/merge.h`, `stdlib/detail/algorithms/set_ops.h`, `stdlib/detail/algorithms/selection.h`, and `stdlib/detail/algorithms/random.h`: `merge`, `inplace_merge`, `includes`, `set_union`, `set_intersection`, `set_difference`, `set_symmetric_difference`, `nth_element`, `partial_sort`, `partial_sort_copy`, `stable_sort`, `shuffle`, and `sample`.
-8. Preserved cppbolt's verified sorting loop (`introsort_loop`, `heap_sort`, `insertion_sort`) in `stdlib/algorithm`.
-9. Added comprehensive differential tests across all algorithm families (`algorithm_infra.cpp`, `algorithm_min_max_heap.cpp`, `algorithm_non_modifying.cpp`, `algorithm_modifying.cpp`, `algorithm_binary_partition_perm.cpp`, `algorithm_merge_set_select.cpp`, `algorithm_comprehensive.cpp`), validating custom functors, lambda predicates, stability invariants, URBGs, and empty/single-element ranges.
+8. Kept cppbolt's sorting implementation (`introsort_loop`, `heap_sort`, `insertion_sort`) in `stdlib/algorithm`.
+9. Added tests across all algorithm families (`algorithm_infra.cpp`, `algorithm_min_max_heap.cpp`, `algorithm_non_modifying.cpp`, `algorithm_modifying.cpp`, `algorithm_binary_partition_perm.cpp`, `algorithm_merge_set_select.cpp`, `algorithm_comprehensive.cpp`), checking custom functors, lambda predicates, stability, URBGs, and boundary cases.
 
 ### Verification Results
 
@@ -608,19 +608,19 @@ Integrated the complete C++17 `<algorithm>` header family into cppbolt using LLV
 
 ## 2026-11-11: C++17 Algorithm Stabilization and Iterator Refinement
 
-Addressed code review findings across algorithm implementations, iterator primitives, and embedded header lookup.
+Addressed review findings in algorithms, iterator primitives, and header lookup.
 
 ### Summary of Work
 
-1. Fixed `std::search_n` in `stdlib/detail/algorithms/non_modifying.h` to exit immediately when `count == 1`, avoiding skipping the first match.
-2. Aligned `std::minmax_element` in `stdlib/detail/algorithms/min_max.h` with C++17 [alg.min.max], returning the first minimum and last maximum position on equivalent values.
-3. Converted `std::partition` in `stdlib/detail/algorithms/partition.h` to single-pass forward partitioning, guaranteeing exactly `last - first` predicate evaluations.
-4. Corrected `std::reverse` in `stdlib/detail/algorithms/modifying.h` to use `!=` instead of `<`, enabling execution on non-random-access bidirectional iterators.
-5. Added standard iterator category tags (`input_iterator_tag`, `forward_iterator_tag`, `bidirectional_iterator_tag`, `random_access_iterator_tag`) and tag dispatch in `stdlib/detail/iterator.h`. Implemented $O(1)$ overloads for pointers (`_Tp*` and `const _Tp*`), fallback $O(N)$ loops for class iterators, and negative step handling in `std::prev`.
-6. Added public `std::less`, `std::greater`, and `std::equal_to` comparators in `stdlib/detail/algorithms/comp.h` and exposed them via the new `<functional>` header.
-7. Fixed `std::unique_copy` in `stdlib/detail/algorithms/modifying.h` to retain a value copy for single-pass input iterators and write sequentially via post-increment.
-8. Refactored `embedded_header` in `src/preprocessor/include.rs` to a static table lookup, bringing the function down from 80 lines to 12 lines.
-9. Extended `tests/mini_stl/algorithm_comprehensive.cpp` to cover `search_n(..., 1, ...)`, duplicate elements in `minmax_element`, bidirectional iterators, negative `prev`, `const` pointers, and public comparator functors.
+1. Fixed `std::search_n` in `stdlib/detail/algorithms/non_modifying.h` to return immediately when `count == 1`.
+2. Aligned `std::minmax_element` in `stdlib/detail/algorithms/min_max.h` with C++17 [alg.min.max] to return the first minimum and last maximum on equal elements.
+3. Rewrote `std::partition` in `stdlib/detail/algorithms/partition.h` to use single-pass forward partitioning with at most `last - first` predicate applications.
+4. Changed `std::reverse` in `stdlib/detail/algorithms/modifying.h` to use `!=` instead of `<`, supporting non-random-access bidirectional iterators.
+5. Added standard iterator category tags (`input_iterator_tag`, `forward_iterator_tag`, `bidirectional_iterator_tag`, `random_access_iterator_tag`) in `stdlib/detail/iterator.h`. Implemented pointer overloads for `_Tp*` and `const _Tp*`, fallback loops for class iterators, and negative step handling in `std::prev`.
+6. Added `std::less`, `std::greater`, and `std::equal_to` comparators in `stdlib/detail/algorithms/comp.h` and exposed them through `<functional>`.
+7. Updated `std::unique_copy` in `stdlib/detail/algorithms/modifying.h` to store a value copy for single-pass input iterators and advance the output iterator with post-increment.
+8. Refactored `embedded_header` in `src/preprocessor/include.rs` to a static table lookup, reducing function length from 80 lines to 12 lines.
+9. Added tests in `tests/mini_stl/algorithm_comprehensive.cpp` for `search_n(..., 1, ...)`, duplicate elements in `minmax_element`, bidirectional iterators, negative `prev`, `const` pointers, and comparator objects.
 
 ### Verification Results
 
