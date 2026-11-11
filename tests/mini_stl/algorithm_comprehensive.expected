@@ -19,3 +19,22 @@ lex_cmp shorter: 1
 lex_cmp longer: 0
 lex_cmp greater: 1
 unique: 1 2 3 2 4
+search_n count 1: 1
+minmax positions: 1 5
+less: 1
+greater: 1
+equal_to: 1
+unique_copy count: 4
+unique_copy: 1 2 3 1
+bi distance: 5
+bi advance: 3
+bi next: 2
+bi prev: 5
+bi reversed: 5 4 3 2 1
+partition calls: 6
+partition mid: 1
+partition: 1 0 0 0 0 0
+const ptr dist: 5
+const ptr advance: 40
+const ptr prev: 50
+bi prev negative: 3

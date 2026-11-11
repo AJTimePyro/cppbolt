@@ -81,7 +81,7 @@ minmax_element(_ForwardIterator __first, _ForwardIterator __last, _Compare __com
             if (__comp(*__first, *__min_it)) {
                 __min_it = __first;
             }
-            if (__comp(*__max_it, *__first)) {
+            if (!__comp(*__first, *__max_it)) {
                 __max_it = __first;
             }
         }

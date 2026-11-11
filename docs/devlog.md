@@ -603,3 +603,27 @@ Integrated the complete C++17 `<algorithm>` header family into cppbolt using LLV
 - Native oracle gate: all 50 mini_stl tests match native Clang and GCC byte-for-byte.
 - Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
 - Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
+## 2026-11-11: C++17 Algorithm Stabilization and Iterator Refinement
+
+Addressed code review findings across algorithm implementations, iterator primitives, and embedded header lookup.
+
+### Summary of Work
+
+1. Fixed `std::search_n` in `stdlib/detail/algorithms/non_modifying.h` to exit immediately when `count == 1`, avoiding skipping the first match.
+2. Aligned `std::minmax_element` in `stdlib/detail/algorithms/min_max.h` with C++17 [alg.min.max], returning the first minimum and last maximum position on equivalent values.
+3. Converted `std::partition` in `stdlib/detail/algorithms/partition.h` to single-pass forward partitioning, guaranteeing exactly `last - first` predicate evaluations.
+4. Corrected `std::reverse` in `stdlib/detail/algorithms/modifying.h` to use `!=` instead of `<`, enabling execution on non-random-access bidirectional iterators.
+5. Added standard iterator category tags (`input_iterator_tag`, `forward_iterator_tag`, `bidirectional_iterator_tag`, `random_access_iterator_tag`) and tag dispatch in `stdlib/detail/iterator.h`. Implemented $O(1)$ overloads for pointers (`_Tp*` and `const _Tp*`), fallback $O(N)$ loops for class iterators, and negative step handling in `std::prev`.
+6. Added public `std::less`, `std::greater`, and `std::equal_to` comparators in `stdlib/detail/algorithms/comp.h` and exposed them via the new `<functional>` header.
+7. Fixed `std::unique_copy` in `stdlib/detail/algorithms/modifying.h` to retain a value copy for single-pass input iterators and write sequentially via post-increment.
+8. Refactored `embedded_header` in `src/preprocessor/include.rs` to a static table lookup, bringing the function down from 80 lines to 12 lines.
+9. Extended `tests/mini_stl/algorithm_comprehensive.cpp` to cover `search_n(..., 1, ...)`, duplicate elements in `minmax_element`, bidirectional iterators, negative `prev`, `const` pointers, and public comparator functors.
+
+### Verification Results
+
+- Native oracle gate: all 50 mini_stl tests match native Clang and GCC byte-for-byte.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings with `-D warnings` across all targets.

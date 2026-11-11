@@ -3,6 +3,31 @@
 
 namespace std {
 
+template <class _Tp = void>
+struct equal_to {
+    template <class _T1, class _T2>
+    constexpr bool operator()(const _T1& __x, const _T2& __y) const {
+        return __x == __y;
+    }
+};
+
+template <class _Tp = void>
+struct less {
+    template <class _T1, class _T2>
+    constexpr bool operator()(const _T1& __lhs, const _T2& __rhs) const {
+        return __lhs < __rhs;
+    }
+};
+
+template <class _Tp = void>
+struct greater {
+    template <class _T1, class _T2>
+    constexpr bool operator()(const _T1& __lhs, const _T2& __rhs) const {
+        return __lhs > __rhs;
+    }
+};
+
+// Backwards-compatible internal names for the public comparators.
 struct __equal_to {
     template <class _T1, class _T2>
     constexpr bool operator()(const _T1& __x, const _T2& __y) const {
@@ -11,10 +36,7 @@ struct __equal_to {
 };
 
 template <class _T1 = void, class _T2 = _T1>
-struct __less {};
-
-template <>
-struct __less<void, void> {
+struct __less {
     template <class _Tp, class _Up>
     constexpr bool operator()(const _Tp& __lhs, const _Up& __rhs) const {
         return __lhs < __rhs;
@@ -22,10 +44,7 @@ struct __less<void, void> {
 };
 
 template <class _T1 = void, class _T2 = _T1>
-struct __greater {};
-
-template <>
-struct __greater<void, void> {
+struct __greater {
     template <class _Tp, class _Up>
     constexpr bool operator()(const _Tp& __lhs, const _Up& __rhs) const {
         return __lhs > __rhs;

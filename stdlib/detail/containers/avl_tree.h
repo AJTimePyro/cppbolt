@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <new>
+#include <detail/iterator.h>
 
 namespace std {
     namespace detail {
@@ -20,6 +21,12 @@ namespace std {
             };
 
             struct iterator {
+                typedef forward_iterator_tag iterator_category;
+                typedef ptrdiff_t difference_type;
+                typedef T value_type;
+                typedef T* pointer;
+                typedef T& reference;
+
                 Node* current;
                 iterator(Node* n = nullptr) : current(n) {}
 

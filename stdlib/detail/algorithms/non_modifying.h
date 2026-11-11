@@ -214,6 +214,7 @@ inline _ForwardIterator search_n(_ForwardIterator __first, _ForwardIterator __la
         if (!__pred(*__first, __value)) continue;
         _ForwardIterator __candidate = __first;
         _Size __n = 1;
+        if (__n == __count) return __candidate;
         while (++__first != __last) {
             if (!__pred(*__first, __value)) break;
             ++__n;

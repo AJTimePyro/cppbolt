@@ -1,6 +1,9 @@
 #ifndef _MINI_STL_DETAIL_REVERSE_ITERATOR_H_
 #define _MINI_STL_DETAIL_REVERSE_ITERATOR_H_
 
+#include <cstddef>
+#include <detail/iterator.h>
+
 namespace std {
 
 template <class _Iter, class _Tp = int>
@@ -9,6 +12,8 @@ protected:
     _Iter __current;
 public:
     using iterator_type = _Iter;
+    using iterator_category = bidirectional_iterator_tag;
+    using difference_type = ptrdiff_t;
     using value_type = _Tp;
     using reference = _Tp&;
     using pointer = _Tp*;

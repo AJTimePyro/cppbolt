@@ -230,9 +230,10 @@ template <class _BidirectionalIterator>
 inline void reverse(_BidirectionalIterator __first, _BidirectionalIterator __last) {
     if (__first == __last) return;
     --__last;
-    while (__first < __last) {
+    while (__first != __last) {
         std::iter_swap(__first, __last);
         ++__first;
+        if (__first == __last) break;
         --__last;
     }
 }
@@ -289,15 +290,19 @@ template <class _InputIterator, class _OutputIterator, class _BinaryPredicate>
 inline _OutputIterator unique_copy(_InputIterator __first, _InputIterator __last,
                                    _OutputIterator __result, _BinaryPredicate __pred) {
     if (__first == __last) return __result;
-    *__result = *__first;
-    _InputIterator __prev = __first;
-    while (++__first != __last) {
-        if (!__pred(*__prev, *__first)) {
-            *++__result = *__first;
-            __prev = __first;
+    auto __val = *__first;
+    *__result = __val;
+    ++__result;
+    ++__first;
+    while (__first != __last) {
+        if (!__pred(__val, *__first)) {
+            __val = *__first;
+            *__result = __val;
+            ++__result;
         }
+        ++__first;
     }
-    return ++__result;
+    return __result;
 }
 
 template <class _InputIterator, class _OutputIterator>

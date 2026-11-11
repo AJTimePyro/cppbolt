@@ -1,5 +1,7 @@
 #include <cstdio>
 #include <algorithm>
+#include <functional>
+#include <iterator>
 #include <vector>
 
 struct Item {
@@ -16,6 +18,72 @@ struct ItemKeyLess {
 struct Greater {
     bool operator()(int a, int b) const {
         return a > b;
+    }
+};
+
+struct OutputCursor {
+    int* ptr;
+    OutputCursor(int* p = nullptr) : ptr(p) {}
+
+    int& operator*() { return *ptr; }
+
+    OutputCursor& operator++() {
+        ++ptr;
+        return *this;
+    }
+
+    OutputCursor operator++(int) {
+        OutputCursor tmp = *this;
+        ++ptr;
+        return tmp;
+    }
+};
+
+struct BiDirectional {
+    typedef std::bidirectional_iterator_tag iterator_category;
+    typedef ptrdiff_t difference_type;
+    typedef int value_type;
+    typedef int* pointer;
+    typedef int& reference;
+
+    int* ptr;
+    BiDirectional(int* p = nullptr) : ptr(p) {}
+
+    int& operator*() const { return *ptr; }
+
+    BiDirectional& operator++() {
+        ++ptr;
+        return *this;
+    }
+
+    BiDirectional operator++(int) {
+        BiDirectional tmp = *this;
+        ++ptr;
+        return tmp;
+    }
+
+    BiDirectional& operator--() {
+        --ptr;
+        return *this;
+    }
+
+    BiDirectional operator--(int) {
+        BiDirectional tmp = *this;
+        --ptr;
+        return tmp;
+    }
+
+    bool operator==(const BiDirectional& other) const { return ptr == other.ptr; }
+    bool operator!=(const BiDirectional& other) const { return ptr != other.ptr; }
+};
+
+struct CountingPredicate {
+    int* calls;
+    CountingPredicate(int* c) : calls(c) {}
+
+    bool operator()(int x) const {
+        ++*calls;
+        return x != 0;
     }
 };
 
@@ -89,6 +157,73 @@ int main() {
         std::printf(" %d", *it);
     }
     std::printf("\n");
+
+    // 8. search_n with a single required occurrence
+    int sn_data[] = {1, 2, 3, 2};
+    int* sn_single = std::search_n(sn_data, sn_data + 4, 1, 2);
+    std::printf("search_n count 1: %d\n", (int)(sn_single - sn_data));
+
+    // 9. minmax_element: first minimum, last maximum
+    int mm_data[] = {3, 1, 2, 1, 3, 3};
+    auto mm_result = std::minmax_element(mm_data, mm_data + 6);
+    std::printf("minmax positions: %d %d\n",
+                (int)(mm_result.first - mm_data), (int)(mm_result.second - mm_data));
+
+    // 10. Public comparator functors
+    std::printf("less: %d\n", (int)std::less<int>()(1, 2));
+    std::printf("greater: %d\n", (int)std::greater<>()(3, 2));
+    std::printf("equal_to: %d\n", (int)std::equal_to<>()(4, 4));
+
+    // 11. unique_copy only needs output post-increment
+    int uc_data[] = {1, 1, 2, 2, 3, 1};
+    int uc_out[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    OutputCursor uc_end = std::unique_copy(uc_data, uc_data + 6, OutputCursor(uc_out));
+    std::printf("unique_copy count: %d\n", (int)(uc_end.ptr - uc_out));
+    std::printf("unique_copy:");
+    for (int* it = uc_out; it != uc_end.ptr; ++it) {
+        std::printf(" %d", *it);
+    }
+    std::printf("\n");
+
+    // 12. Bidirectional iterator support in iterator primitives and reverse
+    int bi_data[] = {1, 2, 3, 4, 5};
+    BiDirectional bi_first(bi_data);
+    BiDirectional bi_last(bi_data + 5);
+    std::printf("bi distance: %ld\n", (long)std::distance(bi_first, bi_last));
+    BiDirectional bi_pos = bi_first;
+    std::advance(bi_pos, 2);
+    std::printf("bi advance: %d\n", *bi_pos);
+    std::printf("bi next: %d\n", *std::next(bi_first));
+    std::printf("bi prev: %d\n", *std::prev(bi_last));
+    std::reverse(bi_first, bi_last);
+    std::printf("bi reversed:");
+    for (int* it = bi_data; it != bi_data + 5; ++it) {
+        std::printf(" %d", *it);
+    }
+    std::printf("\n");
+
+    // 13. partition evaluates the predicate once per element
+    int part_data[] = {0, 0, 0, 0, 0, 1};
+    int part_calls = 0;
+    int* part_mid = std::partition(part_data, part_data + 6, CountingPredicate(&part_calls));
+    std::printf("partition calls: %d\n", part_calls);
+    std::printf("partition mid: %d\n", (int)(part_mid - part_data));
+    std::printf("partition:");
+    for (int* it = part_data; it != part_data + 6; ++it) {
+        std::printf(" %d", *it);
+    }
+    std::printf("\n");
+
+    // 14. const pointer iterator operations and negative prev
+    const int c_arr[] = {10, 20, 30, 40, 50};
+    const int* cp_first = c_arr;
+    const int* cp_last = c_arr + 5;
+    std::printf("const ptr dist: %ld\n", (long)std::distance(cp_first, cp_last));
+    const int* cp_mid = cp_first;
+    std::advance(cp_mid, 3);
+    std::printf("const ptr advance: %d\n", *cp_mid);
+    std::printf("const ptr prev: %d\n", *std::prev(cp_last));
+    std::printf("bi prev negative: %d\n", *std::prev(bi_first, -2));
 
     return 0;
 }

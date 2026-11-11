@@ -21,20 +21,15 @@ inline bool is_partitioned(_InputIterator __first, _InputIterator __last, _Predi
 
 template <class _ForwardIterator, class _Predicate>
 inline _ForwardIterator partition(_ForwardIterator __first, _ForwardIterator __last, _Predicate __pred) {
-    while (true) {
-        while (__first != __last && __pred(*__first)) {
+    while (__first != __last && __pred(*__first)) {
+        ++__first;
+    }
+    if (__first == __last) return __first;
+    for (_ForwardIterator __it = __first; ++__it != __last;) {
+        if (__pred(*__it)) {
+            std::iter_swap(__first, __it);
             ++__first;
         }
-        if (__first == __last) break;
-        _ForwardIterator __it = __first;
-        for (++__it; __it != __last; ++__it) {
-            if (__pred(*__it)) {
-                std::iter_swap(__first, __it);
-                ++__first;
-                break;
-            }
-        }
-        if (__it == __last) break;
     }
     return __first;
 }
