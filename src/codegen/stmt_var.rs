@@ -1,3 +1,4 @@
+use super::stmt_var_init::InitCursor;
 use super::*;
 
 impl<'a> Codegen<'a> {
@@ -148,6 +149,7 @@ impl<'a> Codegen<'a> {
             _ => None,
         };
         let mut scope_entries = Vec::new();
+        let mut cursor = init_list.map(|list| InitCursor { list, idx: 0 });
         for i in 0..count {
             let elem_offset = offset
                 .checked_add((i as u32).checked_mul(elem_size).ok_or_else(|| {
@@ -156,8 +158,10 @@ impl<'a> Codegen<'a> {
                 .ok_or_else(|| crate::internal_error!(stmt.line, stmt.col, "array is too large"))?;
             if let Type::Struct(sname) = elem_ty.strip_const() {
                 scope_entries.push((format!("{}[{}]", name, i), elem_ty.clone(), elem_offset));
-                if let Some(item) = init_list.and_then(|items| items.get(i)) {
-                    self.compile_aggregate_local(elem_ty, item, elem_offset, ctx, code)?;
+                if let Some(cur) = cursor.as_mut()
+                    && !cur.is_empty()
+                {
+                    self.compile_aggregate_field_elided(elem_ty, cur, elem_offset, ctx, code)?;
                 } else if let Some(ci) = self.find_constructor(sname, &[]) {
                     code.push(OP_LOCAL_GET);
                     write_u32(code, ctx.fp_local);
@@ -166,9 +170,15 @@ impl<'a> Codegen<'a> {
                     code.push(OP_I32_ADD);
                     code.push(OP_CALL);
                     write_u32(code, ci);
+                } else {
+                    self.emit_zero_local(elem_ty, elem_offset, ctx, code)?;
                 }
-            } else if let Some(item) = init_list.and_then(|items| items.get(i)) {
-                self.compile_aggregate_local(elem_ty, item, elem_offset, ctx, code)?;
+            } else if let Some(cur) = cursor.as_mut()
+                && !cur.is_empty()
+            {
+                self.compile_aggregate_field_elided(elem_ty, cur, elem_offset, ctx, code)?;
+            } else {
+                self.emit_zero_local(elem_ty, elem_offset, ctx, code)?;
             }
         }
         if let Some(scope) = ctx.scope_objects.last_mut() {

@@ -4,6 +4,56 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-12: Standard Library Correctness and Iterator Fixes
+
+Addressed review findings across the embedded standard library and the semantic analyzer, and completed the C++17 `<iterator>` and `<functional>` surface.
+
+### Summary of Work
+
+1. Reworked `std::reverse_iterator` in `stdlib/detail/reverse_iterator.h` to derive `iterator_category`, `difference_type`, `value_type`, `reference`, and `pointer` from `iterator_traits<_Iter>` instead of a second template parameter, matching the standard one-parameter form. `<array>` now uses the standard typedefs, and `operator->`/`operator*` are covered for pointer and class iterators.
+2. Removed modulo bias from `std::shuffle` and `std::sample` by adding URBG-aware rejection sampling in `stdlib/detail/algorithms/random.h`. The helper honors `min()`/`max()` and rejects values outside the largest evenly divisible range.
+3. Fixed member-call analysis in `src/sema/expr_call.rs` so static member calls no longer assume an implicit `this` parameter, which previously panicked when a static function had no parameters.
+4. Removed a duplicate `std::detail::DefaultLess` definition from `stdlib/algorithm`; the canonical definition remains in `stdlib/detail/algorithms/comp.h`.
+5. Moved C++17 aggregate brace-elision resolution into `src/sema/init_aggregate.rs`, keeping `src/sema/init.rs` within the repository's file and function size limits.
+6. Expanded `tests/mini_stl/algorithm_infra.cpp` and `tests/mini_stl/algorithm_merge_set_select.cpp` with reverse-iterator typing, out-of-range URBG rejection, and permutation-property coverage that does not depend on a specific shuffle implementation.
+
+### Verification Results
+
+- Unit and integration tests: 513 corpus tests on disk, 513 executed, 513 passed, 0 failures. All negative tests passed.
+- Native oracle gate: every recorded expectation matches host GCC and Clang.
+- Independent header gate: 350/350 tests pass with both `g++` and `clang++` using `-nostdinc++ -I stdlib`.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
+## 2026-11-10: C++17 Aggregate Brace Elision and Upstream LLVM libc++ std::array
+
+Implemented compiler-level aggregate brace elision for nested array and aggregate members, and integrated the upstream LLVM libc++ 23.1.5 `<array>` component preserving standard aggregate semantics.
+
+### Summary of Work
+
+1. Implemented C++17 aggregate brace elision in `src/sema/init.rs`, `src/codegen/stmt_var_init.rs`, and `src/codegen/function_global_init.rs`. Flat initializer lists unpack elements sequentially into subaggregate and array members across local variables, globals, and nested structs.
+2. Extended brace elision to top-level multidimensional arrays and raw struct arrays in `src/sema/init.rs` and `src/codegen/stmt_var.rs`.
+3. Handled base class subobjects and braced scalar initializers in global aggregate initialization (`src/codegen/function_global_init.rs`), aligning global initialization layout with local variable initialization.
+4. Preserved aggregate semantics without constructor compatibility shims. Added diagnostics for excess initializer elements in `tests/negative/aggregate_excess_elision.cpp`.
+5. Adapted upstream LLVM libc++ 23.1.5 `<array>` into `stdlib/array`, providing the zero-sized specialization `std::array<T, 0>`, forward and reverse iterators, `at()`, `data()`, `fill()`, move-safe `swap()`, relational comparisons, and tuple helpers (`tuple_size`, `tuple_element`, `std::get`).
+6. Added reverse iterator support via `stdlib/detail/reverse_iterator.h` with pointer return type for `operator->` and registered it in the embedded header table (`src/preprocessor/include.rs`).
+7. Added standard algorithm templates `std::equal`, `std::fill_n`, and `std::lexicographical_compare` to `stdlib/algorithm`.
+8. Added compatibility macros in `stdlib/compat/compiler/compiler.h` and out-of-range diagnostics via `std::__throw_out_of_range` in `stdlib/compat/runtime/runtime.h`.
+9. Fixed free binary operator overload scoring in `src/sema/expr_ops.rs` to validate candidate signatures before bypassing function template resolution.
+10. Resolved all Clippy `-D warnings` lints across the codebase, eliminating direct `.unwrap()` calls on initializer cursors and collapsing redundant conditionals.
+11. Added regression test coverage in `tests/classes_oop/structs/` and differential test suites against native Clang in `tests/mini_stl/array_comprehensive.cpp` and `tests/mini_stl_variant/array_comprehensive_variant.cpp`.
+
+### Verification Results
+
+- Unit and integration tests: 506 corpus tests on disk, 506 executed, 506 passed, 0 failures. All negative tests passed.
+- Oracle gate: 100% byte-for-byte output match against host Clang and GCC.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
 ## 2026-11-10: Template Specialization, Non-Type Parameters, and Alias Templates
 
 Implemented class template explicit and partial specialization, non-type template parameters (NTTP), compile-time constant expression evaluation, alias templates, and standard `<array>` and `<type_traits>` headers.
@@ -551,3 +601,52 @@ Validated and resolved four issues identified during C++17 pre-release testing: 
 - Unit tests: 89 passed in `src/lib.rs`.
 - Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
 - Diagnostic positions test: confirmed all corpus diagnostics name real source locations.
+
+---
+
+## 2026-11-10: C++17 <algorithm> Standard Library Integration
+
+Integrated C++17 `<algorithm>` into cppbolt based on LLVM libc++ 23.1.5, avoiding ad-hoc compiler extensions.
+
+### Summary of Work
+
+1. Added modular headers in `stdlib/detail/algorithms/` and `stdlib/detail/iterator.h`, separating iterator operations from algorithm families. Registered headers in `src/preprocessor/include.rs` and included them from `stdlib/algorithm`.
+2. Implemented iterator operations in `stdlib/detail/iterator.h` and comparators in `stdlib/detail/algorithms/comp.h`: `iterator_traits`, `distance`, `advance`, `next`, `prev`, `iter_swap`, `__less<>`, `__equal_to`, and `__greater<>`.
+3. Integrated min/max and heap functions in `stdlib/detail/algorithms/min_max.h` and `stdlib/detail/algorithms/heap.h`: `min`, `max`, `minmax`, `clamp`, `min_element`, `max_element`, `minmax_element`, `make_heap`, `push_heap`, `pop_heap`, `sort_heap`, `is_heap`, and `is_heap_until`.
+4. Integrated non-modifying sequence algorithms in `stdlib/detail/algorithms/non_modifying.h`: `all_of`, `any_of`, `none_of`, `for_each`, `for_each_n`, `count`, `count_if`, `mismatch`, `find`, `find_if`, `find_if_not`, `adjacent_find`, `search`, `find_end`, `find_first_of`, `search_n`, `equal`, and `lexicographical_compare`.
+5. Integrated modifying sequence algorithms in `stdlib/detail/algorithms/modifying.h`: `copy`, `copy_n`, `copy_if`, `copy_backward`, `move`, `move_backward`, `fill`, `fill_n`, `transform`, `generate`, `generate_n`, `remove`, `remove_if`, `remove_copy`, `remove_copy_if`, `replace`, `replace_if`, `replace_copy`, `replace_copy_if`, `swap_ranges`, `reverse`, `reverse_copy`, `rotate`, `rotate_copy`, `unique`, and `unique_copy`.
+6. Integrated binary search, partitioning, and permutation algorithms in `stdlib/detail/algorithms/binary_search.h`, `stdlib/detail/algorithms/partition.h`, and `stdlib/detail/algorithms/permutation.h`: `lower_bound`, `upper_bound`, `equal_range`, `binary_search`, `is_sorted`, `is_sorted_until`, `is_partitioned`, `partition`, `partition_copy`, `partition_point`, `stable_partition`, `is_permutation`, `next_permutation`, and `prev_permutation`.
+7. Integrated merge, set operations, selection, and random sampling in `stdlib/detail/algorithms/merge.h`, `stdlib/detail/algorithms/set_ops.h`, `stdlib/detail/algorithms/selection.h`, and `stdlib/detail/algorithms/random.h`: `merge`, `inplace_merge`, `includes`, `set_union`, `set_intersection`, `set_difference`, `set_symmetric_difference`, `nth_element`, `partial_sort`, `partial_sort_copy`, `stable_sort`, `shuffle`, and `sample`.
+8. Kept cppbolt's sorting implementation (`introsort_loop`, `heap_sort`, `insertion_sort`) in `stdlib/algorithm`.
+9. Added tests across all algorithm families (`algorithm_infra.cpp`, `algorithm_min_max_heap.cpp`, `algorithm_non_modifying.cpp`, `algorithm_modifying.cpp`, `algorithm_binary_partition_perm.cpp`, `algorithm_merge_set_select.cpp`, `algorithm_comprehensive.cpp`), checking custom functors, lambda predicates, stability, URBGs, and boundary cases.
+
+### Verification Results
+
+- Corpus runner: 513 tests on disk, 513 executed, 513 passed, 0 failures.
+- Native oracle gate: all 50 mini_stl tests match native Clang and GCC byte-for-byte.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
+## 2026-11-11: C++17 Algorithm Stabilization and Iterator Refinement
+
+Addressed review findings in algorithms, iterator primitives, and header lookup.
+
+### Summary of Work
+
+1. Fixed `std::search_n` in `stdlib/detail/algorithms/non_modifying.h` to return immediately when `count == 1`.
+2. Aligned `std::minmax_element` in `stdlib/detail/algorithms/min_max.h` with C++17 [alg.min.max] to return the first minimum and last maximum on equal elements.
+3. Rewrote `std::partition` in `stdlib/detail/algorithms/partition.h` to use single-pass forward partitioning with at most `last - first` predicate applications.
+4. Changed `std::reverse` in `stdlib/detail/algorithms/modifying.h` to use `!=` instead of `<`, supporting non-random-access bidirectional iterators.
+5. Added standard iterator category tags (`input_iterator_tag`, `forward_iterator_tag`, `bidirectional_iterator_tag`, `random_access_iterator_tag`) in `stdlib/detail/iterator.h`. Implemented pointer overloads for `_Tp*` and `const _Tp*`, fallback loops for class iterators, and negative step handling in `std::prev`.
+6. Added `std::less`, `std::greater`, and `std::equal_to` comparators in `stdlib/detail/algorithms/comp.h` and exposed them through `<functional>`.
+7. Updated `std::unique_copy` in `stdlib/detail/algorithms/modifying.h` to store a value copy for single-pass input iterators and advance the output iterator with post-increment.
+8. Refactored `embedded_header` in `src/preprocessor/include.rs` to a static table lookup, reducing function length from 80 lines to 12 lines.
+9. Added tests in `tests/mini_stl/algorithm_comprehensive.cpp` for `search_n(..., 1, ...)`, duplicate elements in `minmax_element`, bidirectional iterators, negative `prev`, `const` pointers, and comparator objects.
+
+### Verification Results
+
+- Native oracle gate: all 50 mini_stl tests match native Clang and GCC byte-for-byte.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings with `-D warnings` across all targets.

@@ -263,35 +263,25 @@ impl Sema {
         context: InitContext,
         pos: ExprPos,
     ) -> Result<Type, CompileError> {
-        if array_len > 0 && init_elements.len() > array_len {
+        let mut elem_idx = 0;
+        for _ in 0..array_len {
+            if elem_idx >= init_elements.len() {
+                break;
+            }
+            self.resolve_aggregate_field_elided(
+                elem_ty,
+                init_elements,
+                &mut elem_idx,
+                context,
+                pos,
+            )?;
+        }
+        if elem_idx < init_elements.len() {
             return Err(CompileError::new(
                 "excess elements in array initializer list",
                 pos.line,
                 pos.col,
             ));
-        }
-        for elem in init_elements.iter_mut() {
-            if let Expr::InitializerList {
-                elements: sub_elements,
-                pos: sub_pos,
-            } = elem
-            {
-                self.resolve_list_init(elem_ty, sub_elements, context, *sub_pos)?;
-            } else {
-                let elem_actual_ty = self.analyze_expr(elem)?;
-                self.check_narrowing(elem, &elem_actual_ty, elem_ty, pos)?;
-                if !self.can_assign_expr(elem_ty, &elem_actual_ty, Some(elem)) {
-                    return Err(CompileError::new(
-                        format!(
-                            "cannot initialize array element of type '{}' with expression of type '{}'",
-                            elem_ty.to_c_type(),
-                            elem_actual_ty.to_c_type()
-                        ),
-                        pos.line,
-                        pos.col,
-                    ));
-                }
-            }
         }
         Ok(Type::Array(Box::new(elem_ty.clone()), array_len))
     }
@@ -350,31 +340,13 @@ impl Sema {
 
         while elem_idx < init_elements.len() && field_idx < fields.len() {
             let fld = &fields[field_idx];
-            let elem = &mut init_elements[elem_idx];
-
-            if let Expr::InitializerList {
-                elements: sub_elements,
-                pos: sub_pos,
-            } = elem
-            {
-                self.resolve_list_init(&fld.ty, sub_elements, context, *sub_pos)?;
-            } else {
-                let elem_ty = self.analyze_expr(elem)?;
-                self.check_narrowing(elem, &elem_ty, &fld.ty, pos)?;
-                if !self.can_assign_expr(&fld.ty, &elem_ty, Some(elem)) {
-                    return Err(CompileError::new(
-                        format!(
-                            "cannot initialize field '{}' of type '{}' with expression of type '{}'",
-                            fld.name,
-                            fld.ty.to_c_type(),
-                            elem_ty.to_c_type()
-                        ),
-                        pos.line,
-                        pos.col,
-                    ));
-                }
-            }
-            elem_idx += 1;
+            self.resolve_aggregate_field_elided(
+                &fld.ty,
+                init_elements,
+                &mut elem_idx,
+                context,
+                pos,
+            )?;
             field_idx += 1;
         }
 

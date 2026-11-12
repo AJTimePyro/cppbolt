@@ -1,0 +1,10 @@
+#ifndef _MINI_STL_COMPAT_CONFIG_PLATFORM_H_
+#define _MINI_STL_COMPAT_CONFIG_PLATFORM_H_
+
+#if defined(__CPP_WASM__)
+#define _MINI_STL_PLATFORM_WASM 1
+#else
+#define _MINI_STL_PLATFORM_NATIVE 1
+#endif
+
+#endif

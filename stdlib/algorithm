@@ -3,28 +3,21 @@
 
 #include <cstddef>
 #include <utility>
+#include <detail/iterator.h>
+#include <detail/algorithms/comp.h>
+#include <detail/algorithms/min_max.h>
+#include <detail/algorithms/heap.h>
+#include <detail/algorithms/non_modifying.h>
+#include <detail/algorithms/modifying.h>
+#include <detail/algorithms/binary_search.h>
+#include <detail/algorithms/partition.h>
+#include <detail/algorithms/permutation.h>
+#include <detail/algorithms/merge.h>
+#include <detail/algorithms/set_ops.h>
+#include <detail/algorithms/selection.h>
+#include <detail/algorithms/random.h>
 
 namespace std {
-    template<typename T>
-    const T& min(const T& a, const T& b) {
-        return (b < a) ? b : a;
-    }
-
-    template<typename T>
-    const T& max(const T& a, const T& b) {
-        return (a < b) ? b : a;
-    }
-
-    template<typename Iter>
-    void reverse(Iter first, Iter last) {
-        if (first == last) return;
-        --last;
-        while (first < last) {
-            std::swap(*first, *last);
-            ++first;
-            --last;
-        }
-    }
 
     namespace detail {
         template<typename Iter, typename Comp>
@@ -100,13 +93,6 @@ namespace std {
             if (first < right + 1) introsort_loop(first, right + 1, depth_limit - 1, comp);
             if (left < last) introsort_loop(left, last, depth_limit - 1, comp);
         }
-
-        struct DefaultLess {
-            template<typename T>
-            bool operator()(const T& a, const T& b) const {
-                return a < b;
-            }
-        };
 
         inline int calc_depth_limit(ptrdiff_t n) {
             int depth = 0;

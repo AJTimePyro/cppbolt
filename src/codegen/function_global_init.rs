@@ -78,38 +78,14 @@ impl<'a> Codegen<'a> {
             | Some(Expr::TypedInitList { elements, .. }) => elements,
             _ => return Ok(()),
         };
+        let Type::Array(_, total_count) = global.ty.strip_const() else {
+            return Ok(());
+        };
         let elem_size = elem_ty.size_of(&self.sema.struct_sizes) as u32;
-        for (i, item) in list.iter().enumerate() {
-            let item_offset = (global.offset + (i as u32) * elem_size) as i32;
-            if let (
-                Type::Struct(sname),
-                Expr::InitializerList {
-                    elements: sublist, ..
-                }
-                | Expr::TypedInitList {
-                    elements: sublist, ..
-                },
-            ) = (elem_ty.strip_const(), item)
-            {
-                let Some(layout) = self.sema.struct_layouts.get(sname) else {
-                    continue;
-                };
-                for (j, sub_item) in sublist.iter().enumerate() {
-                    if let Some(fld) = layout.fields.get(j) {
-                        code.push(OP_I32_CONST);
-                        write_i32(code, item_offset + fld.offset as i32);
-                        self.compile_expr(sub_item, ctx, code)?;
-                        self.emit_store(&fld.ty, 0, code);
-                    }
-                }
-            } else {
-                let item_ty = self.get_expr_type(item, ctx);
-                code.push(OP_I32_CONST);
-                write_i32(code, item_offset);
-                self.compile_expr(item, ctx, code)?;
-                self.emit_conversion(&item_ty, elem_ty, code);
-                self.emit_store(elem_ty, 0, code);
-            }
+        let mut cursor = GlobalCursor { list, idx: 0 };
+        for i in 0..*total_count {
+            let item_offset = global.offset + (i as u32) * elem_size;
+            self.compile_global_field_elided(elem_ty, &mut cursor, item_offset, ctx, code)?;
         }
         Ok(())
     }
@@ -134,7 +110,7 @@ impl<'a> Codegen<'a> {
         if self.compile_global_list_ctor(global, sname, ctx, code)? {
             return Ok(());
         }
-        if self.compile_global_default_ctor(global, sname, code)? {
+        if global.init.is_none() && self.compile_global_default_ctor(global, sname, code)? {
             return Ok(());
         }
         self.compile_global_field_init(global, sname, ctx, code)
@@ -231,19 +207,204 @@ impl<'a> Codegen<'a> {
             | Some(Expr::TypedInitList { elements, .. }) => elements,
             _ => return Ok(()),
         };
-        let Some(layout) = self.sema.struct_layouts.get(sname) else {
+        let Some(layout) = self.sema.struct_layouts.get(sname).cloned() else {
             return Ok(());
         };
-        for (i, item) in list.iter().enumerate() {
-            if let Some(fld) = layout.fields.get(i) {
-                let item_ty = self.get_expr_type(item, ctx);
+        let mut field_idx = 0;
+        let mut cursor = GlobalCursor { list, idx: 0 };
+        if let Some(base_name) = layout.base_classes.first()
+            && let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned()
+            && matches!(
+                cursor.peek(),
+                Some(Expr::InitializerList { .. } | Expr::TypedInitList { .. })
+            )
+        {
+            let base_ty = Type::Struct(base_name.clone());
+            self.compile_global_field_elided(&base_ty, &mut cursor, global.offset, ctx, code)?;
+            field_idx += base_layout.fields.len();
+        }
+        while field_idx < layout.fields.len() {
+            let fld = &layout.fields[field_idx];
+            let field_offset = global.offset + fld.offset as u32;
+            if !cursor.is_empty() {
+                self.compile_global_field_elided(&fld.ty, &mut cursor, field_offset, ctx, code)?;
+            } else if let Some(default_init) = &fld.default_init {
+                let item_ty = self.get_expr_type(default_init, ctx);
                 code.push(OP_I32_CONST);
-                write_i32(code, (global.offset + fld.offset as u32) as i32);
-                self.compile_expr(item, ctx, code)?;
+                write_i32(code, field_offset as i32);
+                self.compile_expr(default_init, ctx, code)?;
                 self.emit_conversion(&item_ty, &fld.ty, code);
                 self.emit_store(&fld.ty, 0, code);
+            } else {
+                code.push(OP_I32_CONST);
+                write_i32(code, field_offset as i32);
+                self.emit_zero_value(&fld.ty, code);
+                self.emit_store(&fld.ty, 0, code);
+            }
+            field_idx += 1;
+        }
+        Ok(())
+    }
+
+    fn compile_global_field_scalar(
+        &mut self,
+        target_ty: &Type,
+        init: &Expr,
+        offset: u32,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        let mut cur = init;
+        while let Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } =
+            cur
+        {
+            if let Some(first) = elements.first() {
+                cur = first;
+            } else {
+                code.push(OP_I32_CONST);
+                write_i32(code, offset as i32);
+                self.emit_zero_value(target_ty, code);
+                self.emit_store(target_ty, 0, code);
+                return Ok(());
+            }
+        }
+        let item_ty = self.get_expr_type(cur, ctx);
+        code.push(OP_I32_CONST);
+        write_i32(code, offset as i32);
+        self.compile_expr(cur, ctx, code)?;
+        self.emit_conversion(&item_ty, target_ty, code);
+        self.emit_store(target_ty, 0, code);
+        Ok(())
+    }
+
+    fn compile_global_field_braced(
+        &mut self,
+        target_ty: &Type,
+        elements: &[Expr],
+        offset: u32,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        let mut sub = GlobalCursor {
+            list: elements,
+            idx: 0,
+        };
+        if let Type::Array(elem_ty, len) = target_ty.strip_const() {
+            let elem_size = elem_ty.size_of(&self.sema.struct_sizes) as u32;
+            for i in 0..*len {
+                let elem_offset = offset + (i as u32) * elem_size;
+                self.compile_global_field_elided(elem_ty, &mut sub, elem_offset, ctx, code)?;
+            }
+        } else if let Type::Struct(sname) = target_ty.strip_const()
+            && let Some(layout) = self.sema.struct_layouts.get(sname).cloned()
+        {
+            let mut f_idx = 0;
+            if let Some(base_name) = layout.base_classes.first()
+                && let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned()
+                && matches!(
+                    sub.peek(),
+                    Some(Expr::InitializerList { .. } | Expr::TypedInitList { .. })
+                )
+            {
+                let base_ty = Type::Struct(base_name.clone());
+                self.compile_global_field_elided(&base_ty, &mut sub, offset, ctx, code)?;
+                f_idx += base_layout.fields.len();
+            }
+            while f_idx < layout.fields.len() {
+                let fld = &layout.fields[f_idx];
+                let fld_offset = offset + fld.offset as u32;
+                self.compile_global_field_elided(&fld.ty, &mut sub, fld_offset, ctx, code)?;
+                f_idx += 1;
             }
         }
         Ok(())
+    }
+
+    fn compile_global_field_elided(
+        &mut self,
+        target_ty: &Type,
+        cursor: &mut GlobalCursor<'_>,
+        offset: u32,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        if cursor.is_empty() {
+            code.push(OP_I32_CONST);
+            write_i32(code, offset as i32);
+            self.emit_zero_value(target_ty, code);
+            self.emit_store(target_ty, 0, code);
+            return Ok(());
+        }
+        if let Type::Array(elem_ty, len) = target_ty.strip_const()
+            && let Some(peeked) = cursor.peek()
+            && self.sema.is_subaggregate_element_init(elem_ty, peeked)
+        {
+            let elem_size = elem_ty.size_of(&self.sema.struct_sizes) as u32;
+            for i in 0..*len {
+                let elem_offset = offset + (i as u32) * elem_size;
+                self.compile_global_field_elided(elem_ty, cursor, elem_offset, ctx, code)?;
+            }
+            return Ok(());
+        }
+        if let Some(Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. }) =
+            cursor.peek()
+        {
+            if !matches!(target_ty.strip_const(), Type::Array(..) | Type::Struct(..))
+                && let Some(item) = cursor.next()
+            {
+                return self.compile_global_field_scalar(target_ty, item, offset, ctx, code);
+            }
+            let res = self.compile_global_field_braced(target_ty, elements, offset, ctx, code);
+            cursor.next();
+            return res;
+        }
+        if let Type::Array(elem_ty, len) = target_ty.strip_const() {
+            let elem_size = elem_ty.size_of(&self.sema.struct_sizes) as u32;
+            for i in 0..*len {
+                let elem_offset = offset + (i as u32) * elem_size;
+                self.compile_global_field_elided(elem_ty, cursor, elem_offset, ctx, code)?;
+            }
+            return Ok(());
+        }
+        if let Type::Struct(sname) = target_ty.strip_const()
+            && self.sema.is_cxx17_aggregate(sname)
+            && let Some(layout) = self.sema.struct_layouts.get(sname).cloned()
+        {
+            for fld in &layout.fields {
+                let fld_offset = offset + fld.offset as u32;
+                self.compile_global_field_elided(&fld.ty, cursor, fld_offset, ctx, code)?;
+            }
+            return Ok(());
+        }
+        if let Some(item) = cursor.next() {
+            self.compile_global_field_scalar(target_ty, item, offset, ctx, code)?;
+        } else {
+            code.push(OP_I32_CONST);
+            write_i32(code, offset as i32);
+            self.emit_zero_value(target_ty, code);
+            self.emit_store(target_ty, 0, code);
+        }
+        Ok(())
+    }
+}
+
+struct GlobalCursor<'a> {
+    list: &'a [Expr],
+    idx: usize,
+}
+
+impl<'a> GlobalCursor<'a> {
+    fn is_empty(&self) -> bool {
+        self.idx >= self.list.len()
+    }
+
+    fn peek(&self) -> Option<&'a Expr> {
+        self.list.get(self.idx)
+    }
+
+    fn next(&mut self) -> Option<&'a Expr> {
+        let item = self.list.get(self.idx)?;
+        self.idx += 1;
+        Some(item)
     }
 }

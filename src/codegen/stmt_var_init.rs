@@ -143,46 +143,102 @@ impl<'a> Codegen<'a> {
         }
         if let Some(layout) = self.sema.struct_layouts.get(sname).cloned() {
             let mut field_idx = 0;
-            let mut elem_idx = 0;
+            let mut cursor = InitCursor { list, idx: 0 };
             if let Some(base_name) = layout.base_classes.first()
                 && let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned()
             {
                 let base_field_count = base_layout.fields.len();
-                if elem_idx < list.len()
-                    && matches!(
-                        &list[elem_idx],
-                        Expr::InitializerList { .. } | Expr::TypedInitList { .. }
-                    )
+                if matches!(
+                    cursor.peek(),
+                    Some(Expr::InitializerList { .. } | Expr::TypedInitList { .. })
+                ) && let Some(base_item) = cursor.next()
                 {
                     let base_ty = Type::Struct(base_name.clone());
-                    self.compile_aggregate_local(&base_ty, &list[elem_idx], offset, ctx, code)?;
-                    elem_idx += 1;
+                    self.compile_aggregate_local(&base_ty, base_item, offset, ctx, code)?;
                     field_idx += base_field_count;
                 }
-            }
-            while elem_idx < list.len() {
-                let item = &list[elem_idx];
-                if let Some(fld) = layout.fields.get(field_idx) {
-                    let field_offset = offset
-                        .checked_add(fld.offset as u32)
-                        .ok_or_else(|| self.internal_error("object is too large"))?;
-                    self.compile_aggregate_local(&fld.ty, item, field_offset, ctx, code)?;
-                    field_idx += 1;
-                }
-                elem_idx += 1;
             }
             while field_idx < layout.fields.len() {
                 let fld = &layout.fields[field_idx];
                 let field_offset = offset
                     .checked_add(fld.offset as u32)
                     .ok_or_else(|| self.internal_error("object is too large"))?;
-                if let Some(default_init) = &fld.default_init {
+                if !cursor.is_empty() {
+                    self.compile_aggregate_field_elided(
+                        &fld.ty,
+                        &mut cursor,
+                        field_offset,
+                        ctx,
+                        code,
+                    )?;
+                } else if let Some(default_init) = &fld.default_init {
                     self.compile_aggregate_local(&fld.ty, default_init, field_offset, ctx, code)?;
                 } else {
                     self.emit_zero_local(&fld.ty, field_offset, ctx, code)?;
                 }
                 field_idx += 1;
             }
+        }
+        Ok(())
+    }
+
+    pub(super) fn compile_aggregate_field_elided(
+        &mut self,
+        target_ty: &Type,
+        cursor: &mut InitCursor<'_>,
+        offset: u32,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        if cursor.is_empty() {
+            return self.emit_zero_local(target_ty, offset, ctx, code);
+        }
+        if let Type::Array(elem_ty, len) = target_ty.strip_const()
+            && let Some(peeked) = cursor.peek()
+            && self.sema.is_subaggregate_element_init(elem_ty, peeked)
+        {
+            let elem_size = elem_ty.size_of(&self.sema.struct_sizes) as u32;
+            for i in 0..*len {
+                let elem_offset = offset
+                    .checked_add((i as u32) * elem_size)
+                    .ok_or_else(|| self.internal_error("object is too large"))?;
+                self.compile_aggregate_field_elided(elem_ty, cursor, elem_offset, ctx, code)?;
+            }
+            return Ok(());
+        }
+        if matches!(
+            cursor.peek(),
+            Some(Expr::InitializerList { .. } | Expr::TypedInitList { .. })
+        ) && let Some(item) = cursor.next()
+        {
+            return self.compile_aggregate_local(target_ty, item, offset, ctx, code);
+        }
+        if let Type::Array(elem_ty, len) = target_ty.strip_const() {
+            let elem_size = elem_ty.size_of(&self.sema.struct_sizes) as u32;
+            for i in 0..*len {
+                let elem_offset = offset
+                    .checked_add((i as u32) * elem_size)
+                    .ok_or_else(|| self.internal_error("object is too large"))?;
+                self.compile_aggregate_field_elided(elem_ty, cursor, elem_offset, ctx, code)?;
+            }
+            return Ok(());
+        }
+        if let Type::Struct(sname) = target_ty.strip_const()
+            && self.sema.is_cxx17_aggregate(sname)
+            && let Some(layout) = self.sema.struct_layouts.get(sname).cloned()
+        {
+            for fld in &layout.fields {
+                let fld_offset = offset
+                    .checked_add(fld.offset as u32)
+                    .ok_or_else(|| self.internal_error("object is too large"))?;
+                self.compile_aggregate_field_elided(&fld.ty, cursor, fld_offset, ctx, code)?;
+            }
+            return Ok(());
+        }
+        if let Some(item) = cursor.next() {
+            self.compile_aggregate_local(target_ty, item, offset, ctx, code)?;
+        } else {
+            self.emit_zero_local(target_ty, offset, ctx, code)?;
         }
         Ok(())
     }
@@ -367,7 +423,8 @@ impl<'a> Codegen<'a> {
         };
         let elem_size = u32::try_from(elem_ty.size_of(&self.sema.struct_sizes))
             .map_err(|_| self.internal_error("array is too large"))?;
-        for (i, item) in list.iter().enumerate() {
+        let mut cursor = InitCursor { list, idx: 0 };
+        for i in 0..*total_count {
             let item_offset = offset
                 .checked_add(
                     (i as u32)
@@ -375,18 +432,29 @@ impl<'a> Codegen<'a> {
                         .ok_or_else(|| self.internal_error("array is too large"))?,
                 )
                 .ok_or_else(|| self.internal_error("array is too large"))?;
-            self.compile_aggregate_local(elem_ty, item, item_offset, ctx, code)?;
-        }
-        for i in list.len()..*total_count {
-            let item_offset = offset
-                .checked_add(
-                    (i as u32)
-                        .checked_mul(elem_size)
-                        .ok_or_else(|| self.internal_error("array is too large"))?,
-                )
-                .ok_or_else(|| self.internal_error("array is too large"))?;
-            self.emit_zero_local(elem_ty, item_offset, ctx, code)?;
+            self.compile_aggregate_field_elided(elem_ty, &mut cursor, item_offset, ctx, code)?;
         }
         Ok(())
+    }
+}
+
+pub(super) struct InitCursor<'a> {
+    pub(super) list: &'a [Expr],
+    pub(super) idx: usize,
+}
+
+impl<'a> InitCursor<'a> {
+    pub(super) fn is_empty(&self) -> bool {
+        self.idx >= self.list.len()
+    }
+
+    pub(super) fn peek(&self) -> Option<&'a Expr> {
+        self.list.get(self.idx)
+    }
+
+    pub(super) fn next(&mut self) -> Option<&'a Expr> {
+        let item = self.list.get(self.idx)?;
+        self.idx += 1;
+        Some(item)
     }
 }

@@ -116,13 +116,13 @@ fn compile(path: &Path) -> Result<Result<Vec<u8>, CompileError>, String> {
 
 /// Returns the file a diagnostic names.
 ///
-/// A file without a directory is one of the embedded headers, which live in
-/// `stdlib/`.
+/// Embedded headers live in `stdlib/`.
 fn reported_path(file: &str) -> PathBuf {
-    if file.contains('/') {
-        PathBuf::from(file)
+    let stdlib_candidate = Path::new("stdlib").join(file);
+    if stdlib_candidate.exists() {
+        stdlib_candidate
     } else {
-        Path::new("stdlib").join(file)
+        PathBuf::from(file)
     }
 }
 

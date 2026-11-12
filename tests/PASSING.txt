@@ -162,6 +162,7 @@ classes_oop/statics_namespaces/namespaces_comprehensive
 classes_oop/statics_namespaces/references
 classes_oop/statics_namespaces/static_local_constructor_args
 classes_oop/statics_namespaces/static_members
+classes_oop/structs/aggregate_brace_elision_array
 classes_oop/structs/aggregate_nsdmi
 classes_oop/structs/brace_init_aggregates
 classes_oop/structs/brace_init_brace_elision
@@ -222,6 +223,7 @@ classes_oop_variant/statics_namespaces/namespaces_comprehensive
 classes_oop_variant/statics_namespaces/references
 classes_oop_variant/statics_namespaces/static_local_constructor_args
 classes_oop_variant/statics_namespaces/static_members
+classes_oop_variant/structs/aggregate_brace_elision_array_variant
 classes_oop_variant/structs/initializer_lists
 classes_oop_variant/structs/nested_classes_variant
 classes_oop_variant/structs/nsdmi_basic_variant
@@ -239,8 +241,16 @@ memory_model_variant/large_global_4mb
 memory_model_variant/malloc_zero
 memory_model_variant/vector_growth_64mb
 mini_stl/algorithm_basic
+mini_stl/algorithm_infra
+mini_stl/algorithm_min_max_heap
+mini_stl/algorithm_non_modifying
+mini_stl/algorithm_modifying
+mini_stl/algorithm_binary_partition_perm
+mini_stl/algorithm_merge_set_select
+mini_stl/algorithm_comprehensive
 mini_stl/algorithm_sort
 mini_stl/array_basic
+mini_stl/array_comprehensive
 mini_stl/cin_getline_newline
 mini_stl/cmath_basic
 mini_stl/combined_integration
@@ -282,6 +292,7 @@ mini_stl/vector_objects
 mini_stl/vector_size_ctor
 mini_stl_variant/algorithm_sort_variant
 mini_stl_variant/array_basic_variant
+mini_stl_variant/array_comprehensive_variant
 mini_stl_variant/cin_getline_newline
 mini_stl_variant/combined_integration_variant
 mini_stl_variant/cout_float_format
@@ -312,6 +323,7 @@ mini_stl_variant/vector_brace_init_variant
 mini_stl_variant/vector_move_variant
 mini_stl_variant/vector_size_ctor_variant
 negative/aggregate_excess_elements
+negative/aggregate_excess_elision
 negative/alias_template_arg_mismatch
 negative/ambiguous_overload_call
 negative/ambiguous_using_directives

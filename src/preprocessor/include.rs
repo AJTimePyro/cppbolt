@@ -18,35 +18,119 @@ pub(super) fn resolve(
     includes.resolve_include(clean, including_file, quoted)
 }
 
+const EMBEDDED_HEADERS: &[(&str, &str)] = &[
+    ("iostream", include_str!("../../stdlib/iostream")),
+    ("string", include_str!("../../stdlib/string")),
+    ("functional", include_str!("../../stdlib/functional")),
+    ("iomanip", include_str!("../../stdlib/iomanip")),
+    ("cstdio", include_str!("../../stdlib/cstdio")),
+    ("cstddef", include_str!("../../stdlib/cstddef")),
+    ("cmath", include_str!("../../stdlib/cmath")),
+    ("cstdlib", include_str!("../../stdlib/cstdlib")),
+    ("new", include_str!("../../stdlib/new")),
+    (
+        "initializer_list",
+        include_str!("../../stdlib/initializer_list"),
+    ),
+    ("utility", include_str!("../../stdlib/utility")),
+    ("memory", include_str!("../../stdlib/memory")),
+    ("vector", include_str!("../../stdlib/vector")),
+    ("array", include_str!("../../stdlib/array")),
+    ("iterator", include_str!("../../stdlib/iterator")),
+    ("type_traits", include_str!("../../stdlib/type_traits")),
+    ("algorithm", include_str!("../../stdlib/algorithm")),
+    ("map", include_str!("../../stdlib/map")),
+    ("set", include_str!("../../stdlib/set")),
+    (
+        "detail/containers/avl_tree.h",
+        include_str!("../../stdlib/detail/containers/avl_tree.h"),
+    ),
+    (
+        "detail_avl_tree.h",
+        include_str!("../../stdlib/detail/containers/avl_tree.h"),
+    ),
+    (
+        "detail/reverse_iterator.h",
+        include_str!("../../stdlib/detail/reverse_iterator.h"),
+    ),
+    (
+        "detail/iterator.h",
+        include_str!("../../stdlib/detail/iterator.h"),
+    ),
+    (
+        "detail/algorithms/comp.h",
+        include_str!("../../stdlib/detail/algorithms/comp.h"),
+    ),
+    (
+        "detail/algorithms/min_max.h",
+        include_str!("../../stdlib/detail/algorithms/min_max.h"),
+    ),
+    (
+        "detail/algorithms/heap.h",
+        include_str!("../../stdlib/detail/algorithms/heap.h"),
+    ),
+    (
+        "detail/algorithms/non_modifying.h",
+        include_str!("../../stdlib/detail/algorithms/non_modifying.h"),
+    ),
+    (
+        "detail/algorithms/modifying.h",
+        include_str!("../../stdlib/detail/algorithms/modifying.h"),
+    ),
+    (
+        "detail/algorithms/binary_search.h",
+        include_str!("../../stdlib/detail/algorithms/binary_search.h"),
+    ),
+    (
+        "detail/algorithms/partition.h",
+        include_str!("../../stdlib/detail/algorithms/partition.h"),
+    ),
+    (
+        "detail/algorithms/permutation.h",
+        include_str!("../../stdlib/detail/algorithms/permutation.h"),
+    ),
+    (
+        "detail/algorithms/merge.h",
+        include_str!("../../stdlib/detail/algorithms/merge.h"),
+    ),
+    (
+        "detail/algorithms/set_ops.h",
+        include_str!("../../stdlib/detail/algorithms/set_ops.h"),
+    ),
+    (
+        "detail/algorithms/selection.h",
+        include_str!("../../stdlib/detail/algorithms/selection.h"),
+    ),
+    (
+        "detail/algorithms/random.h",
+        include_str!("../../stdlib/detail/algorithms/random.h"),
+    ),
+    (
+        "compat/config/platform.h",
+        include_str!("../../stdlib/compat/config/platform.h"),
+    ),
+    (
+        "compat/compiler/compiler.h",
+        include_str!("../../stdlib/compat/compiler/compiler.h"),
+    ),
+    (
+        "compat/runtime/runtime.h",
+        include_str!("../../stdlib/compat/runtime/runtime.h"),
+    ),
+    ("stdio.h", include_str!("../../stdlib/stdio.h")),
+    ("stdlib.h", include_str!("../../stdlib/stdlib.h")),
+    ("string.h", include_str!("../../stdlib/string.h")),
+    ("stddef.h", STDDEF_H),
+    ("stdarg.h", STDARG_H),
+    ("math.h", MATH_H),
+];
+
 fn embedded_header(name: &str) -> Option<&'static str> {
     let clean = name.trim_matches(|c| c == '<' || c == '>' || c == '"');
-    match clean {
-        "iostream" => Some(include_str!("../../stdlib/iostream")),
-        "string" => Some(include_str!("../../stdlib/string")),
-        "iomanip" => Some(include_str!("../../stdlib/iomanip")),
-        "cstdio" => Some(include_str!("../../stdlib/cstdio")),
-        "cstddef" => Some(include_str!("../../stdlib/cstddef")),
-        "cmath" => Some(include_str!("../../stdlib/cmath")),
-        "cstdlib" => Some(include_str!("../../stdlib/cstdlib")),
-        "new" => Some(include_str!("../../stdlib/new")),
-        "initializer_list" => Some(include_str!("../../stdlib/initializer_list")),
-        "utility" => Some(include_str!("../../stdlib/utility")),
-        "memory" => Some(include_str!("../../stdlib/memory")),
-        "vector" => Some(include_str!("../../stdlib/vector")),
-        "array" => Some(include_str!("../../stdlib/array")),
-        "type_traits" => Some(include_str!("../../stdlib/type_traits")),
-        "algorithm" => Some(include_str!("../../stdlib/algorithm")),
-        "map" => Some(include_str!("../../stdlib/map")),
-        "set" => Some(include_str!("../../stdlib/set")),
-        "detail_avl_tree.h" => Some(include_str!("../../stdlib/detail_avl_tree.h")),
-        "stdio.h" => Some(include_str!("../../stdlib/stdio.h")),
-        "stdlib.h" => Some(include_str!("../../stdlib/stdlib.h")),
-        "string.h" => Some(include_str!("../../stdlib/string.h")),
-        "stddef.h" => Some(STDDEF_H),
-        "stdarg.h" => Some(STDARG_H),
-        "math.h" => Some(MATH_H),
-        _ => None,
-    }
+    EMBEDDED_HEADERS
+        .iter()
+        .find(|(header, _)| *header == clean)
+        .map(|(_, content)| *content)
 }
 
 const STDDEF_H: &str = r#"#ifndef _STDDEF_H_

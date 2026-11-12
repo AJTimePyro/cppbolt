@@ -1,0 +1,9 @@
+*p: 30
+dist: 2
+swap: 40 10
+next: 20
+prev: 30
+reverse char: c
+reverse char: b
+reverse char: a
+reverse item: 8

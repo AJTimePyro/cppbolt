@@ -1,0 +1,15 @@
+eq: 1 0
+ne: 0 1
+lt: 1 0
+le: 1 1
+gt: 1 0
+ge: 1 1
+elems: 10 20 30 40
+reverse: 40 30 20 10
+front_back: 10 40
+at: 20 30
+data: 10
+get: 10 20 30 40
+fill: 7 7 7 7
+swap: 7 10
+zero: 0 1 1

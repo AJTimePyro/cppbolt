@@ -157,20 +157,28 @@ impl Sema {
         }
     }
 
-    /// Fills in the default arguments of a member call.
+    /// Returns the explicit parameters and defaults of a member call.
     ///
-    /// The first parameter of a method is the implicit `this`, so the
-    /// arguments start at the second one.
+    /// A non-static method's first parameter is the implicit `this`; a static
+    /// method starts at index zero.
+    fn member_call_params(sig: &FunctionSig) -> (&[Type], &[Option<Expr>]) {
+        if sig.is_static {
+            (&sig.param_types[..], &sig.default_args[..])
+        } else {
+            (
+                sig.param_types.get(1..).unwrap_or(&[]),
+                sig.default_args.get(1..).unwrap_or(&[]),
+            )
+        }
+    }
+
+    /// Fills in the default arguments of a member call.
     fn fill_member_defaults(
         &mut self,
         sig: &FunctionSig,
         args: &mut Vec<Expr>,
     ) -> Result<(), CompileError> {
-        if sig.param_types.len() < 2 {
-            return Ok(());
-        }
-        let params = &sig.param_types[1..];
-        let defaults = &sig.default_args[1..];
+        let (params, defaults) = Self::member_call_params(sig);
         if args.len() > params.len() || defaults.len() < params.len() {
             return Ok(());
         }
@@ -227,7 +235,8 @@ impl Sema {
         )?;
         if let Some(sig) = sig {
             self.fill_member_defaults(&sig, args)?;
-            self.convert_call_args(args, &sig.param_types[1..], arg_types, *pos)?;
+            let (params, _) = Self::member_call_params(&sig);
+            self.convert_call_args(args, params, arg_types, *pos)?;
             self.instantiate_pending_method(&sig.mangled_name)?;
             return Ok(Some(sig.return_type.clone()));
         }

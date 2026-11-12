@@ -32,10 +32,13 @@ pub(super) fn directive_column(line: &str) -> usize {
 
 pub(super) fn split_directive(directive_line: &str) -> (&str, &str) {
     let trimmed = directive_line.trim();
-    match trimmed.split_once(char::is_whitespace) {
-        Some((directive, rest)) => (directive, rest.trim_start()),
-        None => (trimmed, ""),
-    }
+    let end = trimmed
+        .char_indices()
+        .find(|(_, c)| !(c.is_ascii_alphanumeric() || *c == '_'))
+        .map(|(index, _)| index)
+        .unwrap_or(trimmed.len());
+    let (directive, rest) = trimmed.split_at(end);
+    (directive, rest.trim_start())
 }
 
 /// Replaces C and C++ comments with single spaces according to translation phase 3.
