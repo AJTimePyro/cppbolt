@@ -94,13 +94,6 @@ namespace std {
             if (left < last) introsort_loop(left, last, depth_limit - 1, comp);
         }
 
-        struct DefaultLess {
-            template<typename T>
-            bool operator()(const T& a, const T& b) const {
-                return a < b;
-            }
-        };
-
         inline int calc_depth_limit(ptrdiff_t n) {
             int depth = 0;
             while (n > 1) {
