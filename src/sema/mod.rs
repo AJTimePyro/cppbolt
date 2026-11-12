@@ -14,6 +14,7 @@ mod expr_member;
 mod expr_ops;
 mod expr_subscript;
 mod init;
+mod init_aggregate;
 mod init_list;
 mod layout;
 mod lookup;
