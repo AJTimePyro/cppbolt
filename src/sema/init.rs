@@ -407,7 +407,13 @@ impl Sema {
                     if *elem_idx >= init_elements.len() {
                         break;
                     }
-                    self.resolve_aggregate_field_elided(elem_ty, init_elements, elem_idx, context, pos)?;
+                    self.resolve_aggregate_field_elided(
+                        elem_ty,
+                        init_elements,
+                        elem_idx,
+                        context,
+                        pos,
+                    )?;
                 }
                 return Ok(());
             }
@@ -420,7 +426,13 @@ impl Sema {
                 if *elem_idx >= init_elements.len() {
                     break;
                 }
-                self.resolve_aggregate_field_elided(elem_ty, init_elements, elem_idx, context, pos)?;
+                self.resolve_aggregate_field_elided(
+                    elem_ty,
+                    init_elements,
+                    elem_idx,
+                    context,
+                    pos,
+                )?;
             }
             return Ok(());
         }
@@ -432,7 +444,13 @@ impl Sema {
                 if *elem_idx >= init_elements.len() {
                     break;
                 }
-                self.resolve_aggregate_field_elided(&fld.ty, init_elements, elem_idx, context, pos)?;
+                self.resolve_aggregate_field_elided(
+                    &fld.ty,
+                    init_elements,
+                    elem_idx,
+                    context,
+                    pos,
+                )?;
             }
             return Ok(());
         }

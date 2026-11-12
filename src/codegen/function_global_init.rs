@@ -255,8 +255,8 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let mut cur = init;
-        while let Expr::InitializerList { elements, .. }
-        | Expr::TypedInitList { elements, .. } = cur
+        while let Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } =
+            cur
         {
             if let Some(first) = elements.first() {
                 cur = first;
@@ -285,7 +285,10 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let mut sub = GlobalCursor { list: elements, idx: 0 };
+        let mut sub = GlobalCursor {
+            list: elements,
+            idx: 0,
+        };
         if let Type::Array(elem_ty, len) = target_ty.strip_const() {
             let elem_size = elem_ty.size_of(&self.sema.struct_sizes) as u32;
             for i in 0..*len {
@@ -343,9 +346,8 @@ impl<'a> Codegen<'a> {
             }
             return Ok(());
         }
-        if let Some(
-            Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. },
-        ) = cursor.peek()
+        if let Some(Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. }) =
+            cursor.peek()
         {
             if !matches!(target_ty.strip_const(), Type::Array(..) | Type::Struct(..))
                 && let Some(item) = cursor.next()

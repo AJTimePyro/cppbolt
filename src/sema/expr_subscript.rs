@@ -4,12 +4,7 @@ use crate::ast::types::Type;
 
 impl Sema {
     pub(super) fn analyze_subscript(&mut self, expr: &mut Expr) -> Result<Type, CompileError> {
-        let Expr::ArraySubscript {
-            array,
-            index,
-            pos,
-        } = expr
-        else {
+        let Expr::ArraySubscript { array, index, pos } = expr else {
             return Err(crate::internal_error!(
                 self.current_line,
                 self.current_col,

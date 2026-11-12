@@ -433,7 +433,10 @@ int main()
 }
 "#;
     let (code, stdout) = run_cpp(source)?;
-    assert_eq!(code, 0, "#include<iostream> must be accepted like #include <iostream>");
+    assert_eq!(
+        code, 0,
+        "#include<iostream> must be accepted like #include <iostream>"
+    );
     assert_eq!(stdout, "15");
     Ok(())
 }

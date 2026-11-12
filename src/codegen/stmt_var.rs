@@ -1,5 +1,5 @@
-use super::*;
 use super::stmt_var_init::InitCursor;
+use super::*;
 
 impl<'a> Codegen<'a> {
     pub(super) fn compile_var_decl(
