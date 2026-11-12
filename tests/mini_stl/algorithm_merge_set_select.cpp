@@ -126,10 +126,10 @@ int main() {
 
     RejectingURBG rejecting;
     int rej_arr[] = {1, 2, 3, 4, 5};
+    int rej_orig[] = {1, 2, 3, 4, 5};
     std::shuffle(rej_arr, rej_arr + 5, rejecting);
-    std::printf("shuffle_rejects_out_of_range:");
-    for (int i = 0; i < 5; ++i) std::printf(" %d", rej_arr[i]);
-    std::printf("\n");
+    bool rej_perm = std::is_permutation(rej_arr, rej_arr + 5, rej_orig);
+    std::printf("shuffle_rejection_is_permutation: %d\n", (int)rej_perm);
 
     SimpleURBG urbg2(99);
     int smp_src[] = {10, 20, 30, 40, 50, 60, 70, 80};
