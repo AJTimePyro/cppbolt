@@ -4,6 +4,29 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-12: Standard Library Correctness and Iterator Fixes
+
+Addressed review findings across the embedded standard library and the semantic analyzer, and completed the C++17 `<iterator>` and `<functional>` surface.
+
+### Summary of Work
+
+1. Reworked `std::reverse_iterator` in `stdlib/detail/reverse_iterator.h` to derive `iterator_category`, `difference_type`, `value_type`, `reference`, and `pointer` from `iterator_traits<_Iter>` instead of a second template parameter, matching the standard one-parameter form. `<array>` now uses the standard typedefs, and `operator->`/`operator*` are covered for pointer and class iterators.
+2. Removed modulo bias from `std::shuffle` and `std::sample` by adding URBG-aware rejection sampling in `stdlib/detail/algorithms/random.h`. The helper honors `min()`/`max()` and rejects values outside the largest evenly divisible range.
+3. Fixed member-call analysis in `src/sema/expr_call.rs` so static member calls no longer assume an implicit `this` parameter, which previously panicked when a static function had no parameters.
+4. Removed a duplicate `std::detail::DefaultLess` definition from `stdlib/algorithm`; the canonical definition remains in `stdlib/detail/algorithms/comp.h`.
+5. Moved C++17 aggregate brace-elision resolution into `src/sema/init_aggregate.rs`, keeping `src/sema/init.rs` within the repository's file and function size limits.
+6. Expanded `tests/mini_stl/algorithm_infra.cpp` and `tests/mini_stl/algorithm_merge_set_select.cpp` with reverse-iterator typing, out-of-range URBG rejection, and permutation-property coverage that does not depend on a specific shuffle implementation.
+
+### Verification Results
+
+- Unit and integration tests: 513 corpus tests on disk, 513 executed, 513 passed, 0 failures. All negative tests passed.
+- Native oracle gate: every recorded expectation matches host GCC and Clang.
+- Independent header gate: 350/350 tests pass with both `g++` and `clang++` using `-nostdinc++ -I stdlib`.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
 ## 2026-11-10: C++17 Aggregate Brace Elision and Upstream LLVM libc++ std::array
 
 Implemented compiler-level aggregate brace elision for nested array and aggregate members, and integrated the upstream LLVM libc++ 23.1.5 `<array>` component preserving standard aggregate semantics.

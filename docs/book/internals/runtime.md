@@ -58,15 +58,17 @@ Headers under `stdlib/` are embedded into the compiler binary at compile time us
 
 ```text
 stdlib/
-├── algorithm         # std::sort, std::reverse, std::min, std::max, std::equal, std::fill_n, std::lexicographical_compare
+├── algorithm         # C++17 sequence, sorting, heap, binary search, permutation, and set algorithms
 ├── array             # Upstream LLVM libc++ 23.1.5 std::array with aggregate brace elision and iterators
 ├── cmath             # sqrt, sin, cos, abs, etc.
 ├── cstddef           # size_t, ptrdiff_t, NULL
 ├── cstdio            # printf, sprintf, snprintf, puts, getchar, scanf
 ├── cstdlib           # malloc, free, abs, exit
+├── functional        # std::less, std::greater, std::equal_to
 ├── initializer_list  # std::initializer_list
 ├── iomanip           # std::setprecision, std::fixed, std::setw
 ├── iostream          # std::cout, std::cin, streams
+├── iterator          # Iterator tags, traits, distance/advance/next/prev, reverse_iterator
 ├── map               # std::map associative container
 ├── memory            # std::unique_ptr, std::make_unique
 ├── new               # operator new, placement new
@@ -79,8 +81,22 @@ stdlib/
 ├── utility           # std::move, std::forward, std::pair, std::swap
 ├── vector            # std::vector with move operations and dynamic resizing
 ├── detail/           # Internal headers
+│   ├── algorithms/   # <algorithm> family implementations
+│   │   ├── binary_search.h
+│   │   ├── comp.h
+│   │   ├── heap.h
+│   │   ├── merge.h
+│   │   ├── min_max.h
+│   │   ├── modifying.h
+│   │   ├── non_modifying.h
+│   │   ├── partition.h
+│   │   ├── permutation.h
+│   │   ├── random.h
+│   │   ├── selection.h
+│   │   └── set_ops.h
 │   ├── containers/
 │   │   └── avl_tree.h # std::detail::AVLTree backing map and set
+│   ├── iterator.h    # Iterator tags, traits, and pointer operations
 │   └── reverse_iterator.h # std::reverse_iterator adapter
 └── compat/           # Compiler and platform shims
     ├── compiler/
@@ -97,7 +113,7 @@ Public headers live directly under `stdlib/` (`<iostream>`, `<string>`, `<vector
 
 Internal components split across two subdirectories:
 
-- `stdlib/detail/`: Shared data structures and iterator adapters. `detail/containers/avl_tree.h` provides the balanced tree for `map` and `set`. `detail/reverse_iterator.h` implements `std::reverse_iterator`.
+- `stdlib/detail/`: Shared data structures, iterator primitives, and algorithm family implementations. `detail/containers/avl_tree.h` provides the balanced tree for `map` and `set`. `detail/iterator.h` defines iterator tags, traits, and pointer operations. `detail/reverse_iterator.h` implements `std::reverse_iterator`. `detail/algorithms/` holds the implementations included by `<algorithm>`.
 - `stdlib/compat/`: Platform and toolchain shims. `compiler/compiler.h` provides libc++ macro definitions and compiler controls. `runtime/runtime.h` provides runtime hooks, libc declarations, and `std::__throw_out_of_range`. `config/platform.h` defines target platform macros.
 
 ### Supported Embedded Headers
@@ -105,6 +121,7 @@ The embedded library includes:
 - Streams (`<iostream>`), string manipulation (`<string>`), C stdio (`<cstdio>`, `<stdio.h>`), and manipulators (`<iomanip>`)
 - Dynamic allocation (`<new>`, `<cstdlib>`, `<stdlib.h>`), smart pointers (`<memory>`), and initializer lists (`<initializer_list>`)
 - Sequence and associative containers (`<vector>`, `<array>`, `<map>`, `<set>`) with iterators, element access, and move semantics
+- Iterator utilities and adapters (`<iterator>`) and comparison function objects (`<functional>`)
 - Move and forward primitives (`<utility>`), algorithms (`<algorithm>`), type traits (`<type_traits>`), C definitions (`<cstddef>`), and math intrinsics (`<cmath>`)
 
 ### Independent Native Header Verification
