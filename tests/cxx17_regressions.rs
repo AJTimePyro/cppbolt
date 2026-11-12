@@ -413,3 +413,27 @@ int main() {
     );
     Ok(())
 }
+
+#[test]
+fn include_directive_without_space_before_header() -> Result<(), String> {
+    let source = r#"
+#include<iostream>
+using namespace std;
+
+int findSum(int n)
+{
+    return n * (n + 1) / 2;
+}
+
+int main()
+{
+    int n = 5;
+    cout << findSum(n);
+    return findSum(n) == 15 ? 0 : 1;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0, "#include<iostream> must be accepted like #include <iostream>");
+    assert_eq!(stdout, "15");
+    Ok(())
+}
