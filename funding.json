@@ -1,0 +1,73 @@
+{
+  "version": "v1.0.0",
+  "entity": {
+    "type": "individual",
+    "role": "owner",
+    "name": "AJTimePyro",
+    "email": "ajtimepyro@gmail.com",
+    "description": "I am Software Engineer who is interested in building open source tools that people will actually use, in past I have built open source telegram bots repo and there were actually users that used it and my total of 7 repo has gained over 120 stars and 290 forks collectively.",
+    "webpageUrl": {
+      "url": "https://ajtimepyro.is-a.dev/"
+    }
+  },
+  "projects": [
+    {
+      "guid": "cppbolt",
+      "name": "CPPBolt",
+      "description": "It's a C++ compiler written in rust for web assembly that can compile and execute C++ code directly in the browser. It could be used by sites like leetcode, geeksforgeeks and others, so that they don't have to execute user's code on their server which saves lots of of money in server computing, also reduces existing server load, also no need to worry about if any malicious code is being executed on their server, and also give instant response when executing code. It is also very lightweight as of now raw wasm file size is 1.2mb. It is available on npm repository as well for any developer to start using it immediately(with proper easy to use instructions as well on readme).",
+      "webpageUrl": {
+        "url": "https://ajtimepyro.is-a.dev/cppbolt/"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/AJTimePyro/cppbolt"
+      },
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "tags": [
+        "developer-tools",
+        "compilers",
+        "webassembly",
+        "rust",
+        "c++",
+        "cpp",
+        "npm",
+        "programming-languages",
+        "open-source",
+        "education"
+      ]
+    }
+  ],
+  "funding": {
+    "channels": [
+      {
+        "guid": "github",
+        "type": "payment-provider",
+        "address": "https://github.com/sponsors/AJTimePyro",
+        "description": "Donate via GitHub Sponsors"
+      },
+      {
+        "guid": "bank",
+        "type": "bank",
+        "address": "ajtimepyro@gmail.com",
+        "description": "Please email me for bank transfer donations "
+      }
+    ],
+    "plans": [
+      {
+        "guid": "supporting",
+        "status": "active",
+        "name": "Supporter",
+        "description": "Any amount will help",
+        "amount": 0,
+        "currency": "INR",
+        "frequency": "monthly",
+        "channels": [
+          "github",
+          "bank"
+        ]
+      }
+    ],
+    "history": []
+  }
+}
