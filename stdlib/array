@@ -33,8 +33,8 @@ struct array {
   using const_iterator         = const_pointer;
   using size_type              = size_t;
   using difference_type        = ptrdiff_t;
-  using reverse_iterator       = std::reverse_iterator<iterator, value_type>;
-  using const_reverse_iterator = std::reverse_iterator<const_iterator, const value_type>;
+  using reverse_iterator       = std::reverse_iterator<iterator>;
+  using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
   _Tp __elems_[_Size];
 
@@ -155,8 +155,8 @@ struct array<_Tp, 0> {
   using const_iterator         = const_pointer;
   using size_type              = size_t;
   using difference_type        = ptrdiff_t;
-  using reverse_iterator       = std::reverse_iterator<iterator, value_type>;
-  using const_reverse_iterator = std::reverse_iterator<const_iterator, const value_type>;
+  using reverse_iterator       = std::reverse_iterator<iterator>;
+  using const_reverse_iterator = std::reverse_iterator<const_iterator>;
 
   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX17 value_type* data() _NOEXCEPT { return nullptr; }
   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR_SINCE_CXX17 const value_type* data() const _NOEXCEPT {
