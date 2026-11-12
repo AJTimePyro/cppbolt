@@ -19,6 +19,24 @@ struct SimpleURBG {
     }
 };
 
+struct RejectingURBG {
+    typedef unsigned int result_type;
+    unsigned int calls;
+    RejectingURBG() : calls(0) {}
+#if defined(__clang__) || defined(__GNUC__)
+    static constexpr unsigned int min() { return 0; }
+    static constexpr unsigned int max() { return 5; }
+#else
+    static unsigned int min() { return 0; }
+    static unsigned int max() { return 5; }
+#endif
+    unsigned int operator()() {
+        unsigned int value = 5 - calls;
+        ++calls;
+        return value;
+    }
+};
+
 int main() {
     // merge
     int m1[] = {1, 3, 5, 7};
@@ -105,6 +123,13 @@ int main() {
     }
     std::printf("shuffle_is_permutation: %d\n", (int)sh_perm);
     std::printf("shuffle_changed_order: %d\n", (int)sh_diff);
+
+    RejectingURBG rejecting;
+    int rej_arr[] = {1, 2, 3, 4, 5};
+    std::shuffle(rej_arr, rej_arr + 5, rejecting);
+    std::printf("shuffle_rejects_out_of_range:");
+    for (int i = 0; i < 5; ++i) std::printf(" %d", rej_arr[i]);
+    std::printf("\n");
 
     SimpleURBG urbg2(99);
     int smp_src[] = {10, 20, 30, 40, 50, 60, 70, 80};
