@@ -29,7 +29,6 @@
         "compilers",
         "webassembly",
         "rust",
-        "c++",
         "cpp",
         "npm",
         "programming-languages",
