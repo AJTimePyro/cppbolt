@@ -5,7 +5,6 @@ export type WorkerMessage =
 	| {
 			type: "done";
 			exitCode: number;
-			stdout: string;
 			elapsedMs: number;
 			trap: string | null;
 	  }
@@ -20,10 +19,18 @@ export async function executeProgramInWorker(
 	try {
 		let exitCode: number | null = null;
 
+		let pendingChunk = "";
+		const flushChunk = (): void => {
+			if (!pendingChunk) return;
+			postMessage({ type: "stdout", chunk: pendingChunk });
+			pendingChunk = "";
+		};
+
 		const host = createWasmHost({
 			stdin: stdin || "",
 			onStdout: (chunk) => {
-				postMessage({ type: "stdout", chunk });
+				pendingChunk += chunk;
+				if (pendingChunk.endsWith("\n")) flushChunk();
 			},
 		});
 
@@ -57,13 +64,14 @@ export async function executeProgramInWorker(
 			}
 		}
 
+		flushChunk();
+
 		const elapsedMs = performance.now() - started;
 		const code = trap ? 134 : (exitCode ?? returned ?? 0);
 
 		postMessage({
 			type: "done",
 			exitCode: code,
-			stdout: host.getStdout(),
 			elapsedMs,
 			trap: trap ? (trap instanceof Error ? trap.message : String(trap)) : null,
 		});

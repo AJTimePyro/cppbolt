@@ -88,15 +88,23 @@ export class AsyncCppBoltRunner {
 
 			worker.onmessage = (event: MessageEvent) => {
 				const msg = event.data;
+				if (settled) return;
 				if (msg.type === "stdout") {
 					accumulatedStdout += msg.chunk;
-					options?.onStdout?.(msg.chunk);
+					if (options?.onStdout) {
+						try {
+							options.onStdout(msg.chunk);
+						} catch (err) {
+							cleanup();
+							reject(err instanceof Error ? err : new Error(String(err)));
+						}
+					}
 					return;
 				}
 				if (msg.type === "done") {
 					cleanup();
 					resolve({
-						stdout: msg.stdout,
+						stdout: accumulatedStdout,
 						exitCode: msg.exitCode,
 						elapsedMs: msg.elapsedMs,
 					});
