@@ -242,16 +242,16 @@ function formatGExact(vNum: number, prec: number, alternate = false): string {
 export interface WasmHostOptions {
 	/**
 	 * Stdin source for `read_char`.
-	 * - A `string` is consumed character by character; EOF returns -1.
-	 * - A `() => number` callback is called once per character; return -1 for EOF.
+	 * - A `string` is encoded as UTF-8 and consumed one byte per call; EOF returns -1.
+	 * - A `() => number` callback is called once per byte; return -1 for EOF.
 	 * - Omit (or leave undefined) for no stdin input.
 	 */
 	stdin?: string | (() => number);
 
 	/**
-	 * Called whenever the program writes characters to stdout.
-	 * Receives the chunk as a string; chunks are flushed per print call,
-	 * not per character.
+	 * Called whenever the program writes to stdout.
+	 * Receives decoded UTF-8 text. A call may contain more than one character, and
+	 * multi-byte sequences split across writes are buffered until complete.
 	 */
 	onStdout?: (chunk: string) => void;
 
@@ -286,7 +286,12 @@ export interface WasmHost {
 export function createWasmHost(options: WasmHostOptions = {}): WasmHost {
 	const { stdin, onStdout, onExit } = options;
 	let stdoutBuffer = "";
-	let inPos = 0;
+	const decoder = new TextDecoder("utf-8", { fatal: false });
+
+	// stdin state: encode a string once, then hand out one UTF-8 byte per read.
+	const stdinBytes =
+		typeof stdin === "string" ? new TextEncoder().encode(stdin) : null;
+	let stdinPos = 0;
 
 	const writeStdout = (str: string): void => {
 		stdoutBuffer += str;
@@ -298,7 +303,12 @@ export function createWasmHost(options: WasmHostOptions = {}): WasmHost {
 	const imports: WebAssembly.Imports = {
 		env: {
 			print_char: (ch: number): void => {
-				writeStdout(String.fromCharCode(ch));
+				const chunk = decoder.decode(new Uint8Array([ch & 0xff]), {
+					stream: true,
+				});
+				if (chunk) {
+					writeStdout(chunk);
+				}
 			},
 
 			print_int: (
@@ -447,11 +457,9 @@ export function createWasmHost(options: WasmHostOptions = {}): WasmHost {
 			read_char: (): number => {
 				if (typeof stdin === "function") {
 					return stdin();
-				} else if (typeof stdin === "string") {
-					if (inPos < stdin.length) {
-						return stdin.charCodeAt(inPos++);
-					}
-					return -1;
+				}
+				if (stdinBytes !== null) {
+					return stdinPos < stdinBytes.length ? stdinBytes[stdinPos++] : -1;
 				}
 				return -1;
 			},
@@ -467,6 +475,12 @@ export function createWasmHost(options: WasmHostOptions = {}): WasmHost {
 
 	return {
 		imports,
-		getStdout: () => stdoutBuffer,
+		getStdout: (): string => {
+			const tail = decoder.decode();
+			if (tail) {
+				stdoutBuffer += tail;
+			}
+			return stdoutBuffer;
+		},
 	};
 }
