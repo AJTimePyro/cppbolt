@@ -440,3 +440,91 @@ int main()
     assert_eq!(stdout, "15");
     Ok(())
 }
+
+#[test]
+fn range_for_const_reference_inside_function_template() -> Result<(), String> {
+    let source = r#"
+#include <array>
+
+template <typename T, int N>
+int sum_all(const std::array<T, N>& values) {
+    int sum = 0;
+    for (const T& value : values) {
+        sum += value;
+    }
+    return sum;
+}
+
+int main() {
+    std::array<int, 3> values = {10, 20, 30};
+    return sum_all(values) == 60 ? 0 : 1;
+}
+"#;
+    let (code, _) = run_cpp(source)?;
+    assert_eq!(
+        code, 0,
+        "const T& range-for must be substituted inside a function template"
+    );
+    Ok(())
+}
+
+#[test]
+fn range_for_vector_inside_function_template() -> Result<(), String> {
+    let source = r#"
+#include <vector>
+
+template <typename T>
+int sum_all(const std::vector<T>& values) {
+    int sum = 0;
+    for (const T& value : values) {
+        sum += value;
+    }
+    return sum;
+}
+
+int main() {
+    std::vector<int> values;
+    values.push_back(10);
+    values.push_back(20);
+    values.push_back(30);
+    return sum_all(values) == 60 ? 0 : 1;
+}
+"#;
+    let (code, _) = run_cpp(source)?;
+    assert_eq!(
+        code, 0,
+        "const T& range-for over std::vector must work in a function template"
+    );
+    Ok(())
+}
+
+#[test]
+fn template_body_substitutes_switch_and_structured_binding() -> Result<(), String> {
+    let source = r#"
+struct Pair {
+    int first;
+    int second;
+};
+
+template <typename T>
+int pick(T value) {
+    auto [a, b] = Pair{value, value + 1};
+    switch (b - a) {
+        case 1:
+            return a + b;
+        default:
+            return 0;
+    }
+}
+
+int main() {
+    return pick(20) == 41 ? 0 : 1;
+}
+"#;
+    let (code, _) = run_cpp(source)?;
+    assert_eq!(
+        code, 0,
+        "template statement substitution must cover switch and structured bindings"
+    );
+    Ok(())
+}

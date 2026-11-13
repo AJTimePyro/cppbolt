@@ -309,6 +309,11 @@ pub fn substitute_stmt(
             substitute_stmt(body, mapping, injected_class);
             substitute_expr(cond, mapping, injected_class);
         }
+        StmtKind::RangeFor { decl, range, body } => {
+            substitute_stmt(decl, mapping, injected_class);
+            substitute_expr(range, mapping, injected_class);
+            substitute_stmt(body, mapping, injected_class);
+        }
         StmtKind::For {
             init,
             cond,
@@ -326,6 +331,15 @@ pub fn substitute_stmt(
             }
             substitute_stmt(body, mapping, injected_class);
         }
+        StmtKind::StructuredBinding { ty, init, .. } => {
+            *ty = substitute_type(ty, mapping, injected_class);
+            substitute_expr(init, mapping, injected_class);
+        }
+        StmtKind::Switch { expr, body } => {
+            substitute_expr(expr, mapping, injected_class);
+            substitute_stmt(body, mapping, injected_class);
+        }
+        StmtKind::Case(expr, _) => substitute_expr(expr, mapping, injected_class),
         StmtKind::Return(Some(expr)) => substitute_expr(expr, mapping, injected_class),
         StmtKind::VarDecl { ty, init, .. } => {
             *ty = substitute_type(ty, mapping, injected_class);
@@ -338,7 +352,14 @@ pub fn substitute_stmt(
                 substitute_stmt(s, mapping, injected_class);
             }
         }
-        _ => {}
+        StmtKind::Return(None)
+        | StmtKind::Break
+        | StmtKind::Continue
+        | StmtKind::Default
+        | StmtKind::Empty
+        | StmtKind::UsingNamespace(_)
+        | StmtKind::UsingDecl(_)
+        | StmtKind::NamespaceAlias { .. } => {}
     }
 }
 
