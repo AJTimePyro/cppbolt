@@ -212,13 +212,15 @@ Ownership and lifetime rules:
 - The error buffer is static storage owned by the compiler. The message stays valid until the next compilation and must not be freed. Messages are truncated to 4096 bytes.
 - Linear memory growth can invalidate existing JavaScript memory views. Recreate `Uint8Array` and other typed-array views after calls that may grow memory. Numeric pointers remain offsets into linear memory.
 
-Diagnostics use the format `<file>:line:column: error: message`. The ABI does not accept a filename, so the main source is reported as `<input>`; errors inside embedded headers use the header's name.
+Diagnostics use the format `<file>:line:column: error: message`. The ABI does not accept a filename, so the main source is reported as `<input>`; errors inside embedded headers use the header's name. `CompileError` keeps the full `diagnostic` string and, when the message starts with that location prefix, also exposes parsed `file`, `line`, and `column` fields.
 
 ## Language coverage
 
-cppbolt supports scalar types, pointers, arrays, functions, classes, non-static data member initializers (NSDMI), aggregate initialization, selection initializers (`if`/`switch`), comma operator expressions, single inheritance, virtual functions, operator overloading, lambdas, range-based `for`, and the preprocessor, along with an embedded mini standard library (`<iostream>`, `<string>`, `<cstdio>`, `<cmath>`, `<iomanip>`, and related headers).
+cppbolt supports scalar types, pointers, arrays, functions, classes, non-static data member initializers (NSDMI), aggregate initialization, selection initializers (`if`/`switch`), comma operator expressions, single inheritance, virtual functions, operator overloading, lambdas, range-based `for`, and the preprocessor, along with an embedded mini standard library (`<iostream>`, `<string>`, `<vector>`, `<array>`, `<map>`, `<set>`, `<algorithm>`, `<cstdio>`, `<cmath>`, `<iomanip>`, `<memory>`, `<utility>`, `<functional>`, and related headers).
 
-Templates, standard containers and algorithms, exceptions, RTTI, and multiple or virtual inheritance are not supported.
+Function and class templates are supported, as are `std::vector`, `std::string`, `std::array`, `std::map`, `std::set`, and the common algorithms (`std::sort`, `std::reverse`, `std::find`, `std::count`, `std::max`, `std::min`). Coverage is not uniform: range-based `for` over `std::map` and `std::set` currently fails with an internal member-access diagnostic, and `<unordered_map>`, `<queue>`, and `<tuple>` are not available.
+
+Exceptions, RTTI, and multiple or virtual inheritance are not supported.
 
 Only the embedded headers can be included. The Wasm build has no filesystem access, so `#include` of any other file cannot be resolved.
 
@@ -244,10 +246,13 @@ The package ships a host for those imports, so you do not implement `env.*`
 yourself.
 
 - `createWasmHost(options?) -> WasmHost` builds the import environment. Options
-  are `stdin` (a string, or `() => number` for streaming input), `onStdout(chunk)`,
-  and `onExit(code)`. Calling `exit(code)` invokes `onExit` when supplied and
-  always stops the wasm program; the runner returns that code without terminating
-  the embedding Node.js process. The result exposes `imports` for
+  are `stdin` (a string, or `() => number` for byte-at-a-time input), `onStdout(chunk)`,
+  and `onExit(code)`. A string `stdin` is encoded as UTF-8 once, and each
+  `read_char` call returns one UTF-8 byte. `onStdout` receives decoded UTF-8 text;
+  multi-byte sequences split across writes are buffered until complete, so a chunk
+  can contain one or more characters. Calling `exit(code)` invokes `onExit` when
+  supplied and always stops the wasm program; the runner returns that code without
+  terminating the embedding Node.js process. The result exposes `imports` for
   `WebAssembly.instantiate` and `getStdout()`.
 - `new CppBoltRunner(host).run(wasmBytes) -> Promise<RunResult>` instantiates a
   module, calls `main` (or `_start`), and returns `{ stdout, exitCode }`. A
@@ -256,15 +261,23 @@ yourself.
 - `new AsyncCppBoltRunner(host?).run(wasmBytes, options?) -> Promise<RunResult>` runs
   the module in an isolated background worker (`node:worker_threads` or browser Web Worker)
   with `timeoutMs`, `signal` (`AbortSignal`), `stdin`, and streaming `onStdout`.
-  Invalid bytecode rejects with `CompileError`/`LinkError`, while program traps resolve
-  with exit code 134.
+  The constructor's `host` argument is accepted for compatibility but unused: the
+  worker builds its own host, so configure I/O through the run options. Output is
+  batched per line before crossing the worker channel. Invalid bytecode rejects
+  with an `Error`, while program traps resolve with exit code 134.
 - `compileAndRun(compiler, source, options?)` compiles and runs in one call.
-- `compileAndRunAsync(compiler, source, options?)` compiles and runs in a background worker.
+- `compileAndRunAsync(compiler, source, options?)` compiles synchronously on the
+  caller thread and then runs the module in a background worker. `onExit` has no
+  effect here because the worker builds its own host.
+- Errors: `TimeoutError` (with `stdout` and `elapsedMs`) when `timeoutMs` expires,
+  `AbortError` (a subclass of `TimeoutError`) when `signal` aborts execution, and
+  `CompileError` when compilation fails.
 
 ## Notes
 
 - The compiler ABI is single-threaded and stores result state in one slot. Serialize calls and use one instance per worker.
-- Compilation is synchronous. In a browser, run it in a Web Worker to keep the UI responsive.
+- Compilation is synchronous. In a browser, run it in a Web Worker to keep the UI responsive. `compileAndRunAsync` compiles on the caller thread and only moves execution to the worker.
+- The browser async runner creates its Web Worker from a Blob. If a Content Security Policy is active, allow `worker-src blob:` (or `script-src blob:`).
 
 ## License
 
