@@ -5,6 +5,7 @@ package_dir="${1:?Usage: verify_npm_package.sh <package-directory>}"
 
 test -f "$package_dir/package.json"
 test -f "$package_dir/README.md"
+test -f "$package_dir/LICENSE"
 test -f "$package_dir/dist/index.js"
 test -f "$package_dir/dist/index.d.ts"
 test -f "$package_dir/dist/index.browser.mjs"

@@ -8,8 +8,10 @@
 		"url": "https://github.com/AJTimePyro/cppbolt.git"
 	},
 	"main": "./dist/index.js",
-	"module": "./dist/index.browser.mjs",
 	"types": "./dist/index.d.ts",
+	"engines": {
+		"node": ">=18"
+	},
 	"jsdelivr": "./dist/cppbolt.browser.js",
 	"unpkg": "./dist/cppbolt.browser.js",
 	"exports": {
@@ -40,7 +42,8 @@
 	"files": [
 		"dist/",
 		"wasm/cppbolt.wasm",
-		"README.md"
+		"README.md",
+		"LICENSE"
 	],
 	"funding": "https://github.com/sponsors/AJTimePyro"
 }
