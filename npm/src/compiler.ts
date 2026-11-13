@@ -8,11 +8,23 @@ function decodeString(
 
 export class CompileError extends Error {
 	readonly diagnostic: string;
+	/** Source file reported in the diagnostic, if the message starts with one. */
+	readonly file?: string;
+	/** 1-based line number reported in the diagnostic, if present. */
+	readonly line?: number;
+	/** 1-based column number reported in the diagnostic, if present. */
+	readonly column?: number;
 
 	constructor(diagnostic: string) {
 		super(diagnostic);
 		this.name = "CompileError";
 		this.diagnostic = diagnostic;
+		const match = /^([^:]+):(\d+):(\d+):/.exec(diagnostic);
+		if (match) {
+			this.file = match[1];
+			this.line = Number(match[2]);
+			this.column = Number(match[3]);
+		}
 	}
 }
 
