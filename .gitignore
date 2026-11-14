@@ -3,6 +3,7 @@
 /site
 /dist
 npm/dist/
+npm/LICENSE
 web/host.js
 __pycache__/
 playground/

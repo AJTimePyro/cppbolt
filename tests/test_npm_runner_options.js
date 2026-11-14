@@ -44,6 +44,15 @@ async function testOptions() {
     ];
     assert.deepStrictEqual(stdinGot, [0xe6, 0x97, 0xa5, -1], "UTF-8 stdin must yield exact bytes followed by -1");
 
+    // Flushed incomplete UTF-8 tail notifies onStdout
+    const trailingChunks = [];
+    const hostTrailing = pkg.createWasmHost({ onStdout: (c) => trailingChunks.push(c) });
+    hostTrailing.imports.env.print_char(0xc3);
+    assert.strictEqual(trailingChunks.length, 0, "Incomplete sequence must not be emitted mid-stream");
+    const trailingOut = hostTrailing.getStdout();
+    assert.strictEqual(trailingOut, "\uFFFD", "Flushed tail must return replacement character");
+    assert.deepStrictEqual(trailingChunks, ["\uFFFD"], "onStdout must be notified of flushed tail character");
+
     const host = pkg.createWasmHost({});
     const runner = new pkg.CppBoltRunner(host);
     const minimalWasmBytes = new Uint8Array([

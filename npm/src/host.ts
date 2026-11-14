@@ -478,7 +478,7 @@ export function createWasmHost(options: WasmHostOptions = {}): WasmHost {
 		getStdout: (): string => {
 			const tail = decoder.decode();
 			if (tail) {
-				stdoutBuffer += tail;
+				writeStdout(tail);
 			}
 			return stdoutBuffer;
 		},

@@ -255,7 +255,7 @@ yourself.
   terminating the embedding Node.js process. The result exposes `imports` for
   `WebAssembly.instantiate` and `getStdout()`.
 - `new CppBoltRunner(host).run(wasmBytes) -> Promise<RunResult>` instantiates a
-  module, calls `main` (or `_start`), and returns `{ stdout, exitCode }`. A
+  module, calls `main` (or `_start`), and returns `{ stdout, exitCode, elapsedMs }`. A
   WebAssembly trap is reported as exit code 134 instead of throwing. Runs
   synchronously on the current thread and does not support watchdog timeouts.
 - `new AsyncCppBoltRunner(host?).run(wasmBytes, options?) -> Promise<RunResult>` runs
@@ -271,7 +271,7 @@ yourself.
   effect here because the worker builds its own host.
 - Errors: `TimeoutError` (with `stdout` and `elapsedMs`) when `timeoutMs` expires,
   `AbortError` (a subclass of `TimeoutError`) when `signal` aborts execution, and
-  `CompileError` when compilation fails.
+  `CompileError` (with `file`, `line`, `column`, and `diagnostic`) when compilation fails.
 
 ## Notes
 

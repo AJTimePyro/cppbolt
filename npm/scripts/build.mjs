@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
@@ -8,6 +9,12 @@ const root = path.resolve(__dirname, "..");
 const tscBin = path.join(root, "node_modules", "typescript", "bin", "tsc");
 
 async function build() {
+	const repoRoot = path.resolve(root, "..");
+	const licenseSrc = path.join(repoRoot, "LICENSE");
+	if (fs.existsSync(licenseSrc)) {
+		fs.copyFileSync(licenseSrc, path.join(root, "LICENSE"));
+	}
+
 	execFileSync(process.execPath, [tscBin, "-p", "tsconfig.json"], {
 		cwd: root,
 		stdio: "inherit",

@@ -31,7 +31,8 @@
 	"scripts": {
 		"build": "node scripts/build.mjs",
 		"lint": "biome check .",
-		"lint:fix": "biome check --write ."
+		"lint:fix": "biome check --write .",
+		"test": "node ../tests/test_npm_runner_options.js && node ../tests/test_npm_compile_and_run_async.js && node ../tests/test_npm_node_worker.js && node ../tests/test_npm_browser_build.js"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.6.5",

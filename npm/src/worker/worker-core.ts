@@ -30,7 +30,12 @@ export async function executeProgramInWorker(
 			stdin: stdin || "",
 			onStdout: (chunk) => {
 				pendingChunk += chunk;
-				if (pendingChunk.endsWith("\n")) flushChunk();
+				const lastNl = pendingChunk.lastIndexOf("\n");
+				if (lastNl !== -1) {
+					const toSend = pendingChunk.slice(0, lastNl + 1);
+					pendingChunk = pendingChunk.slice(lastNl + 1);
+					postMessage({ type: "stdout", chunk: toSend });
+				}
 			},
 		});
 
@@ -64,6 +69,7 @@ export async function executeProgramInWorker(
 			}
 		}
 
+		host.getStdout();
 		flushChunk();
 
 		const elapsedMs = performance.now() - started;
