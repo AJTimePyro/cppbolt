@@ -34,6 +34,7 @@ mod template_nested;
 mod template_registry;
 mod template_spec;
 pub mod template_subst;
+mod template_subst_stmt;
 #[cfg(test)]
 mod tests;
 
