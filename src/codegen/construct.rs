@@ -348,12 +348,8 @@ fn move_constructor_matches(sig: &FunctionSig, class_name: &str) -> bool {
         return false;
     }
     let defaults = sig.default_args.get(1..).unwrap_or_default();
-    if defaults.len() < sig.param_types.len() - 1
-        || defaults
+    defaults.len() >= sig.param_types.len() - 1
+        && defaults
             .get(1..)
-            .is_some_and(|rest| !rest.iter().all(|d| d.is_some()))
-    {
-        return false;
-    }
-    true
+            .is_none_or(|rest| rest.iter().all(|d| d.is_some()))
 }

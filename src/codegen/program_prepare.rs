@@ -303,10 +303,7 @@ impl<'a> Codegen<'a> {
                                 return true;
                             }
                             let plain_target = QualifiedName::new(call_target).plain();
-                            if plain_target.starts_with("operator") && a.contains(plain_target) {
-                                return true;
-                            }
-                            false
+                            plain_target.starts_with("operator") && a.contains(plain_target)
                         })
                     {
                         reachable.insert(t_idx);
