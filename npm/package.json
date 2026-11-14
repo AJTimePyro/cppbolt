@@ -8,8 +8,10 @@
 		"url": "https://github.com/AJTimePyro/cppbolt.git"
 	},
 	"main": "./dist/index.js",
-	"module": "./dist/index.browser.mjs",
 	"types": "./dist/index.d.ts",
+	"engines": {
+		"node": ">=18"
+	},
 	"jsdelivr": "./dist/cppbolt.browser.js",
 	"unpkg": "./dist/cppbolt.browser.js",
 	"exports": {
@@ -29,7 +31,8 @@
 	"scripts": {
 		"build": "node scripts/build.mjs",
 		"lint": "biome check .",
-		"lint:fix": "biome check --write ."
+		"lint:fix": "biome check --write .",
+		"test": "node ../tests/test_npm_runner_options.js && node ../tests/test_npm_compile_and_run_async.js && node ../tests/test_npm_node_worker.js && node ../tests/test_npm_browser_build.js"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.6.5",
@@ -40,7 +43,8 @@
 	"files": [
 		"dist/",
 		"wasm/cppbolt.wasm",
-		"README.md"
+		"README.md",
+		"LICENSE"
 	],
 	"funding": "https://github.com/sponsors/AJTimePyro"
 }

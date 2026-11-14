@@ -1,14 +1,19 @@
 import path from "node:path";
 import { Worker } from "node:worker_threads";
 import type { WasmHost } from "./host.js";
-import { type RunOptions, type RunResult, TimeoutError } from "./runner.js";
+import {
+	AbortError,
+	type RunOptions,
+	type RunResult,
+	TimeoutError,
+} from "./runner.js";
 
 export class AsyncCppBoltRunner {
 	/**
 	 * Executes WebAssembly modules inside a dedicated Node.js `worker_threads` instance.
 	 * Host I/O configuration (stdin, streaming stdout) is passed per invocation via `RunOptions`.
 	 */
-	constructor(readonly host?: WasmHost) {}
+	constructor(readonly host?: WasmHost | null) {}
 
 	async run(wasmBytes: Uint8Array, options?: RunOptions): Promise<RunResult> {
 		const workerPath = path.join(__dirname, "worker.node.js");
@@ -47,38 +52,36 @@ export class AsyncCppBoltRunner {
 			if (options?.signal) {
 				if (options.signal.aborted) {
 					cleanup();
-					reject(
-						new TimeoutError(
-							"Execution aborted by signal",
-							accumulatedStdout,
-							0,
-						),
-					);
+					reject(new AbortError(accumulatedStdout, 0));
 					return;
 				}
 				abortHandler = () => {
 					cleanup();
 					reject(
-						new TimeoutError(
-							"Execution aborted by signal",
-							accumulatedStdout,
-							performance.now() - started,
-						),
+						new AbortError(accumulatedStdout, performance.now() - started),
 					);
 				};
 				options.signal.addEventListener("abort", abortHandler);
 			}
 
 			worker.on("message", (msg) => {
+				if (settled) return;
 				if (msg.type === "stdout") {
 					accumulatedStdout += msg.chunk;
-					options?.onStdout?.(msg.chunk);
+					if (options?.onStdout) {
+						try {
+							options.onStdout(msg.chunk);
+						} catch (err) {
+							cleanup();
+							reject(err instanceof Error ? err : new Error(String(err)));
+						}
+					}
 					return;
 				}
 				if (msg.type === "done") {
 					cleanup();
 					resolve({
-						stdout: msg.stdout,
+						stdout: accumulatedStdout,
 						exitCode: msg.exitCode,
 						elapsedMs: msg.elapsedMs,
 					});

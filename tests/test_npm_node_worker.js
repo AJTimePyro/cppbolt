@@ -46,6 +46,42 @@ const printStdoutWasmBytes = new Uint8Array([
     0x0a, 0x0a, 0x01, 0x08, 0x00, 0x41, 0x3f, 0x10, 0x00, 0x41, 0x00, 0x0b
 ]);
 
+// prints 0xc3 (incomplete 2-byte UTF-8)
+const printIncompleteUtf8WasmBytes = new Uint8Array([
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x09, 0x02,
+    0x60, 0x00, 0x01, 0x7f,
+    0x60, 0x01, 0x7f, 0x00,
+    0x02, 0x12, 0x01,
+    0x03, 0x65, 0x6e, 0x76,
+    0x0a, 0x70, 0x72, 0x69, 0x6e, 0x74, 0x5f, 0x63, 0x68, 0x61, 0x72,
+    0x00, 0x01,
+    0x03, 0x02, 0x01, 0x00,
+    0x07, 0x08, 0x01, 0x04, 0x6d, 0x61, 0x69, 0x6e, 0x00, 0x01,
+    0x0a, 0x0b, 0x01, 0x09, 0x00,
+    0x41, 0xc3, 0x01, 0x10, 0x00,
+    0x41, 0x00, 0x0b
+]);
+
+// prints 'A', '\n', 'B'
+const printMultiWasmBytes = new Uint8Array([
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+    0x01, 0x09, 0x02,
+    0x60, 0x00, 0x01, 0x7f,
+    0x60, 0x01, 0x7f, 0x00,
+    0x02, 0x12, 0x01,
+    0x03, 0x65, 0x6e, 0x76,
+    0x0a, 0x70, 0x72, 0x69, 0x6e, 0x74, 0x5f, 0x63, 0x68, 0x61, 0x72,
+    0x00, 0x01,
+    0x03, 0x02, 0x01, 0x00,
+    0x07, 0x08, 0x01, 0x04, 0x6d, 0x61, 0x69, 0x6e, 0x00, 0x01,
+    0x0a, 0x14, 0x01, 0x12, 0x00,
+    0x41, 0xc1, 0x00, 0x10, 0x00,
+    0x41, 0x0a, 0x10, 0x00,
+    0x41, 0xc2, 0x00, 0x10, 0x00,
+    0x41, 0x00, 0x0b
+]);
+
 async function testNodeWorker() {
     const pkg = require("../npm/dist/index.js");
 
@@ -78,9 +114,10 @@ async function testNodeWorker() {
     } catch (err) {
         threw = true;
         assert.ok(err instanceof pkg.TimeoutError, "Abort must throw TimeoutError");
+        assert.ok(err instanceof pkg.AbortError, "Abort must throw AbortError");
         assert.match(err.message, /aborted/i);
     }
-    assert.strictEqual(threw, true, "Aborted execution must throw TimeoutError");
+    assert.strictEqual(threw, true, "Aborted execution must throw TimeoutError/AbortError");
 
     let invalidThrew = false;
     try {
@@ -104,6 +141,31 @@ async function testNodeWorker() {
     });
     assert.strictEqual(resStdout.exitCode, 0);
     assert.strictEqual(chunks.join(""), "?", "onStdout must receive streamed output chunks");
+
+    // Trailing incomplete UTF-8 sequence is flushed on worker completion
+    const resTrailing = await runner.run(printIncompleteUtf8WasmBytes);
+    assert.strictEqual(resTrailing.stdout, "\uFFFD", "Worker must flush incomplete trailing UTF-8 sequence");
+
+    // Line buffering splits on last newline and flushes complete lines
+    const multiChunks = [];
+    const resMulti = await runner.run(printMultiWasmBytes, {
+        onStdout: (c) => multiChunks.push(c)
+    });
+    assert.strictEqual(resMulti.stdout, "A\nB");
+    assert.deepStrictEqual(multiChunks, ["A\n", "B"], "Lines ending with newline must flush before EOF");
+
+    let stdoutCallbackThrew = false;
+    try {
+        await runner.run(printStdoutWasmBytes, {
+            onStdout: () => {
+                throw new Error("client onStdout failure");
+            }
+        });
+    } catch (err) {
+        stdoutCallbackThrew = true;
+        assert.strictEqual(err.message, "client onStdout failure");
+    }
+    assert.strictEqual(stdoutCallbackThrew, true, "Throwing inside onStdout must reject runner.run cleanly");
 
     console.log("Node worker test passed!");
     process.exit(0);

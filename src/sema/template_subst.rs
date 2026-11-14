@@ -3,9 +3,9 @@
 
 use crate::ast::decl::{Decl, FunctionDecl, Param};
 use crate::ast::expr::Expr;
-use crate::ast::stmt::{Stmt, StmtKind};
 use crate::ast::template::TemplateClass;
 use crate::ast::types::Type;
+pub use crate::sema::template_subst_stmt::substitute_stmt;
 use std::collections::HashMap;
 
 pub fn substitute_type(
@@ -38,12 +38,10 @@ pub fn substitute_type(
             Type::Pointer(Box::new(substitute_type(inner, mapping, injected_class)))
         }
         Type::Reference(inner) => {
-            let subst_inner = substitute_type(inner, mapping, injected_class);
-            collapse_reference(false, subst_inner)
+            collapse_reference(false, substitute_type(inner, mapping, injected_class))
         }
         Type::RvalueReference(inner) => {
-            let subst_inner = substitute_type(inner, mapping, injected_class);
-            collapse_reference(true, subst_inner)
+            collapse_reference(true, substitute_type(inner, mapping, injected_class))
         }
         Type::Array(inner, size) => Type::Array(
             Box::new(substitute_type(inner, mapping, injected_class)),
@@ -236,18 +234,13 @@ fn substitute_callee_identifier(
 }
 
 pub fn substitute_template_name(name: &str, mapping: &HashMap<String, Type>) -> String {
-    let Some(open) = name.find('<') else {
-        return name.to_string();
-    };
-    let Some(close) = name.rfind('>') else {
+    let (Some(open), Some(close)) = (name.find('<'), name.rfind('>')) else {
         return name.to_string();
     };
     if open >= close {
         return name.to_string();
     }
-    let base = &name[..open];
-    let inside = &name[open + 1..close];
-    let suffix = &name[close + 1..];
+    let (base, inside, suffix) = (&name[..open], &name[open + 1..close], &name[close + 1..]);
     let mut result = inside.to_string();
     for (param, ty) in mapping {
         result = replace_whole_word(&result, param, &ty.to_c_type());
@@ -275,71 +268,6 @@ fn replace_whole_word(text: &str, word: &str, replacement: &str) -> String {
     }
     result.push_str(remainder);
     result
-}
-
-pub fn substitute_stmt(
-    stmt: &mut Stmt,
-    mapping: &HashMap<String, Type>,
-    injected_class: Option<(&str, &Type)>,
-) {
-    match &mut stmt.kind {
-        StmtKind::Expr(expr) => substitute_expr(expr, mapping, injected_class),
-        StmtKind::Compound(stmts) => {
-            for s in stmts {
-                substitute_stmt(s, mapping, injected_class);
-            }
-        }
-        StmtKind::If {
-            branches,
-            else_stmt,
-        } => {
-            for (cond, then_stmt) in branches {
-                substitute_expr(cond, mapping, injected_class);
-                substitute_stmt(then_stmt, mapping, injected_class);
-            }
-            if let Some(else_s) = else_stmt {
-                substitute_stmt(else_s, mapping, injected_class);
-            }
-        }
-        StmtKind::While { cond, body } => {
-            substitute_expr(cond, mapping, injected_class);
-            substitute_stmt(body, mapping, injected_class);
-        }
-        StmtKind::DoWhile { body, cond } => {
-            substitute_stmt(body, mapping, injected_class);
-            substitute_expr(cond, mapping, injected_class);
-        }
-        StmtKind::For {
-            init,
-            cond,
-            step,
-            body,
-        } => {
-            if let Some(init_s) = init {
-                substitute_stmt(init_s, mapping, injected_class);
-            }
-            if let Some(cond_e) = cond {
-                substitute_expr(cond_e, mapping, injected_class);
-            }
-            if let Some(step_e) = step {
-                substitute_expr(step_e, mapping, injected_class);
-            }
-            substitute_stmt(body, mapping, injected_class);
-        }
-        StmtKind::Return(Some(expr)) => substitute_expr(expr, mapping, injected_class),
-        StmtKind::VarDecl { ty, init, .. } => {
-            *ty = substitute_type(ty, mapping, injected_class);
-            if let Some(init_e) = init {
-                substitute_expr(init_e, mapping, injected_class);
-            }
-        }
-        StmtKind::VarDeclGroup(group) => {
-            for s in group {
-                substitute_stmt(s, mapping, injected_class);
-            }
-        }
-        _ => {}
-    }
 }
 
 fn substitute_func_name(func_name: &str, injected_class: Option<(&str, &Type)>) -> String {
@@ -482,14 +410,12 @@ pub fn substitute_struct(
 
 pub fn collapse_reference(outer_is_rvalue: bool, inner: Type) -> Type {
     if inner.is_reference() {
-        if let Some(target) = inner.deref_type() {
-            if !outer_is_rvalue || inner.is_lvalue_reference() {
-                Type::Reference(Box::new(target.clone()))
-            } else {
-                Type::RvalueReference(Box::new(target.clone()))
-            }
+        let is_lvalue = inner.is_lvalue_reference();
+        let target = inner.deref_type().cloned().unwrap_or(inner);
+        if !outer_is_rvalue || is_lvalue {
+            Type::Reference(Box::new(target))
         } else {
-            inner
+            Type::RvalueReference(Box::new(target))
         }
     } else if outer_is_rvalue {
         Type::RvalueReference(Box::new(inner))

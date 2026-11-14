@@ -24,7 +24,7 @@ export interface RunOptions {
 	onStdout?: (chunk: string) => void;
 }
 
-/** Error raised when execution exceeds `timeoutMs` or receives an abort signal. */
+/** Error raised when execution exceeds `timeoutMs`. */
 export class TimeoutError extends Error {
 	readonly stdout: string;
 	readonly elapsedMs: number;
@@ -34,6 +34,14 @@ export class TimeoutError extends Error {
 		this.name = "TimeoutError";
 		this.stdout = stdout;
 		this.elapsedMs = elapsedMs;
+	}
+}
+
+/** Error raised when execution is cancelled through an `AbortSignal`. */
+export class AbortError extends TimeoutError {
+	constructor(stdout = "", elapsedMs = 0) {
+		super("Execution aborted", stdout, elapsedMs);
+		this.name = "AbortError";
 	}
 }
 

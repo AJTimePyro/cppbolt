@@ -6,14 +6,14 @@ export { CompileError, CppBoltCompiler } from "./compiler.js";
 export type { WasmHost, WasmHostOptions } from "./host.js";
 export { createWasmHost, isWasmExit, WasmExit } from "./host.js";
 export type { RunOptions, RunResult } from "./runner.js";
-export { CppBoltRunner, TimeoutError } from "./runner.js";
+export { AbortError, CppBoltRunner, TimeoutError } from "./runner.js";
 
 /** Common runner interface supporting synchronous and worker-isolated execution. */
 export interface RunnerInstance {
 	run(wasmBytes: Uint8Array, options?: RunOptions): Promise<RunResult>;
 }
 
-export type AsyncRunnerFactory = (host: WasmHost) => RunnerInstance;
+export type AsyncRunnerFactory = (host: WasmHost | null) => RunnerInstance;
 let defaultAsyncRunnerFactory: AsyncRunnerFactory | null = null;
 
 export function registerAsyncRunnerFactory(factory: AsyncRunnerFactory): void {
@@ -40,19 +40,22 @@ export async function compileAndRun(
 /**
  * Compiles C++ source and executes the emitted WebAssembly module in an isolated
  * worker with timeout, abort, and I/O streaming support.
+ *
+ * @remarks
+ * Compilation runs synchronously on the caller thread; only execution is
+ * off-thread. Host options such as `onExit` do not apply here because the worker
+ * builds its own host.
  */
 export async function compileAndRunAsync(
 	compiler: CppBoltCompiler,
 	source: string,
-	options?: WasmHostOptions & RunOptions,
+	options?: RunOptions,
 ): Promise<RunResult> {
-	const host = createWasmHost(options);
 	const bytes = compiler.compile(source);
 	if (!defaultAsyncRunnerFactory) {
 		throw new Error(
 			"No AsyncRunner registered for this environment. Import from 'cppbolt' (Node) or 'cppbolt/browser' (Browser).",
 		);
 	}
-	const runner = defaultAsyncRunnerFactory(host);
-	return runner.run(bytes, options);
+	return defaultAsyncRunnerFactory(null).run(bytes, options);
 }

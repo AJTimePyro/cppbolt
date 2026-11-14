@@ -31,6 +31,7 @@ mkdir -p "$output/wasm" "$output/dist"
 cp "$root/npm/package.json" "$output/package.json"
 (cd "$output" && npm pkg delete devDependencies scripts)
 cp "$root/npm/README.md"    "$output/README.md"
+cp "$root/LICENSE"          "$output/LICENSE"
 cp -r "$root/npm/dist/."    "$output/dist/"
 cp "$wasm"                  "$output/wasm/cppbolt.wasm"
 
