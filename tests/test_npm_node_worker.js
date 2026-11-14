@@ -78,9 +78,10 @@ async function testNodeWorker() {
     } catch (err) {
         threw = true;
         assert.ok(err instanceof pkg.TimeoutError, "Abort must throw TimeoutError");
+        assert.ok(err instanceof pkg.AbortError, "Abort must throw AbortError");
         assert.match(err.message, /aborted/i);
     }
-    assert.strictEqual(threw, true, "Aborted execution must throw TimeoutError");
+    assert.strictEqual(threw, true, "Aborted execution must throw TimeoutError/AbortError");
 
     let invalidThrew = false;
     try {
@@ -104,6 +105,19 @@ async function testNodeWorker() {
     });
     assert.strictEqual(resStdout.exitCode, 0);
     assert.strictEqual(chunks.join(""), "?", "onStdout must receive streamed output chunks");
+
+    let stdoutCallbackThrew = false;
+    try {
+        await runner.run(printStdoutWasmBytes, {
+            onStdout: () => {
+                throw new Error("client onStdout failure");
+            }
+        });
+    } catch (err) {
+        stdoutCallbackThrew = true;
+        assert.strictEqual(err.message, "client onStdout failure");
+    }
+    assert.strictEqual(stdoutCallbackThrew, true, "Throwing inside onStdout must reject runner.run cleanly");
 
     console.log("Node worker test passed!");
     process.exit(0);
