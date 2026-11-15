@@ -1,9 +1,66 @@
 use super::template_deduce::{
     deduce_template_arguments, parse_types_list, split_template_call_name,
 };
+use super::template_partial_order::{self, FunctionTemplateCand};
 use super::template_subst::substitute_function;
 use super::*;
 use crate::ast::decl::RefQualifier;
+use crate::sema::pack_expansion::TemplateArg;
+
+pub(crate) fn format_canonical_args(
+    template_params: &[TemplateParam],
+    mapping: &HashMap<String, TemplateArg>,
+) -> String {
+    let mut pieces = Vec::new();
+    for p in template_params {
+        match mapping.get(&p.name) {
+            Some(TemplateArg::Type(t)) => pieces.push(t.to_c_type()),
+            Some(TemplateArg::NonType(v)) => pieces.push(v.to_string()),
+            Some(TemplateArg::TypePack(types)) => {
+                for t in types {
+                    pieces.push(t.to_c_type());
+                }
+            }
+            Some(TemplateArg::NonTypePack(vals)) => {
+                for v in vals {
+                    pieces.push(v.to_string());
+                }
+            }
+            None => pieces.push("int".to_string()),
+        }
+    }
+    pieces.join(", ")
+}
+
+type ViableCandidate = (
+    FunctionDecl,
+    Vec<TemplateParam>,
+    HashMap<String, TemplateArg>,
+    FunctionSig,
+    usize,
+);
+
+fn select_best_template_candidate(viable: &[ViableCandidate], num_args: usize) -> Option<usize> {
+    let mut best_idx = None;
+    for (i, v_i) in viable.iter().enumerate() {
+        let cand_i = FunctionTemplateCand::new(&v_i.0, &v_i.1);
+        let strictly_better = viable.iter().enumerate().all(|(j, v_j)| {
+            if i == j {
+                return true;
+            }
+            let cand_j = FunctionTemplateCand::new(&v_j.0, &v_j.1);
+            template_partial_order::compare_function_templates(&cand_i, &cand_j, num_args)
+                == Some(std::cmp::Ordering::Less)
+        });
+        if strictly_better {
+            if best_idx.is_some() {
+                return None;
+            }
+            best_idx = Some(i);
+        }
+    }
+    best_idx
+}
 
 impl Sema {
     pub fn try_resolve_function_template_call(
@@ -26,56 +83,147 @@ impl Sema {
             };
 
         if let Some(candidates) = self.function_templates.get(tmpl_name).cloned() {
-            let mut last_err = None;
-            for (template_decl, template_params) in &candidates {
-                let min_args = template_decl
-                    .params
-                    .iter()
-                    .filter(|p| p.default_val.is_none())
-                    .count();
-                let max_args = template_decl.params.len();
-                let num_args = if args.is_empty() {
-                    arg_types.len()
-                } else {
-                    args.len()
-                };
-                if num_args < min_args || num_args > max_args {
-                    continue;
+            let mut viable = self.collect_viable_template_candidates(
+                &candidates,
+                &explicit_args,
+                (arg_types, args),
+                pos,
+            )?;
+            if viable.is_empty() {
+                return Ok(None);
+            }
+
+            let num_args = if args.is_empty() {
+                arg_types.len()
+            } else {
+                args.len()
+            };
+
+            let mut min_score = usize::MAX;
+            for v in &viable {
+                if v.4 < min_score {
+                    min_score = v.4;
                 }
-                match deduce_template_arguments(
-                    template_params,
-                    template_decl,
-                    &explicit_args,
-                    (arg_types, args),
-                    pos,
-                ) {
-                    Ok(mapping) => {
-                        let sig = self.instantiate_function_template(
-                            &mapping,
-                            template_params,
-                            template_decl,
-                            pos,
-                        )?;
-                        if let Err(failure) =
-                            self.score_arguments(&sig.param_types, arg_types, Some(args))
-                        {
+            }
+            viable.retain(|v| v.4 == min_score);
+
+            if viable.len() == 1 {
+                let v = viable.remove(0);
+                let sig = self.instantiate_function_template(&v.2, &v.1, &v.0, pos)?;
+                return Ok(Some(sig));
+            }
+
+            if let Some(idx) = select_best_template_candidate(&viable, num_args) {
+                let v = viable.remove(idx);
+                let sig = self.instantiate_function_template(&v.2, &v.1, &v.0, pos)?;
+                return Ok(Some(sig));
+            }
+            return Err(self.ambiguous_call(tmpl_name, arg_types, pos));
+        }
+        Ok(None)
+    }
+
+    fn collect_viable_template_candidates(
+        &mut self,
+        candidates: &[(FunctionDecl, Vec<TemplateParam>)],
+        explicit_args: &[Type],
+        call_args: (&[Type], &[Expr]),
+        pos: ExprPos,
+    ) -> Result<Vec<ViableCandidate>, CompileError> {
+        let (arg_types, args) = call_args;
+        let mut last_err = None;
+        let mut viable = Vec::new();
+        for (template_decl, template_params) in candidates {
+            let has_pack = template_decl.params.last().is_some_and(|p| p.is_pack)
+                || template_params.last().is_some_and(|p| p.is_pack);
+            let min_args = template_decl
+                .params
+                .iter()
+                .filter(|p| !p.is_pack && p.default_val.is_none())
+                .count();
+            let max_args = template_decl.params.len();
+            let num_args = if args.is_empty() {
+                arg_types.len()
+            } else {
+                args.len()
+            };
+            if num_args < min_args || (!has_pack && num_args > max_args) {
+                continue;
+            }
+            match deduce_template_arguments(
+                template_params,
+                template_decl,
+                explicit_args,
+                (arg_types, args),
+                pos,
+            ) {
+                Ok(mapping) => {
+                    let sig = self.substitute_template_function_sig(
+                        &mapping,
+                        template_params,
+                        template_decl,
+                        pos,
+                    )?;
+                    match self.score_arguments(&sig.param_types, arg_types, Some(args)) {
+                        Ok(score) => {
+                            viable.push((
+                                template_decl.clone(),
+                                template_params.clone(),
+                                mapping,
+                                sig,
+                                score,
+                            ));
+                        }
+                        Err(failure) => {
                             last_err = Some(self.no_matching_conversion(
                                 &template_decl.name,
                                 &failure,
                                 pos,
                             ));
-                            continue;
                         }
-                        return Ok(Some(sig));
                     }
-                    Err(e) => last_err = Some(e),
                 }
-            }
-            if let Some(e) = last_err {
-                return Err(e);
+                Err(e) => last_err = Some(e),
             }
         }
-        Ok(None)
+        if viable.is_empty() && let Some(e) = last_err {
+            return Err(e);
+        }
+        Ok(viable)
+    }
+
+    pub fn substitute_template_function_sig(
+        &mut self,
+        mapping: &HashMap<String, TemplateArg>,
+        template_params: &[TemplateParam],
+        template_decl: &FunctionDecl,
+        pos: ExprPos,
+    ) -> Result<FunctionSig, CompileError> {
+        let canonical_args = format_canonical_args(template_params, mapping);
+        let inst_name = format!("{}<{}>", template_decl.name, canonical_args);
+        let mut func_decl =
+            substitute_function(template_decl, mapping, None, Some(inst_name));
+
+        self.resolve_and_instantiate_type(&mut func_decl.return_type, pos.line, pos.col)?;
+        for p in &mut func_decl.params {
+            self.resolve_and_instantiate_type(&mut p.ty, pos.line, pos.col)?;
+        }
+
+        let mangled = self.mangle_name(&func_decl.name, &func_decl.params);
+        Ok(FunctionSig {
+            name: func_decl.name,
+            mangled_name: mangled,
+            return_type: func_decl.return_type,
+            param_types: func_decl.params.iter().map(|p| p.ty.clone()).collect(),
+            default_args: func_decl
+                .params
+                .iter()
+                .map(|p| p.default_val.clone())
+                .collect(),
+            is_static: false,
+            is_explicit: false,
+            ref_qualifier: RefQualifier::None,
+        })
     }
 
     pub fn attach_out_of_class_template_method(
@@ -123,7 +271,7 @@ impl Sema {
 
     pub fn instantiate_function_template(
         &mut self,
-        mapping: &HashMap<String, Type>,
+        mapping: &HashMap<String, TemplateArg>,
         template_params: &[TemplateParam],
         template_decl: &FunctionDecl,
         pos: ExprPos,
@@ -136,16 +284,7 @@ impl Sema {
             ));
         }
 
-        let canonical_args = template_params
-            .iter()
-            .map(|p| {
-                mapping
-                    .get(&p.name)
-                    .map(|t| t.to_c_type())
-                    .unwrap_or_else(|| "int".to_string())
-            })
-            .collect::<Vec<_>>()
-            .join(", ");
+        let canonical_args = format_canonical_args(template_params, mapping);
         let inst_name = format!("{}<{}>", template_decl.name, canonical_args);
         let mut func_decl =
             substitute_function(template_decl, mapping, None, Some(inst_name.clone()));
