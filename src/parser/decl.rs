@@ -39,7 +39,10 @@ impl Parser {
             return Ok(());
         }
 
-        if self.peek() == &TokenKind::KwStruct || self.peek() == &TokenKind::KwClass {
+        if self.peek() == &TokenKind::KwStruct
+            || self.peek() == &TokenKind::KwClass
+            || self.is_struct_after_alignas()
+        {
             let decl = self.parse_struct()?;
             flatten_struct_decl(decl, declarations);
             return Ok(());
@@ -263,13 +266,14 @@ impl Parser {
 
         let starts_with_expr = token_starts_expr(self.peek_ahead(1));
         let saved_pos = self.pos;
+        let saved_splits = self.shr_splits.len();
         match self.parse_function_tail(name.clone(), ty.clone(), start_tok.line, start_tok.col) {
             Ok(func) => Ok(Decl::Function(func)),
             Err(func_err) => {
                 if self.nesting_exceeded.get() {
                     return Err(func_err);
                 }
-                self.pos = saved_pos;
+                self.rollback_pos(saved_pos, saved_splits);
                 self.parse_global_var(name, ty, start_tok)
                     .map_err(|var_err| {
                         if starts_with_expr || self.pos > saved_pos + 1 {

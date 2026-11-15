@@ -2,15 +2,22 @@ use super::*;
 
 impl Parser {
     pub(super) fn parse_struct(&mut self) -> Result<Decl, CompileError> {
+        let mut struct_align = None;
+        if self.peek() == &TokenKind::KwAlignas {
+            let spec = self.parse_alignas_spec()?;
+            struct_align = Some(spec.to_type());
+        }
         let start = self.current().clone();
-        let (name, is_class) = self.parse_struct_name()?;
+        let (name, is_class) = self.parse_struct_name(&mut struct_align)?;
         if !self.active_type_params.is_empty() {
             self.register_template_name(&name);
         }
 
         if self.peek() == &TokenKind::Semi {
             self.advance();
-            return Ok(StructBody::new(name, is_class, start.line, start.col).into_decl(Vec::new()));
+            let mut body = StructBody::new(name, is_class, start.line, start.col);
+            body.alignment = struct_align;
+            return Ok(body.into_decl(Vec::new()));
         }
 
         let base_classes = self.parse_base_classes()?;
@@ -18,6 +25,7 @@ impl Parser {
 
         self.active_struct_scopes.push(name.clone());
         let mut body = StructBody::new(name, is_class, start.line, start.col);
+        body.alignment = struct_align;
         while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
             self.parse_struct_member(&mut body)?;
         }
@@ -29,9 +37,16 @@ impl Parser {
         Ok(body.into_decl(base_classes))
     }
 
-    fn parse_struct_name(&mut self) -> Result<(String, bool), CompileError> {
+    fn parse_struct_name(
+        &mut self,
+        struct_align: &mut Option<Type>,
+    ) -> Result<(String, bool), CompileError> {
         let is_class = self.current().kind == TokenKind::KwClass;
         self.advance();
+        if self.peek() == &TokenKind::KwAlignas {
+            let spec = self.parse_alignas_spec()?;
+            *struct_align = Some(spec.to_type());
+        }
         let mut name = match self.advance().kind.clone() {
             TokenKind::Ident(id) => id,
             _ => {
@@ -101,9 +116,9 @@ impl Parser {
                             self.advance();
                             base.push_str("...");
                         }
-                        if !base_classes.is_empty() {
+                        if base_classes.contains(&base) {
                             return Err(CompileError::new(
-                                "multiple inheritance is not supported",
+                                format!("base class '{base}' specified more than once as a direct base class"),
                                 base_token.line,
                                 base_token.col,
                             ));
@@ -212,6 +227,7 @@ pub(super) struct StructBody {
     pub(super) private_members: Vec<String>,
     pub(super) nested_structs: Vec<Decl>,
     pub(super) is_private: bool,
+    pub(super) alignment: Option<Type>,
     pub(super) line: usize,
     pub(super) col: usize,
 }
@@ -227,6 +243,7 @@ impl StructBody {
             private_members: Vec::new(),
             nested_structs: Vec::new(),
             is_private: is_class,
+            alignment: None,
             line,
             col,
         }
@@ -242,6 +259,7 @@ impl StructBody {
             static_fields: self.static_fields,
             private_members: self.private_members,
             nested_structs: self.nested_structs,
+            alignment: self.alignment,
             line: self.line,
             col: self.col,
         }
@@ -249,35 +267,6 @@ impl StructBody {
 }
 
 impl Parser {
-    fn parse_struct_access(&mut self, body: &mut StructBody) -> Result<bool, CompileError> {
-        if self.peek() == &TokenKind::KwPublic {
-            self.advance();
-            self.expect(TokenKind::Colon)?;
-            body.is_private = false;
-            return Ok(true);
-        }
-        if matches!(self.peek(), TokenKind::KwPrivate | TokenKind::KwProtected) {
-            self.advance();
-            self.expect(TokenKind::Colon)?;
-            body.is_private = true;
-            return Ok(true);
-        }
-        Ok(false)
-    }
-
-    fn parse_struct_friend(&mut self) -> Result<bool, CompileError> {
-        if self.peek() == &TokenKind::KwFriend {
-            self.advance();
-            while self.peek() != &TokenKind::Semi && self.peek() != &TokenKind::Eof {
-                self.advance();
-            }
-            if self.peek() == &TokenKind::Semi {
-                self.advance();
-            }
-            return Ok(true);
-        }
-        Ok(false)
-    }
 
     /// Parses the conversion operator, destructor, and constructor forms of a
     /// class member. Returns `true` when one of them was parsed.

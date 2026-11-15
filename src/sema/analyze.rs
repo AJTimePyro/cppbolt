@@ -85,14 +85,8 @@ impl Sema {
         self.type_aliases = program.type_aliases.clone();
         for decl in &mut program.declarations {
             match decl {
-                Decl::EnumDecl {
-                    name,
-                    is_scoped,
-                    variants,
-                } => {
-                    if *is_scoped {
-                        self.scoped_enums.insert(name.clone());
-                    }
+                Decl::EnumDecl { name, is_scoped, variants } => {
+                    if *is_scoped { self.scoped_enums.insert(name.clone()); }
                     for (vname, val) in variants {
                         let scoped_name = format!("{}::{}", name, vname);
                         self.enum_values.insert(scoped_name.clone(), *val);
@@ -104,15 +98,7 @@ impl Sema {
                     }
                 }
                 Decl::StructDecl {
-                    name,
-                    is_class,
-                    base_classes,
-                    fields,
-                    methods,
-                    private_members,
-                    line,
-                    col,
-                    ..
+                    name, is_class, base_classes, fields, methods, private_members, alignment, line, col, ..
                 } => {
                     for (fname, fty, finit) in fields.iter_mut() {
                         self.resolve_and_instantiate_type(fty, *line, *col)?;
@@ -121,14 +107,9 @@ impl Sema {
                         }
                     }
                     self.compute_struct_layout(RecordLayout {
-                        name: name.as_str(),
-                        is_class: *is_class,
-                        base_classes,
-                        fields,
-                        methods,
-                        private_members,
-                        line: *line,
-                        col: *col,
+                        name: name.as_str(), is_class: *is_class, base_classes, fields, methods, private_members,
+                        line: *line, col: *col,
+                        alignment: alignment.as_ref().map(|ty| ty.align_of(&self.struct_aligns)),
                     })?;
                 }
                 Decl::Template(t) => match &t.kind {

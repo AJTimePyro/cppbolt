@@ -177,17 +177,8 @@ impl Sema {
             return Ok(expanded.to_c_type());
         }
 
-        let (template_class, template_params) = self
-            .class_templates
-            .get(name)
-            .cloned()
-            .or_else(|| {
-                let plain = QualifiedName::new(name).plain();
-                self.class_templates.get(plain).cloned()
-            })
-            .ok_or_else(|| {
-                CompileError::new(format!("Template '{}' not found", name), line, col)
-            })?;
+        let (template_class, template_params) =
+            self.resolve_class_template(name, line, col)?;
 
         let effective_args = super::template_deduce::fill_default_template_args(
             name,
@@ -257,6 +248,7 @@ impl Sema {
             base_classes,
             is_class,
             private_members,
+            alignment,
             ..
         } = &mut struct_decl
         else {
@@ -291,6 +283,7 @@ impl Sema {
             private_members,
             line,
             col,
+            alignment: alignment.as_ref().map(|ty| ty.align_of(&self.struct_aligns)),
         })?;
 
         self.register_instantiated_static_fields(inst_name, static_fields, base_classes, line, col);
@@ -320,6 +313,10 @@ impl Sema {
                     stack_offset: 0,
                 },
             );
+            if let Some(init) = &sf.2 {
+                let mut init_clone = init.clone();
+                let _ = self.analyze_expr(&mut init_clone);
+            }
         }
         for base in base_classes {
             self.ensure_class_instantiated(base, line, col);
@@ -470,6 +467,7 @@ impl Sema {
                     static_fields: vec![],
                     private_members: vec![],
                     nested_structs: vec![],
+                    alignment: None,
                     line: 0,
                     col: 0,
                 });

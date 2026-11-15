@@ -7,6 +7,7 @@ impl Parser {
         }
         if self.is_type_start() && !matches!(self.peek(), TokenKind::LParen) {
             let saved_pos = self.pos;
+            let saved_splits = self.shr_splits.len();
             let start = self.current_pos();
             if let Ok(ty) = self.parse_type() {
                 if self.peek() == &TokenKind::LBrace {
@@ -33,7 +34,7 @@ impl Parser {
                     }
                 }
             }
-            self.pos = saved_pos;
+            self.rollback_pos(saved_pos, saved_splits);
         }
         match self.peek() {
             TokenKind::KwNew => self.parse_new_expr(),
@@ -41,6 +42,7 @@ impl Parser {
             TokenKind::KwStaticCast => self.parse_static_cast_expr(),
             TokenKind::KwReinterpretCast => self.parse_reinterpret_cast_expr(),
             TokenKind::KwSizeof => self.parse_sizeof_expr(),
+            TokenKind::KwAlignof => self.parse_alignof_expr(),
             TokenKind::LParen => self.parse_parenthesized_expr(),
             _ => {
                 let start = self.current_pos();
@@ -201,6 +203,14 @@ impl Parser {
         }
     }
 
+    fn parse_alignof_expr(&mut self) -> Result<Expr, CompileError> {
+        self.advance();
+        self.expect(TokenKind::LParen)?;
+        let ty = self.parse_type()?;
+        self.expect(TokenKind::RParen)?;
+        Ok(Expr::AlignofType(ty))
+    }
+
     fn parse_parenthesized_expr(&mut self) -> Result<Expr, CompileError> {
         // One parenthesis costs one level of the parenthesis budget.
         let _guard = self.enter_parenthesis()?;
@@ -208,6 +218,7 @@ impl Parser {
         let start = self.current_pos();
         let res = if self.is_cast_ahead() {
             let saved_pos = self.pos;
+            let saved_splits = self.shr_splits.len();
             self.advance();
             let cast_res = (|| -> Result<Expr, CompileError> {
                 let ty = self.parse_type()?;
@@ -225,7 +236,7 @@ impl Parser {
                     if self.nesting_exceeded.get() {
                         return Err(error);
                     }
-                    self.pos = saved_pos;
+                    self.rollback_pos(saved_pos, saved_splits);
                     self.advance();
                     let expr = self.parse_expr()?;
                     self.expect(TokenKind::RParen)?;

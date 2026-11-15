@@ -9,6 +9,7 @@ pub struct ConstexprEnv<'a> {
     pub struct_sizes: Option<&'a HashMap<String, usize>>,
     pub constants: Option<&'a HashMap<String, i128>>,
     pub pack_lengths: Option<&'a HashMap<String, usize>>,
+    pub struct_aligns: Option<&'a HashMap<String, usize>>,
 }
 
 /// Evaluates an expression as an integral constant expression.
@@ -20,6 +21,7 @@ pub fn eval_integral_constexpr(
         struct_sizes,
         constants: None,
         pack_lengths: None,
+        struct_aligns: None,
     };
     eval_integral_constexpr_with_env(expr, env)
 }
@@ -36,6 +38,7 @@ pub fn eval_constexpr_with_context(
         struct_sizes,
         constants,
         pack_lengths,
+        struct_aligns: None,
     };
     eval_integral_constexpr_with_env(expr, env)
 }
@@ -115,6 +118,11 @@ pub fn eval_integral_constexpr_with_env(
             let empty = HashMap::new();
             let sizes = env.struct_sizes.unwrap_or(&empty);
             Ok(ty.size_of(sizes) as i128)
+        }
+        Expr::AlignofType(ty) => {
+            let empty = HashMap::new();
+            let aligns = env.struct_aligns.unwrap_or(&empty);
+            Ok(ty.align_of(aligns) as i128)
         }
         Expr::SizeofExpr(inner) => eval_sizeof_expr(inner, env.struct_sizes),
         Expr::SizeofPack { name, pos } => {

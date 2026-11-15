@@ -334,6 +334,8 @@ fn classify_word(word: &str) -> TokenKind {
         "continue" => TokenKind::KwContinue,
         "return" => TokenKind::KwReturn,
         "sizeof" => TokenKind::KwSizeof,
+        "alignas" => TokenKind::KwAlignas,
+        "alignof" => TokenKind::KwAlignof,
         "enum" => TokenKind::KwEnum,
         "struct" => TokenKind::KwStruct,
         "class" => TokenKind::KwClass,

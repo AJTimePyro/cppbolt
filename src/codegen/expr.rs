@@ -17,9 +17,9 @@ impl<'a> Codegen<'a> {
             | Expr::BoolLiteral(..)
             | Expr::CharLiteral(..)
             | Expr::StringLiteral(..)
-            | Expr::This
-            | Expr::SizeofType(..)
-            | Expr::SizeofExpr(..) => self.compile_literal(expr, ctx, code)?,
+            | Expr::This | Expr::SizeofType(..) | Expr::AlignofType(..) | Expr::SizeofExpr(..) => {
+                self.compile_literal(expr, ctx, code)?
+            }
             Expr::Identifier { .. } => self.compile_identifier(expr, ctx, code)?,
             Expr::Binary {
                 op: BinaryOp::LogicalAnd,
@@ -186,6 +186,11 @@ impl<'a> Codegen<'a> {
                 let size = inner.size_of(&self.sema.struct_sizes) as i32;
                 code.push(OP_I32_CONST);
                 write_i32(code, size);
+            }
+            Expr::AlignofType(inner) => {
+                let align = inner.align_of(&self.sema.struct_aligns) as i32;
+                code.push(OP_I32_CONST);
+                write_i32(code, align);
             }
             Expr::SizeofExpr(inner) => {
                 let ty = self.get_expr_type(inner, ctx);

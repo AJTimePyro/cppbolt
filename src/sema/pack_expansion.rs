@@ -88,7 +88,10 @@ fn for_each_child_expr<'a, F: FnMut(&'a Expr)>(expr: &'a Expr, mut f: F) {
 fn expr_target_type(expr: &Expr) -> Option<&Type> {
     match expr {
         Expr::Cast { target_type, .. } => Some(target_type),
-        Expr::SizeofType(ty) | Expr::TypedInitList { ty, .. } | Expr::New { ty, .. } => Some(ty),
+        Expr::SizeofType(ty)
+        | Expr::AlignofType(ty)
+        | Expr::TypedInitList { ty, .. }
+        | Expr::New { ty, .. } => Some(ty),
         _ => None,
     }
 }
@@ -139,7 +142,13 @@ fn scan_packs_in_type(ty: &Type, known: &HashSet<String>, expanded: bool, out: &
         Type::TypeParam(n) if known.contains(n) => out.push((n.clone(), expanded)),
         Type::TemplateInstance { args, .. } => args.iter().for_each(|a| scan_packs_in_type(a, known, expanded, out)),
         Type::Pointer(i) | Type::Reference(i) | Type::RvalueReference(i)
-        | Type::Const(i) | Type::Array(i, _) => scan_packs_in_type(i, known, expanded, out),
+        | Type::Const(i) | Type::Array(i, _) | Type::Aligned(i, _) => scan_packs_in_type(i, known, expanded, out),
+        Type::DependentAlignas(i, pack) => {
+            scan_packs_in_type(i, known, expanded, out);
+            if known.contains(pack) {
+                out.push((pack.clone(), true));
+            }
+        }
         Type::Function { return_type, param_types } => {
             scan_packs_in_type(return_type, known, expanded, out);
             param_types.iter().for_each(|p| scan_packs_in_type(p, known, expanded, out));
@@ -211,8 +220,9 @@ pub fn build_slice_mapping(mapping: &HashMap<String, TemplateArg>, packs: &HashS
             let elem = pack_element_name(pack, index);
             match arg {
                 TemplateArg::TypePack(types) => if let Some(ty) = types.get(index) {
-                    subst_map.insert(pack.clone(), TemplateArg::Type(ty.clone()));
-                    subst_map.insert(elem, TemplateArg::Type(ty.clone()));
+                    let arg = TemplateArg::from(ty.clone());
+                    subst_map.insert(pack.clone(), arg.clone());
+                    subst_map.insert(elem, arg);
                 },
                 TemplateArg::NonTypePack(vals) => if let Some(val) = vals.get(index) {
                     subst_map.insert(pack.clone(), TemplateArg::NonType(*val));

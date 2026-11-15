@@ -444,7 +444,7 @@ fn test_substitute_struct() -> Result<(), Box<dyn std::error::Error>> {
         )],
         static_fields: Vec::new(),
         private_members: Vec::new(),
-        nested_structs: Vec::new(),
+        nested_structs: Vec::new(), alignment: None,
     };
 
     let subst = template_subst::substitute_struct(&tclass, &mapping, "Holder<int>", 1, 1)?;

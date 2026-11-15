@@ -65,6 +65,8 @@ pub enum TokenKind {
     KwDecltype,
     KwExplicit,
     KwFriend,
+    KwAlignas,
+    KwAlignof,
 
     // Operators & Punctuation
     Plus,
@@ -185,6 +187,8 @@ impl TokenKind {
             TokenKind::KwDecltype => Some("'decltype'"),
             TokenKind::KwExplicit => Some("'explicit'"),
             TokenKind::KwFriend => Some("'friend'"),
+            TokenKind::KwAlignas => Some("'alignas'"),
+            TokenKind::KwAlignof => Some("'alignof'"),
             TokenKind::KwStaticCast => Some("'static_cast'"),
             TokenKind::KwReinterpretCast => Some("'reinterpret_cast'"),
             _ => None,

@@ -159,7 +159,8 @@ impl Sema {
         context: InitContext,
         pos: ExprPos,
     ) -> Result<Type, CompileError> {
-        let clean_target = target_ty.strip_reference().strip_const().clone();
+        let mut clean_target = target_ty.strip_reference().strip_const().clone();
+        self.resolve_and_instantiate_type(&mut clean_target, pos.line, pos.col)?;
 
         if let Type::Reference(inner) = target_ty {
             if !inner.is_const() && context != InitContext::DirectList {
