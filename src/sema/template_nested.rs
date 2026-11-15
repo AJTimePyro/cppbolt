@@ -88,9 +88,10 @@ impl Sema {
                 let Some((owner, member)) = alias_name.rsplit_once("::") else {
                     continue;
                 };
-                if QualifiedName::new(owner).plain() == plain_tmpl && !mapping.contains_key(member)
+                if QualifiedName::new(owner).plain() == plain_tmpl
+                    && !mapping.contains_key(member)
+                    && let Ok(mut subst_ty) = substitute_type(&ty, mapping, None)
                 {
-                    let mut subst_ty = substitute_type(&ty, mapping, None);
                     let _ = self.resolve_and_instantiate_type(&mut subst_ty, line, col);
                     mapping.insert(member.to_string(), TemplateArg::Type(subst_ty.clone()));
                     self.type_aliases
@@ -163,18 +164,18 @@ impl Sema {
 
         let mut subst_fields = Vec::new();
         for (fname, fty, finit) in p.fields {
-            let mut ty = substitute_type(fty, arg_map, injected);
+            let mut ty = substitute_type(fty, arg_map, injected)?;
             self.resolve_and_instantiate_type(&mut ty, line, col)?;
             let mut init = finit.clone();
             if let Some((init_expr, _, _)) = &mut init {
-                template_subst::substitute_expr(init_expr, arg_map, injected);
+                template_subst::substitute_expr(init_expr, arg_map, injected)?;
             }
             subst_fields.push((fname.clone(), ty, init));
         }
 
         let mut subst_methods = Vec::new();
         for m in p.methods {
-            let mut sm = substitute_function(m, arg_map, injected, None);
+            let mut sm = substitute_function(m, arg_map, injected, None)?;
             if sm.template_params.is_empty() {
                 self.resolve_and_instantiate_type(&mut sm.return_type, line, col)?;
                 for param in &mut sm.params {

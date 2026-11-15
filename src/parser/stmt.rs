@@ -147,7 +147,15 @@ impl Parser {
                 }
             }
         }
-        let expr = self.parse_expr()?;
+        let mut expr = self.parse_expr()?;
+        if self.peek() == &TokenKind::Ellipsis {
+            let pos = self.current_pos();
+            self.advance();
+            expr = Expr::PackExpansion {
+                pattern: Box::new(expr),
+                pos,
+            };
+        }
         self.expect(TokenKind::Semi)?;
         Ok(Stmt::new(StmtKind::Expr(expr), line, col))
     }

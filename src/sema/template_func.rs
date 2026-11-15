@@ -202,7 +202,7 @@ impl Sema {
         let canonical_args = format_canonical_args(template_params, mapping);
         let inst_name = format!("{}<{}>", template_decl.name, canonical_args);
         let mut func_decl =
-            substitute_function(template_decl, mapping, None, Some(inst_name));
+            substitute_function(template_decl, mapping, None, Some(inst_name))?;
 
         self.resolve_and_instantiate_type(&mut func_decl.return_type, pos.line, pos.col)?;
         for p in &mut func_decl.params {
@@ -287,7 +287,7 @@ impl Sema {
         let canonical_args = format_canonical_args(template_params, mapping);
         let inst_name = format!("{}<{}>", template_decl.name, canonical_args);
         let mut func_decl =
-            substitute_function(template_decl, mapping, None, Some(inst_name.clone()));
+            substitute_function(template_decl, mapping, None, Some(inst_name.clone()))?;
 
         self.resolve_and_instantiate_type(&mut func_decl.return_type, pos.line, pos.col)?;
         for p in &mut func_decl.params {

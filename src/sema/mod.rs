@@ -37,6 +37,7 @@ mod template_registry;
 mod template_spec;
 pub mod template_subst;
 mod template_subst_func;
+mod template_name;
 mod template_subst_stmt;
 #[cfg(test)]
 mod pack_expansion_tests;

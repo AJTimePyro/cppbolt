@@ -381,7 +381,9 @@ impl Sema {
                 deduce_template_arguments(&cand.template_params, &cand, &[], (arg_types, args), pos)
             {
                 let new_name = if method_name.is_none() { Some(short.to_string()) } else { None };
-                let mut spec_func = substitute_function(&cand, &mapping, None, new_name);
+                let Ok(mut spec_func) = substitute_function(&cand, &mapping, None, new_name) else {
+                    continue;
+                };
                 self.resolve_and_instantiate_type(&mut spec_func.return_type, pos.line, pos.col)?;
                 for p in &mut spec_func.params {
                     self.resolve_and_instantiate_type(&mut p.ty, pos.line, pos.col)?;

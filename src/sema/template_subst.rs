@@ -5,77 +5,101 @@ use crate::ast::decl::Decl;
 use crate::ast::expr::Expr;
 use crate::ast::template::TemplateClass;
 use crate::ast::types::Type;
-use crate::sema::pack_expansion::{expand_expr_list, expand_type_list, TemplateArg};
+use crate::diagnostics::CompileError;
+use crate::sema::pack_expansion::{
+    collect_packs_in_expr, expand_expr_list, expand_type_list, TemplateArg,
+};
+pub use crate::sema::template_name::substitute_template_name;
 pub use crate::sema::template_subst_func::substitute_function;
-pub use crate::sema::template_subst_stmt::substitute_stmt;
 use std::collections::HashMap;
 
 pub fn substitute_type(
     ty: &Type,
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
-) -> Type {
+) -> Result<Type, CompileError> {
     match ty {
         Type::TypeParam(name) => match mapping.get(name) {
-            Some(TemplateArg::Type(t)) => t.clone(),
-            Some(TemplateArg::NonType(n)) => Type::NonType(*n),
-            _ => ty.clone(),
+            Some(TemplateArg::Type(t)) => Ok(t.clone()),
+            Some(TemplateArg::NonType(n)) => Ok(Type::NonType(*n)),
+            Some(TemplateArg::TypePack(_)) | Some(TemplateArg::NonTypePack(_)) => {
+                Err(CompileError::new(
+                    format!("parameter pack '{}' used unexpanded", name),
+                    0,
+                    0,
+                ))
+            }
+            _ => Ok(ty.clone()),
         },
-        Type::Struct(name) => substitute_struct_type(name, mapping, injected_class),
+        Type::Struct(name) => Ok(substitute_struct_type(name, mapping, injected_class)),
         Type::TemplateInstance { name, args } => {
-            let subst_args = expand_type_list(args, mapping).unwrap_or_else(|_| {
-                args.iter().map(|a| substitute_type(a, mapping, injected_class)).collect()
-            });
-            Type::TemplateInstance {
+            let subst_args = expand_type_list(args, mapping)?;
+            Ok(Type::TemplateInstance {
                 name: name.clone(),
                 args: subst_args,
-            }
+            })
         }
         Type::Const(inner) => {
-            let subst_inner = substitute_type(inner, mapping, injected_class);
+            let subst_inner = substitute_type(inner, mapping, injected_class)?;
             if subst_inner.is_reference() {
-                subst_inner
+                Ok(subst_inner)
             } else {
-                Type::Const(Box::new(subst_inner))
+                Ok(Type::Const(Box::new(subst_inner)))
             }
         }
-        Type::Pointer(inner) => {
-            Type::Pointer(Box::new(substitute_type(inner, mapping, injected_class)))
-        }
-        Type::Reference(inner) => {
-            collapse_reference(false, substitute_type(inner, mapping, injected_class))
-        }
-        Type::RvalueReference(inner) => {
-            collapse_reference(true, substitute_type(inner, mapping, injected_class))
-        }
-        Type::Array(inner, size) => Type::Array(
-            Box::new(substitute_type(inner, mapping, injected_class)),
+        Type::Pointer(inner) => Ok(Type::Pointer(Box::new(substitute_type(
+            inner,
+            mapping,
+            injected_class,
+        )?))),
+        Type::Reference(inner) => Ok(collapse_reference(
+            false,
+            substitute_type(inner, mapping, injected_class)?,
+        )),
+        Type::RvalueReference(inner) => Ok(collapse_reference(
+            true,
+            substitute_type(inner, mapping, injected_class)?,
+        )),
+        Type::Array(inner, size) => Ok(Type::Array(
+            Box::new(substitute_type(inner, mapping, injected_class)?),
             *size,
-        ),
+        )),
         Type::DependentArray(inner, param_name) => {
-            let subst_inner = substitute_type(inner, mapping, injected_class);
+            let subst_inner = substitute_type(inner, mapping, injected_class)?;
             let size = match mapping.get(param_name) {
                 Some(TemplateArg::NonType(n)) if *n >= 0 => *n as usize,
                 Some(TemplateArg::NonType(_)) => usize::MAX,
                 _ => 0,
             };
-            Type::Array(Box::new(subst_inner), size)
+            Ok(Type::Array(Box::new(subst_inner), size))
         }
         Type::Function {
             return_type,
             param_types,
-        } => Type::Function {
-            return_type: Box::new(substitute_type(return_type, mapping, injected_class)),
-            param_types: param_types
-                .iter()
-                .map(|p| substitute_type(p, mapping, injected_class))
-                .collect(),
-        },
-        Type::PackExpansion(inner) => {
-            Type::PackExpansion(Box::new(substitute_type(inner, mapping, injected_class)))
-        }
-        _ => ty.clone(),
+        } => substitute_function_type(return_type, param_types, mapping, injected_class),
+        Type::PackExpansion(inner) => Ok(Type::PackExpansion(Box::new(substitute_type(
+            inner,
+            mapping,
+            injected_class,
+        )?))),
+        _ => Ok(ty.clone()),
     }
+}
+
+fn substitute_function_type(
+    return_type: &Type,
+    param_types: &[Type],
+    mapping: &HashMap<String, TemplateArg>,
+    injected_class: Option<(&str, &Type)>,
+) -> Result<Type, CompileError> {
+    let mut subst_params = Vec::new();
+    for p in param_types {
+        subst_params.push(substitute_type(p, mapping, injected_class)?);
+    }
+    Ok(Type::Function {
+        return_type: Box::new(substitute_type(return_type, mapping, injected_class)?),
+        param_types: subst_params,
+    })
 }
 
 fn substitute_struct_type(
@@ -109,111 +133,174 @@ fn substitute_struct_type(
     Type::Struct(name.to_string())
 }
 
+fn has_unexpanded_member_pack(exprs: &[Expr], mapping: &HashMap<String, TemplateArg>) -> bool {
+    let known: std::collections::HashSet<String> = mapping
+        .iter()
+        .filter(|(_, v)| v.is_pack())
+        .map(|(k, _)| k.clone())
+        .collect();
+    exprs.iter().any(|e| {
+        if let Expr::PackExpansion { pattern, .. } = e {
+            let mut packs = std::collections::HashSet::new();
+            collect_packs_in_expr(pattern, &known, &mut packs);
+            packs.is_empty()
+        } else {
+            false
+        }
+    })
+}
+
 fn substitute_call(
     callee: &mut Expr,
     args: &mut Vec<Expr>,
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
-) {
+    call_pos: crate::ast::expr::ExprPos,
+) -> Result<(), CompileError> {
     if let Expr::Identifier(name) = callee {
         substitute_callee_identifier(name, mapping, injected_class);
     }
-    substitute_expr(callee, mapping, injected_class);
-    if let Ok(expanded) = expand_expr_list(args, mapping) {
-        *args = expanded;
+    substitute_expr(callee, mapping, injected_class)?;
+    if !has_unexpanded_member_pack(args, mapping) {
+        *args = expand_expr_list(args, mapping).map_err(|e| {
+            if e.line == 0 && e.col == 0 {
+                CompileError::new(e.message, call_pos.line, call_pos.col)
+            } else {
+                e
+            }
+        })?;
     } else {
-        for arg in args {
-            substitute_expr(arg, mapping, injected_class);
+        for arg in args.iter_mut() {
+            substitute_expr(arg, mapping, injected_class)?;
         }
     }
+    if injected_class.is_some() {
+        for arg in args {
+            substitute_expr(arg, mapping, injected_class)?;
+        }
+    }
+    Ok(())
 }
 
 fn substitute_init_elements(
     elements: &mut Vec<Expr>,
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
-) {
-    if let Ok(expanded) = expand_expr_list(elements, mapping) {
-        *elements = expanded;
+    pos: crate::ast::expr::ExprPos,
+) -> Result<(), CompileError> {
+    if !has_unexpanded_member_pack(elements, mapping) {
+        *elements = expand_expr_list(elements, mapping).map_err(|e| {
+            if e.line == 0 && e.col == 0 {
+                CompileError::new(e.message, pos.line, pos.col)
+            } else {
+                e
+            }
+        })?;
     } else {
-        for el in elements {
-            substitute_expr(el, mapping, injected_class);
+        for el in elements.iter_mut() {
+            substitute_expr(el, mapping, injected_class)?;
         }
     }
+    if injected_class.is_some() {
+        for el in elements {
+            substitute_expr(el, mapping, injected_class)?;
+        }
+    }
+    Ok(())
 }
 
 fn substitute_identifier(
     expr: &mut Expr,
     mapping: &HashMap<String, TemplateArg>,
-) {
-    let Expr::Identifier(name) = expr else {
-        return;
+) -> Result<(), CompileError> {
+    let name = match expr {
+        Expr::Identifier(name) => name.clone(),
+        _ => return Ok(()),
     };
-    if let Some(TemplateArg::NonType(val)) = mapping.get(name) {
+    if let Some(TemplateArg::NonType(val)) = mapping.get(&name) {
         let ty = if (*val as i32 as i128) == *val {
             Type::Int
         } else {
             Type::LongLong
         };
         *expr = Expr::IntLiteral(*val as i64, ty);
-    } else if name.contains('<') {
-        *name = substitute_template_name(name, mapping);
+    } else if let Some(arg) = mapping.get(&name) && arg.is_pack() {
+        let pos = expr.pos();
+        return Err(CompileError::new(
+            format!("parameter pack '{}' used unexpanded", name),
+            pos.line,
+            pos.col,
+        ));
+    } else if name.contains('<')
+        && let Expr::Identifier(id) = expr
+    {
+        *id = substitute_template_name(&name, mapping);
     }
+    Ok(())
 }
 
 pub fn substitute_expr(
     expr: &mut Expr,
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
-) {
+) -> Result<(), CompileError> {
     match expr {
-        Expr::Call { callee, args, .. } => substitute_call(callee, args, mapping, injected_class),
+        Expr::Call { callee, args, pos } => {
+            substitute_call(callee, args, mapping, injected_class, *pos)?
+        }
         Expr::Unary { expr, .. } | Expr::SizeofExpr(expr) | Expr::Delete { expr, .. } => {
-            substitute_expr(expr, mapping, injected_class);
+            substitute_expr(expr, mapping, injected_class)?;
         }
         Expr::Binary { left: t, right: v, .. }
         | Expr::Assign { target: t, value: v, .. }
         | Expr::CompoundAssign { target: t, value: v, .. } => {
-            substitute_expr(t, mapping, injected_class);
-            substitute_expr(v, mapping, injected_class);
+            substitute_expr(t, mapping, injected_class)?;
+            substitute_expr(v, mapping, injected_class)?;
         }
         Expr::ArraySubscript { array, index, .. } => {
-            substitute_expr(array, mapping, injected_class);
-            substitute_expr(index, mapping, injected_class);
+            substitute_expr(array, mapping, injected_class)?;
+            substitute_expr(index, mapping, injected_class)?;
         }
         Expr::MemberAccess { object, member, .. } => {
-            substitute_expr(object, mapping, injected_class);
+            substitute_expr(object, mapping, injected_class)?;
             substitute_member_name(member, mapping);
         }
-        Expr::Ternary { cond, then_expr, else_expr } => {
+        Expr::Ternary {
+            cond,
+            then_expr,
+            else_expr,
+        } => {
             for e in [cond, then_expr, else_expr] {
-                substitute_expr(e, mapping, injected_class);
+                substitute_expr(e, mapping, injected_class)?;
             }
         }
-        Expr::Cast { target_type, expr, .. } => {
-            *target_type = substitute_type(target_type, mapping, injected_class);
-            substitute_expr(expr, mapping, injected_class);
+        Expr::Cast {
+            target_type, expr, ..
+        } => {
+            *target_type = substitute_type(target_type, mapping, injected_class)?;
+            substitute_expr(expr, mapping, injected_class)?;
         }
-        Expr::SizeofType(ty) => *ty = substitute_type(ty, mapping, injected_class),
-        Expr::TypedInitList { ty, elements, .. } => {
-            *ty = substitute_type(ty, mapping, injected_class);
-            substitute_init_elements(elements, mapping, injected_class);
+        Expr::SizeofType(ty) => *ty = substitute_type(ty, mapping, injected_class)?,
+        Expr::TypedInitList { ty, elements, pos } => {
+            *ty = substitute_type(ty, mapping, injected_class)?;
+            substitute_init_elements(elements, mapping, injected_class, *pos)?;
         }
-        Expr::New { .. } => substitute_new(expr, mapping, injected_class),
-        Expr::InitializerList { elements, .. } => {
-            substitute_init_elements(elements, mapping, injected_class);
+        Expr::New { .. } => substitute_new(expr, mapping, injected_class)?,
+        Expr::InitializerList { elements, pos } => {
+            substitute_init_elements(elements, mapping, injected_class, *pos)?;
         }
-        Expr::Identifier(_) => substitute_identifier(expr, mapping),
+        Expr::Identifier(_) => substitute_identifier(expr, mapping)?,
         Expr::SizeofPack { name, .. } => {
             if let Some(len) = mapping.get(name).and_then(|a| a.pack_len()) {
                 *expr = Expr::IntLiteral(len as i64, Type::UnsignedInt);
             }
         }
         Expr::PackExpansion { pattern, .. } => {
-            substitute_expr(pattern, mapping, injected_class);
+            substitute_expr(pattern, mapping, injected_class)?;
         }
         _ => {}
     }
+    Ok(())
 }
 
 fn substitute_member_name(member: &mut String, mapping: &HashMap<String, TemplateArg>) {
@@ -230,7 +317,8 @@ fn substitute_new(
     expr: &mut Expr,
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
-) {
+) -> Result<(), CompileError> {
+    let new_pos = expr.pos();
     let Expr::New {
         ty,
         args,
@@ -239,22 +327,34 @@ fn substitute_new(
         ..
     } = expr
     else {
-        return;
+        return Ok(());
     };
-    *ty = substitute_type(ty, mapping, injected_class);
-    if let Ok(expanded) = expand_expr_list(args, mapping) {
-        *args = expanded;
+    *ty = substitute_type(ty, mapping, injected_class)?;
+    if !has_unexpanded_member_pack(args, mapping) {
+        *args = expand_expr_list(args, mapping).map_err(|e| {
+            if e.line == 0 && e.col == 0 {
+                CompileError::new(e.message, new_pos.line, new_pos.col)
+            } else {
+                e
+            }
+        })?;
     } else {
+        for arg in args.iter_mut() {
+            substitute_expr(arg, mapping, injected_class)?;
+        }
+    }
+    if injected_class.is_some() {
         for arg in args {
-            substitute_expr(arg, mapping, injected_class);
+            substitute_expr(arg, mapping, injected_class)?;
         }
     }
     if let Some(size) = array_size {
-        substitute_expr(size, mapping, injected_class);
+        substitute_expr(size, mapping, injected_class)?;
     }
     if let Some(place) = placement {
-        substitute_expr(place, mapping, injected_class);
+        substitute_expr(place, mapping, injected_class)?;
     }
+    Ok(())
 }
 
 fn substitute_callee_identifier(
@@ -276,145 +376,46 @@ fn substitute_callee_identifier(
     }
 }
 
-pub fn substitute_template_name(name: &str, mapping: &HashMap<String, TemplateArg>) -> String {
-    let (Some(open), Some(close)) = (name.find('<'), name.rfind('>')) else {
-        return name.to_string();
-    };
-    if open >= close {
-        return name.to_string();
-    }
-    let (base, inside, suffix) = (&name[..open], &name[open + 1..close], &name[close + 1..]);
-    let mut result = inside.to_string();
-    for (param, arg) in mapping {
-        match arg {
-            TemplateArg::Type(ty) => {
-                result = replace_whole_word(&result, param, &ty.to_c_type());
-            }
-            TemplateArg::NonType(val) => {
-                result = replace_whole_word(&result, param, &val.to_string());
-            }
-            TemplateArg::TypePack(types) => {
-                let joined = types.iter().map(|t| t.to_c_type()).collect::<Vec<_>>().join(", ");
-                let with_ellipsis = format!("{param}...");
-                let with_space = format!("{param} ...");
-                if result.contains(&with_ellipsis) {
-                    result = result.replace(&with_ellipsis, &joined);
-                } else if result.contains(&with_space) {
-                    result = result.replace(&with_space, &joined);
-                } else {
-                    result = replace_whole_word(&result, param, &joined);
-                }
-            }
-            TemplateArg::NonTypePack(vals) => {
-                let joined = vals.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(", ");
-                let with_ellipsis = format!("{param}...");
-                let with_space = format!("{param} ...");
-                if result.contains(&with_ellipsis) {
-                    result = result.replace(&with_ellipsis, &joined);
-                } else if result.contains(&with_space) {
-                    result = result.replace(&with_space, &joined);
-                } else {
-                    result = replace_whole_word(&result, param, &joined);
-                }
-            }
-        }
-    }
-    let clean = clean_template_arg_string(&result);
-    format!("{}<{}>{}", base, clean, suffix)
-}
-
-fn clean_template_arg_string(s: &str) -> String {
-    let mut parts = Vec::new();
-    let mut current = String::new();
-    let mut depth = 0usize;
-    for c in s.chars() {
-        match c {
-            '<' => {
-                depth += 1;
-                current.push(c);
-            }
-            '>' => {
-                depth = depth.saturating_sub(1);
-                current.push(c);
-            }
-            ',' if depth == 0 => {
-                let trimmed = current.trim();
-                if !trimmed.is_empty() {
-                    parts.push(trimmed.to_string());
-                }
-                current.clear();
-            }
-            _ => current.push(c),
-        }
-    }
-    let trimmed = current.trim();
-    if !trimmed.is_empty() {
-        parts.push(trimmed.to_string());
-    }
-    parts.join(", ")
-}
-
-fn replace_whole_word(text: &str, word: &str, replacement: &str) -> String {
-    let mut result = String::new();
-    let mut remainder = text;
-    while let Some(idx) = remainder.find(word) {
-        let bytes = remainder.as_bytes();
-        let not_qualified = !(idx >= 2 && &bytes[idx - 2..idx] == b"::");
-        let is_ident = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
-        let before_ok = not_qualified && (idx == 0 || !is_ident(bytes[idx - 1]));
-        let after_idx = idx + word.len();
-        let after_ok = after_idx == bytes.len() || !is_ident(bytes[after_idx]);
-        if before_ok && after_ok {
-            result.push_str(&remainder[..idx]);
-            result.push_str(replacement);
-        } else {
-            result.push_str(&remainder[..after_idx]);
-        }
-        remainder = &remainder[after_idx..];
-    }
-    result.push_str(remainder);
-    result
-}
-
 pub fn substitute_struct(
     template_class: &TemplateClass,
     mapping: &HashMap<String, TemplateArg>,
     instantiated_name: &str,
     line: usize,
     col: usize,
-) -> Decl {
+) -> Result<Decl, CompileError> {
     let target_ty = Type::Struct(instantiated_name.to_string());
     let injected = Some((template_class.name.as_str(), &target_ty));
 
-    let fields = template_class
-        .fields
-        .iter()
-        .map(|(fname, fty, finit)| {
-            let mut init = finit.clone();
-            if let Some((init_expr, _, _)) = &mut init {
-                substitute_expr(init_expr, mapping, injected);
-            }
-            (fname.clone(), substitute_type(fty, mapping, injected), init)
-        })
-        .collect();
+    let mut fields = Vec::new();
+    for (fname, fty, finit) in &template_class.fields {
+        let mut init = finit.clone();
+        if let Some((init_expr, _, _)) = &mut init {
+            substitute_expr(init_expr, mapping, injected)?;
+        }
+        fields.push((
+            fname.clone(),
+            substitute_type(fty, mapping, injected)?,
+            init,
+        ));
+    }
 
-    let methods = template_class
-        .methods
-        .iter()
-        .map(|m| substitute_function(m, mapping, injected, None))
-        .collect();
+    let mut methods = Vec::new();
+    for m in &template_class.methods {
+        methods.push(substitute_function(m, mapping, injected, None)?);
+    }
 
-    let static_fields = template_class
-        .static_fields
-        .iter()
-        .map(|(sname, sty, sinit)| {
-            let mut init = sinit.clone();
-            if let Some(init_expr) = &mut init {
-                substitute_expr(init_expr, mapping, injected);
-            }
-            (sname.clone(), substitute_type(sty, mapping, injected), init)
-        })
-        .collect();
+    let mut static_fields = Vec::new();
+    for (sname, sty, sinit) in &template_class.static_fields {
+        let mut init = sinit.clone();
+        if let Some(init_expr) = &mut init {
+            substitute_expr(init_expr, mapping, injected)?;
+        }
+        static_fields.push((
+            sname.clone(),
+            substitute_type(sty, mapping, injected)?,
+            init,
+        ));
+    }
 
     let mut base_classes = Vec::new();
     for base in &template_class.base_classes {
@@ -435,7 +436,7 @@ pub fn substitute_struct(
         }
     }
 
-    Decl::StructDecl {
+    Ok(Decl::StructDecl {
         name: instantiated_name.to_string(),
         is_class: template_class.is_class,
         base_classes,
@@ -446,7 +447,7 @@ pub fn substitute_struct(
         nested_structs: Vec::new(),
         line,
         col,
-    }
+    })
 }
 
 pub fn collapse_reference(outer_is_rvalue: bool, inner: Type) -> Type {

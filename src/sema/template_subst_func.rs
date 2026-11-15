@@ -1,10 +1,16 @@
 //! Function-level template AST substitution.
 
-use super::pack_expansion::{build_slice_mapping, collect_packs_in_expr, collect_packs_in_type, pack_element_name, rename_pack_identifiers, TemplateArg};
-use super::template_subst::{substitute_expr, substitute_stmt, substitute_template_name, substitute_type};
+use super::pack_expansion::{
+    build_slice_mapping, collect_packs_in_expr, collect_packs_in_type, pack_element_name,
+    rename_pack_identifiers, TemplateArg,
+};
+use super::template_name::substitute_template_name;
+use super::template_subst::{substitute_expr, substitute_type};
+use super::template_subst_stmt::substitute_stmt;
 use crate::ast::decl::{FunctionDecl, Param};
 use crate::ast::expr::Expr;
 use crate::ast::types::Type;
+use crate::diagnostics::CompileError;
 use std::collections::{HashMap, HashSet};
 
 fn substitute_func_name(func_name: &str, injected_class: Option<(&str, &Type)>) -> String {
@@ -28,16 +34,19 @@ fn substitute_params(
     params: &[Param],
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
-) -> Vec<Param> {
+) -> Result<Vec<Param>, CompileError> {
     let mut result = Vec::new();
     for p in params {
         if p.is_pack {
             let mut known = HashSet::new();
             collect_packs_in_type(&p.ty, &mapping.keys().cloned().collect(), &mut known);
-            let pack_len = known.iter().find_map(|k| mapping.get(k).and_then(|a| a.pack_len())).unwrap_or(0);
+            let pack_len = known
+                .iter()
+                .find_map(|k| mapping.get(k).and_then(|a| a.pack_len()))
+                .unwrap_or(0);
             for i in 0..pack_len {
                 let subst_map = build_slice_mapping(mapping, &known, i);
-                let ty = substitute_type(&p.ty, &subst_map, injected_class);
+                let ty = substitute_type(&p.ty, &subst_map, injected_class)?;
                 let stripped = match ty {
                     Type::PackExpansion(inner) => *inner,
                     other => other,
@@ -52,24 +61,24 @@ fn substitute_params(
         } else {
             let mut default_val = p.default_val.clone();
             if let Some(def) = &mut default_val {
-                substitute_expr(def, mapping, injected_class);
+                substitute_expr(def, mapping, injected_class)?;
             }
             result.push(Param {
                 name: p.name.clone(),
-                ty: substitute_type(&p.ty, mapping, injected_class),
+                ty: substitute_type(&p.ty, mapping, injected_class)?,
                 default_val,
                 is_pack: false,
             });
         }
     }
-    result
+    Ok(result)
 }
 
 fn substitute_ctor_initializers(
     initializers: &[(String, Vec<Expr>)],
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
-) -> Vec<(String, Vec<Expr>)> {
+) -> Result<Vec<(String, Vec<Expr>)>, CompileError> {
     let mut result = Vec::new();
     for (m, inits) in initializers {
         if let Some(base_name) = m.strip_suffix("...") {
@@ -77,18 +86,24 @@ fn substitute_ctor_initializers(
             for init in inits {
                 collect_packs_in_expr(init, &mapping.keys().cloned().collect(), &mut known);
             }
-            let pack_len = known.iter().find_map(|k| mapping.get(k).and_then(|a| a.pack_len())).unwrap_or(0);
+            let pack_len = known
+                .iter()
+                .find_map(|k| mapping.get(k).and_then(|a| a.pack_len()))
+                .unwrap_or(0);
             for i in 0..pack_len {
                 let subst_map = build_slice_mapping(mapping, &known, i);
                 let mut subst_inits = inits.clone();
                 for init in &mut subst_inits {
                     rename_pack_identifiers(init, &known, mapping, i);
-                    substitute_expr(init, &subst_map, injected_class);
+                    substitute_expr(init, &subst_map, injected_class)?;
                 }
                 let inst_base = if let Some(TemplateArg::Type(ty)) = mapping.get(base_name) {
                     ty.to_c_type()
                 } else if let Some(TemplateArg::TypePack(types)) = mapping.get(base_name) {
-                    types.get(i).map(|t| t.to_c_type()).unwrap_or_else(|| base_name.to_string())
+                    types
+                        .get(i)
+                        .map(|t| t.to_c_type())
+                        .unwrap_or_else(|| base_name.to_string())
                 } else {
                     substitute_template_name(base_name, &subst_map)
                 };
@@ -96,11 +111,31 @@ fn substitute_ctor_initializers(
             }
         } else {
             let mut subst_inits = inits.clone();
-            if let Ok(expanded) = crate::sema::pack_expansion::expand_expr_list(&subst_inits, mapping) {
-                subst_inits = expanded;
+            let known: HashSet<String> = mapping
+                .iter()
+                .filter(|(_, v)| v.is_pack())
+                .map(|(k, _)| k.clone())
+                .collect();
+            let has_unexpanded_member_pack = subst_inits.iter().any(|init| {
+                if let Expr::PackExpansion { pattern, .. } = init {
+                    let mut packs = HashSet::new();
+                    collect_packs_in_expr(pattern, &known, &mut packs);
+                    packs.is_empty()
+                } else {
+                    false
+                }
+            });
+            if !has_unexpanded_member_pack {
+                subst_inits =
+                    crate::sema::pack_expansion::expand_expr_list(&subst_inits, mapping)?;
             } else {
                 for init in &mut subst_inits {
-                    substitute_expr(init, mapping, injected_class);
+                    substitute_expr(init, mapping, injected_class)?;
+                }
+            }
+            if injected_class.is_some() {
+                for init in &mut subst_inits {
+                    substitute_expr(init, mapping, injected_class)?;
                 }
             }
             let substituted_m = if m.contains('<') {
@@ -111,7 +146,7 @@ fn substitute_ctor_initializers(
             result.push((substituted_m, subst_inits));
         }
     }
-    result
+    Ok(result)
 }
 
 pub fn substitute_function(
@@ -119,7 +154,7 @@ pub fn substitute_function(
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
     new_name: Option<String>,
-) -> FunctionDecl {
+) -> Result<FunctionDecl, CompileError> {
     let mut remaining_template_params = Vec::new();
     let mut active_mapping = mapping.clone();
     for p in &func.params {
@@ -143,16 +178,17 @@ pub fn substitute_function(
     }
     let mapping = &active_mapping;
     let name = new_name.unwrap_or_else(|| substitute_func_name(&func.name, injected_class));
-    let return_type = substitute_type(&func.return_type, mapping, injected_class);
-    let params = substitute_params(&func.params, mapping, injected_class);
-    let ctor_initializers = substitute_ctor_initializers(&func.ctor_initializers, mapping, injected_class);
+    let return_type = substitute_type(&func.return_type, mapping, injected_class)?;
+    let params = substitute_params(&func.params, mapping, injected_class)?;
+    let ctor_initializers =
+        substitute_ctor_initializers(&func.ctor_initializers, mapping, injected_class)?;
 
     let mut body = func.body.clone();
     if let Some(body_stmt) = &mut body {
-        substitute_stmt(body_stmt, mapping, injected_class);
+        substitute_stmt(body_stmt, mapping, injected_class)?;
     }
 
-    FunctionDecl {
+    Ok(FunctionDecl {
         name,
         return_type,
         params,
@@ -167,5 +203,5 @@ pub fn substitute_function(
         template_params: remaining_template_params,
         line: func.line,
         col: func.col,
-    }
+    })
 }

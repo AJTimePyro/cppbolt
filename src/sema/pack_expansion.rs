@@ -189,7 +189,7 @@ pub fn find_unexpanded_packs_in_type(ty: &Type, known: &HashSet<String>) -> Vec<
     recorded.into_iter().filter(|(_, exp)| !*exp).map(|(p, _)| p).collect()
 }
 
-fn validate_pack_lengths(packs: &HashSet<String>, mapping: &HashMap<String, TemplateArg>, pos: ExprPos) -> Result<usize, CompileError> {
+pub(crate) fn validate_pack_lengths(packs: &HashSet<String>, mapping: &HashMap<String, TemplateArg>, pos: ExprPos) -> Result<usize, CompileError> {
     let mut expected: Option<usize> = None;
     for pack in packs {
         let len = mapping.get(pack).and_then(|a| a.pack_len()).unwrap_or(0);
@@ -241,7 +241,7 @@ pub fn expand_expr_list(exprs: &[Expr], mapping: &HashMap<String, TemplateArg>) 
                     let subst_map = build_slice_mapping(mapping, &packs, i);
                     let mut copy = (**pattern).clone();
                     rename_pack_identifiers(&mut copy, &packs, mapping, i);
-                    crate::sema::template_subst::substitute_expr(&mut copy, &subst_map, None);
+                    crate::sema::template_subst::substitute_expr(&mut copy, &subst_map, None)?;
                     result.push(copy);
                 }
             }
@@ -252,7 +252,7 @@ pub fn expand_expr_list(exprs: &[Expr], mapping: &HashMap<String, TemplateArg>) 
                     return Err(CompileError::new(format!("parameter pack '{}' used unexpanded", first), pos.line, pos.col));
                 }
                 let mut copy = expr.clone();
-                crate::sema::template_subst::substitute_expr(&mut copy, mapping, None);
+                crate::sema::template_subst::substitute_expr(&mut copy, mapping, None)?;
                 result.push(copy);
             }
         }
@@ -274,7 +274,7 @@ pub fn expand_type_list(types: &[Type], mapping: &HashMap<String, TemplateArg>) 
                 let len = validate_pack_lengths(&packs, mapping, ExprPos::default())?;
                 for i in 0..len {
                     let subst_map = build_slice_mapping(mapping, &packs, i);
-                    result.push(crate::sema::template_subst::substitute_type(inner, &subst_map, None));
+                    result.push(crate::sema::template_subst::substitute_type(inner, &subst_map, None)?);
                 }
             }
             _ => {
@@ -282,7 +282,7 @@ pub fn expand_type_list(types: &[Type], mapping: &HashMap<String, TemplateArg>) 
                 if let Some(first) = unexp.first() {
                     return Err(CompileError::new(format!("parameter pack '{}' used unexpanded", first), 0, 0));
                 }
-                result.push(crate::sema::template_subst::substitute_type(ty, mapping, None));
+                result.push(crate::sema::template_subst::substitute_type(ty, mapping, None)?);
             }
         }
     }

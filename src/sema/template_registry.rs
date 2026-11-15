@@ -249,7 +249,7 @@ impl Sema {
         let (line, col) = pos;
         self.instantiate_nested_structs(template_class, inst_name, &mapping, pos)?;
 
-        let mut struct_decl = substitute_struct(template_class, &mapping, inst_name, line, col);
+        let mut struct_decl = substitute_struct(template_class, &mapping, inst_name, line, col)?;
         let Decl::StructDecl {
             fields,
             methods,
@@ -342,8 +342,9 @@ impl Sema {
             let Some((owner, member)) = alias_name.rsplit_once("::") else {
                 continue;
             };
-            if QualifiedName::new(owner).plain() == plain_tmpl {
-                let subst_ty = substitute_type(ty, mapping, None);
+            if QualifiedName::new(owner).plain() == plain_tmpl
+                && let Ok(subst_ty) = substitute_type(ty, mapping, None)
+            {
                 new_aliases.push((format!("{inst_name}::{member}"), subst_ty.clone()));
                 if is_std {
                     new_aliases.push((format!("std::{plain_inst}::{member}"), subst_ty.clone()));

@@ -137,7 +137,7 @@ fn fill_missing_deduced(
             if param.is_pack {
                 result.insert(param.name.clone(), TemplateArg::TypePack(Vec::new()));
             } else if let Some(ref def_ty) = param.default_type {
-                let subst_def = crate::sema::template_subst::substitute_type(def_ty, result, None);
+                let subst_def = crate::sema::template_subst::substitute_type(def_ty, result, None)?;
                 result.insert(param.name.clone(), TemplateArg::from(subst_def));
             } else {
                 return Err(CompileError::new(
@@ -276,7 +276,7 @@ pub fn fill_default_template_args(
                 ));
             };
             let subst_map = crate::sema::pack_expansion::to_template_arg_map(&mapping);
-            let subst_ty = crate::sema::template_subst::substitute_type(def_ty, &subst_map, None);
+            let subst_ty = crate::sema::template_subst::substitute_type(def_ty, &subst_map, None)?;
             mapping.insert(param.name.clone(), subst_ty.clone());
             result.push(subst_ty);
         }

@@ -450,6 +450,8 @@ negative/template_spec_duplicate
 negative/template_template_param
 negative/template_type_arg_mismatch
 negative/variadic_ambiguous_call
+negative/variadic_pack_mismatch
+negative/variadic_unexpanded_pack
 negative/throw_unsupported
 negative/type_mismatch
 negative/typename_unqualified
