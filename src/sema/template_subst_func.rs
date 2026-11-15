@@ -2,7 +2,7 @@
 
 use super::pack_expansion::{
     build_slice_mapping, collect_packs_in_expr, collect_packs_in_type, pack_element_name,
-    rename_pack_identifiers, TemplateArg,
+    rename_pack_identifiers, validate_pack_lengths, TemplateArg,
 };
 use super::template_name::substitute_template_name;
 use super::template_subst::{substitute_expr, substitute_type};
@@ -86,10 +86,16 @@ fn substitute_ctor_initializers(
             for init in inits {
                 collect_packs_in_expr(init, &mapping.keys().cloned().collect(), &mut known);
             }
-            let pack_len = known
-                .iter()
-                .find_map(|k| mapping.get(k).and_then(|a| a.pack_len()))
-                .unwrap_or(0);
+            if mapping.get(base_name).is_some_and(|a| a.is_pack()) {
+                known.insert(base_name.to_string());
+            } else {
+                for (k, v) in mapping {
+                    if v.is_pack() && (base_name == k || base_name.contains(k)) {
+                        known.insert(k.clone());
+                    }
+                }
+            }
+            let pack_len = validate_pack_lengths(&known, mapping, crate::ast::ExprPos::default())?;
             for i in 0..pack_len {
                 let subst_map = build_slice_mapping(mapping, &known, i);
                 let mut subst_inits = inits.clone();

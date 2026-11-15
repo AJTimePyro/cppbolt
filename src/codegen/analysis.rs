@@ -21,6 +21,8 @@ fn check_expr_has_new_delete(expr: &Expr) -> bool {
             Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } => {
                 stack.extend(elements.iter())
             }
+            Expr::PackExpansion { pattern, .. } => stack.push(pattern),
+            Expr::SizeofExpr(expr) => stack.push(expr),
             Expr::Assign { target, value, .. } | Expr::CompoundAssign { target, value, .. } => {
                 stack.extend([target.as_ref(), value.as_ref()]);
             }
@@ -88,50 +90,6 @@ pub(super) fn check_stmt_has_new_delete(stmt: &Stmt) -> bool {
     }
 }
 
-pub(super) fn collect_static_vars(
-    stmt: &Stmt,
-    function: &str,
-    out: &mut Vec<(String, Type, Option<Expr>)>,
-) {
-    match &stmt.kind {
-        StmtKind::VarDecl {
-            name,
-            ty,
-            init,
-            is_static,
-        } => {
-            if *is_static {
-                let gname = crate::name::static_local_name(function, stmt.line, stmt.col, name);
-                out.push((gname, ty.clone(), init.clone()));
-            }
-        }
-        StmtKind::Compound(stmts) | StmtKind::VarDeclGroup(stmts) => {
-            for s in stmts {
-                collect_static_vars(s, function, out);
-            }
-        }
-        StmtKind::If {
-            branches,
-            else_stmt,
-            ..
-        } => {
-            for (_, then_stmt) in branches {
-                collect_static_vars(then_stmt, function, out);
-            }
-            if let Some(eb) = else_stmt {
-                collect_static_vars(eb, function, out);
-            }
-        }
-        StmtKind::While { body, .. }
-        | StmtKind::DoWhile { body, .. }
-        | StmtKind::For { body, .. }
-        | StmtKind::Switch { body, .. } => {
-            collect_static_vars(body, function, out);
-        }
-        _ => {}
-    }
-}
-
 /// Conservatively records names that may escape as function pointers.
 ///
 /// A bare identifier callee is a named call or a function-pointer variable; it
@@ -188,6 +146,8 @@ pub(super) fn collect_address_taken_expr(expr: &Expr, address_taken: &mut HashSe
             Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } => {
                 stack.extend(elements.iter())
             }
+            Expr::PackExpansion { pattern, .. } => stack.push(pattern),
+            Expr::SizeofExpr(expr) => stack.push(expr),
             _ => {}
         }
     }
@@ -321,6 +281,11 @@ fn collect_call_node<'a>(expr: &'a Expr, calls: &mut HashSet<String>, stack: &mu
             stack.extend(args.iter());
         }
         Expr::Delete { expr, .. } => stack.push(expr),
+        Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } => {
+            stack.extend(elements.iter());
+        }
+        Expr::PackExpansion { pattern, .. } => stack.push(pattern),
+        Expr::SizeofExpr(expr) => stack.push(expr),
         _ => {}
     }
 }

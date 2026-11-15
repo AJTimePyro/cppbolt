@@ -5,6 +5,7 @@ mod call_args;
 mod call_types;
 mod cond;
 mod construct;
+mod analysis_vars;
 mod emit_context;
 mod expr;
 mod expr_assign;
@@ -50,9 +51,10 @@ use crate::sema::{FunctionSig, Sema};
 use crate::wasm::*;
 use analysis::{
     FuncCandidate, FuncDeclRef, check_stmt_has_new_delete, collect_address_taken_expr,
-    collect_address_taken_stmt, collect_expr_calls, collect_static_vars, collect_stmt_calls,
+    collect_address_taken_stmt, collect_expr_calls, collect_stmt_calls,
     collect_type_lifecycle,
 };
+use analysis_vars::collect_static_vars;
 use emit_context::{
     ArrayLocal, ArrayLoop, ArraySlots, BinaryTypes, CallSite, CtorCall, GlobalInit, MemberAccess,
     NamedCall, ScalarAssign, SwitchSlots,
