@@ -18,31 +18,7 @@ impl<'a> FunctionTemplateCand<'a> {
     }
 }
 
-/// Information about a parameter at a given call position.
-#[derive(Clone, Copy, Debug)]
-struct ParamInfo<'a> {
-    ty: &'a Type,
-    is_pack: bool,
-}
-
-/// Computes the type specificity metric for template ordering.
-/// Higher specificity indicates a more specialized type.
-pub fn type_specificity(ty: &Type) -> usize {
-    match ty {
-        Type::TypeParam(_) => 0,
-        Type::PackExpansion(inner) => type_specificity(inner),
-        Type::Reference(inner) => 2 + type_specificity(inner),
-        Type::RvalueReference(inner) => 1 + type_specificity(inner),
-        Type::Const(inner) => 1 + type_specificity(inner),
-        Type::Pointer(inner) => 4 + type_specificity(inner),
-        Type::TemplateInstance { args, .. } => {
-            6 + args.iter().map(type_specificity).sum::<usize>()
-        }
-        _ => 10,
-    }
-}
-
-fn get_param_info<'a>(cand: &'a FunctionTemplateCand<'a>, i: usize) -> Option<ParamInfo<'a>> {
+fn get_param_type<'a>(cand: &'a FunctionTemplateCand<'a>, i: usize) -> Option<&'a Type> {
     if i < cand.decl.params.len() {
         let p = &cand.decl.params[i];
         if p.is_pack {
@@ -50,15 +26,9 @@ fn get_param_info<'a>(cand: &'a FunctionTemplateCand<'a>, i: usize) -> Option<Pa
                 Type::PackExpansion(inner) => inner.as_ref(),
                 other => other,
             };
-            Some(ParamInfo {
-                ty: inner_ty,
-                is_pack: true,
-            })
+            Some(inner_ty)
         } else {
-            Some(ParamInfo {
-                ty: &p.ty,
-                is_pack: false,
-            })
+            Some(&p.ty)
         }
     } else if let Some(last) = cand.decl.params.last() {
         if last.is_pack {
@@ -66,10 +36,7 @@ fn get_param_info<'a>(cand: &'a FunctionTemplateCand<'a>, i: usize) -> Option<Pa
                 Type::PackExpansion(inner) => inner.as_ref(),
                 other => other,
             };
-            Some(ParamInfo {
-                ty: inner_ty,
-                is_pack: true,
-            })
+            Some(inner_ty)
         } else {
             None
         }
@@ -78,60 +45,80 @@ fn get_param_info<'a>(cand: &'a FunctionTemplateCand<'a>, i: usize) -> Option<Pa
     }
 }
 
-fn compare_param(p1: ParamInfo, p2: ParamInfo) -> Ordering {
-    if !p1.is_pack && p2.is_pack {
-        return Ordering::Less;
-    }
-    if p1.is_pack && !p2.is_pack {
-        return Ordering::Greater;
-    }
-    let s1 = type_specificity(p1.ty);
-    let s2 = type_specificity(p2.ty);
-    if s1 > s2 {
-        Ordering::Less
-    } else if s2 > s1 {
-        Ordering::Greater
-    } else {
-        Ordering::Equal
+fn synth_subst_type(ty: &Type, synth_map: &std::collections::HashMap<String, Type>) -> Type {
+    match ty {
+        Type::TypeParam(name) => synth_map.get(name).cloned().unwrap_or_else(|| ty.clone()),
+        Type::Pointer(inner) => Type::Pointer(Box::new(synth_subst_type(inner, synth_map))),
+        Type::Reference(inner) => Type::Reference(Box::new(synth_subst_type(inner, synth_map))),
+        Type::RvalueReference(inner) => {
+            Type::RvalueReference(Box::new(synth_subst_type(inner, synth_map)))
+        }
+        Type::Const(inner) => Type::Const(Box::new(synth_subst_type(inner, synth_map))),
+        Type::PackExpansion(inner) => {
+            Type::PackExpansion(Box::new(synth_subst_type(inner, synth_map)))
+        }
+        Type::TemplateInstance { name, args } => Type::TemplateInstance {
+            name: name.clone(),
+            args: args.iter().map(|a| synth_subst_type(a, synth_map)).collect(),
+        },
+        _ => ty.clone(),
     }
 }
 
-/// Compares two function templates for a call with `call_args_len` arguments.
-///
-/// Returns:
-/// - `Some(Ordering::Less)` if `cand1` is strictly more specialized than `cand2`
-/// - `Some(Ordering::Greater)` if `cand2` is strictly more specialized than `cand1`
-/// - `Some(Ordering::Equal)` if both are equally specialized
-/// - `None` if they are incomparable / conflicting
+fn deduces_from_synthetic(
+    source_cand: &FunctionTemplateCand,
+    target_cand: &FunctionTemplateCand,
+    call_args_len: usize,
+) -> bool {
+    let mut synth_map = std::collections::HashMap::new();
+    for (i, p) in source_cand.params.iter().enumerate() {
+        let synth_name = format!("__synth_order_{}_{}", source_cand.decl.name, i);
+        synth_map.insert(p.name.clone(), Type::Struct(synth_name));
+    }
+    let mut deduced = std::collections::HashMap::new();
+    for i in 0..call_args_len {
+        let p_src = get_param_type(source_cand, i);
+        let p_tgt = get_param_type(target_cand, i);
+        let (Some(p_src), Some(p_tgt)) = (p_src, p_tgt) else {
+            return false;
+        };
+        let synth_arg = synth_subst_type(p_src, &synth_map);
+        let is_lvalue = matches!(p_src, Type::Reference(_));
+        if super::template_deduce_type::deduce_type(
+            p_tgt,
+            &synth_arg,
+            &mut deduced,
+            is_lvalue,
+            crate::ast::ExprPos::default(),
+        )
+        .is_err()
+        {
+            return false;
+        }
+    }
+    for p in target_cand.params {
+        if !p.is_pack && !deduced.contains_key(&p.name) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Compares two function templates for a call with `call_args_len` arguments
+/// using standard deduction from synthetic types per ISO C++11 [temp.func.order].
 pub fn compare_function_templates(
     cand1: &FunctionTemplateCand,
     cand2: &FunctionTemplateCand,
     call_args_len: usize,
 ) -> Option<Ordering> {
-    let mut cand1_better = false;
-    let mut cand2_better = false;
+    let d1_to_2 = deduces_from_synthetic(cand1, cand2, call_args_len);
+    let d2_to_1 = deduces_from_synthetic(cand2, cand1, call_args_len);
 
-    for i in 0..call_args_len {
-        let p1 = get_param_info(cand1, i);
-        let p2 = get_param_info(cand2, i);
-        let (Some(p1), Some(p2)) = (p1, p2) else {
-            break;
-        };
-        match compare_param(p1, p2) {
-            Ordering::Less => cand1_better = true,
-            Ordering::Greater => cand2_better = true,
-            Ordering::Equal => {}
-        }
-    }
-
-    if cand1_better && !cand2_better {
+    if d1_to_2 && !d2_to_1 {
         return Some(Ordering::Less);
     }
-    if cand2_better && !cand1_better {
+    if d2_to_1 && !d1_to_2 {
         return Some(Ordering::Greater);
-    }
-    if cand1_better && cand2_better {
-        return None;
     }
 
     let has_pack1 = cand1.decl.params.iter().any(|p| p.is_pack)
@@ -143,12 +130,8 @@ pub fn compare_function_templates(
         Some(Ordering::Less)
     } else if has_pack1 && !has_pack2 {
         Some(Ordering::Greater)
-    } else if cand1.params.len() < cand2.params.len() {
-        Some(Ordering::Less)
-    } else if cand1.params.len() > cand2.params.len() {
-        Some(Ordering::Greater)
     } else {
-        Some(Ordering::Equal)
+        None
     }
 }
 
@@ -186,19 +169,29 @@ mod tests {
     }
 
     #[test]
-    fn test_type_specificity_ranking() {
+    fn test_deduction_based_pointer_more_specialized_than_type_param() {
         let t_param = Type::TypeParam("T".to_string());
-        let t_ref = Type::Reference(Box::new(t_param.clone()));
-        let t_const_ref = Type::Reference(Box::new(Type::Const(Box::new(t_param.clone()))));
         let t_ptr = Type::Pointer(Box::new(t_param.clone()));
-        let t_const_ptr = Type::Pointer(Box::new(Type::Const(Box::new(t_param.clone()))));
-        let t_int = Type::Int;
-
-        assert!(type_specificity(&t_int) > type_specificity(&t_const_ptr));
-        assert!(type_specificity(&t_const_ptr) > type_specificity(&t_ptr));
-        assert!(type_specificity(&t_ptr) > type_specificity(&t_const_ref));
-        assert!(type_specificity(&t_const_ref) > type_specificity(&t_ref));
-        assert!(type_specificity(&t_ref) > type_specificity(&t_param));
+        let decl_ptr = make_fn_decl("f", vec![make_param(t_ptr, false)]);
+        let decl_param = make_fn_decl("f", vec![make_param(t_param, false)]);
+        let tparams = vec![TemplateParam {
+            name: "T".to_string(),
+            param_type: None,
+            default_type: None,
+            is_pack: false,
+            line: 1,
+            col: 1,
+        }];
+        let cand_ptr = FunctionTemplateCand::new(&decl_ptr, &tparams);
+        let cand_param = FunctionTemplateCand::new(&decl_param, &tparams);
+        assert_eq!(
+            compare_function_templates(&cand_ptr, &cand_param, 1),
+            Some(Ordering::Less)
+        );
+        assert_eq!(
+            compare_function_templates(&cand_param, &cand_ptr, 1),
+            Some(Ordering::Greater)
+        );
     }
 
     #[test]

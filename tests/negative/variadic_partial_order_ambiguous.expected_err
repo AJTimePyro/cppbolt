@@ -1,0 +1,1 @@
+tests/negative/variadic_partial_order_ambiguous.cpp:9:5: error: call of overloaded 'order(int *, int *)' is ambiguous
