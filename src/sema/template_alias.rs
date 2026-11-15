@@ -45,9 +45,9 @@ impl Sema {
             return Ok(None);
         };
         let effective_args = fill_default_template_args(name, &params, args, (line, col))?;
-        let mut mapping = HashMap::new();
+        let mut mapping: HashMap<String, crate::sema::TemplateArg> = HashMap::new();
         for (param, arg) in params.iter().zip(effective_args.iter()) {
-            mapping.insert(param.name.clone(), arg.clone());
+            mapping.insert(param.name.clone(), arg.clone().into());
         }
         let mut expanded = substitute_type(&target_ty, &mapping, None);
         self.resolve_and_instantiate_type(&mut expanded, line, col)?;

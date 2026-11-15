@@ -242,7 +242,7 @@ impl Sema {
     fn execute_class_instantiation(
         &mut self,
         template_class: &TemplateClass,
-        mapping: HashMap<String, Type>,
+        mapping: HashMap<String, crate::sema::pack_expansion::TemplateArg>,
         inst_name: &str,
         pos: (usize, usize),
     ) -> Result<(), CompileError> {
@@ -265,6 +265,10 @@ impl Sema {
 
         for (_, fty, _) in fields.iter_mut() {
             self.resolve_and_instantiate_type(fty, line, col)?;
+        }
+
+        for base in base_classes.iter() {
+            self.ensure_class_instantiated(base, line, col);
         }
 
         for m in methods.iter_mut() {
@@ -327,7 +331,7 @@ impl Sema {
         &mut self,
         tmpl_name: &str,
         inst_name: &str,
-        mapping: &HashMap<String, Type>,
+        mapping: &HashMap<String, crate::sema::pack_expansion::TemplateArg>,
     ) {
         let plain_tmpl = QualifiedName::new(tmpl_name).plain();
         let plain_inst = QualifiedName::new(inst_name).plain();

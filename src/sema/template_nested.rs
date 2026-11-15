@@ -1,3 +1,4 @@
+use super::pack_expansion::TemplateArg;
 use super::template_subst::{substitute_function, substitute_type};
 use super::*;
 use crate::ast::decl::{Decl, FunctionDecl};
@@ -14,7 +15,7 @@ struct NestedStructParams<'a> {
     fields: &'a [StructFieldDecl],
     methods: &'a [FunctionDecl],
     private_members: &'a [String],
-    mapping: &'a HashMap<String, Type>,
+    mapping: &'a HashMap<String, TemplateArg>,
     pos: (usize, usize),
 }
 
@@ -23,7 +24,7 @@ impl Sema {
         &mut self,
         template_class: &TemplateClass,
         inst_name: &str,
-        mapping: &mut HashMap<String, Type>,
+        mapping: &mut HashMap<String, TemplateArg>,
         pos: (usize, usize),
     ) {
         let (line, col) = pos;
@@ -32,10 +33,10 @@ impl Sema {
                 let short = name.rsplit_once("::").map(|(_, s)| s).unwrap_or(name);
                 let inst_nested = format!("{}::{}", inst_name, short);
                 let inst_ty = Type::Struct(inst_nested.clone());
-                mapping.insert(short.to_string(), inst_ty.clone());
-                mapping.insert(name.clone(), inst_ty.clone());
+                mapping.insert(short.to_string(), TemplateArg::Type(inst_ty.clone()));
+                mapping.insert(name.clone(), TemplateArg::Type(inst_ty.clone()));
                 let plain_tmpl = QualifiedName::new(&template_class.name).plain();
-                mapping.insert(format!("{}::{}", plain_tmpl, short), inst_ty);
+                mapping.insert(format!("{}::{}", plain_tmpl, short), TemplateArg::Type(inst_ty));
             }
         }
 
@@ -49,11 +50,8 @@ impl Sema {
         args: &[Type],
         inst_name: &str,
         pos: (usize, usize),
-    ) -> HashMap<String, Type> {
-        let mut mapping = HashMap::new();
-        for (param, arg) in template_params.iter().zip(args.iter()) {
-            mapping.insert(param.name.clone(), arg.clone());
-        }
+    ) -> HashMap<String, TemplateArg> {
+        let mut mapping = super::template_deduce::build_template_arg_map(template_params, args);
         self.register_instantiation_nested_and_aliases(
             template_class,
             inst_name,
@@ -67,7 +65,7 @@ impl Sema {
         &mut self,
         template_class: &TemplateClass,
         inst_name: &str,
-        mapping: &mut HashMap<String, Type>,
+        mapping: &mut HashMap<String, TemplateArg>,
         line: usize,
         col: usize,
     ) {
@@ -94,7 +92,7 @@ impl Sema {
                 {
                     let mut subst_ty = substitute_type(&ty, mapping, None);
                     let _ = self.resolve_and_instantiate_type(&mut subst_ty, line, col);
-                    mapping.insert(member.to_string(), subst_ty.clone());
+                    mapping.insert(member.to_string(), TemplateArg::Type(subst_ty.clone()));
                     self.type_aliases
                         .insert(format!("{inst_name}::{member}"), subst_ty.clone());
                     if is_std {
@@ -115,7 +113,7 @@ impl Sema {
         &mut self,
         template_class: &TemplateClass,
         inst_name: &str,
-        mapping: &HashMap<String, Type>,
+        mapping: &HashMap<String, TemplateArg>,
         pos: (usize, usize),
     ) -> Result<(), CompileError> {
         let (line, col) = pos;
@@ -161,21 +159,22 @@ impl Sema {
         let (line, col) = p.pos;
         let target_ty = Type::Struct(p.nested_inst_name.to_string());
         let injected = Some((p.name, &target_ty));
+        let arg_map = p.mapping;
 
         let mut subst_fields = Vec::new();
         for (fname, fty, finit) in p.fields {
-            let mut ty = substitute_type(fty, p.mapping, injected);
+            let mut ty = substitute_type(fty, arg_map, injected);
             self.resolve_and_instantiate_type(&mut ty, line, col)?;
             let mut init = finit.clone();
             if let Some((init_expr, _, _)) = &mut init {
-                template_subst::substitute_expr(init_expr, p.mapping, injected);
+                template_subst::substitute_expr(init_expr, arg_map, injected);
             }
             subst_fields.push((fname.clone(), ty, init));
         }
 
         let mut subst_methods = Vec::new();
         for m in p.methods {
-            let mut sm = substitute_function(m, p.mapping, injected, None);
+            let mut sm = substitute_function(m, arg_map, injected, None);
             if sm.template_params.is_empty() {
                 self.resolve_and_instantiate_type(&mut sm.return_type, line, col)?;
                 for param in &mut sm.params {

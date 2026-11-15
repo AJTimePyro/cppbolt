@@ -487,5 +487,6 @@ pub(super) fn this_param(class: &str, is_const: bool) -> Param {
         name: "this".to_string(),
         ty: Type::Pointer(Box::new(inner)),
         default_val: None,
+        is_pack: false,
     }
 }

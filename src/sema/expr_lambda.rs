@@ -187,6 +187,7 @@ impl Sema {
             name: param_name.clone(),
             ty: param_ty,
             default_val: None,
+            is_pack: false,
         });
         info.ctor_inits
             .push((name.to_string(), vec![Expr::Identifier(param_name)]));

@@ -5,6 +5,8 @@ use crate::ast::template::TemplateClass;
 use crate::diagnostics::CompileError;
 use crate::name::QualifiedName;
 
+use crate::sema::pack_expansion::TemplateArg;
+
 pub struct InstantiationTarget<'a> {
     pub name: &'a str,
     pub inst_name: &'a str,
@@ -49,7 +51,7 @@ impl Sema {
         &mut self,
         target: InstantiationTarget<'_>,
         template_class: TemplateClass,
-    ) -> Result<(TemplateClass, HashMap<String, Type>), CompileError> {
+    ) -> Result<(TemplateClass, HashMap<String, TemplateArg>), CompileError> {
         if let Some(spec) = self.lookup_class_specialization(target.inst_name) {
             let m = self.prepare_instantiation_mapping(
                 &spec,

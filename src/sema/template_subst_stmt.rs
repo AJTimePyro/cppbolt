@@ -1,5 +1,6 @@
 //! Statement-level template AST substitution.
 
+use super::pack_expansion::TemplateArg;
 use super::template_subst::{substitute_expr, substitute_type};
 use crate::ast::stmt::{Stmt, StmtKind};
 use crate::ast::types::Type;
@@ -7,7 +8,7 @@ use std::collections::HashMap;
 
 pub fn substitute_stmt(
     stmt: &mut Stmt,
-    mapping: &HashMap<String, Type>,
+    mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
 ) {
     match &mut stmt.kind {
@@ -65,7 +66,7 @@ pub fn substitute_stmt(
 
 fn substitute_loop_stmt(
     kind: &mut StmtKind,
-    mapping: &HashMap<String, Type>,
+    mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
 ) {
     match kind {

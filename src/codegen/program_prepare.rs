@@ -272,6 +272,7 @@ impl<'a> Codegen<'a> {
                     name: "this".to_string(),
                     ty: Type::Pointer(Box::new(this_inner)),
                     default_val: None,
+                    is_pack: false,
                 },
             );
         }
