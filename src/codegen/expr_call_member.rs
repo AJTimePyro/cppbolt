@@ -333,6 +333,15 @@ impl<'a> Codegen<'a> {
             code.push(OP_I32_LOAD);
             write_u32(code, 2);
             write_u32(code, this_slot);
+            if let Some(Type::Pointer(inner)) = sig.param_types.first()
+                && let Type::Struct(method_class) = inner.strip_const()
+                && let Some(offset) = self.sema.base_subobject_offset(site.class_name, method_class)
+                && offset != 0
+            {
+                code.push(OP_I32_CONST);
+                write_i32(code, offset as i32);
+                code.push(OP_I32_ADD);
+            }
         }
         for (i, a) in args.iter().enumerate() {
             let param_index = if sig.is_static { i } else { i + 1 };

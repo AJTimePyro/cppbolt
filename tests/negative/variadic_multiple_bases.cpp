@@ -7,6 +7,6 @@ struct MultiDerived : Bases... {
 };
 
 int main() {
-    MultiDerived<Base1, Base2> obj;
+    MultiDerived<Base1, Base1> obj;
     return 0;
 }

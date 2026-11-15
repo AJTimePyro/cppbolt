@@ -224,11 +224,12 @@ impl<'a> Codegen<'a> {
                     .get(QualifiedName::new(class_name).plain())
             });
         let layout = layout?;
-        if let Some(base) = layout.base_classes.first()
-            && let Some(result) =
+        for base in &layout.base_classes {
+            if let Some(result) =
                 self.find_method_filtered(base, method_name, arg_types, args, receiver)
-        {
-            return Some(result);
+            {
+                return Some(result);
+            }
         }
         None
     }

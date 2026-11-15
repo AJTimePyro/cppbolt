@@ -11,6 +11,7 @@ pub(crate) struct RecordLayout<'a> {
     pub(super) private_members: &'a [String],
     pub(super) line: usize,
     pub(super) col: usize,
+    pub(super) alignment: Option<usize>,
 }
 
 /// Accumulates the offsets, fields and vtable slots produced while laying out
@@ -59,6 +60,9 @@ impl Sema {
         input: RecordLayout<'_>,
     ) -> Result<(), CompileError> {
         let mut acc = LayoutAccumulator::new();
+        if let Some(align) = input.alignment {
+            acc.max_align = acc.max_align.max(align);
+        }
         let has_virtual_methods = input.methods.iter().any(|m| m.is_virtual);
         let primary_has_vtable = input
             .base_classes
@@ -73,7 +77,7 @@ impl Sema {
             acc.max_align = 4;
         }
 
-        self.layout_base_subobject(input.base_classes.first(), &mut acc, input.line, input.col)?;
+        self.layout_base_subobjects(input.base_classes, &mut acc, input.line, input.col)?;
 
         self.layout_vtable_slots(input.methods, has_vtable, &mut acc.vtable_slots);
 
@@ -132,46 +136,44 @@ impl Sema {
         }
     }
 
-    /// Lays out the single supported base subobject. Only one base is allowed;
-    /// the parser rejects a second base specifier.
-    fn layout_base_subobject(
+    /// Lays out all base subobjects sequentially in declaration order.
+    fn layout_base_subobjects(
         &mut self,
-        base_class: Option<&String>,
+        base_classes: &[String],
         acc: &mut LayoutAccumulator,
         line: usize,
         col: usize,
     ) -> Result<(), CompileError> {
-        let Some(base_name) = base_class else {
-            return Ok(());
-        };
-        let Some(base_layout) = self.struct_layouts.get(base_name).cloned() else {
-            return Ok(());
-        };
-        let base_offset =
-            if acc.offset == 0 && base_layout.fields.is_empty() && !base_layout.has_vtable {
-                0
-            } else {
-                let align = base_layout.align.max(1);
-                if !acc.offset.is_multiple_of(align) {
-                    acc.offset += align - (acc.offset % align);
-                }
-                let base_offset = acc.offset;
-                acc.offset = acc
-                    .offset
-                    .checked_add(base_layout.size)
-                    .ok_or_else(|| CompileError::new("object layout is too large", line, col))?;
-                base_offset
+        for base_name in base_classes {
+            let Some(base_layout) = self.struct_layouts.get(base_name).cloned() else {
+                continue;
             };
-        acc.max_align = acc.max_align.max(base_layout.align);
-        acc.base_offsets.push((base_name.clone(), base_offset));
-        if base_layout.has_vtable {
-            acc.vtable_slots = base_layout.vtable_slots.clone();
-        }
-        for mut bf in base_layout.fields {
-            bf.offset = base_offset
-                .checked_add(bf.offset)
-                .ok_or_else(|| CompileError::new("object layout is too large", line, col))?;
-            acc.struct_fields.push(bf);
+            let base_offset =
+                if acc.offset == 0 && base_layout.fields.is_empty() && !base_layout.has_vtable {
+                    0
+                } else {
+                    let align = base_layout.align.max(1);
+                    if !acc.offset.is_multiple_of(align) {
+                        acc.offset += align - (acc.offset % align);
+                    }
+                    let base_offset = acc.offset;
+                    acc.offset = acc
+                        .offset
+                        .checked_add(base_layout.size)
+                        .ok_or_else(|| CompileError::new("object layout is too large", line, col))?;
+                    base_offset
+                };
+            acc.max_align = acc.max_align.max(base_layout.align);
+            acc.base_offsets.push((base_name.clone(), base_offset));
+            if base_layout.has_vtable && acc.vtable_slots.is_empty() {
+                acc.vtable_slots = base_layout.vtable_slots.clone();
+            }
+            for mut bf in base_layout.fields {
+                bf.offset = base_offset
+                    .checked_add(bf.offset)
+                    .ok_or_else(|| CompileError::new("object layout is too large", line, col))?;
+                acc.struct_fields.push(bf);
+            }
         }
         Ok(())
     }
@@ -211,11 +213,11 @@ impl Sema {
         methods: &[FunctionDecl],
     ) -> std::collections::HashSet<String> {
         let mut pure_virtuals = std::collections::HashSet::new();
-        if let Some(base_name) = base_classes.first()
-            && let Some(base_layout) = self.struct_layouts.get(base_name)
-        {
-            for pv in &base_layout.pure_virtuals {
-                pure_virtuals.insert(pv.clone());
+        for base_name in base_classes {
+            if let Some(base_layout) = self.struct_layouts.get(base_name) {
+                for pv in &base_layout.pure_virtuals {
+                    pure_virtuals.insert(pv.clone());
+                }
             }
         }
         for m in methods {
