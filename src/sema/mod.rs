@@ -19,6 +19,7 @@ mod init_list;
 mod layout;
 mod lookup;
 mod overload;
+pub mod pack_expansion;
 mod stmt;
 mod stmt_decl;
 mod stmt_range_for;
@@ -31,14 +32,19 @@ pub mod template_deduce;
 mod template_func;
 mod template_match;
 mod template_nested;
+pub mod template_partial_order;
 mod template_registry;
 mod template_spec;
 pub mod template_subst;
+mod template_subst_func;
 mod template_subst_stmt;
+#[cfg(test)]
+mod pack_expansion_tests;
 #[cfg(test)]
 mod tests;
 
 pub use init::InitContext;
+pub use pack_expansion::TemplateArg;
 pub(crate) use layout::RecordLayout;
 pub(crate) use stmt_decl::VarDecl;
 

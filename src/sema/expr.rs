@@ -69,11 +69,19 @@ impl Sema {
                 target_type,
                 expr,
             } => self.analyze_cast(*kind, target_type, expr),
-            Expr::SizeofType(_) | Expr::SizeofExpr(_) => Ok(Type::UnsignedInt),
+            Expr::SizeofType(_) | Expr::SizeofExpr(_) | Expr::SizeofPack { .. } => {
+                Ok(Type::UnsignedInt)
+            }
             Expr::InitializerList { .. } | Expr::TypedInitList { .. } => {
                 self.analyze_initializer(expr)
             }
             Expr::Lambda { .. } => self.analyze_lambda(expr),
+            Expr::PackExpansion { pattern, .. } => self.analyze_expr(pattern),
+            Expr::FoldExpr { pos, .. } => Err(CompileError::new(
+                "fold expression is not supported yet",
+                pos.line,
+                pos.col,
+            )),
         }
     }
 

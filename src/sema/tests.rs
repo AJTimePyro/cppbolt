@@ -360,7 +360,7 @@ fn test_functor_call_dispatch_requires_call_operator() -> Result<(), Box<dyn std
 #[test]
 fn test_substitute_scalar_type() {
     let mut mapping = std::collections::HashMap::new();
-    mapping.insert("T".to_string(), Type::Int);
+    mapping.insert("T".to_string(), TemplateArg::Type(Type::Int));
 
     let t_param = Type::TypeParam("T".to_string());
     assert_eq!(
@@ -393,6 +393,7 @@ fn dummy_func(name: &str, ret: Type, param: Type, is_const: bool) -> FunctionDec
             name: "val".to_string(),
             ty: param,
             default_val: None,
+            is_pack: false,
         }],
         body: None,
         is_virtual: false,
@@ -411,7 +412,7 @@ fn dummy_func(name: &str, ret: Type, param: Type, is_const: bool) -> FunctionDec
 #[test]
 fn test_substitute_function() {
     let mut mapping = std::collections::HashMap::new();
-    mapping.insert("T".to_string(), Type::Int);
+    mapping.insert("T".to_string(), TemplateArg::Type(Type::Int));
     let func = dummy_func(
         "get",
         Type::TypeParam("T".to_string()),
@@ -426,7 +427,7 @@ fn test_substitute_function() {
 #[test]
 fn test_substitute_struct() {
     let mut mapping = std::collections::HashMap::new();
-    mapping.insert("T".to_string(), Type::Int);
+    mapping.insert("T".to_string(), TemplateArg::Type(Type::Int));
     let tclass = TemplateClass {
         name: "Holder".to_string(),
         is_class: true,
@@ -470,3 +471,26 @@ fn test_non_const_reference_rejects_temporary() {
     let const_ref_ty = Type::Reference(Box::new(Type::Const(Box::new(Type::Int))));
     assert!(sema.can_assign_expr(&const_ref_ty, &val_ty, Some(&literal)));
 }
+
+#[test]
+fn test_pack_expansion_expr_list() -> Result<(), Box<dyn std::error::Error>> {
+    let mut mapping = HashMap::new();
+    mapping.insert(
+        "args".to_string(),
+        pack_expansion::TemplateArg::TypePack(vec![Type::Int, Type::Double]),
+    );
+    let pattern = Expr::Call {
+        callee: Box::new(Expr::Identifier("f".to_string())),
+        args: vec![Expr::Identifier("args".to_string())],
+        pos: ExprPos::default(),
+    };
+    let exprs = vec![Expr::PackExpansion {
+        pattern: Box::new(pattern),
+        pos: ExprPos::default(),
+    }];
+    let expanded = pack_expansion::expand_expr_list(&exprs, &mapping)
+        .map_err(|e| format!("{e:?}"))?;
+    assert_eq!(expanded.len(), 2);
+    Ok(())
+}
+

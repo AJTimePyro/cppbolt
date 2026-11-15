@@ -8,6 +8,7 @@ use std::collections::HashMap;
 pub struct ConstexprEnv<'a> {
     pub struct_sizes: Option<&'a HashMap<String, usize>>,
     pub constants: Option<&'a HashMap<String, i128>>,
+    pub pack_lengths: Option<&'a HashMap<String, usize>>,
 }
 
 /// Evaluates an expression as an integral constant expression.
@@ -18,8 +19,51 @@ pub fn eval_integral_constexpr(
     let env = ConstexprEnv {
         struct_sizes,
         constants: None,
+        pack_lengths: None,
     };
     eval_integral_constexpr_with_env(expr, env)
+}
+
+/// Evaluates a constant expression with optional struct sizes, constants, and pack lengths.
+#[allow(dead_code)]
+pub fn eval_constexpr_with_context(
+    expr: &Expr,
+    struct_sizes: Option<&HashMap<String, usize>>,
+    constants: Option<&HashMap<String, i128>>,
+    pack_lengths: Option<&HashMap<String, usize>>,
+) -> Result<i128, CompileError> {
+    let env = ConstexprEnv {
+        struct_sizes,
+        constants,
+        pack_lengths,
+    };
+    eval_integral_constexpr_with_env(expr, env)
+}
+
+/// Evaluates a constant expression with a template argument mapping.
+#[allow(dead_code)]
+pub fn eval_constexpr_with_mapping(
+    expr: &Expr,
+    struct_sizes: Option<&HashMap<String, usize>>,
+    mapping: &HashMap<String, super::pack_expansion::TemplateArg>,
+) -> Result<i128, CompileError> {
+    let mut constants = HashMap::new();
+    let mut pack_lengths = HashMap::new();
+    for (k, v) in mapping {
+        match v {
+            super::pack_expansion::TemplateArg::NonType(n) => {
+                constants.insert(k.clone(), *n);
+            }
+            super::pack_expansion::TemplateArg::TypePack(types) => {
+                pack_lengths.insert(k.clone(), types.len());
+            }
+            super::pack_expansion::TemplateArg::NonTypePack(vals) => {
+                pack_lengths.insert(k.clone(), vals.len());
+            }
+            _ => {}
+        }
+    }
+    eval_constexpr_with_context(expr, struct_sizes, Some(&constants), Some(&pack_lengths))
 }
 
 /// Evaluates an expression as an integral constant expression with non-type template parameters or constants.
@@ -73,6 +117,17 @@ pub fn eval_integral_constexpr_with_env(
             Ok(ty.size_of(sizes) as i128)
         }
         Expr::SizeofExpr(inner) => eval_sizeof_expr(inner, env.struct_sizes),
+        Expr::SizeofPack { name, pos } => {
+            if let Some(len) = env.pack_lengths.and_then(|p| p.get(name)) {
+                Ok(*len as i128)
+            } else {
+                Err(CompileError::new(
+                    format!("parameter pack '{}' not found in active pack mapping", name),
+                    pos.line,
+                    pos.col,
+                ))
+            }
+        }
         _ => {
             let pos = expr.pos();
             Err(CompileError::new(
