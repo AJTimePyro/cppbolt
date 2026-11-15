@@ -4,7 +4,7 @@ A dependency-free C++ to WebAssembly subset compiler written in Rust.
 
 `cppbolt` compiles a defined subset of C++17 directly into WebAssembly (`.wasm`) binaries without relying on LLVM, Emscripten, or external native toolchains. It is built to run both natively as a CLI and in the browser (via a WebAssembly build of the compiler itself and a minimal JavaScript host runtime).
 
-The compiler is correctness-focused and implements an explicit, predictable C++17 language subset. It supports classes, templates, move semantics, standard containers, and algorithms, while omitting exceptions and RTTI to maintain deterministic compilation speed and small binary size.
+`cppbolt` implements an explicit C++17 subset including classes, templates, variadic templates, move semantics, algorithms, and standard containers (`std::vector`, `std::map`, `std::set`, `std::array`, `std::tuple`). It omits exceptions and RTTI to keep compilation deterministic and binaries small.
 
 ---
 

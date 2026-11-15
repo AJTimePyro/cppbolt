@@ -24,23 +24,27 @@ The parser transforms the flat token stream into a structured Abstract Syntax Tr
   }
   ```
 - `ast::Decl`: Top-level declaration node:
-  - `Function(FunctionDecl)`: Free functions, member methods, constructors, destructors.
+  - `Function(FunctionDecl)`: Free functions, member methods, constructors, destructors (with `Param::is_pack` for parameter packs).
   - `GlobalVar { name, ty, init, line, col }`: Global and namespace-level variables.
-  - `StructDecl { name, is_class, base_classes, fields, methods, ... }`: Class and struct definitions.
+  - `StructDecl { name, is_class, base_classes, fields, methods, ... }`: Class and struct definitions (with `BaseClassSpecifier` supporting pack expansion `Bases...`).
   - `EnumDecl { name, is_scoped, variants }`: Enumerations.
   - `NamespaceAlias { alias, target, line, col }`: C++17 namespace aliases.
   - `UsingNamespace(String)`, `UsingDecl(String)`: Using directives and declarations.
-  - `Template(TemplateDecl)`: Function templates, class templates, and alias templates (`template <...> using Alias = Target;`).
+  - `Template(TemplateDecl)`: Function templates, class templates, and alias templates (`template <...> using Alias = Target;`), with `TemplateParam::is_pack` indicating type and non-type parameter packs.
 - `ast::Stmt`: Statement nodes:
   - `Expr(Expr)`, `Block(Vec<Stmt>)`, `If { cond, then_branch, else_branch }`, `While`, `DoWhile`, `For`, `RangeFor { decl, range, body }`, `Switch`, `Return(Option<Expr>)`, `Break`, `Continue`, `VarDecl`.
 - `ast::Expr`: Expression tree nodes:
   - `IntLiteral`, `FloatLiteral`, `StringLiteral`, `BoolLiteral`, `Identifier`, `BinaryOp`, `UnaryOp`, `Call`, `MemberCall`, `MemberAccess`, `ArraySubscript`, `New`, `Delete`, `Ternary`, `Assign`, `Cast`, `Lambda`.
+  - `SizeofPack { name, pos }`: Compile-time `sizeof...(pack)` query returning the number of elements in the parameter pack.
+  - `PackExpansion { pattern, pos }`: Pack expansion pattern `pattern...` in function calls, initializers, base classes, and constructor initializers.
+  - `FoldExpr`: AST representation reserved for C++17 fold expressions.
   - `InitializerList { elements, pos }`: Bare braced expression lists `{ a, b, c }`.
   - `TypedInitList { ty, elements, pos }`: Explicitly-typed temporary and direct-list expressions `Type{ a, b, c }`.
   - Every `Expr` variant carries an `ExprPos` (`line`, `col`) recording the position of its leading token.
 - `ast::types::Type`: Representation of types:
   - Primitives: `Int`, `LongLong`, `Short`, `Char`, `Float`, `Double`, `Bool`, `Void`, `Nullptr` (`decltype(nullptr)`), and unsigned variants.
   - Compounds: `Pointer(Box<Type>)`, `Reference(Box<Type>)` (lvalue ref `T&`), `RvalueReference(Box<Type>)` (rvalue ref `T&&`), `Array(Box<Type>, usize)`, `DependentArray(Box<Type>, String)`.
+  - Variadics: `PackExpansion(Box<Type>)` representing an expanded type pattern `Ts...`.
   - Aggregates and Generics: `Struct(String)`, `Enum(String)`, `TypeParam(String)`, `NonType(i128)`, `TemplateInstance { name, args }`, `Function { return_type, params }`.
 
 ---

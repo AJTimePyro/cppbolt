@@ -44,7 +44,8 @@ Templates and standard containers implemented in cppbolt:
 - [x] **Initializer Lists**: `std::initializer_list<T>` constructors, brace initialization, and aggregate deduction.
 - [x] **Standard Containers**: Templated implementations of `<vector>`, `<map>`, `<set>`, `<array>`, and `<utility>` (`std::pair`).
 - [x] **Algorithms & Traits**: `<algorithm>` (`std::sort`, `std::find`, `std::min`, `std::max`, `std::copy`, `std::reverse`) and `<type_traits>` (`std::integral_constant`, `std::is_same`, `std::remove_reference`).
-- [ ] **Variadic Templates**: Parameter packs (`template <typename... Args>`) and pack expansions.
+- [x] **Variadic Templates**: Parameter packs (`template <typename... Args>`), pack expansions in call arguments, initializer lists, base classes, constructor initializers, and template arguments, `sizeof...`, forwarding reference packs, partial ordering of function templates with packs, `std::tuple`, and variadic `std::make_unique` (C++17 fold expressions deferred).
+- [ ] **Fold Expressions**: C++17 unary and binary fold expressions (`(... + args)`, `(args + ...)`) over parameter packs.
 - [ ] **Template Template Parameters**: Templated parameters (`template <template <typename> class C>`).
 
 ---

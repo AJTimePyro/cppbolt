@@ -19,11 +19,18 @@ The semantic analysis stage validates the Abstract Syntax Tree, computes record 
 11. **Closure Synthesis & Lambda Desugaring**: Synthesizes unique anonymous closure structs (`__lambda_N`) for C++17 lambda expressions (`src/sema/expr_lambda.rs`), generating fields for captures, constructor initialization, `operator()` call signatures, return type deduction, and static `__invoke` trampoline methods for implicit conversion to C function pointers.
 12. **Recursive `operator->` Resolution**: Resolves chained member-arrow accesses recursively until a raw pointer is reached, enforcing cycle detection and receiver `const` propagation (`src/sema/expr_member.rs`).
 13. **List Initialization**: Resolves braced initializers (`src/sema/init.rs`) across direct-list, copy-list, and value-initialization contexts. Enforces C++17 narrowing rules ([dcl.init.list] p7) and `explicit` constructor rejection in copy contexts, resolves aggregate base subobjects, and implements C++17 aggregate brace elision ([dcl.init.aggr] p11) for nested array and aggregate members.
+14. **Parameter Pack Substitution & Expansion**: Expands parameter packs at compile time across expressions, types, base class lists, and constructor initializers (`src/sema/pack_expansion.rs`). Validates that multiple packs expanded within the same pattern have identical lengths, rejects unexpanded parameter packs with clear diagnostics, and evaluates `sizeof...(pack)` constant queries (`src/sema/constexpr_eval.rs`).
+15. **Function Template Partial Ordering**: Analyzes and orders function templates per C++11 [temp.func.order] in `src/sema/template_partial_order.rs`, scoring type specificity and treating non-pack parameters as strictly more specialized than parameter packs. Integrates partial ordering into overload resolution ([over.match.best]) in `src/sema/expr_call.rs`.
 
 ---
 
 ## 2. Key Data Structures
 
+- `TemplateArg`: Represents concrete template argument values during substitution and pack expansion:
+  - `Type(Type)`: Concrete type argument.
+  - `NonType(i128)`: Evaluated non-type constant argument.
+  - `TypePack(Vec<Type>)`: Type parameter pack.
+  - `NonTypePack(Vec<i128>)`: Non-type parameter pack.
 - `Sema`: Central semantic state containing:
   - `structs: HashMap<String, StructLayout>`: Layouts, field offsets, vtable slots, and pure virtual tracking for all defined records.
   - `functions: HashMap<String, Vec<FunctionSig>>`: All registered functions and method overloads.

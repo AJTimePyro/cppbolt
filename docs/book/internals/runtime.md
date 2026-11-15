@@ -77,6 +77,7 @@ stdlib/
 ├── stdlib.h          # C stdlib declarations and memory functions
 ├── string            # std::string implementation
 ├── string.h          # C string declarations
+├── tuple             # std::tuple, std::make_tuple, std::get
 ├── type_traits       # integral_constant, is_same, remove_reference
 ├── utility           # std::move, std::forward, std::pair, std::swap
 ├── vector            # std::vector with move operations and dynamic resizing
@@ -120,9 +121,9 @@ Internal components split across two subdirectories:
 The embedded library includes:
 - Streams (`<iostream>`), string manipulation (`<string>`), C stdio (`<cstdio>`, `<stdio.h>`), and manipulators (`<iomanip>`)
 - Dynamic allocation (`<new>`, `<cstdlib>`, `<stdlib.h>`), smart pointers (`<memory>`), and initializer lists (`<initializer_list>`)
-- Sequence and associative containers (`<vector>`, `<array>`, `<map>`, `<set>`) with iterators, element access, and move semantics
+- Sequence and associative containers (`<vector>`, `<array>`, `<map>`, `<set>`) with iterators, element access, and move semantics, and heterogenous product types (`<tuple>`)
 - Iterator utilities and adapters (`<iterator>`) and comparison function objects (`<functional>`)
-- Move and forward primitives (`<utility>`), algorithms (`<algorithm>`), type traits (`<type_traits>`), C definitions (`<cstddef>`), and math intrinsics (`<cmath>`)
+- Move and forward primitives (`<utility>` including index sequences), variadic smart pointers (`<memory>` with `make_unique`), algorithms (`<algorithm>`), type traits (`<type_traits>`), C definitions (`<cstddef>`), and math intrinsics (`<cmath>`)
 
 ### Independent Native Header Verification
 All embedded headers are compiled and verified against host `g++` and `clang++` using `-nostdinc++` and AddressSanitizer/UndefinedBehaviorSanitizer via `tools/verify_mini_stl_gxx.py`.
