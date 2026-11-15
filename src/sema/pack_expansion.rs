@@ -49,11 +49,7 @@ pub fn to_template_arg_map(mapping: &HashMap<String, Type>) -> HashMap<String, T
 }
 
 pub fn pack_element_name(name: &str, i: usize) -> String {
-    let base = match name.strip_suffix('s') {
-        Some(s) if !s.is_empty() && !name.ends_with("ss") => s,
-        _ => name,
-    };
-    format!("{}{}", base, i)
+    format!("__pack_{}_{}", name, i)
 }
 
 fn for_each_child_expr<'a, F: FnMut(&'a Expr)>(expr: &'a Expr, mut f: F) {

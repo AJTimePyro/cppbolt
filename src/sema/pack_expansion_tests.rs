@@ -227,3 +227,18 @@ fn test_deduce_variadic_forwarding_references() -> Result<(), Box<dyn std::error
     );
     Ok(())
 }
+
+#[test]
+fn test_pack_element_name_reserved_prefix() {
+    let name0 = pack_element_name("args", 0);
+    let name1 = pack_element_name("args", 1);
+    assert_eq!(name0, "__pack_args_0");
+    assert_eq!(name1, "__pack_args_1");
+    assert_ne!(name0, "arg0");
+    assert_ne!(name1, "arg1");
+    assert_ne!(name0, "args0");
+
+    let val0 = pack_element_name("val", 0);
+    assert_eq!(val0, "__pack_val_0");
+    assert_ne!(val0, "val0");
+}

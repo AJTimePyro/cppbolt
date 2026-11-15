@@ -63,10 +63,8 @@ fn deduce_pack_arguments(
         Type::PackExpansion(inner) => &**inner,
         other => other,
     };
-    let pack_tparam = template_params.iter().find(|p| p.is_pack);
-    let pack_name = pack_tparam
-        .map(|p| p.name.clone())
-        .unwrap_or_else(|| pack_param.name.clone());
+    let pack_name = template_params.iter().find(|p| p.is_pack)
+        .map(|p| p.name.clone()).unwrap_or_else(|| pack_param.name.clone());
 
     let mut pack_types = Vec::new();
     for (i, arg_ty) in arg_types.iter().enumerate().skip(start) {
@@ -78,9 +76,14 @@ fn deduce_pack_arguments(
         };
         let mut elem_deduced = HashMap::new();
         deduce_type(pattern_ty, &adjusted_arg_ty, &mut elem_deduced, is_lval, pos)?;
-        if let Some(t) = elem_deduced.remove(&pack_name) {
-            pack_types.push(t);
-        } else if let Some((_, t)) = elem_deduced.into_iter().next() {
+        let deduced_ty = elem_deduced.remove(&pack_name).or_else(|| {
+            template_params.iter().find(|p| p.is_pack).and_then(|p| elem_deduced.remove(&p.name))
+        }).or_else(|| {
+            let mut items: Vec<_> = elem_deduced.into_iter().collect();
+            items.sort_by(|a, b| a.0.cmp(&b.0));
+            items.into_iter().next().map(|(_, ty)| ty)
+        });
+        if let Some(t) = deduced_ty {
             pack_types.push(t);
         } else {
             return Err(CompileError::new(
