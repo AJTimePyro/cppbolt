@@ -41,6 +41,7 @@ const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("algorithm", include_str!("../../stdlib/algorithm")),
     ("map", include_str!("../../stdlib/map")),
     ("set", include_str!("../../stdlib/set")),
+    ("tuple", include_str!("../../stdlib/tuple")),
     (
         "detail/containers/avl_tree.h",
         include_str!("../../stdlib/detail/containers/avl_tree.h"),

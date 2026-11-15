@@ -1,0 +1,169 @@
+#ifndef _MINI_STL_TUPLE_
+#define _MINI_STL_TUPLE_
+
+#include <cstddef>
+#include <utility>
+
+namespace std {
+
+template <typename... Ts>
+class tuple;
+
+template <>
+class tuple<> {
+public:
+    tuple() {}
+};
+
+template <typename Head, typename... Tail>
+class tuple<Head, Tail...> : public tuple<Tail...> {
+public:
+    Head head;
+
+    tuple() : tuple<Tail...>(), head() {}
+    explicit tuple(const Head& h, const Tail&... tail)
+        : tuple<Tail...>(tail...), head(h) {}
+
+    template <typename UHead, typename... UTail>
+    tuple(UHead&& h, UTail&&... tail)
+        : tuple<Tail...>(static_cast<UTail&&>(tail)...), head(static_cast<UHead&&>(h)) {}
+};
+
+template <typename... Args>
+tuple<Args...> make_tuple(Args... args) {
+    return tuple<Args...>(args...);
+}
+
+// tuple_element
+template <size_t I, typename Tuple>
+struct tuple_element;
+
+template <typename T0, typename... Tail>
+struct tuple_element<0, tuple<T0, Tail...>> {
+    typedef T0 type;
+};
+
+template <typename T0, typename T1, typename... Tail>
+struct tuple_element<1, tuple<T0, T1, Tail...>> {
+    typedef T1 type;
+};
+
+template <typename T0, typename T1, typename T2, typename... Tail>
+struct tuple_element<2, tuple<T0, T1, T2, Tail...>> {
+    typedef T2 type;
+};
+
+template <typename T0, typename T1, typename T2, typename T3, typename... Tail>
+struct tuple_element<3, tuple<T0, T1, T2, T3, Tail...>> {
+    typedef T3 type;
+};
+
+template <typename T0, typename T1, typename T2, typename T3, typename T4, typename... Tail>
+struct tuple_element<4, tuple<T0, T1, T2, T3, T4, Tail...>> {
+    typedef T4 type;
+};
+
+template <typename T0, typename T1, typename T2, typename T3, typename T4, typename T5, typename... Tail>
+struct tuple_element<5, tuple<T0, T1, T2, T3, T4, T5, Tail...>> {
+    typedef T5 type;
+};
+
+template <size_t I, typename Tuple>
+using tuple_element_t = typename tuple_element<I, Tuple>::type;
+
+// tuple_size
+template <typename Tuple>
+struct tuple_size;
+
+template <typename... Ts>
+struct tuple_size<tuple<Ts...>> {
+    static const size_t value = sizeof...(Ts);
+};
+
+// tuple_getter
+template <size_t I, typename Tuple>
+struct tuple_getter;
+
+template <typename T0, typename... Tail>
+struct tuple_getter<0, tuple<T0, Tail...>> {
+    static T0& get(tuple<T0, Tail...>& t) {
+        return t.head;
+    }
+    static const T0& get(const tuple<T0, Tail...>& t) {
+        return t.head;
+    }
+};
+
+template <typename T0, typename T1, typename... Tail>
+struct tuple_getter<1, tuple<T0, T1, Tail...>> {
+    static T1& get(tuple<T0, T1, Tail...>& t) {
+        tuple<T1, Tail...>& base = t;
+        return base.head;
+    }
+    static const T1& get(const tuple<T0, T1, Tail...>& t) {
+        const tuple<T1, Tail...>& base = t;
+        return base.head;
+    }
+};
+
+template <typename T0, typename T1, typename T2, typename... Tail>
+struct tuple_getter<2, tuple<T0, T1, T2, Tail...>> {
+    static T2& get(tuple<T0, T1, T2, Tail...>& t) {
+        tuple<T2, Tail...>& base = t;
+        return base.head;
+    }
+    static const T2& get(const tuple<T0, T1, T2, Tail...>& t) {
+        const tuple<T2, Tail...>& base = t;
+        return base.head;
+    }
+};
+
+template <typename T0, typename T1, typename T2, typename T3, typename... Tail>
+struct tuple_getter<3, tuple<T0, T1, T2, T3, Tail...>> {
+    static T3& get(tuple<T0, T1, T2, T3, Tail...>& t) {
+        tuple<T3, Tail...>& base = t;
+        return base.head;
+    }
+    static const T3& get(const tuple<T0, T1, T2, T3, Tail...>& t) {
+        const tuple<T3, Tail...>& base = t;
+        return base.head;
+    }
+};
+
+template <typename T0, typename T1, typename T2, typename T3, typename T4, typename... Tail>
+struct tuple_getter<4, tuple<T0, T1, T2, T3, T4, Tail...>> {
+    static T4& get(tuple<T0, T1, T2, T3, T4, Tail...>& t) {
+        tuple<T4, Tail...>& base = t;
+        return base.head;
+    }
+    static const T4& get(const tuple<T0, T1, T2, T3, T4, Tail...>& t) {
+        const tuple<T4, Tail...>& base = t;
+        return base.head;
+    }
+};
+
+template <typename T0, typename T1, typename T2, typename T3, typename T4, typename T5, typename... Tail>
+struct tuple_getter<5, tuple<T0, T1, T2, T3, T4, T5, Tail...>> {
+    static T5& get(tuple<T0, T1, T2, T3, T4, T5, Tail...>& t) {
+        tuple<T5, Tail...>& base = t;
+        return base.head;
+    }
+    static const T5& get(const tuple<T0, T1, T2, T3, T4, T5, Tail...>& t) {
+        const tuple<T5, Tail...>& base = t;
+        return base.head;
+    }
+};
+
+template <size_t I, typename Tuple>
+typename tuple_element<I, Tuple>::type& get(Tuple& t) {
+    return tuple_getter<I, Tuple>::get(t);
+}
+
+template <size_t I, typename Tuple>
+const typename tuple_element<I, Tuple>::type& get(const Tuple& t) {
+    return tuple_getter<I, Tuple>::get(t);
+}
+
+} // namespace std
+
+#endif // _MINI_STL_TUPLE_
