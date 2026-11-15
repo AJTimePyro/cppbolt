@@ -47,6 +47,8 @@ pub enum Type {
         param_types: Vec<Type>,
     },
     PackExpansion(Box<Type>),
+    Aligned(Box<Type>, usize),
+    DependentAlignas(Box<Type>, String),
 }
 
 impl Type {
@@ -103,6 +105,7 @@ impl Type {
     pub fn strip_const(&self) -> &Type {
         match self {
             Type::Const(inner) => inner.strip_const(),
+            Type::Aligned(inner, _) | Type::DependentAlignas(inner, _) => inner.strip_const(),
             _ => self,
         }
     }
@@ -118,6 +121,12 @@ impl Type {
             Type::Array(inner, size) => Type::Array(Box::new(inner.strip_all_const()), *size),
             Type::DependentArray(inner, param) => {
                 Type::DependentArray(Box::new(inner.strip_all_const()), param.clone())
+            }
+            Type::Aligned(inner, align) => {
+                Type::Aligned(Box::new(inner.strip_all_const()), *align)
+            }
+            Type::DependentAlignas(inner, param) => {
+                Type::DependentAlignas(Box::new(inner.strip_all_const()), param.clone())
             }
             Type::TemplateInstance { name, args } => Type::TemplateInstance {
                 name: name.clone(),
@@ -139,9 +148,11 @@ impl Type {
         let mut curr = self;
         loop {
             match curr {
-                Type::Const(inner) | Type::Reference(inner) | Type::RvalueReference(inner) => {
-                    curr = inner
-                }
+                Type::Const(inner)
+                | Type::Reference(inner)
+                | Type::RvalueReference(inner)
+                | Type::Aligned(inner, _)
+                | Type::DependentAlignas(inner, _) => curr = inner,
                 _ => return curr,
             }
         }
@@ -308,34 +319,41 @@ impl Type {
             Type::Function { .. } => 4,
             Type::PackExpansion(_) => 0,
             Type::Const(_) => unreachable!(),
+            Type::Aligned(inner, _) | Type::DependentAlignas(inner, _) => inner.size_of(struct_sizes),
         }
     }
 
     pub fn align_of(&self, struct_aligns: &HashMap<String, usize>) -> usize {
-        match self.strip_const() {
-            Type::Void | Type::Auto => 1,
-            Type::Nullptr => 4,
-            Type::Bool | Type::Char | Type::SignedChar | Type::UnsignedChar => 1,
-            Type::Short | Type::UnsignedShort => 2,
-            Type::Int | Type::UnsignedInt | Type::Long | Type::UnsignedLong | Type::Enum(_) => 4,
-            Type::LongLong | Type::UnsignedLongLong => 8,
-            Type::Float => 4,
-            Type::Double => 8,
-            Type::Pointer(_) | Type::Reference(_) | Type::RvalueReference(_) => 4,
-            Type::Array(elem, _) => elem.align_of(struct_aligns),
-            Type::Struct(name) => *struct_aligns
-                .get(name)
-                .or_else(|| struct_aligns.get(QualifiedName::new(name).plain()))
-                .or_else(|| struct_aligns.get(QualifiedName::new(name).std_name().as_ref()))
-                .unwrap_or(&4),
-            Type::TemplateInstance { name, .. } => *struct_aligns
-                .get(name)
-                .or_else(|| struct_aligns.get(QualifiedName::new(name).plain()))
-                .unwrap_or(&4),
-            Type::TypeParam(_) | Type::NonType(_) | Type::DependentArray(_, _) => 4,
-            Type::Function { .. } => 4,
-            Type::PackExpansion(_) => 1,
-            Type::Const(_) => unreachable!(),
+        match self {
+            Type::Aligned(inner, align) => (*align).max(inner.align_of(struct_aligns)),
+            Type::DependentAlignas(inner, _) => inner.align_of(struct_aligns),
+            Type::Const(inner) => inner.align_of(struct_aligns),
+            _ => match self.strip_const() {
+                Type::Void | Type::Auto => 1,
+                Type::Nullptr => 4,
+                Type::Bool | Type::Char | Type::SignedChar | Type::UnsignedChar => 1,
+                Type::Short | Type::UnsignedShort => 2,
+                Type::Int | Type::UnsignedInt | Type::Long | Type::UnsignedLong | Type::Enum(_) => 4,
+                Type::LongLong | Type::UnsignedLongLong => 8,
+                Type::Float => 4,
+                Type::Double => 8,
+                Type::Pointer(_) | Type::Reference(_) | Type::RvalueReference(_) => 4,
+                Type::Array(elem, _) => elem.align_of(struct_aligns),
+                Type::Struct(name) => *struct_aligns
+                    .get(name)
+                    .or_else(|| struct_aligns.get(QualifiedName::new(name).plain()))
+                    .or_else(|| struct_aligns.get(QualifiedName::new(name).std_name().as_ref()))
+                    .unwrap_or(&4),
+                Type::TemplateInstance { name, .. } => *struct_aligns
+                    .get(name)
+                    .or_else(|| struct_aligns.get(QualifiedName::new(name).plain()))
+                    .unwrap_or(&4),
+                Type::TypeParam(_) | Type::NonType(_) | Type::DependentArray(_, _) => 4,
+                Type::Function { .. } => 4,
+                Type::PackExpansion(_) => 1,
+                Type::Const(_) => unreachable!(),
+                Type::Aligned(..) | Type::DependentAlignas(..) => unreachable!(),
+            },
         }
     }
 
@@ -369,6 +387,7 @@ impl Type {
             | Type::Function { .. } => Some(WasmType::I32),
             Type::PackExpansion(_) => None,
             Type::Const(_) => unreachable!(),
+            Type::Aligned(inner, _) | Type::DependentAlignas(inner, _) => inner.to_wasm_type(),
         }
     }
 
@@ -413,6 +432,7 @@ impl Type {
             },
             Type::Function { .. } => "void (*)()".to_string(),
             Type::PackExpansion(inner) => format!("{}...", inner.to_c_type()),
+            Type::Aligned(inner, _) | Type::DependentAlignas(inner, _) => inner.to_c_type(),
         }
     }
 }

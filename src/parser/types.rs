@@ -1,10 +1,5 @@
 use super::*;
 
-enum ArrayDim {
-    Fixed(usize),
-    Dependent(String),
-}
-
 impl Parser {
     pub(super) fn is_type_start(&self) -> bool {
         match self.peek() {
@@ -21,7 +16,8 @@ impl Parser {
             | TokenKind::KwAuto
             | TokenKind::KwConst
             | TokenKind::KwDecltype
-            | TokenKind::KwTypename => true,
+            | TokenKind::KwTypename
+            | TokenKind::KwAlignas => true,
             TokenKind::ColonColon => {
                 if let TokenKind::Ident(sub) = self.peek_ahead(1) {
                     sub == "size_t"
@@ -92,6 +88,7 @@ impl Parser {
     fn parse_specifier_type_inner(&mut self) -> Result<Type, CompileError> {
         let mut is_const = false;
         let mut is_typename = false;
+        let mut alignas_specs = Vec::new();
         loop {
             if self.peek() == &TokenKind::KwConst {
                 self.advance();
@@ -99,6 +96,8 @@ impl Parser {
             } else if self.peek() == &TokenKind::KwTypename {
                 self.advance();
                 is_typename = true;
+            } else if self.peek() == &TokenKind::KwAlignas {
+                alignas_specs.push(self.parse_alignas_spec()?);
             } else {
                 break;
             }
@@ -150,6 +149,9 @@ impl Parser {
             } else {
                 break;
             }
+        }
+        for spec in alignas_specs {
+            base_type = spec.wrap_type(base_type);
         }
         Ok(base_type)
     }
@@ -351,11 +353,13 @@ impl Parser {
                     ));
                 }
                 let id = self.resolve_namespace_alias(&raw_id);
-                if self.is_active_type_param(&id) {
-                    Type::TypeParam(id)
-                } else if self.is_known_template(&id) && self.peek() == &TokenKind::Lt {
+                if (self.is_active_type_param(&id) || self.is_known_template(&id))
+                    && self.peek() == &TokenKind::Lt
+                {
                     let args = self.parse_template_args()?;
                     Type::TemplateInstance { name: id, args }
+                } else if self.is_active_type_param(&id) {
+                    Type::TypeParam(id)
                 } else if self.is_known_template(&id) {
                     Type::Struct(id)
                 } else if id == "size_t" {
@@ -412,54 +416,6 @@ impl Parser {
             _ => unreachable!(),
         };
         Ok(ty)
-    }
-
-    pub(super) fn parse_array_suffix(&mut self, elem_type: Type) -> Result<Type, CompileError> {
-        let mut dimensions = Vec::new();
-        while self.peek() == &TokenKind::LBracket {
-            let bracket_pos = self.current_pos();
-            self.advance();
-            let dim = if self.peek() != &TokenKind::RBracket {
-                let expr = self.parse_expr()?;
-                if let Expr::Identifier(ref id) = expr
-                    && self.is_active_type_param(id)
-                {
-                    ArrayDim::Dependent(id.clone())
-                } else {
-                    match crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None) {
-                        Ok(n) if n >= 0 => ArrayDim::Fixed(n as usize),
-                        Ok(_) => {
-                            return Err(CompileError::new(
-                                "Array dimension must be non-negative integer constant",
-                                bracket_pos.line,
-                                bracket_pos.col,
-                            ));
-                        }
-                        Err(mut err) => {
-                            err.line = bracket_pos.line;
-                            err.col = bracket_pos.col;
-                            return Err(err);
-                        }
-                    }
-                }
-            } else {
-                ArrayDim::Fixed(0)
-            };
-            self.expect(TokenKind::RBracket)?;
-            dimensions.push(dim);
-        }
-        // C declarators nest left to right, so `int m[2][3]` is two rows of
-        // three ints: wrap the element type from the innermost dimension out.
-        let mut cur_type = elem_type;
-        for dim in dimensions.into_iter().rev() {
-            match dim {
-                ArrayDim::Fixed(size) => cur_type = Type::Array(Box::new(cur_type), size),
-                ArrayDim::Dependent(param) => {
-                    cur_type = Type::DependentArray(Box::new(cur_type), param);
-                }
-            }
-        }
-        Ok(cur_type)
     }
 
     pub(super) fn is_template_member_type(&self, id: &str) -> bool {

@@ -24,13 +24,11 @@ pub fn match_pattern_arg(
 ) -> bool {
     match pattern {
         Type::TypeParam(p) => {
+            let arg = TemplateArg::from(concrete.clone());
             if let Some(existing) = bindings.get(p) {
-                match existing {
-                    TemplateArg::Type(ty) => ty == concrete,
-                    _ => false,
-                }
+                existing == &arg
             } else {
-                bindings.insert(p.clone(), TemplateArg::Type(concrete.clone()));
+                bindings.insert(p.clone(), arg);
                 true
             }
         }
@@ -116,7 +114,20 @@ fn match_trailing_pack(
     bindings: &mut HashMap<String, TemplateArg>,
 ) -> bool {
     if let Type::TypeParam(p) = inner_pattern {
-        bindings.insert(p.clone(), TemplateArg::TypePack(trailing.to_vec()));
+        let is_nontype = trailing.iter().any(|t| matches!(t, Type::NonType(_)));
+        let arg = if is_nontype {
+            let vals: Vec<i128> = trailing
+                .iter()
+                .filter_map(|t| match t {
+                    Type::NonType(v) => Some(*v),
+                    _ => None,
+                })
+                .collect();
+            TemplateArg::NonTypePack(vals)
+        } else {
+            TemplateArg::TypePack(trailing.to_vec())
+        };
+        bindings.insert(p.clone(), arg);
         return true;
     }
     if trailing.is_empty() {

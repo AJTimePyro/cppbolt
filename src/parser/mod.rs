@@ -21,8 +21,11 @@ mod stmt;
 mod stmt_selection;
 mod structs;
 mod structs_nested;
+mod struct_align;
 mod template;
+mod template_param;
 mod types;
+mod types_array;
 mod unsupported;
 
 /// Decrements the parser's nesting counter when a recursive parse completes,

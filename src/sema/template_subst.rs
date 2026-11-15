@@ -19,18 +19,9 @@ pub fn substitute_type(
     injected_class: Option<(&str, &Type)>,
 ) -> Result<Type, CompileError> {
     match ty {
-        Type::TypeParam(name) => match mapping.get(name) {
-            Some(TemplateArg::Type(t)) => Ok(t.clone()),
-            Some(TemplateArg::NonType(n)) => Ok(Type::NonType(*n)),
-            Some(TemplateArg::TypePack(_)) | Some(TemplateArg::NonTypePack(_)) => {
-                Err(CompileError::new(
-                    format!("parameter pack '{}' used unexpanded", name),
-                    0,
-                    0,
-                ))
-            }
-            _ => Ok(ty.clone()),
-        },
+        Type::TypeParam(name) => {
+            super::template_subst_align::substitute_type_param(name, ty, mapping)
+        }
         Type::Struct(name) => Ok(substitute_struct_type(name, mapping, injected_class)),
         Type::TemplateInstance { name, args } => {
             let subst_args = expand_type_list(args, mapping)?;
@@ -66,11 +57,11 @@ pub fn substitute_type(
         )),
         Type::DependentArray(inner, param_name) => {
             let subst_inner = substitute_type(inner, mapping, injected_class)?;
-            let size = match mapping.get(param_name) {
-                Some(TemplateArg::NonType(n)) if *n >= 0 => *n as usize,
-                Some(TemplateArg::NonType(_)) => usize::MAX,
-                _ => 0,
-            };
+            let size = super::template_subst_array::evaluate_dependent_array_size(
+                param_name,
+                mapping,
+                injected_class,
+            )?;
             Ok(Type::Array(Box::new(subst_inner), size))
         }
         Type::Function {
@@ -82,6 +73,18 @@ pub fn substitute_type(
             mapping,
             injected_class,
         )?))),
+        Type::DependentAlignas(inner, pack_name) => {
+            super::template_subst_align::substitute_dependent_alignas(
+                inner,
+                pack_name,
+                mapping,
+                injected_class,
+            )
+        }
+        Type::Aligned(inner, align) => Ok(Type::Aligned(
+            Box::new(substitute_type(inner, mapping, injected_class)?),
+            *align,
+        )),
         _ => Ok(ty.clone()),
     }
 }
@@ -280,7 +283,7 @@ pub fn substitute_expr(
             *target_type = substitute_type(target_type, mapping, injected_class)?;
             substitute_expr(expr, mapping, injected_class)?;
         }
-        Expr::SizeofType(ty) => *ty = substitute_type(ty, mapping, injected_class)?,
+        Expr::SizeofType(ty) | Expr::AlignofType(ty) => *ty = substitute_type(ty, mapping, injected_class)?,
         Expr::TypedInitList { ty, elements, pos } => {
             *ty = substitute_type(ty, mapping, injected_class)?;
             substitute_init_elements(elements, mapping, injected_class, *pos)?;
@@ -290,13 +293,22 @@ pub fn substitute_expr(
             substitute_init_elements(elements, mapping, injected_class, *pos)?;
         }
         Expr::Identifier(_) => substitute_identifier(expr, mapping)?,
-        Expr::SizeofPack { name, .. } => {
+        Expr::SizeofPack { name, pos } => {
             if let Some(len) = mapping.get(name).and_then(|a| a.pack_len()) {
                 *expr = Expr::IntLiteral(len as i64, Type::UnsignedInt);
+            } else if mapping.contains_key(name) {
+                return Err(CompileError::new(
+                    format!("'{name}' does not refer to the name of a parameter pack"),
+                    pos.line,
+                    pos.col,
+                ));
             }
         }
         Expr::PackExpansion { pattern, .. } => {
             substitute_expr(pattern, mapping, injected_class)?;
+        }
+        Expr::Lambda { .. } => {
+            crate::sema::template_subst_lambda::substitute_lambda(expr, mapping, injected_class)?;
         }
         _ => {}
     }
@@ -376,40 +388,6 @@ fn substitute_callee_identifier(
     }
 }
 
-fn substitute_base_classes(
-    bases: &[String],
-    mapping: &HashMap<String, TemplateArg>,
-    line: usize,
-    col: usize,
-) -> Result<Vec<String>, CompileError> {
-    let mut base_classes = Vec::new();
-    for base in bases {
-        if let Some(stripped) = base.strip_suffix("...") {
-            if let Some(TemplateArg::TypePack(types)) = mapping.get(stripped) {
-                for ty in types {
-                    base_classes.push(ty.to_c_type());
-                }
-            } else {
-                base_classes.push(substitute_template_name(base, mapping));
-            }
-        } else if let Some(TemplateArg::Type(target)) = mapping.get(base) {
-            base_classes.push(target.to_c_type());
-        } else if base.contains('<') {
-            base_classes.push(substitute_template_name(base, mapping));
-        } else {
-            base_classes.push(base.clone());
-        }
-    }
-    if base_classes.len() > 1 {
-        return Err(CompileError::new(
-            "multiple inheritance is not supported",
-            line,
-            col,
-        ));
-    }
-    Ok(base_classes)
-}
-
 pub fn substitute_struct(
     template_class: &TemplateClass,
     mapping: &HashMap<String, TemplateArg>,
@@ -426,11 +404,14 @@ pub fn substitute_struct(
         if let Some((init_expr, _, _)) = &mut init {
             substitute_expr(init_expr, mapping, injected)?;
         }
-        fields.push((
-            fname.clone(),
-            substitute_type(fty, mapping, injected)?,
-            init,
-        ));
+        let subst_fty = substitute_type(fty, mapping, injected).map_err(|mut e| {
+            if e.line == 0 && e.col == 0 {
+                e.line = line;
+                e.col = col;
+            }
+            e
+        })?;
+        fields.push((fname.clone(), subst_fty, init));
     }
 
     let mut methods = Vec::new();
@@ -452,7 +433,12 @@ pub fn substitute_struct(
     }
 
     let base_classes =
-        substitute_base_classes(&template_class.base_classes, mapping, line, col)?;
+        super::template_subst_align::substitute_base_classes(&template_class.base_classes, mapping, line, col)?;
+    let alignment = template_class
+        .alignment
+        .as_ref()
+        .map(|ty| substitute_type(ty, mapping, injected))
+        .transpose()?;
 
     Ok(Decl::StructDecl {
         name: instantiated_name.to_string(),
@@ -463,23 +449,10 @@ pub fn substitute_struct(
         static_fields,
         private_members: template_class.private_members.clone(),
         nested_structs: Vec::new(),
+        alignment,
         line,
         col,
     })
 }
 
-pub fn collapse_reference(outer_is_rvalue: bool, inner: Type) -> Type {
-    if inner.is_reference() {
-        let is_lvalue = inner.is_lvalue_reference();
-        let target = inner.deref_type().cloned().unwrap_or(inner);
-        if !outer_is_rvalue || is_lvalue {
-            Type::Reference(Box::new(target))
-        } else {
-            Type::RvalueReference(Box::new(target))
-        }
-    } else if outer_is_rvalue {
-        Type::RvalueReference(Box::new(inner))
-    } else {
-        Type::Reference(Box::new(inner))
-    }
-}
+pub use super::template_subst_align::collapse_reference;
