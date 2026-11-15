@@ -1,0 +1,1 @@
+tests/negative/variadic_structural_deduction_mismatch.cpp:8:5: error: type mismatch in deduction: template instance mismatch

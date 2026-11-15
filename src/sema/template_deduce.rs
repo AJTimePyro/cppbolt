@@ -6,8 +6,8 @@ use crate::ast::template::TemplateParam;
 use crate::ast::types::Type;
 use crate::diagnostics::CompileError;
 use crate::lexer::TokenKind;
-use crate::name::QualifiedName;
 use crate::sema::pack_expansion::TemplateArg;
+use crate::sema::template_deduce_type::{deduce_type, type_has_template_param};
 use std::collections::HashMap;
 
 /// Splits a template call identifier such as `my_max<int>` into `("my_max", "int")`.
@@ -15,7 +15,20 @@ pub fn split_template_call_name(name: &str) -> Option<(&str, &str)> {
     if !name.ends_with('>') {
         return None;
     }
-    let open = name.find('<')?;
+    let mut depth = 0;
+    let mut open = None;
+    for (i, &b) in name.as_bytes().iter().enumerate().rev() {
+        if b == b'>' {
+            depth += 1;
+        } else if b == b'<' {
+            depth -= 1;
+            if depth == 0 {
+                open = Some(i);
+                break;
+            }
+        }
+    }
+    let open = open?;
     Some((&name[..open], &name[open + 1..name.len() - 1]))
 }
 
@@ -83,14 +96,16 @@ fn deduce_pack_arguments(
             items.sort_by(|a, b| a.0.cmp(&b.0));
             items.into_iter().next().map(|(_, ty)| ty)
         });
-        if let Some(t) = deduced_ty {
-            pack_types.push(t);
-        } else {
-            return Err(CompileError::new(
-                format!("could not deduce template argument for '{}'", pack_name),
-                pos.line,
-                pos.col,
-            ));
+        match deduced_ty {
+            Some(TemplateArg::Type(t)) => pack_types.push(t),
+            Some(TemplateArg::NonType(v)) => pack_types.push(Type::NonType(v)),
+            _ => {
+                return Err(CompileError::new(
+                    format!("could not deduce template argument for '{}'", pack_name),
+                    pos.line,
+                    pos.col,
+                ));
+            }
         }
     }
     Ok((pack_name, pack_types))
@@ -176,11 +191,11 @@ pub fn deduce_template_arguments(
         template_params.len()
     };
 
-    let mut deduced = HashMap::new();
+    let mut deduced: HashMap<String, TemplateArg> = HashMap::new();
     let mut explicit_pack = Vec::new();
     for (i, explicit_arg) in explicit_args.iter().enumerate() {
         if i < non_pack_t_count {
-            deduced.insert(template_params[i].name.clone(), explicit_arg.clone());
+            deduced.insert(template_params[i].name.clone(), TemplateArg::from(explicit_arg.clone()));
         } else if has_t_pack {
             explicit_pack.push(explicit_arg.clone());
         }
@@ -197,13 +212,12 @@ pub fn deduce_template_arguments(
         } else {
             arg_ty.clone()
         };
-        deduce_type(&p.ty, &adjusted_arg_ty, &mut deduced, is_lval, pos)?;
+        if type_has_template_param(&p.ty) {
+            deduce_type(&p.ty, &adjusted_arg_ty, &mut deduced, is_lval, pos)?;
+        }
     }
 
-    let mut result: HashMap<String, TemplateArg> = HashMap::new();
-    for (k, v) in deduced {
-        result.insert(k, TemplateArg::from(v));
-    }
+    let mut result = deduced;
 
     if has_pack {
         let (pack_name, mut pack_types) = deduce_pack_arguments(
@@ -358,140 +372,4 @@ pub fn build_template_arg_map(
         }
     }
     mapping
-}
-
-fn deduce_type(
-    param_ty: &Type,
-    arg_ty: &Type,
-    deduced: &mut HashMap<String, Type>,
-    is_lvalue: bool,
-    pos: ExprPos,
-) -> Result<(), CompileError> {
-    match param_ty {
-        Type::TypeParam(name) => {
-            let deduced_arg = arg_ty.strip_reference().strip_const().clone();
-            record_deduced(name, deduced_arg, deduced, pos)?;
-        }
-        Type::Reference(inner) => {
-            if let Type::Const(tparam) = &**inner {
-                if let Type::TypeParam(name) = &**tparam {
-                    let deduced_arg = arg_ty.strip_reference().strip_const().clone();
-                    record_deduced(name, deduced_arg, deduced, pos)?;
-                    return Ok(());
-                }
-            } else if let Type::TypeParam(name) = &**inner {
-                if !is_lvalue {
-                    return Err(CompileError::new(
-                        format!(
-                            "cannot bind non-const lvalue reference of type '{}&' to an rvalue",
-                            name
-                        ),
-                        pos.line,
-                        pos.col,
-                    ));
-                }
-                let deduced_arg = arg_ty.strip_reference().clone();
-                record_deduced(name, deduced_arg, deduced, pos)?;
-                return Ok(());
-            }
-            deduce_type(inner, arg_ty.strip_reference(), deduced, is_lvalue, pos)?;
-        }
-        Type::RvalueReference(inner) => {
-            if let Type::TypeParam(name) = &**inner {
-                let deduced_arg = if is_lvalue {
-                    Type::Reference(Box::new(arg_ty.strip_reference().clone()))
-                } else {
-                    arg_ty.strip_reference().clone()
-                };
-                record_deduced(name, deduced_arg, deduced, pos)?;
-                return Ok(());
-            }
-            if is_lvalue {
-                return Err(CompileError::new(
-                    "cannot bind rvalue reference to an lvalue".to_string(),
-                    pos.line,
-                    pos.col,
-                ));
-            }
-            deduce_type(inner, arg_ty.strip_reference(), deduced, is_lvalue, pos)?;
-        }
-        Type::Const(inner) => {
-            deduce_type(inner, arg_ty.strip_const(), deduced, is_lvalue, pos)?;
-        }
-        Type::Pointer(inner) => {
-            if let Type::Pointer(arg_inner) = arg_ty.strip_reference().strip_const() {
-                deduce_type(inner, arg_inner, deduced, true, pos)?;
-            }
-        }
-        Type::Array(inner, size) => {
-            if let Type::Array(arg_inner, arg_size) = arg_ty.strip_reference().strip_const()
-                && size == arg_size
-            {
-                deduce_type(inner, arg_inner, deduced, true, pos)?;
-            }
-        }
-        Type::TemplateInstance { name, args } => {
-            deduce_template_instance(name, args, arg_ty, deduced, pos)?;
-        }
-        _ => {}
-    }
-    Ok(())
-}
-
-fn deduce_template_instance(
-    name: &str,
-    args: &[Type],
-    arg_ty: &Type,
-    deduced: &mut HashMap<String, Type>,
-    pos: ExprPos,
-) -> Result<(), CompileError> {
-    let clean_arg = arg_ty.strip_reference().strip_const();
-    if let Type::TemplateInstance {
-        name: a_name,
-        args: a_args,
-    } = clean_arg
-    {
-        if QualifiedName::new(name).matches(QualifiedName::new(a_name))
-            && args.len() == a_args.len()
-        {
-            for (p_arg, a_arg) in args.iter().zip(a_args.iter()) {
-                deduce_type(p_arg, a_arg, deduced, true, pos)?;
-            }
-        }
-    } else if let Type::Struct(sname) = clean_arg
-        && let Some((s_base, s_args_str)) = split_template_call_name(sname)
-        && QualifiedName::new(s_base).matches(QualifiedName::new(name))
-        && let Ok(s_args) = parse_types_list(s_args_str, &[name.to_string()])
-        && args.len() == s_args.len()
-    {
-        for (p_arg, a_arg) in args.iter().zip(s_args.iter()) {
-            deduce_type(p_arg, a_arg, deduced, true, pos)?;
-        }
-    }
-    Ok(())
-}
-
-fn record_deduced(
-    name: &str,
-    deduced_arg: Type,
-    deduced: &mut HashMap<String, Type>,
-    pos: ExprPos,
-) -> Result<(), CompileError> {
-    if let Some(existing) = deduced.get(name) {
-        if existing != &deduced_arg && existing.to_c_type() != deduced_arg.to_c_type() {
-            return Err(CompileError::new(
-                format!(
-                    "template argument deduction conflict for '{}': deduced '{}' and '{}'",
-                    name,
-                    existing.to_c_type(),
-                    deduced_arg.to_c_type()
-                ),
-                pos.line,
-                pos.col,
-            ));
-        }
-    } else {
-        deduced.insert(name.to_string(), deduced_arg);
-    }
-    Ok(())
 }
