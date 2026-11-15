@@ -4,6 +4,37 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-15: C++11 Variadic Templates Completion and Audit Remediation
+
+Completed C++11 variadic template support across the compiler and embedded standard library based on an independent Clang comparison audit:
+
+### Summary of Work
+
+1. Resolved base pack expansion length from the base pack in `mapping` in `src/sema/template_subst_func.rs`, fixing `: Bases(v)...` when `v` is a non-pack scalar.
+2. Extended call-graph reachability traversal in `src/codegen/analysis.rs` to visit `InitializerList`, `TypedInitList`, `PackExpansion`, and `SizeofExpr`. This preserves functions invoked through swallow idiom expressions (`int dummy[] = { (f(args), 0)... };`) during dead code elimination. Factored static local collection into `src/codegen/analysis_vars.rs`.
+3. Preserved dependent array bounds (`int a[sizeof...(Ts)];`) during parsing as `Type::DependentArray` in `src/parser/types_array.rs`, evaluating the bound at template instantiation in `src/sema/template_subst_array.rs`.
+4. Converted trailing non-type pack arguments to `TemplateArg::NonTypePack` in `src/sema/template_match.rs` for partial specializations like `Sum<First, Rest...>`.
+5. Replaced heuristic parameter-count tie-breaking in `src/sema/template_partial_order.rs` with deduction from synthetic types per ISO C++11 [temp.func.order] (`deduces_from_synthetic`). Ambiguous overloads remain ambiguous.
+6. Relaxed trailing pack validation for partial specializations in `src/parser/template.rs`, supporting multi-pack specializations such as `ZipCount<TypeList<As...>, TypeList<Bs...>>`.
+7. Added semantic diagnostics in `src/sema/expr.rs` for `sizeof...(non_pack)` and pack expansions without unexpanded parameter packs.
+8. Added parsing and substitution for template-template parameters and parameter packs (`template <template <typename...> class... Containers>`) in `src/parser/template_param.rs` and `src/sema/template_name.rs`.
+9. Removed single-base restrictions in `src/sema/layout.rs`, laying out multiple base subobjects sequentially with offset adjustments, multi-base method dispatch, and duplicate direct base class rejection.
+10. Supported `[args...]` and `[&args...]` in `src/parser/expr_lambda.rs` and expanded them into individual closure captures during substitution in `src/sema/template_subst_lambda.rs`. Factored free variable analysis into `src/sema/expr_lambda_free_vars.rs`.
+11. Implemented structural deduction in `src/sema/template_deduce_type.rs` for function template parameters containing pack expansions inside template instances, such as `f(Tuple<As...>, Tuple<Bs...>)` and `g(Tuple<First, Rest...>)`.
+12. Supported nested member class templates containing parameter packs (`Outer<Ts...>::Inner<Us...>`) in `src/parser/structs_nested.rs` and `src/sema/template_nested.rs`, substituting outer parameters while preserving inner parameters.
+13. Added `alignas(Ts...)` and `alignof(T)` in `src/parser/struct_align.rs`, evaluating maximum alignment across pack types in `src/sema/template_subst_align.rs` and `src/sema/layout.rs`.
+14. Removed the non-standard `f(args)...;` expression-statement extension from `src/parser/stmt.rs`.
+
+### Verification Results
+
+- Test runner: 543/543 corpus tests passed, 0 failures.
+- Unit and integration tests: 119 unit tests passed, 0 failed.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Native oracle gate: 100% byte-for-byte output match against host native Clang in C++11 mode.
+- Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
 ## 2026-11-15: C++11 Variadic Templates, Parameter Packs, and std::tuple
 
 Added C++11 variadic template support across the compiler and embedded standard library: parameter packs, pack expansion in expressions and types, `sizeof...`, argument deduction, forwarding references, function template partial ordering, and `<tuple>`.
