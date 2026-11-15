@@ -7,6 +7,7 @@ pub struct TemplateParam {
     pub name: String,
     pub default_type: Option<Type>,
     pub param_type: Option<Type>,
+    pub is_pack: bool,
     pub line: usize,
     pub col: usize,
 }
@@ -48,6 +49,7 @@ mod tests {
             name: "T".to_string(),
             default_type: None,
             param_type: None,
+            is_pack: false,
             line: 1,
             col: 10,
         };
@@ -55,9 +57,23 @@ mod tests {
             name: "T".to_string(),
             default_type: None,
             param_type: None,
+            is_pack: false,
             line: 1,
             col: 10,
         };
         assert_eq!(p1, p2);
+    }
+
+    #[test]
+    fn test_template_param_pack() {
+        let p = TemplateParam {
+            name: "Ts".to_string(),
+            default_type: None,
+            param_type: None,
+            is_pack: true,
+            line: 1,
+            col: 10,
+        };
+        assert!(p.is_pack);
     }
 }

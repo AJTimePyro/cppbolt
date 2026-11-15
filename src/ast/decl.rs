@@ -12,6 +12,7 @@ pub struct Param {
     pub name: String,
     pub ty: Type,
     pub default_val: Option<Expr>,
+    pub is_pack: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

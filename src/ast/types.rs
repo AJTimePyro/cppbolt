@@ -46,6 +46,7 @@ pub enum Type {
         return_type: Box<Type>,
         param_types: Vec<Type>,
     },
+    PackExpansion(Box<Type>),
 }
 
 impl Type {
@@ -122,6 +123,7 @@ impl Type {
                 name: name.clone(),
                 args: args.iter().map(|a| a.strip_all_const()).collect(),
             },
+            Type::PackExpansion(inner) => Type::PackExpansion(Box::new(inner.strip_all_const())),
             other => other.clone(),
         }
     }
@@ -304,6 +306,7 @@ impl Type {
                 .unwrap_or(&4),
             Type::TypeParam(_) | Type::NonType(_) | Type::DependentArray(_, _) => 4,
             Type::Function { .. } => 4,
+            Type::PackExpansion(_) => 0,
             Type::Const(_) => unreachable!(),
         }
     }
@@ -331,6 +334,7 @@ impl Type {
                 .unwrap_or(&4),
             Type::TypeParam(_) | Type::NonType(_) | Type::DependentArray(_, _) => 4,
             Type::Function { .. } => 4,
+            Type::PackExpansion(_) => 1,
             Type::Const(_) => unreachable!(),
         }
     }
@@ -363,6 +367,7 @@ impl Type {
             | Type::NonType(_)
             | Type::DependentArray(_, _)
             | Type::Function { .. } => Some(WasmType::I32),
+            Type::PackExpansion(_) => None,
             Type::Const(_) => unreachable!(),
         }
     }
@@ -407,6 +412,19 @@ impl Type {
                 _ => name.clone(),
             },
             Type::Function { .. } => "void (*)()".to_string(),
+            Type::PackExpansion(inner) => format!("{}...", inner.to_c_type()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pack_expansion_type() {
+        let ty = Type::PackExpansion(Box::new(Type::TypeParam("T".to_string())));
+        assert_eq!(ty.to_c_type(), "T...");
+        assert_eq!(ty.strip_all_const(), ty);
     }
 }

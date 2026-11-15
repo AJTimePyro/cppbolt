@@ -192,6 +192,22 @@ pub enum Expr {
         is_mutable: bool,
         pos: ExprPos,
     },
+    SizeofPack {
+        name: String,
+        pos: ExprPos,
+    },
+    PackExpansion {
+        pattern: Box<Expr>,
+        pos: ExprPos,
+    },
+    #[allow(dead_code)]
+    FoldExpr {
+        op: BinaryOp,
+        left: Option<Box<Expr>>,
+        right: Option<Box<Expr>>,
+        is_left_fold: bool,
+        pos: ExprPos,
+    },
 }
 
 impl Drop for Expr {
@@ -207,12 +223,15 @@ impl Drop for Expr {
     }
 }
 
+/// Moves one child expression out of `child`, leaving a cheap leaf placeholder.
+#[inline]
+fn take_box(child: &mut Box<Expr>, out: &mut Vec<Expr>) {
+    out.push(std::mem::replace(&mut **child, Expr::BoolLiteral(false)));
+}
+
 /// Moves every child expression out of `expr`, leaving cheap leaf
 /// placeholders behind so the recursive `Box` drop cannot descend further.
 fn take_expr_children(expr: &mut Expr, out: &mut Vec<Expr>) {
-    fn take_box(child: &mut Box<Expr>, out: &mut Vec<Expr>) {
-        out.push(std::mem::replace(&mut **child, Expr::BoolLiteral(false)));
-    }
     match expr {
         Expr::Binary { left, right, .. } => {
             take_box(left, out);
@@ -221,11 +240,7 @@ fn take_expr_children(expr: &mut Expr, out: &mut Vec<Expr>) {
         Expr::Unary { expr, .. } | Expr::Cast { expr, .. } | Expr::SizeofExpr(expr) => {
             take_box(expr, out);
         }
-        Expr::Assign { target, value, .. } => {
-            take_box(target, out);
-            take_box(value, out);
-        }
-        Expr::CompoundAssign { target, value, .. } => {
+        Expr::Assign { target, value, .. } | Expr::CompoundAssign { target, value, .. } => {
             take_box(target, out);
             take_box(value, out);
         }
@@ -247,8 +262,9 @@ fn take_expr_children(expr: &mut Expr, out: &mut Vec<Expr>) {
             take_box(then_expr, out);
             take_box(else_expr, out);
         }
-        Expr::InitializerList { elements, .. } => out.append(elements),
-        Expr::TypedInitList { elements, .. } => out.append(elements),
+        Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } => {
+            out.append(elements);
+        }
         Expr::New {
             args,
             array_size,
@@ -271,7 +287,17 @@ fn take_expr_children(expr: &mut Expr, out: &mut Vec<Expr>) {
                 }
             }
         }
-        Expr::IntLiteral(..)
+        Expr::PackExpansion { pattern, .. } => take_box(pattern, out),
+        Expr::FoldExpr { left, right, .. } => {
+            if let Some(l) = left {
+                take_box(l, out);
+            }
+            if let Some(r) = right {
+                take_box(r, out);
+            }
+        }
+        Expr::SizeofPack { .. }
+        | Expr::IntLiteral(..)
         | Expr::FloatLiteral(..)
         | Expr::BoolLiteral(_)
         | Expr::CharLiteral(_)
@@ -294,7 +320,10 @@ impl Expr {
             | Expr::MemberAccess { pos, .. }
             | Expr::InitializerList { pos, .. }
             | Expr::TypedInitList { pos, .. }
-            | Expr::Lambda { pos, .. } => *pos,
+            | Expr::Lambda { pos, .. }
+            | Expr::SizeofPack { pos, .. }
+            | Expr::PackExpansion { pos, .. }
+            | Expr::FoldExpr { pos, .. } => *pos,
             Expr::Ternary { cond, .. } => cond.pos(),
             Expr::Cast { expr, .. } | Expr::SizeofExpr(expr) => expr.pos(),
             _ => ExprPos::default(),
@@ -352,5 +381,41 @@ mod tests {
             };
         }
         drop(cur);
+    }
+
+    #[test]
+    fn deep_pack_expansion_drops_without_overflow() {
+        let mut cur = Expr::IntLiteral(1, Type::Int);
+        for _ in 0..10_000 {
+            cur = Expr::PackExpansion {
+                pattern: Box::new(cur),
+                pos: ExprPos::new(1, 1),
+            };
+        }
+        drop(cur);
+    }
+
+    #[test]
+    fn deep_fold_expr_drops_without_overflow() {
+        let mut cur = Expr::IntLiteral(1, Type::Int);
+        for _ in 0..10_000 {
+            cur = Expr::FoldExpr {
+                op: BinaryOp::Add,
+                left: Some(Box::new(cur)),
+                right: None,
+                is_left_fold: true,
+                pos: ExprPos::new(1, 1),
+            };
+        }
+        drop(cur);
+    }
+
+    #[test]
+    fn test_sizeof_pack_expr() {
+        let expr = Expr::SizeofPack {
+            name: "Args".to_string(),
+            pos: ExprPos::new(2, 5),
+        };
+        assert_eq!(expr.pos(), ExprPos::new(2, 5));
     }
 }
