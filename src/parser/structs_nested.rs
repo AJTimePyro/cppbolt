@@ -6,11 +6,86 @@ impl Parser {
         &mut self,
         body: &mut StructBody,
     ) -> Result<bool, CompileError> {
-        if self.peek() != &TokenKind::KwStruct && self.peek() != &TokenKind::KwClass {
+        if self.peek() == &TokenKind::KwTemplate {
+            return self.parse_nested_template_struct(body);
+        }
+        if self.peek() != &TokenKind::KwStruct
+            && self.peek() != &TokenKind::KwClass
+            && !self.is_struct_after_alignas()
+        {
             return Ok(false);
         }
         let decl = self.parse_nested_struct(body)?;
         body.nested_structs.push(decl);
+        Ok(true)
+    }
+
+    fn parse_nested_template_struct(
+        &mut self,
+        body: &mut StructBody,
+    ) -> Result<bool, CompileError> {
+        let saved_pos = self.pos;
+        let saved_splits = self.shr_splits.len();
+        let t_tok = self.advance().clone();
+        if self.peek() != &TokenKind::Lt {
+            self.rollback_pos(saved_pos, saved_splits);
+            return Ok(false);
+        }
+        self.advance();
+        let params = match self.parse_template_params() {
+            Ok(p) => p,
+            Err(_) => {
+                self.rollback_pos(saved_pos, saved_splits);
+                return Ok(false);
+            }
+        };
+        if self.peek() != &TokenKind::KwStruct
+            && self.peek() != &TokenKind::KwClass
+            && !self.is_struct_after_alignas()
+        {
+            self.active_type_params.pop();
+            self.rollback_pos(saved_pos, saved_splits);
+            return Ok(false);
+        }
+        let decl_res = self.parse_nested_struct(body);
+        self.active_type_params.pop();
+        let decl = decl_res?;
+        let Decl::StructDecl {
+            name,
+            is_class,
+            base_classes,
+            fields,
+            methods,
+            static_fields,
+            private_members,
+            nested_structs,
+            alignment,
+            ..
+        } = decl
+        else {
+            return Ok(false);
+        };
+        if !name.contains('<') {
+            template::validate_trailing_pack(&params, "class template")?;
+        }
+        self.register_template_name(&name);
+        let template_class = TemplateClass {
+            name,
+            is_class,
+            base_classes,
+            fields,
+            methods,
+            static_fields,
+            private_members,
+            nested_structs,
+            alignment,
+        };
+        body.nested_structs.push(Decl::Template(TemplateDecl {
+            params,
+            kind: TemplateKind::Class(template_class),
+            line: t_tok.line,
+            col: t_tok.col,
+        }));
         Ok(true)
     }
 
@@ -104,6 +179,36 @@ impl Parser {
                 self.register_member_alias(&body.name, alias, ty);
             }
             self.expect(TokenKind::Semi)?;
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    pub(super) fn parse_struct_access(&mut self, body: &mut StructBody) -> Result<bool, CompileError> {
+        if self.peek() == &TokenKind::KwPublic {
+            self.advance();
+            self.expect(TokenKind::Colon)?;
+            body.is_private = false;
+            return Ok(true);
+        }
+        if matches!(self.peek(), TokenKind::KwPrivate | TokenKind::KwProtected) {
+            self.advance();
+            self.expect(TokenKind::Colon)?;
+            body.is_private = true;
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    pub(super) fn parse_struct_friend(&mut self) -> Result<bool, CompileError> {
+        if self.peek() == &TokenKind::KwFriend {
+            self.advance();
+            while self.peek() != &TokenKind::Semi && self.peek() != &TokenKind::Eof {
+                self.advance();
+            }
+            if self.peek() == &TokenKind::Semi {
+                self.advance();
+            }
             return Ok(true);
         }
         Ok(false)
