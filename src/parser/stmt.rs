@@ -137,25 +137,18 @@ impl Parser {
         }
         if self.is_type_start() {
             let saved_pos = self.pos;
+            let saved_splits = self.shr_splits.len();
             match self.parse_var_decl() {
                 Ok(stmt) => return Ok(stmt),
                 Err(error) => {
                     if error.message.contains("constant") || self.nesting_exceeded.get() {
                         return Err(error);
                     }
-                    self.pos = saved_pos;
+                    self.rollback_pos(saved_pos, saved_splits);
                 }
             }
         }
-        let mut expr = self.parse_expr()?;
-        if self.peek() == &TokenKind::Ellipsis {
-            let pos = self.current_pos();
-            self.advance();
-            expr = Expr::PackExpansion {
-                pattern: Box::new(expr),
-                pos,
-            };
-        }
+        let expr = self.parse_expr()?;
         self.expect(TokenKind::Semi)?;
         Ok(Stmt::new(StmtKind::Expr(expr), line, col))
     }

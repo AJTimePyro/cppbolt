@@ -3,7 +3,8 @@ void pair_fn(T t, U u);
 
 template <typename... Ts, typename... Us>
 void test_fn(Ts... ts, Us... us) {
-    pair_fn(ts, us)...;
+    int dummy[] = { (pair_fn(ts, us), 0)... };
+    (void)dummy;
 }
 
 int main() {

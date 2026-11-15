@@ -1,0 +1,1 @@
+tests/negative/variadic_sizeof_non_pack.cpp:3:13: error: 'val' does not refer to the name of a parameter pack

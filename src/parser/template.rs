@@ -2,7 +2,7 @@
 
 use super::*;
 
-fn validate_trailing_pack(params: &[TemplateParam], kind: &str) -> Result<(), CompileError> {
+pub(super) fn validate_trailing_pack(params: &[TemplateParam], kind: &str) -> Result<(), CompileError> {
     for (i, p) in params.iter().enumerate() {
         if p.is_pack && i + 1 < params.len() {
             return Err(CompileError::new(
@@ -77,11 +77,7 @@ impl Parser {
         let p_col = self.current().col;
 
         if self.peek() == &TokenKind::KwTemplate {
-            return Err(CompileError::new(
-                "template template parameters are not supported yet",
-                p_line,
-                p_col,
-            ));
+            return self.parse_template_template_param(p_line, p_col, seen_default);
         }
         let param_type =
             if self.peek() == &TokenKind::KwTypename || self.peek() == &TokenKind::KwClass {
@@ -203,7 +199,10 @@ impl Parser {
     ) -> Result<(), CompileError> {
         let result = if self.peek() == &TokenKind::KwUsing {
             self.parse_template_alias(params, t_line, t_col)
-        } else if self.peek() == &TokenKind::KwStruct || self.peek() == &TokenKind::KwClass {
+        } else if self.peek() == &TokenKind::KwStruct
+            || self.peek() == &TokenKind::KwClass
+            || self.is_struct_after_alignas()
+        {
             self.parse_template_class(params, t_line, t_col)
         } else {
             self.parse_template_function(params, t_line, t_col)
@@ -221,7 +220,6 @@ impl Parser {
         t_line: usize,
         t_col: usize,
     ) -> Result<Vec<Decl>, CompileError> {
-        validate_trailing_pack(&params, "class template")?;
         let decl = self.parse_struct()?;
         let Decl::StructDecl {
             name,
@@ -232,11 +230,16 @@ impl Parser {
             static_fields,
             private_members,
             nested_structs,
+            alignment,
             ..
         } = decl
         else {
             return Ok(vec![decl]);
         };
+
+        if !name.contains('<') {
+            validate_trailing_pack(&params, "class template")?;
+        }
 
         self.register_template_name(&name);
         let template_class = TemplateClass {
@@ -248,6 +251,7 @@ impl Parser {
             static_fields,
             private_members,
             nested_structs,
+            alignment,
         };
         Ok(vec![Decl::Template(TemplateDecl {
             params,

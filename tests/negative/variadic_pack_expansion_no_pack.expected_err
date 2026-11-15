@@ -1,0 +1,1 @@
+tests/negative/variadic_pack_expansion_no_pack.cpp:3:18: error: pack expansion does not contain any unexpanded parameter packs

@@ -69,14 +69,25 @@ impl Sema {
                 target_type,
                 expr,
             } => self.analyze_cast(*kind, target_type, expr),
-            Expr::SizeofType(_) | Expr::SizeofExpr(_) | Expr::SizeofPack { .. } => {
-                Ok(Type::UnsignedInt)
+            Expr::SizeofType(_) | Expr::SizeofExpr(_) => Ok(Type::UnsignedInt),
+            Expr::AlignofType(ty) => {
+                let _ = self.resolve_and_instantiate_type(ty, self.current_line, self.current_col);
+                Ok(Type::UnsignedLong)
             }
+            Expr::SizeofPack { name, pos } => Err(CompileError::new(
+                format!("'{name}' does not refer to the name of a parameter pack"),
+                pos.line,
+                pos.col,
+            )),
             Expr::InitializerList { .. } | Expr::TypedInitList { .. } => {
                 self.analyze_initializer(expr)
             }
             Expr::Lambda { .. } => self.analyze_lambda(expr),
-            Expr::PackExpansion { pattern, .. } => self.analyze_expr(pattern),
+            Expr::PackExpansion { pos, .. } => Err(CompileError::new(
+                "pack expansion does not contain any unexpanded parameter packs",
+                pos.line,
+                pos.col,
+            )),
             Expr::FoldExpr { pos, .. } => Err(CompileError::new(
                 "fold expression is not supported yet",
                 pos.line,
@@ -369,8 +380,9 @@ impl Sema {
                 Ok(Type::Void)
             }
             Expr::TypedInitList { ty, elements, pos } => {
-                let explicit_ty = ty.clone();
                 let p = *pos;
+                self.resolve_and_instantiate_type(ty, p.line, p.col)?;
+                let explicit_ty = ty.clone();
                 self.resolve_list_init(&explicit_ty, elements, InitContext::DirectList, p)
             }
             _ => Err(crate::internal_error!(
