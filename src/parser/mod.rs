@@ -227,11 +227,20 @@ impl Parser {
     pub(super) fn parse_paren_expr_list(&mut self) -> Result<Vec<Expr>, CompileError> {
         let mut args = Vec::new();
         while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
-            if self.peek() == &TokenKind::LBrace {
-                args.push(self.parse_initializer()?);
+            let mut arg = if self.peek() == &TokenKind::LBrace {
+                self.parse_initializer()?
             } else {
-                args.push(self.parse_expr_prec(2)?);
+                self.parse_expr_prec(2)?
+            };
+            if self.peek() == &TokenKind::Ellipsis {
+                let pos = self.current_pos();
+                self.advance();
+                arg = Expr::PackExpansion {
+                    pattern: Box::new(arg),
+                    pos,
+                };
             }
+            args.push(arg);
             if self.peek() == &TokenKind::Comma {
                 self.advance();
             } else {
@@ -248,7 +257,16 @@ impl Parser {
         self.expect(TokenKind::LBrace)?;
         let mut list = Vec::new();
         while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
-            list.push(self.parse_initializer()?);
+            let mut elem = self.parse_initializer()?;
+            if self.peek() == &TokenKind::Ellipsis {
+                let elem_pos = self.current_pos();
+                self.advance();
+                elem = Expr::PackExpansion {
+                    pattern: Box::new(elem),
+                    pos: elem_pos,
+                };
+            }
+            list.push(elem);
             if self.peek() == &TokenKind::Comma {
                 self.advance();
             } else {

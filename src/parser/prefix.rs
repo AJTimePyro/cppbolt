@@ -176,7 +176,19 @@ impl Parser {
     }
 
     fn parse_sizeof_expr(&mut self) -> Result<Expr, CompileError> {
+        let pos = self.current_pos();
         self.advance();
+        if self.peek() == &TokenKind::Ellipsis {
+            self.advance();
+            self.expect(TokenKind::LParen)?;
+            let id_pos = self.current_pos();
+            let name = match self.advance().kind.clone() {
+                TokenKind::Ident(id) => id,
+                _ => return Err(CompileError::new("expected identifier", id_pos.line, id_pos.col)),
+            };
+            self.expect(TokenKind::RParen)?;
+            return Ok(Expr::SizeofPack { name, pos });
+        }
         self.expect(TokenKind::LParen)?;
         if self.is_type_start() {
             let ty = self.parse_type()?;

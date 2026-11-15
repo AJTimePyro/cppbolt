@@ -70,27 +70,37 @@ impl Parser {
         if self.peek() == &TokenKind::Colon {
             self.advance();
             loop {
-                loop {
+                while matches!(
+                    self.peek(),
+                    TokenKind::KwPublic | TokenKind::KwPrivate | TokenKind::KwProtected | TokenKind::KwVirtual
+                ) {
                     if self.peek() == &TokenKind::KwVirtual {
-                        let token = self.current();
                         return Err(CompileError::new(
                             "virtual inheritance is not supported",
-                            token.line,
-                            token.col,
+                            self.current().line,
+                            self.current().col,
                         ));
                     }
-                    if matches!(
-                        self.peek(),
-                        TokenKind::KwPublic | TokenKind::KwPrivate | TokenKind::KwProtected
-                    ) {
-                        self.advance();
-                    } else {
-                        break;
-                    }
+                    self.advance();
                 }
                 let base_token = self.current().clone();
                 match self.advance().kind.clone() {
-                    TokenKind::Ident(base) => {
+                    TokenKind::Ident(mut base) => {
+                        while self.peek() == &TokenKind::ColonColon {
+                            self.advance();
+                            if let TokenKind::Ident(ref sub) = self.advance().kind {
+                                base = format!("{}::{}", base, sub);
+                            }
+                        }
+                        if self.peek() == &TokenKind::Lt {
+                            let args = self.parse_template_args()?;
+                            let canonical = args.iter().map(|a| a.to_c_type()).collect::<Vec<_>>().join(", ");
+                            base = format!("{}<{}>", base, canonical);
+                        }
+                        if self.peek() == &TokenKind::Ellipsis {
+                            self.advance();
+                            base.push_str("...");
+                        }
                         if !base_classes.is_empty() {
                             return Err(CompileError::new(
                                 "multiple inheritance is not supported",
@@ -308,9 +318,10 @@ impl Parser {
             return Ok(true);
         }
 
-        let short_name = body.name.split("::").last().unwrap_or(&body.name);
+        let base_name = body.name.split('<').next().unwrap_or(&body.name);
+        let short_name = base_name.split("::").last().unwrap_or(base_name);
         if let TokenKind::Ident(id) = self.peek().clone()
-            && (id == body.name || id == short_name)
+            && (id == body.name || id == base_name || id == short_name)
             && self.peek_ahead(1) == &TokenKind::LParen
         {
             self.advance();
@@ -424,11 +435,12 @@ impl Parser {
         Ok(())
     }
     fn parse_optional_member_init(&mut self) -> Result<FieldInit, CompileError> {
-        if self.peek() == &TokenKind::Assign {
-            let tok = self.advance().clone();
-            Ok(Some((self.parse_initializer()?, tok.line, tok.col)))
-        } else if self.peek() == &TokenKind::LBrace {
-            let tok = self.current().clone();
+        if matches!(self.peek(), TokenKind::Assign | TokenKind::LBrace) {
+            let tok = if self.peek() == &TokenKind::Assign {
+                self.advance().clone()
+            } else {
+                self.current().clone()
+            };
             Ok(Some((self.parse_initializer()?, tok.line, tok.col)))
         } else {
             Ok(None)

@@ -38,51 +38,11 @@ impl Parser {
         let mut params = Vec::new();
 
         while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
-            if self.peek() == &TokenKind::Dot
-                && self.peek_ahead(1) == &TokenKind::Dot
-                && self.peek_ahead(2) == &TokenKind::Dot
-            {
-                self.advance();
-                self.advance();
+            if self.peek() == &TokenKind::Ellipsis {
                 self.advance();
                 break;
             }
-            let base_type = self.parse_type()?;
-            let (ptype, pname) =
-                if self.peek() == &TokenKind::LParen && self.peek_ahead(1) == &TokenKind::Star {
-                    self.parse_function_pointer_declarator(base_type, None)?
-                } else {
-                    let name = if let TokenKind::Ident(id) = self.peek().clone() {
-                        self.advance();
-                        id
-                    } else {
-                        String::new()
-                    };
-                    let ptype = if self.peek() == &TokenKind::LBracket {
-                        let arr_type = self.parse_array_suffix(base_type)?;
-                        match arr_type {
-                            Type::Array(inner, _) => Type::Pointer(inner),
-                            other => other,
-                        }
-                    } else {
-                        base_type
-                    };
-                    (ptype, name)
-                };
-
-            let default_val = if self.peek() == &TokenKind::Assign {
-                self.advance();
-                Some(self.parse_expr_prec(2)?)
-            } else {
-                None
-            };
-
-            params.push(Param {
-                name: pname,
-                ty: ptype,
-                default_val,
-            });
-
+            params.push(self.parse_single_function_param()?);
             if self.peek() == &TokenKind::Comma {
                 self.advance();
             } else {
@@ -96,6 +56,58 @@ impl Parser {
         }
 
         Ok(params)
+    }
+
+    fn parse_single_function_param(&mut self) -> Result<Param, CompileError> {
+        let base_type = self.parse_type()?;
+        let is_pack = if self.peek() == &TokenKind::Ellipsis {
+            self.advance();
+            true
+        } else {
+            false
+        };
+        let (ptype, pname) =
+            if self.peek() == &TokenKind::LParen && self.peek_ahead(1) == &TokenKind::Star {
+                self.parse_function_pointer_declarator(base_type, None)?
+            } else {
+                let name = if let TokenKind::Ident(id) = self.peek().clone() {
+                    self.advance();
+                    id
+                } else {
+                    String::new()
+                };
+                let ptype = if self.peek() == &TokenKind::LBracket {
+                    let arr_type = self.parse_array_suffix(base_type)?;
+                    match arr_type {
+                        Type::Array(inner, _) => Type::Pointer(inner),
+                        other => other,
+                    }
+                } else {
+                    base_type
+                };
+                (ptype, name)
+            };
+
+        let default_val = if self.peek() == &TokenKind::Assign {
+            if is_pack {
+                return Err(CompileError::new(
+                    "parameter pack cannot have a default argument",
+                    self.current().line,
+                    self.current().col,
+                ));
+            }
+            self.advance();
+            Some(self.parse_expr_prec(2)?)
+        } else {
+            None
+        };
+
+        Ok(Param {
+            name: pname,
+            ty: ptype,
+            default_val,
+            is_pack,
+        })
     }
 
     /// Parses `(*name)(args)` after the base type of a function pointer and
@@ -197,7 +209,7 @@ impl Parser {
         if self.peek() == &TokenKind::Colon {
             self.advance();
             loop {
-                let iname = match self.advance().kind.clone() {
+                let mut iname = match self.advance().kind.clone() {
                     TokenKind::Ident(id) => id,
                     _ => {
                         return Err(CompileError::new(
@@ -207,12 +219,27 @@ impl Parser {
                         ));
                     }
                 };
+                while self.peek() == &TokenKind::ColonColon {
+                    self.advance();
+                    if let TokenKind::Ident(ref sub) = self.advance().kind {
+                        iname = format!("{}::{}", iname, sub);
+                    }
+                }
+                if self.peek() == &TokenKind::Lt {
+                    let args = self.parse_template_args()?;
+                    let canonical = args.iter().map(|a| a.to_c_type()).collect::<Vec<_>>().join(", ");
+                    iname = format!("{}<{}>", iname, canonical);
+                }
                 let args = if self.peek() == &TokenKind::LBrace {
                     self.parse_brace_expr_list()?.0
                 } else {
                     self.expect(TokenKind::LParen)?;
                     self.parse_paren_expr_list()?
                 };
+                if self.peek() == &TokenKind::Ellipsis {
+                    self.advance();
+                    iname.push_str("...");
+                }
                 ctor_initializers.push((iname, args));
                 if self.peek() == &TokenKind::Comma {
                     self.advance();
