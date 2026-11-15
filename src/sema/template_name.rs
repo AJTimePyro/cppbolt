@@ -22,32 +22,35 @@ pub fn substitute_template_name(name: &str, mapping: &HashMap<String, TemplateAr
             }
             TemplateArg::TypePack(types) => {
                 let joined = types.iter().map(|t| t.to_c_type()).collect::<Vec<_>>().join(", ");
-                let with_ellipsis = format!("{param}...");
-                let with_space = format!("{param} ...");
-                if result.contains(&with_ellipsis) {
-                    result = result.replace(&with_ellipsis, &joined);
-                } else if result.contains(&with_space) {
-                    result = result.replace(&with_space, &joined);
-                } else {
-                    result = replace_whole_word(&result, param, &joined);
-                }
+                result = substitute_pack_string(result, param, &joined);
             }
             TemplateArg::NonTypePack(vals) => {
                 let joined = vals.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(", ");
-                let with_ellipsis = format!("{param}...");
-                let with_space = format!("{param} ...");
-                if result.contains(&with_ellipsis) {
-                    result = result.replace(&with_ellipsis, &joined);
-                } else if result.contains(&with_space) {
-                    result = result.replace(&with_space, &joined);
-                } else {
-                    result = replace_whole_word(&result, param, &joined);
-                }
+                result = substitute_pack_string(result, param, &joined);
             }
         }
     }
     let clean = clean_template_arg_string(&result);
-    format!("{}<{}>{}", base, clean, suffix)
+    let subst_base = if let Some(TemplateArg::Type(target)) = mapping.get(base)
+        && !target.to_c_type().contains('<')
+    {
+        target.to_c_type()
+    } else {
+        base.to_string()
+    };
+    format!("{}<{}>{}", subst_base, clean, suffix)
+}
+
+fn substitute_pack_string(result: String, param: &str, joined: &str) -> String {
+    let with_ellipsis = format!("{param}...");
+    let with_space = format!("{param} ...");
+    if result.contains(&with_ellipsis) {
+        result.replace(&with_ellipsis, joined)
+    } else if result.contains(&with_space) {
+        result.replace(&with_space, joined)
+    } else {
+        replace_whole_word(&result, param, joined)
+    }
 }
 
 fn clean_template_arg_string(s: &str) -> String {

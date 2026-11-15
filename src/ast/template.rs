@@ -22,6 +22,7 @@ pub struct TemplateClass {
     pub static_fields: Vec<(String, Type, Option<Expr>)>,
     pub private_members: Vec<String>,
     pub nested_structs: Vec<Decl>,
+    pub alignment: Option<Type>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
