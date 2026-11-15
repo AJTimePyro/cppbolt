@@ -1,0 +1,1 @@
+tests/negative/variadic_multiple_bases.cpp:10:5: error: multiple inheritance is not supported

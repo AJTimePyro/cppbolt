@@ -376,6 +376,40 @@ fn substitute_callee_identifier(
     }
 }
 
+fn substitute_base_classes(
+    bases: &[String],
+    mapping: &HashMap<String, TemplateArg>,
+    line: usize,
+    col: usize,
+) -> Result<Vec<String>, CompileError> {
+    let mut base_classes = Vec::new();
+    for base in bases {
+        if let Some(stripped) = base.strip_suffix("...") {
+            if let Some(TemplateArg::TypePack(types)) = mapping.get(stripped) {
+                for ty in types {
+                    base_classes.push(ty.to_c_type());
+                }
+            } else {
+                base_classes.push(substitute_template_name(base, mapping));
+            }
+        } else if let Some(TemplateArg::Type(target)) = mapping.get(base) {
+            base_classes.push(target.to_c_type());
+        } else if base.contains('<') {
+            base_classes.push(substitute_template_name(base, mapping));
+        } else {
+            base_classes.push(base.clone());
+        }
+    }
+    if base_classes.len() > 1 {
+        return Err(CompileError::new(
+            "multiple inheritance is not supported",
+            line,
+            col,
+        ));
+    }
+    Ok(base_classes)
+}
+
 pub fn substitute_struct(
     template_class: &TemplateClass,
     mapping: &HashMap<String, TemplateArg>,
@@ -417,24 +451,8 @@ pub fn substitute_struct(
         ));
     }
 
-    let mut base_classes = Vec::new();
-    for base in &template_class.base_classes {
-        if let Some(stripped) = base.strip_suffix("...") {
-            if let Some(TemplateArg::TypePack(types)) = mapping.get(stripped) {
-                for ty in types {
-                    base_classes.push(ty.to_c_type());
-                }
-            } else {
-                base_classes.push(substitute_template_name(base, mapping));
-            }
-        } else if let Some(TemplateArg::Type(target)) = mapping.get(base) {
-            base_classes.push(target.to_c_type());
-        } else if base.contains('<') {
-            base_classes.push(substitute_template_name(base, mapping));
-        } else {
-            base_classes.push(base.clone());
-        }
-    }
+    let base_classes =
+        substitute_base_classes(&template_class.base_classes, mapping, line, col)?;
 
     Ok(Decl::StructDecl {
         name: instantiated_name.to_string(),
