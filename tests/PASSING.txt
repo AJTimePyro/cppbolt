@@ -522,5 +522,7 @@ templates_operators_variant/variadic_func_basic_variant
 templates_operators_variant/variadic_class_tuple_variant
 mini_stl/variadic_make_unique
 mini_stl/std_tuple_basic
+mini_stl/std_tuple_large
 mini_stl_variant/variadic_make_unique_variant
 mini_stl_variant/std_tuple_basic_variant
+mini_stl_variant/std_tuple_large_variant
