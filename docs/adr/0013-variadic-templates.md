@@ -29,7 +29,7 @@ Standard containers and utilities such as `std::tuple`, variadic `std::make_uniq
    We tokenize `...` as `TokenKind::Ellipsis`. AST structures represent variadics explicitly: `TemplateParam::is_pack`, `Param::is_pack`, `Type::PackExpansion`, `Expr::SizeofPack`, `Expr::PackExpansion`, and an AST node placeholder `Expr::FoldExpr` reserving structure for C++17 fold expressions.
 
 3. Parameter pack expansion engine (`src/sema/pack_expansion.rs`).
-   We introduce `TemplateArg` representing concrete template arguments (`Type`, `NonType`, `TypePack`, `NonTypePack`). `expand_type_list` and `expand_expr_list` expand patterns across argument lists. When multiple parameter packs are co-expanded within the same pattern, the engine enforces identical pack lengths and diagnoses mismatches. Unexpanded parameter packs used outside pack expansions trigger compile errors.
+   We introduce `TemplateArg` representing concrete template arguments (`Type`, `NonType`, `TypePack`, `NonTypePack`). `expand_type_list` and `expand_expr_list` expand patterns across argument lists. When multiple parameter packs are co-expanded within the same pattern, the engine enforces identical pack lengths and diagnoses mismatches. Unexpanded parameter packs used outside pack expansions trigger compile errors. Base class pack expansion is limited to single inheritance: expanding multiple base classes (`struct S : Bases...` where `sizeof...(Bases) > 1`) is rejected with a compile error.
 
 4. Compile-time `sizeof...(pack)` evaluation (`src/sema/constexpr_eval.rs`, `src/sema/expr.rs`).
    The compile-time constant expression evaluator looks up parameter pack lengths directly from substitution mappings and context tables, returning the element count as a `size_t` constant expression.
@@ -41,12 +41,12 @@ Standard containers and utilities such as `std::tuple`, variadic `std::make_uniq
    Function template argument deduction extracts parameter packs from trailing call arguments. For forwarding reference packs (`Args&&...`), argument lvalues deduce as lvalue references (`T&`) and rvalues as object types (`T`), collapsing references (`&` + `&&` -> `&`, `&&` + `&&` -> `&&`).
 
 7. Function template partial ordering ([temp.func.order]) (`src/sema/template_partial_order.rs`).
-   We implement symmetric deduction between candidate function template overloads. A non-pack parameter is strictly more specialized than a parameter pack; for reference types, lvalue references are more specialized than rvalue references. Overload resolution selects the uniquely most specialized function template per [over.match.best] and rejects ambiguous ties.
+   We implement synthesized parameter specificity scoring between candidate function template overloads. A non-pack parameter is strictly more specialized than a parameter pack; for reference types, lvalue references are more specialized than rvalue references. Overload resolution selects the uniquely most specialized function template per [over.match.best] and rejects ambiguous ties.
 
 8. Embedded standard library headers (`stdlib/`).
    - `<memory>`: Implements variadic `std::make_unique<T>(Args&&... args)` forwarding arguments directly to the target constructor.
-   - `<utility>`: Implements compile-time integer index sequences (`std::integer_sequence`, `std::index_sequence`, `std::make_index_sequence`).
-   - `<tuple>`: Implements `std::tuple` using recursive base class inheritance, `std::make_tuple`, and `std::get<I>(tuple)` without runtime overhead.
+   - `<utility>`: Implements compile-time integer index sequences (`std::integer_sequence`, `std::index_sequence`).
+   - `<tuple>`: Implements `std::tuple` using recursive base class inheritance, `std::make_tuple`, and `std::get<I>(tuple)` supporting up to 17 elements (indices 0..16) without runtime overhead.
 
 ## Consequences
 ### Positive
@@ -58,3 +58,5 @@ Standard containers and utilities such as `std::tuple`, variadic `std::make_uniq
 ### Negative / Trade-offs
 - C++17 fold expressions (`(... + args)`) are deferred to a subsequent implementation phase.
 - Template template parameters (`template <template <typename> class C>`) remain unsupported.
+- Base class pack expansion is limited to single inheritance, matching the compiler object model.
+- `std::tuple` element access via `std::get` and `std::tuple_element` supports up to 17 elements (indices 0..16).

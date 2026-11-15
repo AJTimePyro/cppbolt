@@ -11,13 +11,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Variadic Templates, Parameter Packs & std::tuple (C++11)
 - Added parameter packs across AST and parser: template type packs (`typename... Ts`, `class... Ts`), non-type parameter packs (`int... Ns`), and function parameter packs (`Ts... args`, `Ts...`).
 - Added pack expansion expressions (`expr...`) and type pack expansions across function call arguments, initializer lists, base class specifiers (`struct S : Bases...`), constructor member initializers (`: Bases(args)...`), and template argument lists (`Tuple<Tail...>`, `f<Ts...>(args...)`).
+- Enforced single inheritance on base class pack expansions (`struct S : Bases...`), diagnosing multiple bases as unsupported to preserve target object layout.
 - Added compile-time `sizeof...(pack)` query operator in AST, parser, and semantic constant expression evaluation, returning the number of elements in the parameter pack as a constant integer.
-- Implemented parameter pack substitution engine in `src/sema/pack_expansion.rs` supporting homogeneous and heterogeneous type and non-type packs, length validation across multiple packs expanded within the same pattern, unexpanded parameter pack detection, and empty pack omission.
-- Implemented template argument deduction for variadic function templates and parameter packs, including empty trailing packs and forwarding reference packs (`Args&&...`) with reference collapsing rules.
+- Implemented parameter pack substitution engine in `src/sema/pack_expansion.rs` supporting homogeneous and heterogeneous type and non-type packs, length validation across multiple packs expanded within the same pattern, unexpanded parameter pack detection, reserved `__pack_{name}_{i}` synthetic identifiers, and empty pack omission.
+- Implemented template argument deduction for variadic function templates and parameter packs, including empty trailing packs, deterministic deduction fallback, and forwarding reference packs (`Args&&...`) with reference collapsing rules.
 - Implemented function template partial ordering per C++11 [temp.func.order] in `src/sema/template_partial_order.rs`, ranking non-pack parameters as strictly more specialized than parameter packs, and preferring more specialized overloads in call resolution ([over.match.best]).
 - Updated embedded `<memory>` with variadic `std::make_unique<T>(Args&&... args)`.
 - Updated embedded `<utility>` with `std::integer_sequence`, `std::index_sequence`, and `std::make_index_sequence`.
-- Added `<tuple>` header providing `std::tuple`, recursive base-indexed element storage, `std::make_tuple`, and `std::get<I>(tuple)`.
+- Added `<tuple>` header providing `std::tuple`, recursive base-indexed element storage, `std::make_tuple`, and `std::get<I>(tuple)` supporting up to 17 elements (indices 0..16).
+- Added explicit error diagnostics in WebAssembly code generation rejecting unsupported or unlowered AST expressions.
 - Added positive, variant, and negative diagnostic test suites across `tests/templates_operators/`, `tests/mini_stl/`, and `tests/negative/`.
 
 ### Template Specialization, Non-Type Parameters & Alias Templates

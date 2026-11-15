@@ -13,27 +13,29 @@ Added C++11 variadic template support across the compiler and embedded standard 
 1. Added `TokenKind::Ellipsis` (`...`) in `src/lexer/token.rs` and `src/lexer/mod.rs`, tokenizing triple dots as a single atomic token.
 2. Added AST representations for variadics in `src/ast/`: `TemplateParam::is_pack` for type and non-type template parameter packs, `Param::is_pack` for function parameter packs, `Type::PackExpansion` for type packs, `Expr::SizeofPack` for compile-time pack length queries, `Expr::PackExpansion` for expression patterns, and an AST placeholder `Expr::FoldExpr` for future C++17 fold expressions.
 3. Implemented parsing in `src/parser/`: template parameter packs (`typename... Ts`, `class... Ts`, `int... Ns`), function parameter packs (`Ts... args`, `Ts...`), `sizeof...(pack)` queries, and pack expansions across call argument lists, braced initializer lists, base class lists (`struct S : Bases...`), constructor member initializer lists (`: Bases(args)...`), and template argument lists (`Tuple<Tail...>`). Disallowed misplaced parameter packs in class templates and template aliases.
-4. Implemented parameter pack expansion in `src/sema/pack_expansion.rs` (`TemplateArg`, `expand_type_list`, `expand_expr_list`). The engine checks that co-expanded packs share identical lengths, rejects unexpanded parameter packs, and handles empty expansions.
+4. Implemented parameter pack expansion in `src/sema/pack_expansion.rs` (`TemplateArg`, `expand_type_list`, `expand_expr_list`). The engine checks that co-expanded packs share identical lengths, rejects unexpanded parameter packs, isolates pack elements with reserved `__pack_{name}_{i}` synthetic identifiers, and handles empty expansions.
 5. Integrated compile-time `sizeof...(pack)` evaluation into `src/sema/constexpr_eval.rs` and `src/sema/expr.rs`, evaluating pack lengths directly from substitution mappings and context tables as `size_t` constants.
-6. Implemented variable-arity class template instantiation and trailing pack matching in `src/sema/template_deduce.rs`, `src/sema/template_registry.rs`, and `src/sema/template_match.rs`, enabling recursive template definitions such as `Tuple<Head, Tail...> : Tuple<Tail...>`.
+6. Implemented variable-arity class template instantiation and trailing pack matching in `src/sema/template_deduce.rs`, `src/sema/template_registry.rs`, and `src/sema/template_match.rs`, enabling recursive template definitions such as `Tuple<Head, Tail...> : Tuple<Tail...>`. Made deduction fallback deterministic.
 7. Extended function template argument deduction in `src/sema/template_deduce.rs` to deduce parameter packs from trailing arguments, including empty packs and forwarding reference packs (`Args&&...`) with reference collapsing rules.
 8. Implemented function template partial ordering in `src/sema/template_partial_order.rs` per C++11 [temp.func.order]. Ranked non-pack parameters as strictly more specialized than parameter packs, and integrated partial ordering into function template resolution (`src/sema/template_func.rs`) and overload selection (`src/sema/expr_call.rs`).
-9. Updated the embedded standard library:
+9. Enforced single inheritance on base class pack expansion in `src/sema/template_subst.rs`, diagnosing multiple base class expansions as unsupported to protect the WebAssembly record layout.
+10. Added explicit error handling in `src/codegen/expr.rs` to diagnose and reject unsupported or unlowered AST expressions that reach code generation.
+11. Updated the embedded standard library:
    - Added variadic `std::make_unique<T>(Args&&... args)` to `stdlib/memory`.
    - Added `std::integer_sequence`, `std::index_sequence`, and `std::make_index_sequence` to `stdlib/utility`.
-   - Added `stdlib/tuple` implementing `std::tuple`, recursive base-indexed element storage, `std::make_tuple`, and `std::get<I>(tuple)`.
-10. Added test coverage:
-    - Positive tests: `tests/templates_operators/variadic_func_basic.cpp`, `variadic_class_tuple.cpp`, `variadic_forwarding.cpp`, `variadic_partial_ordering.cpp`, and mini-STL tests `tests/mini_stl/variadic_make_unique.cpp`, `std_tuple_basic.cpp`.
+   - Added `stdlib/tuple` implementing `std::tuple`, recursive base-indexed element storage, `std::make_tuple`, and `std::get<I>(tuple)` supporting up to 17 elements (indices 0..16).
+12. Added test coverage:
+    - Positive tests: `tests/templates_operators/variadic_func_basic.cpp`, `variadic_class_tuple.cpp`, `variadic_forwarding.cpp`, `variadic_partial_ordering.cpp`, and mini-STL tests `tests/mini_stl/variadic_make_unique.cpp`, `std_tuple_basic.cpp`, `std_tuple_large.cpp`.
     - Variant tests in `tests/templates_operators_variant/` and `tests/mini_stl_variant/`.
-    - Negative diagnostic tests in `tests/negative/variadic_ambiguous_call.cpp`.
+    - Negative diagnostic tests in `tests/negative/variadic_ambiguous_call.cpp`, `variadic_unexpanded_pack.cpp`, `variadic_pack_mismatch.cpp`, `variadic_multiple_bases.cpp`.
 
 ### Verification Results
 
-- Unit and integration tests: 118 unit tests passed, 0 failed.
+- Unit and integration tests: 119 unit tests passed, 0 failed.
 - Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
 - Oracle gate: 100% byte-for-byte stdout match against host native GCC 11 and Clang 11.
-- Corpus test runner: 523/523 tests passed, 0 failures.
-- Golden baseline: all 380 entries match `tests/golden.txt`.
+- Corpus test runner: 528/528 tests passed, 0 failures.
+- Golden baseline: all 382 entries match `tests/golden.txt`.
 - Clippy: 0 warnings with `-D warnings` across all targets.
 
 ---

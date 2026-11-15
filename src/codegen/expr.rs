@@ -71,7 +71,13 @@ impl<'a> Codegen<'a> {
                     self.compile_expr(&elements[0], ctx, code)?;
                 }
             }
-            _ => {}
+            _ => {
+                return Err(CompileError::new(
+                    format!("unsupported or unlowered expression in codegen: {expr:?}"),
+                    expr.pos().line,
+                    expr.pos().col,
+                ));
+            }
         }
         Ok(())
     }
