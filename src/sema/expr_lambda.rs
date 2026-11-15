@@ -1,6 +1,7 @@
 //! Semantic analysis and closure synthesis for C++17 lambda expressions.
 
 use super::analyze::this_param;
+use super::expr_lambda_free_vars::FreeVarCollector;
 use super::*;
 use std::collections::HashSet;
 
@@ -65,6 +66,7 @@ impl Sema {
             private_members: &[],
             line: pos.line,
             col: pos.col,
+            alignment: None,
         })?;
 
         self.register_struct_method(lambda_name, ctor_decl);
@@ -90,6 +92,7 @@ impl Sema {
             static_fields: vec![],
             private_members: vec![],
             nested_structs: vec![],
+            alignment: None,
             line: pos.line,
             col: pos.col,
         });
@@ -114,6 +117,13 @@ impl Sema {
         let mut seen = HashSet::new();
 
         for cap in captures {
+            if cap.is_pack {
+                return Err(CompileError::new(
+                    format!("'{}' does not refer to the name of a parameter pack", cap.name),
+                    pos.line,
+                    pos.col,
+                ));
+            }
             let Some((var_ty, _)) = self.lookup_capture_var(&cap.name) else {
                 let msg = format!(
                     "variable '{}' cannot be implicitly captured in a lambda with no default capture",
@@ -273,196 +283,6 @@ fn build_lambda_op(
         body: Some(body.clone()),
         is_const: !is_mutable,
         ..base_fn_decl("operator()", pos)
-    }
-}
-
-struct FreeVarCollector<'a> {
-    params: &'a [Param],
-    explicit: &'a HashSet<String>,
-    discovered: &'a mut Vec<String>,
-}
-
-impl<'a> FreeVarCollector<'a> {
-    fn visit_stmt(&mut self, stmt: &Stmt, locals: &mut HashSet<String>) {
-        match &stmt.kind {
-            StmtKind::VarDecl { name, init, .. } => {
-                if let Some(e) = init {
-                    self.visit_expr(e, locals);
-                }
-                locals.insert(name.clone());
-            }
-            StmtKind::VarDeclGroup(stmts) => {
-                for s in stmts {
-                    self.visit_stmt(s, locals);
-                }
-            }
-            StmtKind::Compound(stmts) => {
-                let prev = locals.clone();
-                for s in stmts {
-                    self.visit_stmt(s, locals);
-                }
-                *locals = prev;
-            }
-            StmtKind::Expr(e) | StmtKind::Return(Some(e)) => self.visit_expr(e, locals),
-            StmtKind::If {
-                branches,
-                else_stmt,
-            } => {
-                for (cond, branch) in branches {
-                    self.visit_expr(cond, locals);
-                    self.visit_stmt(branch, locals);
-                }
-                if let Some(eb) = else_stmt {
-                    self.visit_stmt(eb, locals);
-                }
-            }
-            StmtKind::While { cond, body } | StmtKind::DoWhile { cond, body } => {
-                self.visit_expr(cond, locals);
-                self.visit_stmt(body, locals);
-            }
-            StmtKind::For {
-                init,
-                cond,
-                step,
-                body,
-            } => {
-                let prev = locals.clone();
-                if let Some(s) = init {
-                    self.visit_stmt(s, locals);
-                }
-                if let Some(e) = cond {
-                    self.visit_expr(e, locals);
-                }
-                if let Some(e) = step {
-                    self.visit_expr(e, locals);
-                }
-                self.visit_stmt(body, locals);
-                *locals = prev;
-            }
-            StmtKind::RangeFor { decl, range, body } => {
-                self.visit_expr(range, locals);
-                let prev = locals.clone();
-                self.visit_stmt(decl, locals);
-                self.visit_stmt(body, locals);
-                *locals = prev;
-            }
-            StmtKind::StructuredBinding { bindings, init, .. } => {
-                self.visit_expr(init, locals);
-                for b in bindings {
-                    locals.insert(b.clone());
-                }
-            }
-            StmtKind::Switch { expr, body } => {
-                self.visit_expr(expr, locals);
-                self.visit_stmt(body, locals);
-            }
-            StmtKind::Case(e, _) => self.visit_expr(e, locals),
-            _ => {}
-        }
-    }
-
-    fn visit_expr(&mut self, expr: &Expr, locals: &HashSet<String>) {
-        match expr {
-            Expr::Identifier(name) => {
-                if !self.params.iter().any(|p| &p.name == name)
-                    && !self.explicit.contains(name)
-                    && !locals.contains(name)
-                    && !self.discovered.contains(name)
-                {
-                    self.discovered.push(name.clone());
-                }
-            }
-            Expr::Binary { left, right, .. } => {
-                self.visit_expr(left, locals);
-                self.visit_expr(right, locals);
-            }
-            Expr::Assign { target, value, .. } | Expr::CompoundAssign { target, value, .. } => {
-                self.visit_expr(target, locals);
-                self.visit_expr(value, locals);
-            }
-            Expr::Unary { expr, .. } | Expr::Cast { expr, .. } | Expr::Delete { expr, .. } => {
-                self.visit_expr(expr, locals);
-            }
-            Expr::MemberAccess { object, .. } => self.visit_expr(object, locals),
-            Expr::ArraySubscript { array, index, .. } => {
-                self.visit_expr(array, locals);
-                self.visit_expr(index, locals);
-            }
-            Expr::Call { callee, args, .. } => {
-                self.visit_expr(callee, locals);
-                for a in args {
-                    self.visit_expr(a, locals);
-                }
-            }
-            Expr::Ternary {
-                cond,
-                then_expr,
-                else_expr,
-                ..
-            } => {
-                self.visit_expr(cond, locals);
-                self.visit_expr(then_expr, locals);
-                self.visit_expr(else_expr, locals);
-            }
-            Expr::InitializerList { elements: list, .. }
-            | Expr::TypedInitList { elements: list, .. } => {
-                for item in list {
-                    self.visit_expr(item, locals);
-                }
-            }
-            Expr::New {
-                args,
-                array_size,
-                placement,
-                ..
-            } => {
-                for a in args {
-                    self.visit_expr(a, locals);
-                }
-                if let Some(size) = array_size {
-                    self.visit_expr(size, locals);
-                }
-                if let Some(place) = placement {
-                    self.visit_expr(place, locals);
-                }
-            }
-            Expr::Lambda {
-                captures,
-                params,
-                body,
-                ..
-            } => self.visit_lambda_expr(captures, params, body, locals),
-            _ => {}
-        }
-    }
-
-    fn visit_lambda_expr(
-        &mut self,
-        captures: &[LambdaCapture],
-        params: &[Param],
-        body: &Stmt,
-        locals: &HashSet<String>,
-    ) {
-        for c in captures {
-            if !locals.contains(&c.name)
-                && !self.params.iter().any(|p| p.name == c.name)
-                && !self.explicit.contains(&c.name)
-                && !self.discovered.contains(&c.name)
-            {
-                self.discovered.push(c.name.clone());
-            }
-        }
-        let mut inner_explicit = self.explicit.clone();
-        for c in captures {
-            inner_explicit.insert(c.name.clone());
-        }
-        let mut inner_collector = FreeVarCollector {
-            params,
-            explicit: &inner_explicit,
-            discovered: self.discovered,
-        };
-        let mut inner_locals = locals.clone();
-        inner_collector.visit_stmt(body, &mut inner_locals);
     }
 }
 

@@ -14,6 +14,7 @@ pub enum DefaultCapture {
 pub struct LambdaCapture {
     pub name: String,
     pub is_reference: bool,
+    pub is_pack: bool,
 }
 
 /// The source position of an expression node.
@@ -162,6 +163,7 @@ pub enum Expr {
         expr: Box<Expr>,
     },
     SizeofType(Type),
+    AlignofType(Type),
     SizeofExpr(Box<Expr>),
     InitializerList {
         elements: Vec<Expr>,
@@ -304,7 +306,8 @@ fn take_expr_children(expr: &mut Expr, out: &mut Vec<Expr>) {
         | Expr::StringLiteral(_)
         | Expr::Identifier(_)
         | Expr::This
-        | Expr::SizeofType(_) => {}
+        | Expr::SizeofType(_)
+        | Expr::AlignofType(_) => {}
     }
 }
 
