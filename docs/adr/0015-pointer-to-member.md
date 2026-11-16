@@ -4,13 +4,13 @@
 Accepted
 
 ## Context
-ISO C++17 defines pointer-to-member types in [dcl.mptr], member access operators in [expr.mptr.oper], and member pointer conversions in [conv.mem]. A pointer to member differs fundamentally from an ordinary object pointer or function pointer: it does not hold a concrete memory address. Instead, it represents an offset to a data member within any instance of a class, or a method descriptor for invoking a member function on an instance.
+ISO C++17 defines pointer-to-member types in [dcl.mptr], member access operators in [expr.mptr.oper], and member pointer conversions in [conv.mem]. A pointer to member holds no concrete memory address. It represents either an offset to a data member within an instance of a class, or a method descriptor for invoking a member function on an instance.
 
 The standard distinguishes two categories of pointer-to-member types:
 1. Pointers to data members: `T C::*`
 2. Pointers to member functions: `R (C::*)(Args...)`
 
-Supporting pointers to members in a WebAssembly compiler requires resolving four distinct design problems:
+Supporting pointers to members in a WebAssembly compiler raises four design problems:
 1. Representing data-member offsets when offset 0 is a valid struct member, which precludes using 0 as the null pointer value.
 2. Encoding member-function pointers so that a single type can invoke either a non-virtual member function (via function table index) or a virtual member function (via vtable slot lookup), while applying necessary `this` pointer adjustments for multiple inheritance.
 3. Lowering base-to-derived conversions ([conv.mem]), where a pointer to a member of `Base` implicitly converts to a pointer to a member of `Derived`, inverting the usual object pointer conversion direction.
@@ -19,20 +19,20 @@ Supporting pointers to members in a WebAssembly compiler requires resolving four
 ## Options Considered
 
 ### Option 1: Synthetic helper thunks vs direct inlined dispatch
-We considered generating synthetic runtime WebAssembly thunk functions for every pointer-to-member invocation or conversion. In this approach, taking the address of a member would return an index into the Wasm function table pointing to a compiler-generated wrapper function.
+We considered generating a WebAssembly thunk for every pointer-to-member invocation or conversion. Taking the address of a member would return an index into the Wasm function table pointing to a compiler-generated wrapper function.
 
-We rejected this option. Generating helper thunks increases WebAssembly table entries, inflates code size, introduces an extra indirect call frame, and complicates constant evaluation. Inlined lowering resolves member access arithmetic and vtable indexing directly at the call site, eliminating wrapper overhead.
+We rejected it. Generating helper thunks adds WebAssembly table entries, inflates code size, introduces an extra indirect call frame, and complicates constant evaluation. Inlined lowering resolves member access arithmetic and vtable indexing at the call site, so no wrapper overhead remains.
 
 ### Option 2: Fat struct representation in linear memory vs flat 64-bit scalar representation
 We considered representing member-function pointers as two-word structs allocated in linear memory, passing pointers to these structs on the stack.
 
-We rejected this option. Storing member pointers in linear memory incurs memory traffic, requires shadow stack allocations for temporaries, and prevents passing member pointers cleanly in WebAssembly value registers.
+We rejected it. Storing member pointers in linear memory incurs memory traffic, requires shadow stack allocations for temporaries, and prevents passing member pointers in WebAssembly value registers.
 
 We chose a flat 64-bit scalar representation (`i64`) based on the Itanium C++ ABI specification adapted for 32-bit ILP32 WebAssembly:
 - Low 32 bits (`ptr`): encodes the function table index or vtable slot, using bit 0 as a discriminator.
 - High 32 bits (`adj`): encodes the signed `this` adjustment for multiple inheritance.
 
-This packs the complete dispatch descriptor into a single native WebAssembly `i64` register.
+This packs the dispatch descriptor into one WebAssembly `i64` register.
 
 ## Decision
 
@@ -92,8 +92,8 @@ Fold expressions over `.*` and `->*` are expanded during template substitution i
 
 ### Positive
 - Full support for ISO C++17 pointer-to-member operations, covering data members, non-virtual methods, virtual methods, multiple inheritance, base-to-derived conversions, and null comparisons.
-- Flat `i64` member-function pointer representation fits into native WebAssembly registers without linear memory allocations.
-- Offset -1 correctly distinguishes null data-member pointers from member pointers at offset 0.
+- Flat `i64` member-function pointer representation fits into WebAssembly registers without linear memory allocations.
+- Offset -1 distinguishes null data-member pointers from member pointers at offset 0.
 - Direct integration with C++17 fold expressions across all four fold shapes.
 
 ### Negative / Trade-offs

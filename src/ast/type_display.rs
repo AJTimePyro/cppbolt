@@ -1,4 +1,4 @@
-//! C++ spelling of AST types, kept out of `types.rs` to respect the file-size cap.
+//! C++ spelling of AST types, split from `types.rs` to keep that file under the size cap.
 
 use super::types::Type;
 
