@@ -29,6 +29,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Supported parameter packs in function pointer declarations (`void (*fn)(Args...)`) across parsing, substitution, and indirect invocation.
 - Supported C++11 dynamic exception specifications `throw(Ts...)` and `throw()` on function templates.
 - Preserved lvalue reference value categories across nested call expressions returning references (`std::forward<T>`), preventing spurious WebAssembly scalar loads in forwarding call chains.
+- Supported `sizeof...(Ts)` expressions in non-type template arguments and dependent NTTP substitution (`IntConst<sizeof...(Ts)>`).
+- Implemented multiple-inheritance subobject offsets and pointer adjustments across layout, conversions, member access, method calls, and static casts.
+- Added function pointer template argument deduction for `R (*fn)(Args...)`, deducing return types and parameter packs directly without trailing call arguments.
+- Supported nested dependent type declarations (`Outer<Ts...>::Inner<Us...> var;`) in local scopes.
+- Supported local type alias declarations (`using Res = Target<Ts...>;`) and block-scoped alias resolution.
+- Supported `alignas` pack expansions with `alignof(Ts)...` expressions and non-type parameter packs (`alignas(Ns...)`).
 - Added explicit error diagnostics in WebAssembly code generation rejecting unsupported or unlowered AST expressions.
 - Added positive, variant, and negative diagnostic test suites across `tests/templates_operators/`, `tests/mini_stl/`, and `tests/negative/`.
 

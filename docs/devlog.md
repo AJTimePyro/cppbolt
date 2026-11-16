@@ -4,6 +4,29 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-16: C++11 Variadic Templates and Multiple-Inheritance Remediation
+
+Resolved the remaining C++11 variadic template and multiple-inheritance defects identified during independent compiler audits:
+
+### Summary of Work
+
+1. Non-type template argument substitution now resolves `sizeof...(Ts)` and arithmetic expressions containing pack lengths (`src/sema/template_subst_nontype.rs`, `src/sema/template_subst.rs`, `src/sema/template_name.rs`). The substitution engine evaluates dependent NTTP expressions with active pack mappings and simplifies canonical argument strings for template instance lookup.
+2. Implemented multiple-inheritance subobject offsets and pointer adjustments across the compiler (`src/sema/layout.rs`, `src/codegen/memory.rs`, `src/codegen/expr.rs`, `src/codegen/lvalue.rs`, `src/codegen/stmt_var_init.rs`, `src/codegen/function_global_init.rs`, `src/codegen/expr_call.rs`, `src/codegen/call_args.rs`). Derived-to-base and base-to-derived conversions adjust pointer and reference offsets, member access resolves secondary base field positions, and static casts validate inheritance relations.
+3. Added template argument deduction for function pointers (`src/sema/template_deduce_type.rs`), deducing return types and parameter packs directly from function types or pointers (`R (*)(Args...)`) without requiring trailing call arguments.
+4. Resolved nested dependent type declarations in local scopes (`src/parser/mod.rs`, `src/parser/types.rs`, `src/sema/template_subst.rs`). The parser recognizes member templates and qualified dependent types without misclassifying `<` tokens as comparison expressions, and template substitution replaces qualifier template instances.
+5. Added local type alias declarations (`using Res = Target<Ts...>;`) and block-scoped resolution (`src/ast/stmt.rs`, `src/parser/stmt.rs`, `src/sema/mod.rs`, `src/sema/stmt.rs`, `src/sema/template_subst_stmt.rs`). Local aliases resolve inside their enclosing blocks without leaking to outer scopes.
+6. Expanded `alignas` pack handling to support `alignof(Ts)...` expressions and non-type packs (`src/parser/struct_align.rs`, `src/sema/template_subst_align.rs`), computing maximum required alignments across all expanded elements.
+
+### Verification Results
+
+- Test runner: 562/562 corpus tests passed, 0 failures.
+- Unit tests: 119/119 unit tests passed, 0 failures.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Differential verification: byte-for-byte output match against host native Clang in C++11 mode across positive test suites.
+- Clippy: 0 warnings under `-D warnings` across all targets.
+
+---
+
 ## 2026-11-15: C++11 Variadic Templates Completion and Audit Remediation
 
 Completed C++11 variadic template support across the compiler and embedded standard library based on an independent Clang comparison audit:
