@@ -42,11 +42,54 @@ impl<'a> Codegen<'a> {
         Ok(())
     }
 
+    /// Emits a member-function pointer for one exact overload.
+    fn emit_member_function_pointer(
+        &mut self,
+        class_name: &str,
+        member_name: &str,
+        sig: &FunctionSig,
+        code: &mut Vec<u8>,
+    ) -> Result<bool, CompileError> {
+        let layout = self.sema.struct_layouts.get(class_name);
+        let vslot = layout.and_then(|l| l.vtable_slots.iter().position(|s| s == member_name));
+        let ptr = if let Some(slot_idx) = vslot {
+            ((slot_idx as i64) << 1) | 1
+        } else {
+            let table_idx = self
+                .func_table_indices
+                .get(&sig.mangled_name)
+                .copied()
+                .unwrap_or(0);
+            (table_idx as i64) << 1
+        };
+        let mut adj = 0i64;
+        if let Some(first_param) = sig.param_types.first()
+            && let Some(this_struct) = first_param.strip_reference().deref_type()
+            && let Type::Struct(decl_class) = this_struct.strip_const()
+            && decl_class != class_name
+            && let Some(off) = self.sema.base_subobject_offset(class_name, decl_class)
+        {
+            adj = off as i64;
+        }
+        let val = (adj << 32) | (ptr & 0xFFFFFFFF);
+        code.push(OP_I64_CONST);
+        write_i64(code, val);
+        Ok(true)
+    }
+
     pub(super) fn try_compile_member_pointer_addrof(
         &mut self,
         name: &str,
         code: &mut Vec<u8>,
     ) -> Result<bool, CompileError> {
+        if let Some((class_raw, mangled)) = decode_member_pointer_name(name)
+            && let Some(sig) = self.sema.functions.get(mangled).and_then(|v| v.first())
+        {
+            let class_part = class_raw.strip_prefix("::").unwrap_or(class_raw);
+            let class_name = self.sema.resolve_alias_in_qualified_name(class_part);
+            return self.emit_member_function_pointer(&class_name, &sig.name, sig, code);
+        }
+
         let Some((class_raw, member_name)) = name.rsplit_once("::") else {
             return Ok(false);
         };
@@ -59,38 +102,10 @@ impl<'a> Codegen<'a> {
             return Ok(true);
         }
 
-        if let Some(sig) = self.sema.find_method_in_class(&class_name, member_name) {
-            if sig.is_static {
-                return Ok(false);
-            }
-            let layout = self.sema.struct_layouts.get(&class_name);
-            let vslot = layout.and_then(|l| l.vtable_slots.iter().position(|s| s == member_name));
-            let ptr = if let Some(slot_idx) = vslot {
-                ((slot_idx as i64) << 1) | 1
-            } else {
-                let qual = format!("{}::{}", class_name, member_name);
-                let table_idx = self
-                    .func_table_indices
-                    .get(&sig.mangled_name)
-                    .or_else(|| self.func_table_indices.get(&qual))
-                    .or_else(|| self.func_table_indices.get(member_name))
-                    .copied()
-                    .unwrap_or(0);
-                (table_idx as i64) << 1
-            };
-            let mut adj = 0i64;
-            if let Some(first_param) = sig.param_types.first()
-                && let Some(this_struct) = first_param.strip_reference().deref_type()
-                && let Type::Struct(decl_class) = this_struct.strip_const()
-                && decl_class != &class_name
-                && let Some(off) = self.sema.base_subobject_offset(&class_name, decl_class)
-            {
-                adj = off as i64;
-            }
-            let val = (adj << 32) | (ptr & 0xFFFFFFFF);
-            code.push(OP_I64_CONST);
-            write_i64(code, val);
-            return Ok(true);
+        if let Some(sig) = self.sema.find_method_in_class(&class_name, member_name)
+            && !sig.is_static
+        {
+            return self.emit_member_function_pointer(&class_name, member_name, &sig, code);
         }
 
         Ok(false)

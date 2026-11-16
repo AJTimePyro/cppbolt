@@ -106,8 +106,11 @@ pub(super) fn collect_address_taken_expr(expr: &Expr, address_taken: &mut HashSe
                 stack.extend(args.iter());
             }
             Expr::Identifier(name) => {
-                address_taken.insert(name.clone());
-                address_taken.insert(QualifiedName::new(name).alternate().into_owned());
+                let mangled = decode_member_pointer_name(name)
+                    .map(|(_, m)| m)
+                    .unwrap_or(name);
+                address_taken.insert(mangled.to_string());
+                address_taken.insert(QualifiedName::new(mangled).alternate().into_owned());
             }
             Expr::Unary {
                 op: UnaryOp::AddrOf,
@@ -115,7 +118,10 @@ pub(super) fn collect_address_taken_expr(expr: &Expr, address_taken: &mut HashSe
                 ..
             } => {
                 if let Expr::Identifier(name) = &**expr {
-                    address_taken.insert(name.clone());
+                    let mangled = decode_member_pointer_name(name)
+                        .map(|(_, m)| m)
+                        .unwrap_or(name);
+                    address_taken.insert(mangled.to_string());
                 } else {
                     stack.push(expr);
                 }
@@ -421,6 +427,9 @@ pub(super) fn collect_stmt_calls(stmt: &Stmt, calls: &mut HashSet<String>) {
 pub(super) struct FuncCandidate<'p> {
     pub(super) is_root: bool,
     pub(super) aliases: Vec<String>,
+    /// Unique mangled name, used to resolve this candidate's table entry
+    /// without colliding with shared short/qualified aliases of overloads.
+    pub(super) mangled: String,
     pub(super) decl: FuncDeclRef<'p>,
     pub(super) calls: HashSet<String>,
 }

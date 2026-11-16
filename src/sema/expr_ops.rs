@@ -201,9 +201,14 @@ impl Sema {
 
         if *op == UnaryOp::AddrOf
             && let Expr::Identifier(name) = expr.as_ref()
-            && let Some(mp_type) = self.try_resolve_member_pointer_address(name, *pos)?
+            && let Some(resolved) = self.try_resolve_member_pointer_address(name, *pos)?
         {
-            return Ok(mp_type);
+            if let Some(encoded_name) = resolved.encoded_name
+                && let Expr::Identifier(name) = &mut **expr
+            {
+                *name = encoded_name;
+            }
+            return Ok(resolved.ty);
         }
 
         let ty = self.analyze_expr(expr)?;
@@ -385,7 +390,8 @@ impl Sema {
             let ctx = InitContext::CopyListAssign;
             return self.resolve_list_init(&target_ty, elements, ctx, *pos);
         }
-        let mut value_ty = self.analyze_expr(value)?;
+        let expected = is_member_pointer_address(value).then_some(&target_ty);
+        let mut value_ty = self.with_expected_type(expected, |s| s.analyze_expr(value))?;
         if let Type::Struct(sname) = value_ty.strip_reference().strip_const() {
             let is_const = value_ty.strip_reference().is_const();
             if let Some(sig) = self.find_conversion_to(sname, &target_ty, is_const) {

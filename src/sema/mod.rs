@@ -14,6 +14,7 @@ mod expr_lambda_free_vars;
 mod expr_member;
 mod expr_ops;
 mod expr_subscript;
+mod expected_type;
 mod init;
 mod init_aggregate;
 mod init_list;
@@ -56,6 +57,7 @@ mod member_ptr_tests;
 #[cfg(test)]
 mod tests;
 
+pub(crate) use expected_type::is_member_pointer_address;
 pub use init::InitContext;
 #[cfg(test)]
 pub use pack_expansion::TemplateArg;
@@ -189,6 +191,10 @@ pub struct Sema {
     /// diagnostic, while a constructor call in an expression reports a call
     /// diagnostic.
     pub in_initializer: bool,
+    /// Target type available at the current expression site (initializer,
+    /// assignment, return, cast). Used to disambiguate overloaded
+    /// `&Class::member` addresses.
+    pub expected_type: Option<Type>,
     pub range_for_counter: usize,
     pub lambda_counter: usize,
     pub synthesized_decls: Vec<Decl>,
@@ -252,6 +258,7 @@ impl Sema {
             namespace_aliases: HashMap::new(),
             type_aliases: HashMap::new(),
             in_initializer: false,
+            expected_type: None,
             depth: crate::depth::DepthCounters::new(),
         };
 

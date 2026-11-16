@@ -169,6 +169,7 @@ impl<'a> Codegen<'a> {
             decl: FuncDeclRef::Function(f),
             is_root,
             aliases,
+            mangled,
             calls,
         }
     }
@@ -184,7 +185,7 @@ impl<'a> Codegen<'a> {
             return None;
         }
         let short_name = QualifiedName::new(name).class_short_name();
-        let aliases = self.collect_method_aliases(name, m);
+        let (aliases, mangled) = self.collect_method_aliases(name, m);
         let mut calls = HashSet::new();
         if m.name == *name || m.name == short_name {
             calls.insert(format!("{}_~{}", name, name));
@@ -239,11 +240,12 @@ impl<'a> Codegen<'a> {
             decl: FuncDeclRef::Method(name, m),
             is_root,
             aliases,
+            mangled,
             calls,
         })
     }
 
-    fn collect_method_aliases(&self, name: &str, m: &FunctionDecl) -> Vec<String> {
+    fn collect_method_aliases(&self, name: &str, m: &FunctionDecl) -> (Vec<String>, String) {
         let short_name = QualifiedName::new(name).class_short_name();
         let qual_name = format!("{}::{}", name, m.name);
         let mut aliases = vec![
@@ -286,8 +288,8 @@ impl<'a> Codegen<'a> {
             RefQualifier::RValue => mangled.push_str("_O"),
             RefQualifier::None => {}
         }
-        aliases.push(mangled);
-        aliases
+        aliases.push(mangled.clone());
+        (aliases, mangled)
     }
 
     fn compute_reachable(candidates: &[FuncCandidate<'_>]) -> HashSet<usize> {

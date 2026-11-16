@@ -409,6 +409,19 @@ impl<'a> Codegen<'a> {
     }
 
     fn type_of_member_pointer_addrof(&self, name: &str) -> Option<Type> {
+        if let Some((class_raw, mangled)) = decode_member_pointer_name(name)
+            && let Some(sig) = self.sema.functions.get(mangled).and_then(|v| v.first())
+        {
+            let class_part = class_raw.strip_prefix("::").unwrap_or(class_raw);
+            let class_name = self.sema.resolve_alias_in_qualified_name(class_part);
+            return Some(Type::MemberPointer {
+                class_name,
+                member_type: Box::new(Type::Function {
+                    return_type: Box::new(sig.return_type.clone()),
+                    param_types: sig.param_types.iter().skip(1).cloned().collect(),
+                }),
+            });
+        }
         let (class_raw, member_name) = name.rsplit_once("::")?;
         let class_part = class_raw.strip_prefix("::").unwrap_or(class_raw);
         let class_name = self.sema.resolve_alias_in_qualified_name(class_part);

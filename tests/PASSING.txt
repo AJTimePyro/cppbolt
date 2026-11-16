@@ -193,6 +193,7 @@ classes_oop/multiple_inheritance_offsets
 classes_oop/member_pointer_data
 classes_oop/member_pointer_func
 classes_oop/member_pointer_multi_inheritance
+classes_oop/member_pointer_overload
 classes_oop/member_pointer_virtual
 classes_oop_variant/constructors_destructors/copy_semantics
 classes_oop_variant/constructors_destructors/ctor_default_argument
@@ -403,6 +404,7 @@ negative/lambda_const_capture_mutation
 negative/lambda_duplicate_default_capture
 negative/lambda_out_of_order_default_capture
 negative/member_access_non_struct
+negative/member_pointer_overload_no_match
 negative/method_string_argument
 negative/method_struct_argument
 negative/method_too_many_arguments

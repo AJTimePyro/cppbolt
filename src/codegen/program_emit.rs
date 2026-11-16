@@ -213,7 +213,7 @@ impl<'a> Codegen<'a> {
                 continue;
             }
             if cand.aliases.iter().any(|a| plan.address_taken.contains(a))
-                && let Some(&func_idx) = cand.aliases.iter().find_map(|a| self.func_indices.get(a))
+                && let Some(&func_idx) = self.func_indices.get(&cand.mangled)
             {
                 let table_elem_idx = self.vtable_func_indices.len() as u32;
                 self.vtable_func_indices.push(func_idx);

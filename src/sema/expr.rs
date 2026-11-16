@@ -98,7 +98,7 @@ impl Sema {
         expr: &mut Expr,
     ) -> Result<Type, CompileError> {
         self.resolve_and_instantiate_type(target_type, self.current_line, self.current_col)?;
-        let expr_ty = self.analyze_expr(expr)?;
+        let expr_ty = self.with_expected_type(Some(target_type), |s| s.analyze_expr(expr))?;
         if kind == CastKind::Reinterpret {
             if target_type.is_reference() && !expr.is_lvalue() {
                 return Err(CompileError::new(

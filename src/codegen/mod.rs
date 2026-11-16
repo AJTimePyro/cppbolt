@@ -64,6 +64,12 @@ pub(super) use member_pointer::{MemberPointerCall, MemberPointerCmp};
 use program::Plan;
 use std::collections::{HashMap, HashSet};
 
+/// Decodes the `class@@mangled-name` marker sema writes onto the identifier of
+/// a resolved `&Class::member` method address.
+pub(crate) fn decode_member_pointer_name(name: &str) -> Option<(&str, &str)> {
+    name.split_once("@@")
+}
+
 /// Mutable state for one compilation: the Wasm module, symbol offsets, and
 /// the data/vtable/table bookkeeping shared by the lowering passes.
 pub struct Codegen<'a> {

@@ -3,12 +3,101 @@ use crate::ast::types::Type;
 use crate::ast::{BinaryOp, Expr, ExprPos};
 use crate::diagnostics::CompileError;
 
+/// The member-pointer type denoted by taking the address of `sig`.
+fn member_pointer_type(class_name: &str, sig: &FunctionSig) -> Type {
+    let fn_type = Type::Function {
+        return_type: Box::new(sig.return_type.clone()),
+        param_types: if sig.is_static {
+            sig.param_types.clone()
+        } else {
+            sig.param_types.iter().skip(1).cloned().collect()
+        },
+    };
+    if sig.is_static {
+        Type::Pointer(Box::new(fn_type))
+    } else {
+        Type::MemberPointer {
+            class_name: class_name.to_string(),
+            member_type: Box::new(fn_type),
+        }
+    }
+}
+
+/// The resolved type of `&Class::member` plus the exact method overload chosen.
+pub(super) struct MemberPointerAddress {
+    pub ty: Type,
+    /// Encoding `class@@mangled-name` of the selected non-static method, used
+    /// by codegen to emit the exact overload. `None` for data members and
+    /// static methods.
+    pub encoded_name: Option<String>,
+}
+
+fn first_overload(overloads: &[FunctionSig]) -> &FunctionSig {
+    overloads
+        .iter()
+        .find(|sig| !sig_receiver_is_const(sig))
+        .unwrap_or(&overloads[0])
+}
+
 impl Sema {
+    /// Picks the overload whose member-pointer type matches the type expected
+    /// at this site. Falls back to the first overload when no target type is
+    /// available; reports an error when a member-pointer target matches none.
+    fn select_member_pointer_overload(
+        &self,
+        class_name: &str,
+        overloads: &[FunctionSig],
+        expected: Option<&Type>,
+        pos: ExprPos,
+    ) -> Result<FunctionSig, CompileError> {
+        let Some(expected) = expected else {
+            return Ok(first_overload(overloads).clone());
+        };
+        let (expected_class, expected_fn) = match expected.strip_const() {
+            Type::MemberPointer {
+                class_name,
+                member_type,
+            } => (Some(class_name.as_str()), member_type.as_ref()),
+            Type::Pointer(inner) => (None, inner.as_ref()),
+            _ => return Ok(first_overload(overloads).clone()),
+        };
+        for sig in overloads {
+            if member_pointer_type(class_name, sig) == *expected {
+                return Ok(sig.clone());
+            }
+        }
+        if let Some(expected_class) = expected_class
+            && let Type::Function { .. } = expected_fn
+        {
+            for sig in overloads {
+                if let Type::MemberPointer {
+                    class_name: sig_class,
+                    member_type: sig_fn,
+                } = member_pointer_type(class_name, sig)
+                    && *sig_fn == *expected_fn
+                    && self.is_subclass(expected_class, &sig_class)
+                {
+                    return Ok(sig.clone());
+                }
+            }
+        }
+        Err(CompileError::new(
+            format!(
+                "no overload of '{}::{}' matches member pointer type '{}'",
+                class_name,
+                overloads[0].name,
+                expected.to_c_type()
+            ),
+            pos.line,
+            pos.col,
+        ))
+    }
+
     pub(super) fn try_resolve_member_pointer_address(
         &mut self,
         name: &str,
         pos: ExprPos,
-    ) -> Result<Option<Type>, CompileError> {
+    ) -> Result<Option<MemberPointerAddress>, CompileError> {
         let Some((class_raw, member_name)) = name.rsplit_once("::") else {
             return Ok(None);
         };
@@ -17,27 +106,28 @@ impl Sema {
         self.ensure_class_instantiated(&class_name, pos.line, pos.col);
 
         if let Some(fld) = self.find_field_in_class(&class_name, member_name) {
-            return Ok(Some(Type::MemberPointer {
-                class_name: class_name.to_string(),
-                member_type: Box::new(fld.ty),
+            return Ok(Some(MemberPointerAddress {
+                ty: Type::MemberPointer {
+                    class_name: class_name.to_string(),
+                    member_type: Box::new(fld.ty),
+                },
+                encoded_name: None,
             }));
         }
 
-        if let Some(sig) = self.find_method_in_class(&class_name, member_name) {
-            let fn_type = Type::Function {
-                return_type: Box::new(sig.return_type.clone()),
-                param_types: if sig.is_static {
-                    sig.param_types.clone()
-                } else {
-                    sig.param_types.iter().skip(1).cloned().collect()
-                },
-            };
-            if sig.is_static {
-                return Ok(Some(Type::Pointer(Box::new(fn_type))));
-            }
-            return Ok(Some(Type::MemberPointer {
-                class_name: class_name.to_string(),
-                member_type: Box::new(fn_type),
+        let overloads = self.find_method_overloads_in_class(&class_name, member_name, false);
+        if !overloads.is_empty() {
+            let expected = self.expected_type.clone();
+            let sig = self.select_member_pointer_overload(
+                &class_name,
+                &overloads,
+                expected.as_ref(),
+                pos,
+            )?;
+            return Ok(Some(MemberPointerAddress {
+                ty: member_pointer_type(&class_name, &sig),
+                encoded_name: (!sig.is_static)
+                    .then(|| format!("{}@@{}", class_name, sig.mangled_name)),
             }));
         }
 

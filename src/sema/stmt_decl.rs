@@ -112,7 +112,11 @@ impl Sema {
             _ => {
                 let previous = self.in_initializer;
                 self.in_initializer = true;
-                let result = self.analyze_expr_keeping_reference(init_expr);
+                let expected: Option<&Type> =
+                    is_member_pointer_address(init_expr).then_some(&*ty);
+                let result = self.with_expected_type(expected, |s| {
+                    s.analyze_expr_keeping_reference(init_expr)
+                });
                 self.in_initializer = previous;
                 Ok((result?, false))
             }

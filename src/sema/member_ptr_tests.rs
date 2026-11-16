@@ -51,3 +51,19 @@ fn test_sema_pointer_to_member_data_and_function() {
          int main() { S s; s.x = 42; return get_val(&s, &S::x); }"
     ));
 }
+
+#[test]
+fn test_sema_member_pointer_overload_selected_by_target_type() {
+    assert!(analyze_ok(
+        "struct C { int f(int x) { return x; } int f(char x) { return x; } }; \
+         int main() { int (C::*as_int)(int) = &C::f; int (C::*as_char)(char) = &C::f; }"
+    ));
+    assert!(analyze_ok(
+        "struct C { int f(int x) { return x; } int f(double x) { return (int)x; } }; \
+         int main() { C c; int (C::*pm)(int) = &C::f; return (c.*pm)(1); }"
+    ));
+    assert!(!analyze_ok(
+        "struct C { int f(int x) { return x; } int f(double x) { return (int)x; } }; \
+         int main() { int (C::*pm)(char) = &C::f; }"
+    ));
+}
