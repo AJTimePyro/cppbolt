@@ -13,6 +13,7 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         self.current_scratch1.set(ctx.scratch1);
+        self.current_scratch_i64.set(ctx.scratch_i64);
         let inits = self.global_inits.clone();
         for (gname, gty, init_opt) in inits {
             let Some(&goffset) = self.global_offsets.get(&gname) else {

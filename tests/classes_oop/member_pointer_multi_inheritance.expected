@@ -1,0 +1,6 @@
+derived dot b1: 10
+derived dot b2: 20
+derived arrow b1: 10
+derived arrow b2: 20
+call b2 via derived: 40
+call b2 via derived ptr: 40

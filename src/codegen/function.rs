@@ -10,6 +10,7 @@ impl<'a> Codegen<'a> {
         let mut code = Vec::new();
         let (locals, mut ctx) = Self::function_context(f, class_name.as_deref());
         self.current_scratch1.set(ctx.scratch1);
+        self.current_scratch_i64.set(ctx.scratch_i64);
 
         Self::emit_prologue(&mut ctx, &mut code);
 

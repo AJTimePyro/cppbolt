@@ -129,7 +129,7 @@ impl<'a> Codegen<'a> {
                     if m.is_pure_virtual {
                         continue;
                     }
-                    if let Some(candidate) = self.build_method_candidate(name, m) {
+                    if let Some(candidate) = self.build_method_candidate(name, m, address_taken) {
                         candidates.push(candidate);
                     }
                 }
@@ -178,6 +178,7 @@ impl<'a> Codegen<'a> {
         &mut self,
         name: &'p String,
         m: &'p FunctionDecl,
+        address_taken: &HashSet<String>,
     ) -> Option<FuncCandidate<'p>> {
         if !m.template_params.is_empty() {
             return None;
@@ -231,9 +232,12 @@ impl<'a> Codegen<'a> {
             })
             .unwrap_or(false);
 
+        let is_address_taken = aliases.iter().any(|a| address_taken.contains(a));
+        let is_root = is_vmethod || is_address_taken;
+
         Some(FuncCandidate {
             decl: FuncDeclRef::Method(name, m),
-            is_root: is_vmethod,
+            is_root,
             aliases,
             calls,
         })

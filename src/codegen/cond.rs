@@ -36,6 +36,16 @@ impl<'a> Codegen<'a> {
                 code.extend_from_slice(&0.0f64.to_le_bytes());
                 code.push(OP_F64_NE);
             }
+            Type::MemberPointer { member_type, .. } => {
+                if matches!(member_type.strip_const(), Type::Function { .. }) {
+                    code.push(OP_I64_EQZ);
+                    code.push(OP_I32_EQZ);
+                } else {
+                    code.push(OP_I32_CONST);
+                    write_i32(code, -1);
+                    code.push(OP_I32_NE);
+                }
+            }
             _ => {}
         }
         Ok(())

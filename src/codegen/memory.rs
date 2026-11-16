@@ -47,6 +47,17 @@ impl<'a> Codegen<'a> {
                 write_u32(code, 3);
                 write_u32(code, offset);
             }
+            Type::MemberPointer { member_type, .. } => {
+                if matches!(member_type.strip_const(), Type::Function { .. }) {
+                    code.push(OP_I64_STORE);
+                    write_u32(code, 3);
+                    write_u32(code, offset);
+                } else {
+                    code.push(OP_I32_STORE);
+                    write_u32(code, 2);
+                    write_u32(code, offset);
+                }
+            }
             _ => {
                 code.push(OP_I32_STORE);
                 write_u32(code, 2);
@@ -81,6 +92,41 @@ impl<'a> Codegen<'a> {
             return;
         }
         if from == to {
+            return;
+        }
+        if matches!(from, Type::Nullptr)
+            && let Type::MemberPointer { member_type, .. } = to
+        {
+            code.push(OP_DROP);
+            if matches!(member_type.strip_const(), Type::Function { .. }) {
+                code.push(OP_I64_CONST);
+                write_i64(code, 0);
+            } else {
+                code.push(OP_I32_CONST);
+                write_i32(code, -1);
+            }
+            return;
+        }
+        if let (
+            Type::MemberPointer {
+                class_name: s_from,
+                member_type: m_from,
+            },
+            Type::MemberPointer {
+                class_name: s_to, ..
+            },
+        ) = (from, to)
+        {
+            if s_from != s_to
+                && let Some(sub_offset) = self.sema.base_subobject_offset(s_to, s_from)
+                && sub_offset != 0
+            {
+                if matches!(m_from.strip_const(), Type::Function { .. }) {
+                    self.emit_guarded_member_func_ptr_adjustment(sub_offset, code);
+                } else {
+                    self.emit_guarded_member_data_ptr_adjustment(sub_offset, code);
+                }
+            }
             return;
         }
         if let (Type::Pointer(f_inner), Type::Pointer(t_inner)) = (from, to)
@@ -131,6 +177,56 @@ impl<'a> Codegen<'a> {
         }
     }
 
+    fn emit_guarded_member_func_ptr_adjustment(&self, offset: usize, code: &mut Vec<u8>) {
+        let s = self.current_scratch_i64.get();
+        if s != 0 {
+            code.push(OP_LOCAL_TEE);
+            write_u32(code, s);
+            code.push(OP_I64_EQZ);
+            code.push(OP_IF);
+            code.push(TYPE_I64);
+            code.push(OP_I64_CONST);
+            write_i64(code, 0);
+            code.push(OP_ELSE);
+            code.push(OP_LOCAL_GET);
+            write_u32(code, s);
+            code.push(OP_I64_CONST);
+            write_i64(code, (offset as i64) << 32);
+            code.push(OP_I64_ADD);
+            code.push(OP_END);
+        } else {
+            code.push(OP_I64_CONST);
+            write_i64(code, (offset as i64) << 32);
+            code.push(OP_I64_ADD);
+        }
+    }
+
+    fn emit_guarded_member_data_ptr_adjustment(&self, offset: usize, code: &mut Vec<u8>) {
+        let s = self.current_scratch1.get();
+        if s != 0 {
+            code.push(OP_LOCAL_TEE);
+            write_u32(code, s);
+            code.push(OP_I32_CONST);
+            write_i32(code, -1);
+            code.push(OP_I32_EQ);
+            code.push(OP_IF);
+            code.push(TYPE_I32);
+            code.push(OP_I32_CONST);
+            write_i32(code, -1);
+            code.push(OP_ELSE);
+            code.push(OP_LOCAL_GET);
+            write_u32(code, s);
+            code.push(OP_I32_CONST);
+            write_i32(code, offset as i32);
+            code.push(OP_I32_ADD);
+            code.push(OP_END);
+        } else {
+            code.push(OP_I32_CONST);
+            write_i32(code, offset as i32);
+            code.push(OP_I32_ADD);
+        }
+    }
+
     fn emit_bool_conversion(from: &Type, code: &mut Vec<u8>) {
         match from {
             Type::Float => {
@@ -146,6 +242,16 @@ impl<'a> Codegen<'a> {
             Type::LongLong | Type::UnsignedLongLong => {
                 code.push(OP_I64_EQZ);
                 code.push(OP_I32_EQZ);
+            }
+            Type::MemberPointer { member_type, .. } => {
+                if matches!(member_type.strip_const(), Type::Function { .. }) {
+                    code.push(OP_I64_EQZ);
+                    code.push(OP_I32_EQZ);
+                } else {
+                    code.push(OP_I32_CONST);
+                    write_i32(code, -1);
+                    code.push(OP_I32_NE);
+                }
             }
             _ => {
                 code.push(OP_I32_CONST);
@@ -272,6 +378,17 @@ impl<'a> Codegen<'a> {
                 code.push(OP_F64_LOAD);
                 write_u32(code, 3);
                 write_u32(code, offset);
+            }
+            Type::MemberPointer { member_type, .. } => {
+                if matches!(member_type.strip_const(), Type::Function { .. }) {
+                    code.push(OP_I64_LOAD);
+                    write_u32(code, 3);
+                    write_u32(code, offset);
+                } else {
+                    code.push(OP_I32_LOAD);
+                    write_u32(code, 2);
+                    write_u32(code, offset);
+                }
             }
             _ => {
                 code.push(OP_I32_LOAD);

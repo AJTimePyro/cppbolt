@@ -1,0 +1,7 @@
+pt.*px = 10
+pt.*py = 20
+p->*px = 10
+p->*py = 20
+modified: x=100 y=200
+pnull is null
+px is not null

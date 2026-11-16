@@ -46,6 +46,21 @@ impl<'a> Codegen<'a> {
                 ctx,
                 code,
             ),
+            Expr::Binary {
+                op: op @ (BinaryOp::DotStar | BinaryOp::ArrowStar),
+                left,
+                right,
+                ..
+            } => self.compile_member_pointer_call(
+                MemberPointerCall {
+                    left,
+                    right,
+                    is_arrow: *op == BinaryOp::ArrowStar,
+                    args,
+                },
+                ctx,
+                code,
+            ),
             _ => self.compile_indirect_call(callee, args, ctx, code),
         }
     }

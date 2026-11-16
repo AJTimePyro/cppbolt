@@ -371,7 +371,13 @@ impl Type {
             | Type::NonType(_)
             | Type::DependentNonType(_)
             | Type::DependentArray(_, _) => 4,
-                Type::MemberPointer { .. } => 4,
+                Type::MemberPointer { member_type, .. } => {
+                    if matches!(member_type.strip_const(), Type::Function { .. }) {
+                        8
+                    } else {
+                        4
+                    }
+                }
                 Type::Function { .. } => 4,
                 Type::PackExpansion(_) => 1,
                 Type::Const(_) => unreachable!(),
@@ -401,6 +407,13 @@ impl Type {
             Type::LongLong | Type::UnsignedLongLong => Some(WasmType::I64),
             Type::Float => Some(WasmType::F32),
             Type::Double => Some(WasmType::F64),
+            Type::MemberPointer { member_type, .. } => {
+                if matches!(member_type.strip_const(), Type::Function { .. }) {
+                    Some(WasmType::I64)
+                } else {
+                    Some(WasmType::I32)
+                }
+            }
             Type::Array(_, _)
             | Type::Struct(_)
             | Type::TemplateInstance { .. }
@@ -408,7 +421,6 @@ impl Type {
             | Type::NonType(_)
             | Type::DependentNonType(_)
             | Type::DependentArray(_, _)
-            | Type::MemberPointer { .. }
             | Type::Function { .. } => Some(WasmType::I32),
             Type::PackExpansion(_) => None,
             Type::Const(_) => unreachable!(),

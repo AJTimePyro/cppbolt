@@ -341,6 +341,11 @@ impl Expr {
             Expr::MemberAccess {
                 object, is_arrow, ..
             } => *is_arrow || object.is_lvalue(),
+            Expr::Binary { op, left, .. } => match op {
+                BinaryOp::ArrowStar => true,
+                BinaryOp::DotStar => left.is_lvalue(),
+                _ => false,
+            },
             Expr::Unary {
                 op: UnaryOp::Deref, ..
             } => true,

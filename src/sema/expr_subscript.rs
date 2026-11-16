@@ -63,6 +63,19 @@ impl Sema {
         }
         match expr {
             Expr::Identifier(_) | Expr::MemberAccess { .. } | Expr::ArraySubscript { .. } => true,
+            Expr::Binary {
+                op: BinaryOp::ArrowStar,
+                ..
+            } => true,
+            Expr::Binary {
+                op: BinaryOp::DotStar,
+                left,
+                ..
+            } => {
+                let mut e = (**left).clone();
+                let left_ty = self.analyze_expr(&mut e).unwrap_or(Type::Int);
+                self.is_assignable_target(left, &left_ty)
+            }
             Expr::Unary {
                 op: UnaryOp::Deref,
                 expr: inner,

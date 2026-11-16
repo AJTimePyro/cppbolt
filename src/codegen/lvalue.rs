@@ -99,6 +99,12 @@ impl<'a> Codegen<'a> {
                 is_arrow,
                 ..
             } => self.compile_lvalue_member(object, member, *is_arrow, ctx, code),
+            Expr::Binary {
+                op: op @ (BinaryOp::DotStar | BinaryOp::ArrowStar),
+                left,
+                right,
+                ..
+            } => self.compile_member_pointer_lvalue(left, right, *op == BinaryOp::ArrowStar, ctx, code),
             Expr::Call { .. }
             | Expr::TypedInitList { .. }
             | Expr::Binary { .. }

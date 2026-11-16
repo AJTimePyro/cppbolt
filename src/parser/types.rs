@@ -72,12 +72,7 @@ impl Parser {
     pub fn parse_type(&mut self) -> Result<Type, CompileError> {
         let _guard = self.enter_type()?;
         let base_type = self.parse_specifier_type_inner()?;
-        let ty = self.parse_declarator_prefix(&base_type)?;
-        if self.is_function_pointer_declarator_ahead() {
-            let (fn_ptr_ty, _) = self.parse_function_pointer_declarator(ty, None)?;
-            return Ok(fn_ptr_ty);
-        }
-        Ok(ty)
+        self.parse_declarator_prefix(&base_type)
     }
 
     /// Parses the type specifiers of a declaration: the builtin or named type

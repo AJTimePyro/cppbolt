@@ -159,6 +159,12 @@ impl<'a> Codegen<'a> {
                 return sig.return_type.clone();
             }
         }
+        if *op == BinaryOp::DotStar || *op == BinaryOp::ArrowStar {
+            if let Type::MemberPointer { member_type, .. } = rty.strip_reference().strip_const() {
+                return *member_type.clone();
+            }
+            return Type::Int;
+        }
         match op {
             BinaryOp::Comma => rty.clone(),
             BinaryOp::LogicalAnd | BinaryOp::LogicalOr => Type::Bool,
@@ -219,7 +225,14 @@ impl<'a> Codegen<'a> {
                     ty.deref_type().cloned().unwrap_or(Type::Int)
                 }
             }
-            UnaryOp::AddrOf => Type::Pointer(Box::new(self.get_expr_type(expr, ctx))),
+            UnaryOp::AddrOf => {
+                if let Expr::Identifier(name) = expr
+                    && let Some(ty) = self.type_of_member_pointer_addrof(name)
+                {
+                    return ty;
+                }
+                Type::Pointer(Box::new(self.get_expr_type(expr, ctx)))
+            }
             UnaryOp::BitNot | UnaryOp::Neg | UnaryOp::Plus => {
                 self.get_expr_type(expr, ctx).integer_promotion()
             }
@@ -393,5 +406,36 @@ impl<'a> Codegen<'a> {
             }
         }
         arr_ty.deref_type().cloned().unwrap_or(Type::Int)
+    }
+
+    fn type_of_member_pointer_addrof(&self, name: &str) -> Option<Type> {
+        let (class_raw, member_name) = name.rsplit_once("::")?;
+        let class_part = class_raw.strip_prefix("::").unwrap_or(class_raw);
+        let class_name = self.sema.resolve_alias_in_qualified_name(class_part);
+
+        if let Some(fld) = self.sema.find_field_in_class(&class_name, member_name) {
+            return Some(Type::MemberPointer {
+                class_name: class_name.to_string(),
+                member_type: Box::new(fld.ty),
+            });
+        }
+        if let Some(sig) = self.sema.find_method_in_class(&class_name, member_name) {
+            let fn_type = Type::Function {
+                return_type: Box::new(sig.return_type.clone()),
+                param_types: if sig.is_static {
+                    sig.param_types.clone()
+                } else {
+                    sig.param_types.iter().skip(1).cloned().collect()
+                },
+            };
+            if sig.is_static {
+                return Some(Type::Pointer(Box::new(fn_type)));
+            }
+            return Some(Type::MemberPointer {
+                class_name: class_name.to_string(),
+                member_type: Box::new(fn_type),
+            });
+        }
+        None
     }
 }

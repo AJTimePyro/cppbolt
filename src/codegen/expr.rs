@@ -29,27 +29,19 @@ impl<'a> Codegen<'a> {
                 op: BinaryOp::LogicalOr,
                 ..
             } => self.compile_logical_or(expr, ctx, code)?,
+            Expr::Binary {
+                op: BinaryOp::DotStar | BinaryOp::ArrowStar,
+                ..
+            }
+            | Expr::ArraySubscript { .. }
+            | Expr::MemberAccess { .. } => self.compile_expr_lvalue_load(expr, ctx, code)?,
             Expr::Binary { .. } => self.compile_binary(expr, ctx, code)?,
             Expr::Unary { .. } => self.compile_unary(expr, ctx, code)?,
             Expr::Assign { .. } => self.compile_assign(expr, ctx, code)?,
             Expr::CompoundAssign { .. } => self.compile_compound_assign(expr, ctx, code)?,
             Expr::New { .. } => self.compile_new(expr, ctx, code)?,
             Expr::Delete { .. } => self.compile_delete(expr, ctx, code)?,
-            Expr::Call { .. } => {
-                self.compile_call(expr, ctx, code)?;
-                let ty = self.get_expr_type_raw(expr, ctx);
-                let value_ty = ty.strip_const().strip_reference();
-                if ty.is_reference() && !matches!(value_ty, Type::Struct(_) | Type::Array(_, _)) {
-                    self.emit_load(value_ty, 0, code);
-                }
-            }
-            Expr::ArraySubscript { .. } | Expr::MemberAccess { .. } => {
-                let ty = self.get_expr_type(expr, ctx);
-                self.compile_lvalue_addr(expr, ctx, code)?;
-                if !matches!(ty.strip_const(), Type::Struct(_) | Type::Array(_, _)) {
-                    self.emit_load(&ty, 0, code);
-                }
-            }
+            Expr::Call { .. } => self.compile_expr_call(expr, ctx, code)?,
             Expr::Ternary { .. } => self.compile_ternary(expr, ctx, code)?,
             Expr::Cast {
                 kind,
@@ -78,6 +70,35 @@ impl<'a> Codegen<'a> {
                     expr.pos().col,
                 ));
             }
+        }
+        Ok(())
+    }
+
+    fn compile_expr_lvalue_load(
+        &mut self,
+        expr: &Expr,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        let ty = self.get_expr_type(expr, ctx);
+        self.compile_lvalue_addr(expr, ctx, code)?;
+        if !matches!(ty.strip_const(), Type::Struct(_) | Type::Array(_, _)) {
+            self.emit_load(&ty, 0, code);
+        }
+        Ok(())
+    }
+
+    fn compile_expr_call(
+        &mut self,
+        expr: &Expr,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        self.compile_call(expr, ctx, code)?;
+        let ty = self.get_expr_type_raw(expr, ctx);
+        let value_ty = ty.strip_const().strip_reference();
+        if ty.is_reference() && !matches!(value_ty, Type::Struct(_) | Type::Array(_, _)) {
+            self.emit_load(value_ty, 0, code);
         }
         Ok(())
     }

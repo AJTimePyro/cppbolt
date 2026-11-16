@@ -26,6 +26,7 @@ mod function_lifecycle;
 mod function_lookup;
 mod initializer_list;
 mod lvalue;
+mod member_pointer;
 mod memory;
 mod method_lookup;
 mod overload;
@@ -59,6 +60,7 @@ use emit_context::{
     ArrayLocal, ArrayLoop, ArraySlots, BinaryTypes, CallSite, CtorCall, GlobalInit, MemberAccess,
     NamedCall, ScalarAssign, SwitchSlots,
 };
+pub(super) use member_pointer::{MemberPointerCall, MemberPointerCmp};
 use program::Plan;
 use std::collections::{HashMap, HashSet};
 
@@ -88,6 +90,7 @@ pub struct Codegen<'a> {
     pub current_line: usize,
     pub current_col: usize,
     pub current_scratch1: std::cell::Cell<u32>,
+    pub current_scratch_i64: std::cell::Cell<u32>,
     depth: crate::depth::DepthCounters,
 }
 
@@ -159,6 +162,7 @@ impl<'a> Codegen<'a> {
             current_line: 1,
             current_col: 1,
             current_scratch1: std::cell::Cell::new(0),
+            current_scratch_i64: std::cell::Cell::new(0),
             max_memory_mb: 256,
             depth: crate::depth::DepthCounters::new(),
         }

@@ -81,7 +81,13 @@ impl<'a> Codegen<'a> {
             op, left, right, ..
         } = cur
         {
-            if matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
+            if matches!(
+                op,
+                BinaryOp::LogicalAnd
+                    | BinaryOp::LogicalOr
+                    | BinaryOp::DotStar
+                    | BinaryOp::ArrowStar
+            ) {
                 break;
             }
             spine.push((op, right));
@@ -137,6 +143,22 @@ impl<'a> Codegen<'a> {
         }
         if *op == BinaryOp::Comma {
             return self.emit_comma_node(lty, left, right, ctx, code);
+        }
+        if matches!(op, BinaryOp::Eq | BinaryOp::Ne)
+            && (matches!(lty.strip_const(), Type::MemberPointer { .. })
+                || matches!(rty.strip_const(), Type::MemberPointer { .. }))
+        {
+            return self.compile_member_pointer_eq_ne(
+                MemberPointerCmp {
+                    op,
+                    lty,
+                    rty,
+                    left,
+                    right,
+                },
+                ctx,
+                code,
+            );
         }
         let lraw = lty.strip_const();
         let rraw = rty.strip_const();
