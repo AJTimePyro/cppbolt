@@ -149,7 +149,7 @@ impl Parser {
     fn parse_typedef_decl(&mut self) -> Result<(), CompileError> {
         self.advance();
         let base_type = self.parse_type()?;
-        if self.peek() == &TokenKind::LParen && self.peek_ahead(1) == &TokenKind::Star {
+        if self.is_function_pointer_declarator_ahead() {
             // Function-pointer typedef: Base (*Name)(args).
             let (final_ty, id) =
                 self.parse_function_pointer_declarator(base_type, Some("Expected typedef name"))?;
@@ -217,8 +217,7 @@ impl Parser {
         loop {
             let ty = self.parse_declarator_prefix(&specifiers)?;
             if declarations.is_empty()
-                && self.peek() == &TokenKind::LParen
-                && self.peek_ahead(1) == &TokenKind::Star
+                && self.is_function_pointer_declarator_ahead()
             {
                 return Ok(vec![self.parse_function_pointer_global(ty, &start_tok)?]);
             }

@@ -235,6 +235,11 @@ fn eval_binary_values(op: BinaryOp, l: i128, r: i128, pos: ExprPos) -> Result<i1
         BinaryOp::Gt => Ok(if l > r { 1 } else { 0 }),
         BinaryOp::Ge => Ok(if l >= r { 1 } else { 0 }),
         BinaryOp::Comma => Ok(r),
+        BinaryOp::DotStar | BinaryOp::ArrowStar => Err(CompileError::new(
+            "pointer-to-member operations are not supported in constant expressions",
+            pos.line,
+            pos.col,
+        )),
     }
 }
 

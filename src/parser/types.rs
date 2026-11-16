@@ -72,7 +72,12 @@ impl Parser {
     pub fn parse_type(&mut self) -> Result<Type, CompileError> {
         let _guard = self.enter_type()?;
         let base_type = self.parse_specifier_type_inner()?;
-        self.parse_declarator_prefix(&base_type)
+        let ty = self.parse_declarator_prefix(&base_type)?;
+        if self.is_function_pointer_declarator_ahead() {
+            let (fn_ptr_ty, _) = self.parse_function_pointer_declarator(ty, None)?;
+            return Ok(fn_ptr_ty);
+        }
+        Ok(ty)
     }
 
     /// Parses the type specifiers of a declaration: the builtin or named type
@@ -168,7 +173,7 @@ impl Parser {
         name_error: &str,
     ) -> Result<(Type, String), CompileError> {
         let ty = self.parse_declarator_prefix(specifiers)?;
-        if self.peek() == &TokenKind::LParen && self.peek_ahead(1) == &TokenKind::Star {
+        if self.is_function_pointer_declarator_ahead() {
             return self.parse_function_pointer_declarator(ty, Some(name_error));
         }
         let tok = self.advance().clone();
@@ -188,6 +193,14 @@ impl Parser {
     ) -> Result<Type, CompileError> {
         let mut ty = specifiers.clone();
         loop {
+            if self.is_member_pointer_prefix_ahead_from(0) {
+                let class_name = self.parse_member_pointer_class_prefix()?;
+                ty = Type::MemberPointer {
+                    class_name,
+                    member_type: Box::new(ty),
+                };
+                continue;
+            }
             match self.peek() {
                 TokenKind::Star => {
                     self.advance();

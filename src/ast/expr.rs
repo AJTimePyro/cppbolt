@@ -57,6 +57,8 @@ pub enum BinaryOp {
     Gt,
     Ge,
     Comma,
+    DotStar,
+    ArrowStar,
 }
 
 impl BinaryOp {
@@ -79,6 +81,7 @@ impl BinaryOp {
             BinaryOp::Gt => Some("operator>"),
             BinaryOp::Ge => Some("operator>="),
             BinaryOp::Comma => Some("operator,"),
+            BinaryOp::ArrowStar => Some("operator->*"),
             _ => None,
         }
     }

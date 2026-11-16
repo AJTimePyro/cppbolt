@@ -485,3 +485,5 @@ impl Parser {
 mod tests;
 #[cfg(test)]
 mod tests_fold;
+#[cfg(test)]
+mod tests_member_ptr;

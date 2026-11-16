@@ -444,6 +444,9 @@ impl<'a> Codegen<'a> {
                 code.push(OP_I32_OR);
             }
             BinaryOp::Comma => {}
+            BinaryOp::DotStar | BinaryOp::ArrowStar => {
+                unimplemented!("pointer-to-member operations are handled separately")
+            }
         }
     }
 }

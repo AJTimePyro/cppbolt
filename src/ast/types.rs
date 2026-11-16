@@ -47,6 +47,10 @@ pub enum Type {
         return_type: Box<Type>,
         param_types: Vec<Type>,
     },
+    MemberPointer {
+        class_name: String,
+        member_type: Box<Type>,
+    },
     PackExpansion(Box<Type>),
     Aligned(Box<Type>, usize),
     DependentAlignas(Box<Type>, String),
@@ -76,6 +80,7 @@ impl Type {
                 | Type::Double
                 | Type::Nullptr
                 | Type::Pointer(_)
+                | Type::MemberPointer { .. }
                 | Type::Enum(_)
         )
     }
@@ -132,6 +137,13 @@ impl Type {
             Type::TemplateInstance { name, args } => Type::TemplateInstance {
                 name: name.clone(),
                 args: args.iter().map(|a| a.strip_all_const()).collect(),
+            },
+            Type::MemberPointer {
+                class_name,
+                member_type,
+            } => Type::MemberPointer {
+                class_name: class_name.clone(),
+                member_type: Box::new(member_type.strip_all_const()),
             },
             Type::PackExpansion(inner) => Type::PackExpansion(Box::new(inner.strip_all_const())),
             other => other.clone(),
@@ -320,6 +332,9 @@ impl Type {
             | Type::NonType(_)
             | Type::DependentNonType(_)
             | Type::DependentArray(_, _) => 4,
+            Type::MemberPointer { member_type, .. } => {
+                if matches!(member_type.strip_const(), Type::Function { .. }) { 8 } else { 4 }
+            }
             Type::Function { .. } => 4,
             Type::PackExpansion(_) => 0,
             Type::Const(_) => unreachable!(),
@@ -356,6 +371,7 @@ impl Type {
             | Type::NonType(_)
             | Type::DependentNonType(_)
             | Type::DependentArray(_, _) => 4,
+                Type::MemberPointer { .. } => 4,
                 Type::Function { .. } => 4,
                 Type::PackExpansion(_) => 1,
                 Type::Const(_) => unreachable!(),
@@ -392,6 +408,7 @@ impl Type {
             | Type::NonType(_)
             | Type::DependentNonType(_)
             | Type::DependentArray(_, _)
+            | Type::MemberPointer { .. }
             | Type::Function { .. } => Some(WasmType::I32),
             Type::PackExpansion(_) => None,
             Type::Const(_) => unreachable!(),
@@ -438,6 +455,13 @@ impl Type {
             Type::Struct(name) | Type::Enum(name) => match name.as_str() {
                 "istream" | "ostream" | "ios_base" | "string" => format!("std::{}", name),
                 _ => name.clone(),
+            },
+            Type::MemberPointer { class_name, member_type } => match member_type.as_ref() {
+                Type::Function { return_type, param_types } => {
+                    let p = param_types.iter().map(|t| t.to_c_type()).collect::<Vec<_>>().join(", ");
+                    format!("{} ({}::*)({})", return_type.to_c_type(), class_name, p)
+                }
+                _ => format!("{} {}::*", member_type.to_c_type(), class_name),
             },
             Type::Function { .. } => "void (*)()".to_string(),
             Type::PackExpansion(inner) => format!("{}...", inner.to_c_type()),

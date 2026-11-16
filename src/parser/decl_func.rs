@@ -67,7 +67,7 @@ impl Parser {
             false
         };
         let (ptype, pname) =
-            if self.peek() == &TokenKind::LParen && self.peek_ahead(1) == &TokenKind::Star {
+            if self.is_function_pointer_declarator_ahead() {
                 self.parse_function_pointer_declarator(base_type, None)?
             } else {
                 let name = if let TokenKind::Ident(id) = self.peek().clone() {
@@ -110,7 +110,71 @@ impl Parser {
         })
     }
 
-    /// Parses `(*name)(args)` after the base type of a function pointer and
+    pub(super) fn is_member_pointer_prefix_ahead_from(&self, mut offset: usize) -> bool {
+        if self.peek_ahead(offset) == &TokenKind::ColonColon {
+            offset += 1;
+        }
+        match self.peek_ahead(offset) {
+            TokenKind::Ident(_) => offset += 1,
+            _ => return false,
+        }
+        while self.peek_ahead(offset) == &TokenKind::ColonColon {
+            offset += 1;
+            if self.peek_ahead(offset) == &TokenKind::Star {
+                return true;
+            }
+            match self.peek_ahead(offset) {
+                TokenKind::Ident(_) => offset += 1,
+                _ => return false,
+            }
+        }
+        false
+    }
+
+    pub(super) fn parse_member_pointer_class_prefix(&mut self) -> Result<String, CompileError> {
+        let mut class_name = String::new();
+        if self.peek() == &TokenKind::ColonColon {
+            self.advance();
+            class_name.push_str("::");
+        }
+        match &self.advance().kind {
+            TokenKind::Ident(id) => class_name.push_str(id),
+            _ => {
+                return Err(CompileError::new(
+                    "Expected class name in member pointer",
+                    self.current().line,
+                    self.current().col,
+                ));
+            }
+        }
+        while self.peek() == &TokenKind::ColonColon && self.peek_ahead(1) != &TokenKind::Star {
+            self.advance();
+            match &self.advance().kind {
+                TokenKind::Ident(sub) => {
+                    class_name.push_str("::");
+                    class_name.push_str(sub);
+                }
+                _ => {
+                    return Err(CompileError::new(
+                        "Expected identifier in qualified class name",
+                        self.current().line,
+                        self.current().col,
+                    ));
+                }
+            }
+        }
+        self.expect(TokenKind::ColonColon)?;
+        self.expect(TokenKind::Star)?;
+        Ok(class_name)
+    }
+
+    pub(super) fn is_function_pointer_declarator_ahead(&self) -> bool {
+        self.peek() == &TokenKind::LParen
+            && (self.peek_ahead(1) == &TokenKind::Star
+                || self.is_member_pointer_prefix_ahead_from(1))
+    }
+
+    /// Parses `(*name)(args)` or `(Class::*name)(args)` after the base type of a function pointer and
     /// returns the pointer-to-function type together with the name.
     ///
     /// `name_error` is the diagnostic for a missing name; `None` accepts an
@@ -121,7 +185,12 @@ impl Parser {
         name_error: Option<&str>,
     ) -> Result<(Type, String), CompileError> {
         self.advance();
-        self.advance();
+        let class_name = if self.is_member_pointer_prefix_ahead_from(0) {
+            Some(self.parse_member_pointer_class_prefix()?)
+        } else {
+            self.expect(TokenKind::Star)?;
+            None
+        };
         let name = match name_error {
             Some(message) => match self.advance().kind.clone() {
                 TokenKind::Ident(id) => id,
@@ -159,13 +228,18 @@ impl Parser {
             }
         }
         self.expect(TokenKind::RParen)?;
-        Ok((
-            Type::Pointer(Box::new(Type::Function {
-                return_type: Box::new(base_type),
-                param_types: fn_params,
-            })),
-            name,
-        ))
+        let fn_type = Type::Function {
+            return_type: Box::new(base_type),
+            param_types: fn_params,
+        };
+        let final_type = match class_name {
+            Some(cls) => Type::MemberPointer {
+                class_name: cls,
+                member_type: Box::new(fn_type),
+            },
+            None => Type::Pointer(Box::new(fn_type)),
+        };
+        Ok((final_type, name))
     }
 
     pub(super) fn parse_function_qualifiers(

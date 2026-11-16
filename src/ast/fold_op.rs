@@ -40,6 +40,7 @@ impl FoldOp {
                 BinaryOp::Gt => ">",
                 BinaryOp::Ge => ">=",
                 BinaryOp::Comma => ",",
+                BinaryOp::DotStar | BinaryOp::ArrowStar => unreachable!("not a fold-binary op"),
             },
             FoldOp::Assign => "=",
             FoldOp::Compound(op) => match op {
@@ -57,6 +58,16 @@ impl FoldOp {
             },
             FoldOp::DotStar => ".*",
             FoldOp::ArrowStar => "->*",
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn to_binary_op(self) -> Option<BinaryOp> {
+        match self {
+            FoldOp::Binary(op) => Some(op),
+            FoldOp::DotStar => Some(BinaryOp::DotStar),
+            FoldOp::ArrowStar => Some(BinaryOp::ArrowStar),
+            _ => None,
         }
     }
 }
