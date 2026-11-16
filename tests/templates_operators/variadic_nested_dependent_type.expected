@@ -1,0 +1,5 @@
+Outer=2 Inner=3 sum=3
+Outer=1 Inner=3 sum=70
+Outer=3 Inner=3 sum=70
+Outer=3 Inner=1 sum=300
+Outer=3 Inner=3 sum=300

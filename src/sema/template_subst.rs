@@ -27,9 +27,14 @@ pub fn substitute_type(
         }
         Type::Struct(name) => Ok(substitute_struct_type(name, mapping, injected_class)),
         Type::TemplateInstance { name, args } => {
+            let subst_name = if name.contains('<') {
+                substitute_template_name(name, mapping)
+            } else {
+                name.clone()
+            };
             let subst_args = expand_type_list(args, mapping)?;
             Ok(Type::TemplateInstance {
-                name: name.clone(),
+                name: subst_name,
                 args: subst_args,
             })
         }

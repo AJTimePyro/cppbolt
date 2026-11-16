@@ -368,6 +368,9 @@ impl Parser {
         }
         while self.peek() == &TokenKind::ColonColon {
             self.advance();
+            if self.peek() == &TokenKind::KwTemplate {
+                self.advance();
+            }
             if self.peek() == &TokenKind::Tilde {
                 self.advance();
                 match self.advance().kind.clone() {
@@ -422,11 +425,48 @@ impl Parser {
     }
 
     pub fn is_known_template(&self, name: &str) -> bool {
-        self.known_templates.contains(name)
+        if self.known_templates.contains(name)
             || self
                 .known_templates
                 .contains(QualifiedName::new(name).plain())
+        {
+            return true;
+        }
+        if name.contains('<') {
+            let stripped = strip_template_args(name);
+            if self.known_templates.contains(&stripped)
+                || self
+                    .known_templates
+                    .contains(QualifiedName::new(&stripped).plain())
+            {
+                return true;
+            }
+        }
+        if let Some(short) = name.rsplit("::").next()
+            && short != name
+            && self.known_templates.contains(short)
+        {
+            return true;
+        }
+        false
     }
+}
+
+pub(crate) fn strip_template_args(name: &str) -> String {
+    let mut out = String::with_capacity(name.len());
+    let mut depth: usize = 0;
+    for ch in name.chars() {
+        match ch {
+            '<' => depth += 1,
+            '>' => depth = depth.saturating_sub(1),
+            _ if depth == 0 => out.push(ch),
+            _ => {}
+        }
+    }
+    out
+}
+
+impl Parser {
 
     pub fn parse_program(&mut self) -> Result<Program, CompileError> {
         let mut declarations = Vec::new();

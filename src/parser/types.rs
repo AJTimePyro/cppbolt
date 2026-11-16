@@ -46,6 +46,7 @@ impl Parser {
                             || self.known_templates.contains(&full)
                             || self.type_aliases.contains_key(sub)
                             || self.type_aliases.contains_key(&full)
+                            || self.is_active_type_param(id)
                     } else {
                         false
                     }
@@ -353,7 +354,10 @@ impl Parser {
                     ));
                 }
                 let id = self.resolve_namespace_alias(&raw_id);
-                if (self.is_active_type_param(&id) || self.is_known_template(&id))
+                if (self.is_active_type_param(&id)
+                    || self.is_known_template(&id)
+                    || self.is_template_member_type(&id)
+                    || is_typename)
                     && self.peek() == &TokenKind::Lt
                 {
                     let args = self.parse_template_args()?;
@@ -388,34 +392,37 @@ impl Parser {
                     Type::Struct(format!("{}::{}", ns, id))
                 } else if self.known_types.contains(&id) {
                     Type::Struct(id)
-                } else if QualifiedName::new(&id).in_std() {
-                    let plain = QualifiedName::new(&id).plain();
-                    if self.known_types.contains(plain) {
-                        Type::Struct(plain.to_string())
-                    } else {
-                        return Err(CompileError::new(
-                            format!("Unknown type '{}'", id),
-                            self.current().line,
-                            self.current().col,
-                        ));
-                    }
-                } else if self.allow_unknown_types
-                    || is_typename
-                    || self.known_types.contains(&format!("std::{}", id))
-                    || self.is_template_member_type(&id)
-                {
-                    Type::Struct(id)
                 } else {
-                    return Err(CompileError::new(
-                        format!("Unknown type '{}'", id),
-                        self.current().line,
-                        self.current().col,
-                    ));
+                    self.resolve_named_struct_fallback(&id, is_typename, (self.current().line, self.current().col))?
                 }
             }
             _ => unreachable!(),
         };
         Ok(ty)
+    }
+
+    fn resolve_named_struct_fallback(
+        &self,
+        id: &str,
+        is_typename: bool,
+        pos: (usize, usize),
+    ) -> Result<Type, CompileError> {
+        let (line, col) = pos;
+        if QualifiedName::new(id).in_std() {
+            let plain = QualifiedName::new(id).plain();
+            if self.known_types.contains(plain) {
+                return Ok(Type::Struct(plain.to_string()));
+            }
+            return Err(CompileError::new(format!("Unknown type '{}'", id), line, col));
+        }
+        if self.allow_unknown_types
+            || is_typename
+            || self.known_types.contains(&format!("std::{}", id))
+            || self.is_template_member_type(id)
+        {
+            return Ok(Type::Struct(id.to_string()));
+        }
+        Err(CompileError::new(format!("Unknown type '{}'", id), line, col))
     }
 
     pub(super) fn is_template_member_type(&self, id: &str) -> bool {
