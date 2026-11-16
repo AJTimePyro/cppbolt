@@ -217,7 +217,10 @@ impl Sema {
         }
 
         if matches!(member_type.strip_const(), Type::Function { .. }) {
-            return Ok((**member_type).clone());
+            return Ok(Type::BoundMemberFunction {
+                class_name: target_class.clone(),
+                member_type: member_type.clone(),
+            });
         }
 
         let mut res_type = (**member_type).clone();

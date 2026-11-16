@@ -6,6 +6,7 @@ pub mod decl;
 pub mod expr;
 pub mod fold_op;
 pub mod stmt;
+mod type_display;
 pub mod template;
 pub mod types;
 

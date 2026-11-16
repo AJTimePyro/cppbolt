@@ -7,6 +7,7 @@ fn function_return_type(ty: &Type) -> Option<Type> {
     match ty.strip_const() {
         Type::Pointer(inner) => function_return_type(inner),
         Type::Function { return_type, .. } => Some((**return_type).clone()),
+        Type::BoundMemberFunction { member_type, .. } => function_return_type(member_type),
         _ => None,
     }
 }

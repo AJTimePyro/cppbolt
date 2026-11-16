@@ -51,6 +51,12 @@ pub enum Type {
         class_name: String,
         member_type: Box<Type>,
     },
+    /// The result of `obj.*pmf` when the member is a function: a bound member
+    /// function, which is only valid as the callee of a call expression.
+    BoundMemberFunction {
+        class_name: String,
+        member_type: Box<Type>,
+    },
     PackExpansion(Box<Type>),
     Aligned(Box<Type>, usize),
     DependentAlignas(Box<Type>, String),
@@ -335,7 +341,7 @@ impl Type {
             Type::MemberPointer { member_type, .. } => {
                 if matches!(member_type.strip_const(), Type::Function { .. }) { 8 } else { 4 }
             }
-            Type::Function { .. } => 4,
+            Type::Function { .. } | Type::BoundMemberFunction { .. } => 4,
             Type::PackExpansion(_) => 0,
             Type::Const(_) => unreachable!(),
             Type::Aligned(inner, _) | Type::DependentAlignas(inner, _) => inner.size_of(struct_sizes),
@@ -378,7 +384,7 @@ impl Type {
                         4
                     }
                 }
-                Type::Function { .. } => 4,
+                Type::Function { .. } | Type::BoundMemberFunction { .. } => 4,
                 Type::PackExpansion(_) => 1,
                 Type::Const(_) => unreachable!(),
                 Type::Aligned(..) | Type::DependentAlignas(..) => unreachable!(),
@@ -421,63 +427,11 @@ impl Type {
             | Type::NonType(_)
             | Type::DependentNonType(_)
             | Type::DependentArray(_, _)
-            | Type::Function { .. } => Some(WasmType::I32),
+            | Type::Function { .. }
+            | Type::BoundMemberFunction { .. } => Some(WasmType::I32),
             Type::PackExpansion(_) => None,
             Type::Const(_) => unreachable!(),
             Type::Aligned(inner, _) | Type::DependentAlignas(inner, _) => inner.to_wasm_type(),
-        }
-    }
-
-    pub fn to_c_type(&self) -> String {
-        match self {
-            Type::Const(inner) => format!("const {}", inner.to_c_type()),
-            Type::Void => "void".to_string(),
-            Type::Nullptr => "decltype(nullptr)".to_string(),
-            Type::Auto => "auto".to_string(),
-            Type::Bool => "bool".to_string(),
-            Type::Char => "char".to_string(),
-            Type::SignedChar => "signed char".to_string(),
-            Type::UnsignedChar => "unsigned char".to_string(),
-            Type::Short => "short".to_string(),
-            Type::UnsignedShort => "unsigned short".to_string(),
-            Type::Int => "int".to_string(),
-            Type::UnsignedInt => "unsigned int".to_string(),
-            Type::Long => "long".to_string(),
-            Type::UnsignedLong => "unsigned long".to_string(),
-            Type::LongLong => "long long".to_string(),
-            Type::UnsignedLongLong => "unsigned long long".to_string(),
-            Type::Float => "float".to_string(),
-            Type::Double => "double".to_string(),
-            Type::Pointer(inner) => format!("{} *", inner.to_c_type()),
-            Type::Reference(inner) => format!("{} &", inner.to_c_type()),
-            Type::RvalueReference(inner) => format!("{} &&", inner.to_c_type()),
-            Type::Array(inner, n) => format!("{}[{}]", inner.to_c_type(), n),
-            Type::DependentArray(inner, param) => format!("{}[{}]", inner.to_c_type(), param),
-            Type::NonType(n) => n.to_string(),
-            Type::DependentNonType(s) => s.clone(),
-            Type::TypeParam(name) => name.clone(),
-            Type::TemplateInstance { name, args } => {
-                let formatted = args
-                    .iter()
-                    .map(|a| a.to_c_type())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                format!("{}<{}>", name, formatted)
-            }
-            Type::Struct(name) | Type::Enum(name) => match name.as_str() {
-                "istream" | "ostream" | "ios_base" | "string" => format!("std::{}", name),
-                _ => name.clone(),
-            },
-            Type::MemberPointer { class_name, member_type } => match member_type.as_ref() {
-                Type::Function { return_type, param_types } => {
-                    let p = param_types.iter().map(|t| t.to_c_type()).collect::<Vec<_>>().join(", ");
-                    format!("{} ({}::*)({})", return_type.to_c_type(), class_name, p)
-                }
-                _ => format!("{} {}::*", member_type.to_c_type(), class_name),
-            },
-            Type::Function { .. } => "void (*)()".to_string(),
-            Type::PackExpansion(inner) => format!("{}...", inner.to_c_type()),
-            Type::Aligned(inner, _) | Type::DependentAlignas(inner, _) => inner.to_c_type(),
         }
     }
 }
