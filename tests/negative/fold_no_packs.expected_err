@@ -1,0 +1,1 @@
+tests/negative/fold_no_packs.cpp:3:12: error: pack expansion does not contain any unexpanded parameter packs

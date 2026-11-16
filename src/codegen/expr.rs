@@ -167,7 +167,9 @@ impl<'a> Codegen<'a> {
     ) -> Result<(), CompileError> {
         match expr {
             Expr::IntLiteral(val, ty) => {
-                if *ty == Type::LongLong || *ty == Type::UnsignedLongLong {
+                if *ty == Type::Void {
+                    // Empty void expression (e.g. empty fold over comma)
+                } else if *ty == Type::LongLong || *ty == Type::UnsignedLongLong {
                     code.push(OP_I64_CONST);
                     write_i64(code, *val);
                 } else {

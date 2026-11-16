@@ -1,0 +1,1 @@
+tests/negative/fold_packs_both_sides.cpp:3:12: error: binary fold expression has unexpanded parameter packs in both operands

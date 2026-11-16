@@ -91,6 +91,15 @@ c_basics_variant/types/sizeof_expr
 c_basics_variant/types/ternary_mixed_types
 c_basics_variant/types/unsigned_wrap
 c_basics_variant/types/value_init_scalar
+cxx17/fold_binary_left
+cxx17/fold_binary_right
+cxx17/fold_constexpr
+cxx17/fold_empty_pack
+cxx17/fold_nested
+cxx17/fold_nttp
+cxx17/fold_overloaded_op
+cxx17/fold_unary_left
+cxx17/fold_unary_right
 classes_oop/constructors_destructors/copy_semantics
 classes_oop/constructors_destructors/ctor_default_argument
 classes_oop/constructors_destructors/delegating_constructor
@@ -358,6 +367,10 @@ negative/error_directive
 negative/explicit_ctor_arg
 negative/explicit_ctor_copy_list
 negative/explicit_ctor_return
+negative/fold_empty_pack_invalid_op
+negative/fold_mismatched_ops
+negative/fold_no_packs
+negative/fold_packs_both_sides
 negative/func_arg_count_mismatch
 negative/function_base_to_derived_pointer
 negative/function_int_to_struct

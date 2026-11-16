@@ -25,6 +25,7 @@ pub const FEATURES: &[&str] = &[
     "mini_stl",
     "mini_stl_variant",
     "independent",
+    "cxx17",
 ];
 
 /// Lists the C++ sources of a directory, recursively traversing subdirectories.
