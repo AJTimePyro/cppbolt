@@ -90,16 +90,12 @@ impl<'a> Codegen<'a> {
         {
             if let Some(offset) = self.sema.base_subobject_offset(s_from, s_to) {
                 if offset != 0 {
-                    code.push(OP_I32_CONST);
-                    write_i32(code, offset as i32);
-                    code.push(OP_I32_ADD);
+                    self.emit_guarded_pointer_adjustment(offset, true, code);
                 }
                 return;
             } else if let Some(offset) = self.sema.base_subobject_offset(s_to, s_from) {
                 if offset != 0 {
-                    code.push(OP_I32_CONST);
-                    write_i32(code, offset as i32);
-                    code.push(OP_I32_SUB);
+                    self.emit_guarded_pointer_adjustment(offset, false, code);
                 }
                 return;
             }
@@ -110,6 +106,29 @@ impl<'a> Codegen<'a> {
         }
         Self::emit_scalar_conversion(from, to, code);
         emit_integer_narrowing(to, code);
+    }
+
+    fn emit_guarded_pointer_adjustment(&self, offset: usize, is_add: bool, code: &mut Vec<u8>) {
+        let s = self.current_scratch1.get();
+        if s != 0 {
+            code.push(OP_LOCAL_TEE);
+            write_u32(code, s);
+            code.push(OP_IF);
+            code.push(TYPE_I32);
+            code.push(OP_LOCAL_GET);
+            write_u32(code, s);
+            code.push(OP_I32_CONST);
+            write_i32(code, offset as i32);
+            code.push(if is_add { OP_I32_ADD } else { OP_I32_SUB });
+            code.push(OP_ELSE);
+            code.push(OP_I32_CONST);
+            write_i32(code, 0);
+            code.push(OP_END);
+        } else {
+            code.push(OP_I32_CONST);
+            write_i32(code, offset as i32);
+            code.push(if is_add { OP_I32_ADD } else { OP_I32_SUB });
+        }
     }
 
     fn emit_bool_conversion(from: &Type, code: &mut Vec<u8>) {

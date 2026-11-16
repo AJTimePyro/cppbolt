@@ -60,5 +60,14 @@ int main() {
     std::printf("downcast: from_b2=%d from_b3=%d\n",
                 from_b2->get_all(), from_b3->get_all());
 
+    Derived* null_d = nullptr;
+    Base2* null_b2 = null_d;
+    Base3* null_b3 = static_cast<Base3*>(null_d);
+    Derived* back_null = static_cast<Derived*>(null_b2);
+    std::printf("null: b2=%d b3=%d back=%d\n",
+                null_b2 == nullptr ? 1 : 0,
+                null_b3 == nullptr ? 1 : 0,
+                back_null == nullptr ? 1 : 0);
+
     return 0;
 }

@@ -12,6 +12,7 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        self.current_scratch1.set(ctx.scratch1);
         let inits = self.global_inits.clone();
         for (gname, gty, init_opt) in inits {
             let Some(&goffset) = self.global_offsets.get(&gname) else {

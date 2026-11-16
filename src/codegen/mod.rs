@@ -87,6 +87,7 @@ pub struct Codegen<'a> {
     /// so a diagnostic never points at a fabricated line and column.
     pub current_line: usize,
     pub current_col: usize,
+    pub current_scratch1: std::cell::Cell<u32>,
     depth: crate::depth::DepthCounters,
 }
 
@@ -157,6 +158,7 @@ impl<'a> Codegen<'a> {
             func_table_indices: HashMap::new(),
             current_line: 1,
             current_col: 1,
+            current_scratch1: std::cell::Cell::new(0),
             max_memory_mb: 256,
             depth: crate::depth::DepthCounters::new(),
         }

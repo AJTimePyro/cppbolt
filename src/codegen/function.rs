@@ -9,6 +9,7 @@ impl<'a> Codegen<'a> {
     ) -> Result<FuncBody, CompileError> {
         let mut code = Vec::new();
         let (locals, mut ctx) = Self::function_context(f, class_name.as_deref());
+        self.current_scratch1.set(ctx.scratch1);
 
         Self::emit_prologue(&mut ctx, &mut code);
 
