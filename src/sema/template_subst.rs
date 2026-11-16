@@ -106,23 +106,18 @@ fn substitute_modified_type(
                 Ok(Some(Type::Const(Box::new(subst))))
             }
         }
-        Type::Pointer(inner) => Ok(Some(Type::Pointer(Box::new(substitute_type(
-            inner,
-            mapping,
-            injected_class,
-        )?)))),
-        Type::Reference(inner) => Ok(Some(collapse_reference(
-            false,
-            substitute_type(inner, mapping, injected_class)?,
-        ))),
-        Type::RvalueReference(inner) => Ok(Some(collapse_reference(
-            true,
-            substitute_type(inner, mapping, injected_class)?,
-        ))),
-        Type::Array(inner, size) => Ok(Some(Type::Array(
-            Box::new(substitute_type(inner, mapping, injected_class)?),
-            *size,
-        ))),
+        Type::Pointer(inner) => Ok(Some(Type::Pointer(Box::new(substitute_type(inner, mapping, injected_class)?)))),
+        Type::Reference(inner) => Ok(Some(collapse_reference(false, substitute_type(inner, mapping, injected_class)?))),
+        Type::RvalueReference(inner) => Ok(Some(collapse_reference(true, substitute_type(inner, mapping, injected_class)?))),
+        Type::Array(inner, size) => Ok(Some(Type::Array(Box::new(substitute_type(inner, mapping, injected_class)?), *size))),
+        Type::MemberPointer { class_name, member_type } => {
+            let cls = match mapping.get(class_name) {
+                Some(TemplateArg::Type(Type::Struct(s) | Type::TypeParam(s))) => s.clone(),
+                _ => class_name.clone(),
+            };
+            let mty = substitute_type(member_type, mapping, injected_class)?;
+            Ok(Some(Type::MemberPointer { class_name: cls, member_type: Box::new(mty) }))
+        }
         _ => Ok(None),
     }
 }

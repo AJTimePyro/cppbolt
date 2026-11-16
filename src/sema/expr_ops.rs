@@ -20,6 +20,11 @@ impl Sema {
         if *op == BinaryOp::Comma {
             return rty.clone();
         }
+        if *op == BinaryOp::DotStar || *op == BinaryOp::ArrowStar {
+            return self
+                .check_member_pointer_binary(*op, lty, rty, ExprPos::default())
+                .unwrap_or(Type::Int);
+        }
 
         let (l_clean, r_clean) = (
             lty.strip_reference().strip_const(),
@@ -110,6 +115,10 @@ impl Sema {
         let mut lty = self.analyze_expr(&mut base)?;
         for (op, right, pos) in spine.iter_mut().rev() {
             let mut rty = self.analyze_expr(right)?;
+            if *op == BinaryOp::DotStar || *op == BinaryOp::ArrowStar {
+                lty = self.check_member_pointer_binary(*op, &lty, &rty, *pos)?;
+                continue;
+            }
             self.apply_binary_conversions(*op, (&mut base, &mut lty), (right, &mut rty), *pos);
             // Adding two pointers is not a C++ expression.
             if *op == BinaryOp::Add
@@ -189,6 +198,13 @@ impl Sema {
                 "unexpected expression kind"
             ));
         };
+
+        if *op == UnaryOp::AddrOf
+            && let Expr::Identifier(name) = expr.as_ref()
+            && let Some(mp_type) = self.try_resolve_member_pointer_address(name, *pos)?
+        {
+            return Ok(mp_type);
+        }
 
         let ty = self.analyze_expr(expr)?;
         match op {

@@ -11,15 +11,16 @@ use std::collections::HashMap;
 pub fn type_has_template_param(ty: &Type) -> bool {
     match ty {
         Type::TypeParam(_) => true,
-        Type::Pointer(inner)
-        | Type::Reference(inner)
-        | Type::RvalueReference(inner)
-        | Type::Const(inner)
-        | Type::PackExpansion(inner)
-        | Type::Array(inner, _) => type_has_template_param(inner),
+        Type::Pointer(inner) | Type::Reference(inner) | Type::RvalueReference(inner)
+        | Type::Const(inner) | Type::PackExpansion(inner) | Type::Array(inner, _) => {
+            type_has_template_param(inner)
+        }
         Type::TemplateInstance { args, .. } => args.iter().any(type_has_template_param),
         Type::Function { return_type, param_types } => {
             type_has_template_param(return_type) || param_types.iter().any(type_has_template_param)
+        }
+        Type::MemberPointer { class_name, member_type } => {
+            !class_name.contains("::") || type_has_template_param(member_type)
         }
         _ => false,
     }
@@ -28,24 +29,22 @@ pub fn type_has_template_param(ty: &Type) -> bool {
 fn collect_type_param_names(ty: &Type, out: &mut Vec<String>) {
     match ty {
         Type::TypeParam(name) => out.push(name.clone()),
-        Type::Pointer(inner)
-        | Type::Reference(inner)
-        | Type::RvalueReference(inner)
-        | Type::Const(inner)
-        | Type::PackExpansion(inner)
-        | Type::Array(inner, _) => {
+        Type::Pointer(inner) | Type::Reference(inner) | Type::RvalueReference(inner)
+        | Type::Const(inner) | Type::PackExpansion(inner) | Type::Array(inner, _) => {
             collect_type_param_names(inner, out);
         }
         Type::TemplateInstance { args, .. } => {
-            for a in args {
-                collect_type_param_names(a, out);
-            }
+            for a in args { collect_type_param_names(a, out); }
         }
         Type::Function { return_type, param_types } => {
             collect_type_param_names(return_type, out);
-            for p in param_types {
-                collect_type_param_names(p, out);
+            for p in param_types { collect_type_param_names(p, out); }
+        }
+        Type::MemberPointer { class_name, member_type } => {
+            if !class_name.contains("::") {
+                out.push(class_name.clone());
             }
+            collect_type_param_names(member_type, out);
         }
         _ => {}
     }
@@ -148,6 +147,12 @@ pub fn deduce_type(
                 }
             }
         }
+        Type::MemberPointer {
+            class_name,
+            member_type,
+        } => {
+            deduce_member_pointer(class_name, member_type, arg_ty, deduced, pos)?;
+        }
         Type::Array(inner, size) => {
             if let Type::Array(arg_inner, arg_size) = arg_ty.strip_reference().strip_const()
                 && size == arg_size
@@ -173,6 +178,34 @@ pub fn deduce_type(
         _ => {}
     }
     Ok(())
+}
+
+fn deduce_member_pointer(
+    class_name: &str,
+    member_type: &Type,
+    arg_ty: &Type,
+    deduced: &mut HashMap<String, TemplateArg>,
+    pos: ExprPos,
+) -> Result<(), CompileError> {
+    let stripped = arg_ty.strip_reference().strip_const();
+    if let Type::MemberPointer { class_name: arg_class, member_type: arg_member } = stripped {
+        if deduced.contains_key(class_name) || !class_name.contains("::") {
+            let _ = deduce_type(
+                &Type::TypeParam(class_name.to_string()),
+                &Type::Struct(arg_class.clone()),
+                deduced,
+                true,
+                pos,
+            );
+        }
+        deduce_type(member_type, arg_member, deduced, true, pos)
+    } else {
+        Err(CompileError::new(
+            "type mismatch in deduction: expected pointer-to-member".to_string(),
+            pos.line,
+            pos.col,
+        ))
+    }
 }
 
 fn deduce_function(

@@ -19,6 +19,7 @@ mod init_aggregate;
 mod init_list;
 mod layout;
 mod lookup;
+mod member_pointer;
 mod overload;
 pub mod pack_expansion;
 mod stmt;
@@ -50,6 +51,8 @@ pub mod fold_expansion;
 mod fold_tests;
 #[cfg(test)]
 mod pack_expansion_tests;
+#[cfg(test)]
+mod member_ptr_tests;
 #[cfg(test)]
 mod tests;
 
