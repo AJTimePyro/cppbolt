@@ -151,6 +151,7 @@ pub struct VarSymbol {
 pub struct Scope {
     pub vars: HashMap<String, VarSymbol>,
     pub namespace_aliases: HashMap<String, String>,
+    pub type_aliases: HashMap<String, Type>,
 }
 
 pub struct Sema {
@@ -333,6 +334,7 @@ impl Sema {
         self.scopes.push(Scope {
             vars: HashMap::new(),
             namespace_aliases: HashMap::new(),
+            type_aliases: HashMap::new(),
         });
     }
 
@@ -439,6 +441,16 @@ impl Sema {
         None
     }
 
+    pub fn lookup_type_alias(&self, name: &str) -> Option<Type> {
+        let plain = QualifiedName::new(name).plain();
+        for scope in self.scopes.iter().rev() {
+            if let Some(ty) = scope.type_aliases.get(name).or_else(|| scope.type_aliases.get(plain)) {
+                return Some(ty.clone());
+            }
+        }
+        self.type_aliases.get(name).or_else(|| self.type_aliases.get(plain)).cloned()
+    }
+
     /// Resolves leading namespace aliases in `name` to the canonical namespace.
     pub fn resolve_alias_in_qualified_name(&self, name: &str) -> String {
         let mut current = name.to_string();
@@ -452,10 +464,18 @@ impl Sema {
                     current = format!("{}::{}", target, suffix);
                     matched = true;
                     break;
+                } else if let Some(target_ty) = self.lookup_type_alias(&prefix) {
+                    let suffix = parts[i..].join("::");
+                    current = format!("{}::{}", target_ty.to_c_type(), suffix);
+                    matched = true;
+                    break;
                 }
             }
             if !matched && let Some(target) = self.lookup_namespace_alias(&current) {
                 current = target.clone();
+                matched = true;
+            } else if !matched && let Some(target_ty) = self.lookup_type_alias(&current) {
+                current = target_ty.to_c_type();
                 matched = true;
             }
             if !matched {

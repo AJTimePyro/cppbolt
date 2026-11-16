@@ -99,6 +99,9 @@ pub fn substitute_stmt(
                 substitute_expr(init_e, mapping, injected_class)?;
             }
         }
+        StmtKind::TypeAlias { ty, .. } => {
+            *ty = substitute_type(ty, mapping, injected_class)?;
+        }
         StmtKind::Return(None)
         | StmtKind::Break
         | StmtKind::Continue

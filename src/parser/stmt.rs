@@ -84,8 +84,16 @@ impl Parser {
             Ok(Stmt::new(StmtKind::UsingNamespace(ns), line, col))
         } else {
             let name = self.parse_qualified_name()?;
-            self.expect(TokenKind::Semi)?;
-            Ok(Stmt::new(StmtKind::UsingDecl(name), line, col))
+            if self.peek() == &TokenKind::Assign {
+                self.advance();
+                let ty = self.parse_type()?;
+                self.expect(TokenKind::Semi)?;
+                self.known_types.insert(name.clone());
+                Ok(Stmt::new(StmtKind::TypeAlias { name, ty }, line, col))
+            } else {
+                self.expect(TokenKind::Semi)?;
+                Ok(Stmt::new(StmtKind::UsingDecl(name), line, col))
+            }
         }
     }
 

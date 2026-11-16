@@ -121,6 +121,7 @@ impl Sema {
             | StmtKind::UsingNamespace(_)
             | StmtKind::UsingDecl(_)
             | StmtKind::NamespaceAlias { .. }
+            | StmtKind::TypeAlias { .. }
             | StmtKind::Expr(_) => {}
             StmtKind::Return(expr_opt) => {
                 self.analyze_return(expr_opt, stmt.line, stmt.col)?;
@@ -192,6 +193,12 @@ impl Sema {
                 let resolved = self.resolve_alias_in_qualified_name(name);
                 let short = resolved.split("::").last().unwrap_or(&resolved).to_string();
                 self.using_decls.insert(short, resolved);
+            }
+            StmtKind::TypeAlias { name, ty } => {
+                self.resolve_and_instantiate_type(ty, self.current_line, self.current_col)?;
+                if let Some(scope) = self.scopes.last_mut() {
+                    scope.type_aliases.insert(name.clone(), ty.clone());
+                }
             }
             StmtKind::Expr(expr) => {
                 self.analyze_expr(expr)?;

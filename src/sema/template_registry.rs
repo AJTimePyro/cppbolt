@@ -116,13 +116,7 @@ impl Sema {
         line: usize,
         col: usize,
     ) -> Result<(), CompileError> {
-        let plain = QualifiedName::new(sname).plain();
-        if let Some(alias) = self
-            .type_aliases
-            .get(sname)
-            .cloned()
-            .or_else(|| self.type_aliases.get(plain).cloned())
-        {
+        if let Some(alias) = self.lookup_type_alias(sname) {
             *ty = alias;
             return Ok(());
         }
@@ -145,11 +139,8 @@ impl Sema {
                     let member = &sname[gt_pos + 3..];
                     let canon = format!("{inst}::{member}");
                     if let Some(alias) = self
-                        .type_aliases
-                        .get(&canon)
-                        .cloned()
-                        .or_else(|| self.type_aliases.get(sname).cloned())
-                        .or_else(|| self.type_aliases.get(plain).cloned())
+                        .lookup_type_alias(&canon)
+                        .or_else(|| self.lookup_type_alias(sname))
                     {
                         *ty = alias;
                     } else if self.struct_layouts.contains_key(&canon) {
