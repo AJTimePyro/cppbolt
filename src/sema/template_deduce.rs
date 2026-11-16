@@ -230,6 +230,11 @@ pub fn deduce_template_arguments(
         let mut pack_types = explicit_pack;
         pack_types.extend(deduced_pack);
         result.insert(pack_name, TemplateArg::TypePack(pack_types));
+    } else if has_t_pack
+        && !explicit_pack.is_empty()
+        && let Some(last_p) = template_params.last()
+    {
+        result.insert(last_p.name.clone(), TemplateArg::TypePack(explicit_pack));
     }
 
     fill_missing_deduced(template_params, &mut result, pos)?;

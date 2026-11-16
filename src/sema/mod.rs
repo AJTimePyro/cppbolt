@@ -42,6 +42,7 @@ mod template_subst_func;
 mod template_subst_array;
 mod template_subst_lambda;
 mod template_subst_align;
+mod template_subst_nontype;
 mod template_name;
 mod template_subst_stmt;
 #[cfg(test)]

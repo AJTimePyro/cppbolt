@@ -1,0 +1,1 @@
+tests/negative/variadic_nttp_non_pack.cpp:12:5: error: 'T' does not refer to the name of a parameter pack

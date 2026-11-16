@@ -22,11 +22,11 @@ pub fn substitute_template_name(name: &str, mapping: &HashMap<String, TemplateAr
             }
             TemplateArg::TypePack(types) => {
                 let joined = types.iter().map(|t| t.to_c_type()).collect::<Vec<_>>().join(", ");
-                result = substitute_pack_string(result, param, &joined);
+                result = substitute_pack_string(result, param, &joined, types.len());
             }
             TemplateArg::NonTypePack(vals) => {
                 let joined = vals.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(", ");
-                result = substitute_pack_string(result, param, &joined);
+                result = substitute_pack_string(result, param, &joined, vals.len());
             }
         }
     }
@@ -41,15 +41,25 @@ pub fn substitute_template_name(name: &str, mapping: &HashMap<String, TemplateAr
     format!("{}<{}>{}", subst_base, clean, suffix)
 }
 
-fn substitute_pack_string(result: String, param: &str, joined: &str) -> String {
+fn substitute_pack_string(result: String, param: &str, joined: &str, pack_len: usize) -> String {
+    let sizeof_pack = format!("sizeof...({param})");
+    let sizeof_pack_space = format!("sizeof... ({param})");
+    let len_str = pack_len.to_string();
+    let mut res = result;
+    if res.contains(&sizeof_pack) {
+        res = res.replace(&sizeof_pack, &len_str);
+    }
+    if res.contains(&sizeof_pack_space) {
+        res = res.replace(&sizeof_pack_space, &len_str);
+    }
     let with_ellipsis = format!("{param}...");
     let with_space = format!("{param} ...");
-    if result.contains(&with_ellipsis) {
-        result.replace(&with_ellipsis, joined)
-    } else if result.contains(&with_space) {
-        result.replace(&with_space, joined)
+    if res.contains(&with_ellipsis) {
+        res.replace(&with_ellipsis, joined)
+    } else if res.contains(&with_space) {
+        res.replace(&with_space, joined)
     } else {
-        replace_whole_word(&result, param, joined)
+        replace_whole_word(&res, param, joined)
     }
 }
 
@@ -70,7 +80,7 @@ fn clean_template_arg_string(s: &str) -> String {
             ',' if depth == 0 => {
                 let trimmed = current.trim();
                 if !trimmed.is_empty() {
-                    parts.push(trimmed.to_string());
+                    parts.push(simplify_arg_str(trimmed));
                 }
                 current.clear();
             }
@@ -79,9 +89,23 @@ fn clean_template_arg_string(s: &str) -> String {
     }
     let trimmed = current.trim();
     if !trimmed.is_empty() {
-        parts.push(trimmed.to_string());
+        parts.push(simplify_arg_str(trimmed));
     }
     parts.join(", ")
+}
+
+fn simplify_arg_str(part: &str) -> String {
+    let mut lexer = crate::lexer::Lexer::new(part);
+    if let Ok(tokens) = lexer.tokenize() {
+        let mut parser = crate::parser::Parser::new(tokens);
+        if let Ok(expr) = parser.parse_expr()
+            && parser.peek() == &crate::lexer::TokenKind::Eof
+            && let Ok(val) = crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None)
+        {
+            return val.to_string();
+        }
+    }
+    part.to_string()
 }
 
 fn replace_whole_word(text: &str, word: &str, replacement: &str) -> String {

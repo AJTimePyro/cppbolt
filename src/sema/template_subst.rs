@@ -18,6 +18,9 @@ pub fn substitute_type(
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
 ) -> Result<Type, CompileError> {
+    if let Some(res) = substitute_modified_type(ty, mapping, injected_class)? {
+        return Ok(res);
+    }
     match ty {
         Type::TypeParam(name) => {
             super::template_subst_align::substitute_type_param(name, ty, mapping)
@@ -30,31 +33,6 @@ pub fn substitute_type(
                 args: subst_args,
             })
         }
-        Type::Const(inner) => {
-            let subst_inner = substitute_type(inner, mapping, injected_class)?;
-            if subst_inner.is_reference() {
-                Ok(subst_inner)
-            } else {
-                Ok(Type::Const(Box::new(subst_inner)))
-            }
-        }
-        Type::Pointer(inner) => Ok(Type::Pointer(Box::new(substitute_type(
-            inner,
-            mapping,
-            injected_class,
-        )?))),
-        Type::Reference(inner) => Ok(collapse_reference(
-            false,
-            substitute_type(inner, mapping, injected_class)?,
-        )),
-        Type::RvalueReference(inner) => Ok(collapse_reference(
-            true,
-            substitute_type(inner, mapping, injected_class)?,
-        )),
-        Type::Array(inner, size) => Ok(Type::Array(
-            Box::new(substitute_type(inner, mapping, injected_class)?),
-            *size,
-        )),
         Type::DependentArray(inner, param_name) => {
             let subst_inner = substitute_type(inner, mapping, injected_class)?;
             let size = super::template_subst_array::evaluate_dependent_array_size(
@@ -85,7 +63,49 @@ pub fn substitute_type(
             Box::new(substitute_type(inner, mapping, injected_class)?),
             *align,
         )),
+        Type::DependentNonType(expr_str) => {
+            super::template_subst_nontype::evaluate_dependent_nontype(
+                expr_str,
+                mapping,
+                injected_class,
+            )
+        }
         _ => Ok(ty.clone()),
+    }
+}
+
+fn substitute_modified_type(
+    ty: &Type,
+    mapping: &HashMap<String, TemplateArg>,
+    injected_class: Option<(&str, &Type)>,
+) -> Result<Option<Type>, CompileError> {
+    match ty {
+        Type::Const(inner) => {
+            let subst = substitute_type(inner, mapping, injected_class)?;
+            if subst.is_reference() {
+                Ok(Some(subst))
+            } else {
+                Ok(Some(Type::Const(Box::new(subst))))
+            }
+        }
+        Type::Pointer(inner) => Ok(Some(Type::Pointer(Box::new(substitute_type(
+            inner,
+            mapping,
+            injected_class,
+        )?)))),
+        Type::Reference(inner) => Ok(Some(collapse_reference(
+            false,
+            substitute_type(inner, mapping, injected_class)?,
+        ))),
+        Type::RvalueReference(inner) => Ok(Some(collapse_reference(
+            true,
+            substitute_type(inner, mapping, injected_class)?,
+        ))),
+        Type::Array(inner, size) => Ok(Some(Type::Array(
+            Box::new(substitute_type(inner, mapping, injected_class)?),
+            *size,
+        ))),
+        _ => Ok(None),
     }
 }
 

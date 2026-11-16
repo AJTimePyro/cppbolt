@@ -9,11 +9,14 @@ enum ArrayDim {
     Dependent(String),
 }
 
-fn expr_to_dependent_str(expr: &Expr) -> Option<String> {
+pub(crate) fn expr_to_dependent_str(expr: &Expr) -> Option<String> {
     match expr {
         Expr::Identifier(id) => Some(id.clone()),
         Expr::IntLiteral(val, _) => Some(val.to_string()),
         Expr::SizeofPack { name, .. } => Some(format!("sizeof...({name})")),
+        Expr::SizeofType(ty) => Some(format!("sizeof({})", ty.to_c_type())),
+        Expr::AlignofType(ty) => Some(format!("alignof({})", ty.to_c_type())),
+        Expr::Cast { expr: inner, .. } => expr_to_dependent_str(inner),
         Expr::Unary { op, expr, .. } => {
             let inner = expr_to_dependent_str(expr)?;
             let sym = match op {

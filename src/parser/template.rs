@@ -168,8 +168,17 @@ impl Parser {
         self.in_template_arg = saved_in_template;
         self.template_arg_paren_depth = saved_depth;
         let expr = expr_res?;
-        let val = crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None)?;
-        Ok(Type::NonType(val))
+        match crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None) {
+            Ok(val) => Ok(Type::NonType(val)),
+            Err(err) => {
+                let is_dep = !self.active_type_params.is_empty() || has_pack_in_expr(&expr);
+                if is_dep && let Some(dep_str) = super::types_array::expr_to_dependent_str(&expr) {
+                    Ok(Type::DependentNonType(dep_str))
+                } else {
+                    Err(err)
+                }
+            }
+        }
     }
 
     pub(super) fn consume_template_closing_gt(&mut self) -> Result<(), CompileError> {
@@ -436,5 +445,15 @@ impl Parser {
                 return true;
             }
         }
+    }
+}
+
+fn has_pack_in_expr(expr: &crate::ast::expr::Expr) -> bool {
+    use crate::ast::expr::Expr;
+    match expr {
+        Expr::SizeofPack { .. } | Expr::PackExpansion { .. } => true,
+        Expr::Unary { expr: inner, .. } | Expr::Cast { expr: inner, .. } => has_pack_in_expr(inner),
+        Expr::Binary { left, right, .. } => has_pack_in_expr(left) || has_pack_in_expr(right),
+        _ => false,
     }
 }

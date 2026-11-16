@@ -35,6 +35,7 @@ pub enum Type {
     Array(Box<Type>, usize),
     DependentArray(Box<Type>, String),
     NonType(i128),
+    DependentNonType(String),
     Struct(String),
     Enum(String),
     TypeParam(String),
@@ -315,7 +316,10 @@ impl Type {
                 .get(name)
                 .or_else(|| struct_sizes.get(QualifiedName::new(name).plain()))
                 .unwrap_or(&4),
-            Type::TypeParam(_) | Type::NonType(_) | Type::DependentArray(_, _) => 4,
+            Type::TypeParam(_)
+            | Type::NonType(_)
+            | Type::DependentNonType(_)
+            | Type::DependentArray(_, _) => 4,
             Type::Function { .. } => 4,
             Type::PackExpansion(_) => 0,
             Type::Const(_) => unreachable!(),
@@ -348,7 +352,10 @@ impl Type {
                     .get(name)
                     .or_else(|| struct_aligns.get(QualifiedName::new(name).plain()))
                     .unwrap_or(&4),
-                Type::TypeParam(_) | Type::NonType(_) | Type::DependentArray(_, _) => 4,
+                Type::TypeParam(_)
+            | Type::NonType(_)
+            | Type::DependentNonType(_)
+            | Type::DependentArray(_, _) => 4,
                 Type::Function { .. } => 4,
                 Type::PackExpansion(_) => 1,
                 Type::Const(_) => unreachable!(),
@@ -383,6 +390,7 @@ impl Type {
             | Type::TemplateInstance { .. }
             | Type::TypeParam(_)
             | Type::NonType(_)
+            | Type::DependentNonType(_)
             | Type::DependentArray(_, _)
             | Type::Function { .. } => Some(WasmType::I32),
             Type::PackExpansion(_) => None,
@@ -417,6 +425,7 @@ impl Type {
             Type::Array(inner, n) => format!("{}[{}]", inner.to_c_type(), n),
             Type::DependentArray(inner, param) => format!("{}[{}]", inner.to_c_type(), param),
             Type::NonType(n) => n.to_string(),
+            Type::DependentNonType(s) => s.clone(),
             Type::TypeParam(name) => name.clone(),
             Type::TemplateInstance { name, args } => {
                 let formatted = args

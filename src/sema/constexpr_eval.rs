@@ -130,7 +130,7 @@ pub fn eval_integral_constexpr_with_env(
                 Ok(*len as i128)
             } else {
                 Err(CompileError::new(
-                    format!("parameter pack '{}' not found in active pack mapping", name),
+                    format!("'{name}' does not refer to the name of a parameter pack"),
                     pos.line,
                     pos.col,
                 ))

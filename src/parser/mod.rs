@@ -25,7 +25,7 @@ mod struct_align;
 mod template;
 mod template_param;
 mod types;
-mod types_array;
+pub(crate) mod types_array;
 mod unsupported;
 
 /// Decrements the parser's nesting counter when a recursive parse completes,
