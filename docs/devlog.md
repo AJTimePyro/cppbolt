@@ -16,11 +16,15 @@ Resolved the remaining C++11 variadic template and multiple-inheritance defects 
 4. Resolved nested dependent type declarations in local scopes (`src/parser/mod.rs`, `src/parser/types.rs`, `src/sema/template_subst.rs`). The parser recognizes member templates and qualified dependent types without misclassifying `<` tokens as comparison expressions, and template substitution replaces qualifier template instances.
 5. Added local type alias declarations (`using Res = Target<Ts...>;`) and block-scoped resolution (`src/ast/stmt.rs`, `src/parser/stmt.rs`, `src/sema/mod.rs`, `src/sema/stmt.rs`, `src/sema/template_subst_stmt.rs`). Local aliases resolve inside their enclosing blocks without leaking to outer scopes.
 6. Expanded `alignas` pack handling to support `alignof(Ts)...` expressions and non-type packs (`src/parser/struct_align.rs`, `src/sema/template_subst_align.rs`), computing maximum required alignments across all expanded elements.
+7. Guarded multiple-inheritance pointer conversions to preserve null pointer values (`(Base2*)(Derived*)nullptr == nullptr`) without applying subobject offsets to zero addresses (`src/codegen/memory.rs`).
+8. Propagated composite struct alignments into dependent `alignas` evaluation, and threaded caller coordinates into type substitution errors (`src/sema/template_subst_align.rs`, `src/sema/pack_expansion.rs`, `src/sema/template_subst.rs`).
+9. Added `std::get<I>(tuple&&)` rvalue overloads and enabled nested template argument parsing in type lists (`stdlib/tuple`, `src/parser/types.rs`), permitting move extraction of move-only types from tuples.
 
 ### Verification Results
 
-- Test runner: 562/562 corpus tests passed, 0 failures.
+- Test runner: 563/563 corpus tests passed, 0 failures.
 - Unit tests: 119/119 unit tests passed, 0 failures.
+- Diagnostic positions harness: passed with zero fabricated coordinates.
 - Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
 - Differential verification: byte-for-byte output match against host native Clang in C++11 mode across positive test suites.
 - Clippy: 0 warnings under `-D warnings` across all targets.
