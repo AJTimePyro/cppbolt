@@ -1,0 +1,4 @@
+extract: 42
+extract_unary_left: 42
+extract_single: 10
+invoked: 50

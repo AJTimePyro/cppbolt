@@ -95,6 +95,8 @@ cxx17/fold_binary_left
 cxx17/fold_binary_right
 cxx17/fold_constexpr
 cxx17/fold_empty_pack
+cxx17/fold_member_pointer_arrow
+cxx17/fold_member_pointer_dot
 cxx17/fold_nested
 cxx17/fold_nttp
 cxx17/fold_overloaded_op
@@ -372,6 +374,7 @@ negative/explicit_ctor_arg
 negative/explicit_ctor_copy_list
 negative/explicit_ctor_return
 negative/fold_empty_pack_invalid_op
+negative/fold_member_pointer_incompatible
 negative/fold_mismatched_ops
 negative/fold_no_packs
 negative/fold_packs_both_sides

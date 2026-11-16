@@ -139,11 +139,18 @@ fn build_fold_op_expr(op: FoldOp, left: Expr, right: Expr, pos: ExprPos) -> Resu
             value: Box::new(right),
             pos,
         }),
-        FoldOp::DotStar | FoldOp::ArrowStar => Err(CompileError::new(
-            format!("pointer-to-member fold operator '{}' is not supported yet", op.as_str()),
-            pos.line,
-            pos.col,
-        )),
+        FoldOp::DotStar => Ok(Expr::Binary {
+            op: BinaryOp::DotStar,
+            left: Box::new(left),
+            right: Box::new(right),
+            pos,
+        }),
+        FoldOp::ArrowStar => Ok(Expr::Binary {
+            op: BinaryOp::ArrowStar,
+            left: Box::new(left),
+            right: Box::new(right),
+            pos,
+        }),
     }
 }
 

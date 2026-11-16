@@ -1,0 +1,1 @@
+tests/negative/fold_member_pointer_incompatible.cpp:11:12: error: pointer-to-member of type 'int Bar::*' is incompatible with object of type 'Foo'

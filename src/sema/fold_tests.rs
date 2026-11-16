@@ -441,3 +441,35 @@ fn test_nttp_fold_expression_template_parsing_and_subst() -> Result<(), Box<dyn 
     Ok(())
 }
 
+#[test]
+fn test_expand_fold_expr_member_pointers() -> Result<(), Box<dyn std::error::Error>> {
+    let mut mapping = HashMap::new();
+    mapping.insert("ptrs".to_string(), TemplateArg::NonTypePack(vec![1, 2]));
+
+    let dot = expand_fold_expr(
+        FoldOp::DotStar,
+        Some(&id_expr("r")),
+        Some(&id_expr("ptrs")),
+        &mapping,
+        ExprPos::default(),
+    )?;
+    assert_eq!(dot, bin_op(BinaryOp::DotStar, bin_op(BinaryOp::DotStar, id_expr("r"), int_lit(1)), int_lit(2)));
+
+    let arrow = expand_fold_expr(
+        FoldOp::ArrowStar,
+        Some(&id_expr("p")),
+        Some(&id_expr("ptrs")),
+        &mapping,
+        ExprPos::default(),
+    )?;
+    assert_eq!(arrow, bin_op(BinaryOp::ArrowStar, bin_op(BinaryOp::ArrowStar, id_expr("p"), int_lit(1)), int_lit(2)));
+
+    let mut empty = HashMap::new();
+    empty.insert("ptrs".to_string(), TemplateArg::NonTypePack(vec![]));
+    let err_dot = expand_fold_expr(FoldOp::DotStar, Some(&id_expr("ptrs")), None, &empty, ExprPos::default());
+    assert!(err_dot.is_err_and(|e| e.message.contains("empty expansion for operator '.*'")));
+    let err_arrow = expand_fold_expr(FoldOp::ArrowStar, Some(&id_expr("ptrs")), None, &empty, ExprPos::default());
+    assert!(err_arrow.is_err_and(|e| e.message.contains("empty expansion for operator '->*'")));
+
+    Ok(())
+}
