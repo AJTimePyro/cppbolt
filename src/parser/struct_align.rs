@@ -60,6 +60,20 @@ impl Parser {
         self.expect(TokenKind::KwAlignas)?;
         self.expect(TokenKind::LParen)?;
 
+        if self.peek() == &TokenKind::KwAlignof
+            && self.peek_ahead(1) == &TokenKind::LParen
+            && let TokenKind::Ident(id) = self.peek_ahead(2)
+            && self.peek_ahead(3) == &TokenKind::RParen
+            && self.peek_ahead(4) == &TokenKind::Ellipsis
+        {
+            let pack = id.clone();
+            for _ in 0..5 {
+                self.advance();
+            }
+            self.expect(TokenKind::RParen)?;
+            return Ok(AlignasSpec::Dependent(pack));
+        }
+
         if let TokenKind::Ident(id) = self.peek() {
             let is_ellipsis = self.peek_ahead(1) == &TokenKind::Ellipsis;
             if is_ellipsis || self.is_active_type_param(id) {

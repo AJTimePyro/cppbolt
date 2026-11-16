@@ -16,7 +16,12 @@ pub fn evaluate_dependent_alignas(
                 .max()
                 .unwrap_or(1),
             TemplateArg::Type(ty) => ty.align_of(struct_aligns),
-            _ => 1,
+            TemplateArg::NonTypePack(vals) => vals
+                .iter()
+                .filter_map(|&v| if v > 0 { Some(v as usize) } else { None })
+                .max()
+                .unwrap_or(1),
+            TemplateArg::NonType(n) => (*n).max(1) as usize,
         }
     } else {
         1
