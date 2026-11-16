@@ -86,11 +86,10 @@ Fold expressions in non-type template arguments (`src/sema/template_subst_nontyp
 ## Consequences
 
 ### Positive
-- All four C++17 fold expression shapes parse and expand across all 32 operators.
+- All four C++17 fold expression shapes parse and expand across all 32 operators, including pointer-to-member operators `.*` and `->*` (fully enabled and tested in ADR 0015).
 - WebAssembly code emission requires no runtime pack or loop support; all folds lower to concrete scalar or compound expressions during template substitution.
 - Standard empty pack fallbacks (`&&`, `||`, `,`) work without manual user workarounds.
 - Constant expression evaluation and non-type template arguments support fold expressions directly.
 
 ### Negative / Trade-offs
-- Pointer-to-member fold operators (`.*`, `->*`) parse into AST but trigger a diagnostic during semantic expansion because `cppbolt` does not yet support pointer-to-member types.
 - Deep folds generate linear trees of binary AST nodes proportional to the pack size, which consumes memory during compilation of very large packs.

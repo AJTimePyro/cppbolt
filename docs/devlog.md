@@ -4,6 +4,35 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-16: Pointer-to-Member Operators, ABI Representation, and C++17 Fold Integration
+
+Implemented C++ pointer-to-member language support (ISO C++17 [dcl.mptr], [expr.mptr.oper], [conv.mem]), flat 64-bit Itanium ABI representation, and fold expression integration across the parser, semantic analyzer, WebAssembly code generator, and test suite:
+
+### Summary of Work
+
+1. Extended the type system and AST in `src/ast/types.rs`, `src/ast/expr.rs`, and `src/ast/fold_op.rs`: added `Type::MemberPointer { class_name, member_type }`, binary operators `BinaryOp::DotStar` (`.*`) and `BinaryOp::ArrowStar` (`->*`), and fold operators `FoldOp::DotStar` and `FoldOp::ArrowStar`.
+2. Implemented syntax parsing in `src/parser/decl_func.rs`, `src/parser/types.rs`, and `src/parser/expr.rs`: supported nested `Class::*` specifiers in simple and parenthesized member function declarators, and added precedence 14 Pratt parsing for `.*` and `->*` operators.
+3. Implemented semantic analysis in `src/sema/member_pointer.rs`, `src/sema/assign.rs`, and `src/sema/template_deduce_type.rs`: resolved member pointer addresses (`&Class::member`), validated receiver and member pointer compatibility, enforced const qualification propagation, supported base-to-derived conversions (`Base::*` to `Derived::*`), and added structural template argument deduction for `Type::MemberPointer`.
+4. Lowered pointer-to-member operations to WebAssembly in `src/codegen/member_pointer.rs` and `src/codegen/memory.rs`:
+   - Data-member pointers lower to WebAssembly `i32` byte offsets within struct layouts, using `-1` to encode null data-member pointers.
+   - Member-function pointers lower to WebAssembly `i64` packing `{ ptr: u32, adj: u32 }` with `0i64` as null. Bit 0 of `ptr` discriminates between non-virtual function table calls (bit 0 = 0) and virtual vtable calls (bit 0 = 1). The high 32 bits (`adj`) adjust the `this` pointer for multiple inheritance subobject navigation.
+   - Dispatch lowers to `call_indirect`, staging operands through local frame slots.
+   - Emitted guarded base-to-derived conversions adjusting member offsets and function `adj` fields for non-null pointers.
+5. Enabled C++17 fold expressions over `.*` and `->*` in `src/sema/fold_expansion.rs`, expanding parameter packs into left- or right-associative binary expression trees.
+6. Added positive test coverage in `tests/classes_oop/` and `tests/cxx17/` for data members, non-virtual methods, virtual methods, multiple inheritance adjustments, and fold expressions, along with negative diagnostic tests in `tests/negative/`.
+7. Documented the architecture and ABI in ADR 0015 (`docs/adr/0015-pointer-to-member.md`), updated ADR 0014 (`docs/adr/0014-cxx17-fold-expressions.md`), and updated compiler documentation in `docs/book/internals/parser-and-ast.md` and `docs/book/user/supported-cpp.md`.
+
+### Verification Results
+
+- Corpus test runner: 583/583 corpus tests passed on disk, 0 failures.
+- Unit tests: 134/134 unit tests passed in `src/lib.rs`, 0 failures.
+- Native oracle gate: all mini_stl tests match native Clang and GCC byte-for-byte.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings under `-D warnings` across all targets.
+- Book build: `mdbook build docs/book` succeeds with zero errors.
+
+---
+
 ## 2026-11-16: C++17 Fold Expressions Implementation
 
 Implemented C++17 fold expressions ([expr.prim.fold]) across the AST, parser, semantic analyzer, template substitution pipeline, and constant evaluator:
