@@ -94,7 +94,7 @@ Fold expressions over `.*` and `->*` are expanded during template substitution i
 - Full support for ISO C++17 pointer-to-member operations, covering data members, non-virtual methods, virtual methods, multiple inheritance, base-to-derived conversions, and null comparisons.
 - Flat `i64` member-function pointer representation fits into native WebAssembly registers without linear memory allocations.
 - Offset -1 correctly distinguishes null data-member pointers from member pointers at offset 0.
-- Seamless integration with C++17 fold expressions across all four fold shapes.
+- Direct integration with C++17 fold expressions across all four fold shapes.
 
 ### Negative / Trade-offs
 - Calling a member function pointer allocates two 4-byte frame slots (`this_slot` and `fn_slot`) in the caller frame to stage the indirect call operands.
