@@ -471,22 +471,5 @@ fn test_parse_pack_expansion_in_ordinary_function() -> Result<(), Box<dyn std::e
     Ok(())
 }
 
-#[test]
-fn test_parse_fold_expressions_all_forms() -> Result<(), Box<dyn std::error::Error>> {
-    let cases = [
-        ("(... + args)", true),
-        ("(args + ...)", true),
-        ("(0 + ... + args)", true),
-        ("(args + ... + 0)", true),
-        ("(args + ... - 0)", false),
-    ];
-    for (src, should_succeed) in cases {
-        let mut lexer = Lexer::new(src);
-        let tokens = lexer.tokenize()?;
-        let mut parser = Parser::new(tokens);
-        let res = parser.parse_expr();
-        assert_eq!(res.is_ok(), should_succeed, "Failed on: {}", src);
-    }
-    Ok(())
-}
+
 

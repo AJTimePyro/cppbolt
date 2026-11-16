@@ -53,7 +53,7 @@ impl FoldOp {
                 BinaryOp::BitXor => "^=",
                 BinaryOp::Shl => "<<=",
                 BinaryOp::Shr => ">>=",
-                _ => "+=",
+                _ => unreachable!("invalid compound assignment binary op"),
             },
             FoldOp::DotStar => ".*",
             FoldOp::ArrowStar => "->*",

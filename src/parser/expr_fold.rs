@@ -183,6 +183,7 @@ impl Parser {
             });
         }
 
+        let op2_pos = self.current_pos();
         let op2 = self.parse_fold_operator()?;
         if op1 != op2 {
             return Err(CompileError::new(
@@ -191,8 +192,8 @@ impl Parser {
                     op1.as_str(),
                     op2.as_str()
                 ),
-                self.current().line,
-                self.current().col,
+                op2_pos.line,
+                op2_pos.col,
             ));
         }
         let right = self.parse_prefix()?;

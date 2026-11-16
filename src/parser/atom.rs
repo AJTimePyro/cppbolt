@@ -119,7 +119,7 @@ impl Parser {
                         pos: start,
                     };
                 }
-                TokenKind::Dot => {
+                TokenKind::Dot if self.peek_ahead(1) != &TokenKind::Star => {
                     self.advance();
                     let member = self.parse_member_name(".")?;
                     expr = Expr::MemberAccess {
@@ -129,7 +129,7 @@ impl Parser {
                         pos: start,
                     };
                 }
-                TokenKind::Arrow => {
+                TokenKind::Arrow if self.peek_ahead(1) != &TokenKind::Star => {
                     self.advance();
                     let member = self.parse_member_name("->")?;
                     expr = Expr::MemberAccess {
