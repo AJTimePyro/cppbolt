@@ -341,14 +341,19 @@ struct tuple_getter<16, tuple<T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, 
     }
 };
 
-template <size_t I, typename Tuple>
-typename tuple_element<I, Tuple>::type& get(Tuple& t) {
-    return tuple_getter<I, Tuple>::get(t);
+template <size_t I, typename... Types>
+typename tuple_element<I, tuple<Types...>>::type& get(tuple<Types...>& t) {
+    return tuple_getter<I, tuple<Types...>>::get(t);
 }
 
-template <size_t I, typename Tuple>
-const typename tuple_element<I, Tuple>::type& get(const Tuple& t) {
-    return tuple_getter<I, Tuple>::get(t);
+template <size_t I, typename... Types>
+const typename tuple_element<I, tuple<Types...>>::type& get(const tuple<Types...>& t) {
+    return tuple_getter<I, tuple<Types...>>::get(t);
+}
+
+template <size_t I, typename... Types>
+typename tuple_element<I, tuple<Types...>>::type&& get(tuple<Types...>&& t) {
+    return static_cast<typename tuple_element<I, tuple<Types...>>::type&&>(tuple_getter<I, tuple<Types...>>::get(t));
 }
 
 } // namespace std

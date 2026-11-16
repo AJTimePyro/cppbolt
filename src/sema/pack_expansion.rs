@@ -270,7 +270,11 @@ pub fn expand_expr_list(exprs: &[Expr], mapping: &HashMap<String, TemplateArg>) 
     Ok(result)
 }
 
-pub fn expand_type_list(types: &[Type], mapping: &HashMap<String, TemplateArg>) -> Result<Vec<Type>, CompileError> {
+pub fn expand_type_list(
+    types: &[Type],
+    mapping: &HashMap<String, TemplateArg>,
+    pos: (usize, usize),
+) -> Result<Vec<Type>, CompileError> {
     let known: HashSet<String> = mapping.iter().filter(|(_, v)| v.is_pack()).map(|(k, _)| k.clone()).collect();
     let mut result = Vec::new();
     for ty in types {
@@ -279,9 +283,13 @@ pub fn expand_type_list(types: &[Type], mapping: &HashMap<String, TemplateArg>) 
                 let mut packs = HashSet::new();
                 collect_packs_in_type(inner, &known, &mut packs);
                 if packs.is_empty() {
-                    return Err(CompileError::new("pack expansion does not contain any unexpanded parameter packs", 0, 0));
+                    return Err(CompileError::new(
+                        "pack expansion does not contain any unexpanded parameter packs",
+                        pos.0,
+                        pos.1,
+                    ));
                 }
-                let len = validate_pack_lengths(&packs, mapping, ExprPos::default())?;
+                let len = validate_pack_lengths(&packs, mapping, ExprPos::new(pos.0, pos.1))?;
                 for i in 0..len {
                     let subst_map = build_slice_mapping(mapping, &packs, i);
                     result.push(crate::sema::template_subst::substitute_type(inner, &subst_map, None)?);
@@ -290,7 +298,11 @@ pub fn expand_type_list(types: &[Type], mapping: &HashMap<String, TemplateArg>) 
             _ => {
                 let unexp = find_unexpanded_packs_in_type(ty, &known);
                 if let Some(first) = unexp.first() {
-                    return Err(CompileError::new(format!("parameter pack '{}' used unexpanded", first), 0, 0));
+                    return Err(CompileError::new(
+                        format!("parameter pack '{}' used unexpanded", first),
+                        pos.0,
+                        pos.1,
+                    ));
                 }
                 result.push(crate::sema::template_subst::substitute_type(ty, mapping, None)?);
             }

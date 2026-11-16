@@ -38,7 +38,7 @@ fn test_expand_type_list() -> Result<(), Box<dyn std::error::Error>> {
         Type::PackExpansion(Box::new(Type::TypeParam("Ts".to_string()))),
         Type::Bool,
     ];
-    let expanded = expand_type_list(&types, &mapping)?;
+    let expanded = expand_type_list(&types, &mapping, (1, 1))?;
     assert_eq!(expanded, vec![Type::Char, Type::Int, Type::Double, Type::Bool]);
     Ok(())
 }
@@ -111,7 +111,7 @@ fn test_unexpanded_pack_error() -> Result<(), Box<dyn std::error::Error>> {
     assert!(err.message.contains("parameter pack 'Ts' used unexpanded"));
 
     let types = vec![Type::TypeParam("Ts".to_string())];
-    let err_ty = match expand_type_list(&types, &mapping) {
+    let err_ty = match expand_type_list(&types, &mapping, (1, 1)) {
         Err(e) => e,
         Ok(_) => return Err("expected unexpanded pack error in type".into()),
     };

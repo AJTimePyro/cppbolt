@@ -33,10 +33,12 @@ pub fn substitute_dependent_alignas(
     pack_name: &str,
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
+    struct_aligns: Option<&HashMap<String, usize>>,
 ) -> Result<Type, CompileError> {
     let subst_inner = super::template_subst::substitute_type(inner, mapping, injected_class)?;
     let empty_aligns = HashMap::new();
-    let align = evaluate_dependent_alignas(pack_name, mapping, &empty_aligns);
+    let aligns = struct_aligns.unwrap_or(&empty_aligns);
+    let align = evaluate_dependent_alignas(pack_name, mapping, aligns);
     Ok(Type::Aligned(Box::new(subst_inner), align))
 }
 
@@ -44,14 +46,15 @@ pub fn substitute_type_param(
     name: &str,
     ty: &Type,
     mapping: &HashMap<String, TemplateArg>,
+    pos: (usize, usize),
 ) -> Result<Type, CompileError> {
     match mapping.get(name) {
         Some(TemplateArg::Type(t)) => Ok(t.clone()),
         Some(TemplateArg::NonType(n)) => Ok(Type::NonType(*n)),
         Some(TemplateArg::TypePack(_)) | Some(TemplateArg::NonTypePack(_)) => Err(CompileError::new(
             format!("parameter pack '{}' used unexpanded", name),
-            0,
-            0,
+            pos.0,
+            pos.1,
         )),
         _ => Ok(ty.clone()),
     }

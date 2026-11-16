@@ -357,7 +357,8 @@ impl Parser {
                 if (self.is_active_type_param(&id)
                     || self.is_known_template(&id)
                     || self.is_template_member_type(&id)
-                    || is_typename)
+                    || is_typename
+                    || self.allow_unknown_types)
                     && self.peek() == &TokenKind::Lt
                 {
                     let args = self.parse_template_args()?;
