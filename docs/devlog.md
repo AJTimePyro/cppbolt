@@ -4,6 +4,31 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-16: C++17 Fold Expressions Implementation
+
+Implemented C++17 fold expressions ([expr.prim.fold]) across the AST, parser, semantic analyzer, template substitution pipeline, and constant evaluator:
+
+### Summary of Work
+
+1. Added `FoldOp` in `src/ast/fold_op.rs` representing all 32 C++17 fold operators (arithmetic, bitwise, relational, logical, comma, assignment, compound assignment, and pointer-to-member), and added `Expr::FoldExpr { op, left, right, pos }` in `src/ast/expr.rs`.
+2. Implemented fold expression parsing in `src/parser/expr_fold.rs` and `src/parser/prefix.rs`. The parser uses `has_depth1_ellipsis` lookahead to distinguish parenthesized folds without backtracking, parses all four shapes (unary left, unary right, binary left, binary right), and validates that binary folds use identical operator tokens.
+3. Implemented semantic fold expansion in `src/sema/fold_expansion.rs`. During template substitution, `expand_fold_expr` classifies fold shapes, validates that multi-pack expansions share identical pack lengths, slices parameter packs, and constructs concrete binary expression trees with standard left or right associativity.
+4. Implemented ISO C++17 [temp.variadic] empty pack rules: empty unary folds over `&&` evaluate to `true`, `||` to `false`, and `,` to a void expression (`Expr::IntLiteral(0, Type::Void)`), while other operators trigger compile errors when expanded over empty packs.
+5. Integrated fold expressions into non-type template arguments, dependent array bounds (`src/parser/types_array.rs`), and compile-time evaluation (`src/sema/constexpr_eval.rs`, `src/sema/template_subst_nontype.rs`), allowing constructs like `template <int... Ns> struct S { int arr[(... + Ns)]; };` to evaluate during template instantiation.
+6. Enforced diagnostics rejecting unexpanded fold expressions outside template bodies or fold expressions containing packs in both operands.
+7. Added positive end-to-end test cases in `tests/cxx17/` and negative diagnostic tests in `tests/negative/`, along with parser unit tests in `src/parser/tests_fold.rs` and semantic unit tests in `src/sema/fold_tests.rs`.
+8. Documented the architecture in ADR 0014 (`docs/adr/0014-cxx17-fold-expressions.md`) and updated compiler book internals (`docs/book/internals/parser-and-ast.md`, `docs/book/user/supported-cpp.md`).
+
+### Verification Results
+
+- Test runner: 576/576 corpus tests passed, 0 failures.
+- Unit tests: 131/131 unit tests passed, 0 failures.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings under `-D warnings` across all targets.
+- Book build: `mdbook build docs/book` succeeds with zero errors.
+
+---
+
 ## 2026-11-16: C++11 Variadic Templates and Multiple-Inheritance Remediation
 
 Resolved the remaining C++11 variadic template and multiple-inheritance defects identified during independent compiler audits:

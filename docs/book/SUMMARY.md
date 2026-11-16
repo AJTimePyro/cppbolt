@@ -36,6 +36,7 @@
 - [ADR 0011: Move Semantics, Value Categories, and Smart Pointers](adr/0011-move-semantics-and-value-categories.md)
 - [ADR 0012: Template Specialization, Non-Type Parameters, and Alias Templates](adr/0012-template-specialization-nttp-aliases.md)
 - [ADR 0013: C++11 Variadic Templates, Parameter Packs, and Partial Ordering](adr/0013-variadic-templates.md)
+- [ADR 0014: C++17 Fold Expressions](adr/0014-cxx17-fold-expressions.md)
 
 # Development
 

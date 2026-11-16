@@ -37,7 +37,7 @@ The parser transforms the flat token stream into a structured Abstract Syntax Tr
   - `IntLiteral`, `FloatLiteral`, `StringLiteral`, `BoolLiteral`, `Identifier`, `BinaryOp`, `UnaryOp`, `Call`, `MemberCall`, `MemberAccess`, `ArraySubscript`, `New`, `Delete`, `Ternary`, `Assign`, `Cast`, `Lambda`.
   - `SizeofPack { name, pos }`: Compile-time `sizeof...(pack)` query returning the number of elements in the parameter pack.
   - `PackExpansion { pattern, pos }`: Pack expansion pattern `pattern...` in function calls, initializers, base classes, and constructor initializers.
-  - `FoldExpr`: AST representation reserved for C++17 fold expressions.
+  - `FoldExpr { op, left, right, pos }`: C++17 fold expression over parameter packs covering all 32 fold operators across unary left, unary right, binary left, and binary right shapes.
   - `InitializerList { elements, pos }`: Bare braced expression lists `{ a, b, c }`.
   - `TypedInitList { ty, elements, pos }`: Explicitly-typed temporary and direct-list expressions `Type{ a, b, c }`.
   - Every `Expr` variant carries an `ExprPos` (`line`, `col`) recording the position of its leading token.
