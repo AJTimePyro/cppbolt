@@ -220,16 +220,15 @@ pub fn deduce_template_arguments(
     let mut result = deduced;
 
     if has_pack {
-        let (pack_name, mut pack_types) = deduce_pack_arguments(
+        let (pack_name, deduced_pack) = deduce_pack_arguments(
             &func_decl.params[non_pack_count],
             template_params,
             call_args,
-            non_pack_count,
+            non_pack_count + explicit_pack.len(),
             pos,
         )?;
-        if !explicit_pack.is_empty() {
-            pack_types.splice(0..0, explicit_pack);
-        }
+        let mut pack_types = explicit_pack;
+        pack_types.extend(deduced_pack);
         result.insert(pack_name, TemplateArg::TypePack(pack_types));
     }
 

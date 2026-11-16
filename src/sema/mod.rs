@@ -50,6 +50,7 @@ mod pack_expansion_tests;
 mod tests;
 
 pub use init::InitContext;
+#[cfg(test)]
 pub use pack_expansion::TemplateArg;
 pub(crate) use layout::RecordLayout;
 pub(crate) use stmt_decl::VarDecl;

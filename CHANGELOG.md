@@ -23,6 +23,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Updated embedded `<memory>` with variadic `std::make_unique<T>(Args&&... args)`.
 - Updated embedded `<utility>` with `std::integer_sequence`, `std::index_sequence`, and `std::make_index_sequence`.
 - Added `<tuple>` header providing `std::tuple`, recursive base-indexed element storage, `std::make_tuple`, and `std::get<I>(tuple)` supporting up to 17 elements (indices 0..16).
+- Fixed explicit function-template argument pack deduction when explicit arguments are provided (`foo<int, int>(1, 2)`), preventing duplicate argument deduction and signature-arity mismatch in WebAssembly call emission.
+- Implemented alias template parameter pack expansion (`template <typename... Ts> using Alias = Target<Ts...>;`), grouping trailing arguments into `TemplateArg::TypePack`.
+- Enforced compile-time diagnostics rejecting unexpanded parameter packs in class template data members and method parameter types.
+- Supported parameter packs in function pointer declarations (`void (*fn)(Args...)`) across parsing, substitution, and indirect invocation.
+- Supported C++11 dynamic exception specifications `throw(Ts...)` and `throw()` on function templates.
+- Preserved lvalue reference value categories across nested call expressions returning references (`std::forward<T>`), preventing spurious WebAssembly scalar loads in forwarding call chains.
 - Added explicit error diagnostics in WebAssembly code generation rejecting unsupported or unlowered AST expressions.
 - Added positive, variant, and negative diagnostic test suites across `tests/templates_operators/`, `tests/mini_stl/`, and `tests/negative/`.
 

@@ -95,10 +95,7 @@ fn substitute_function_type(
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
 ) -> Result<Type, CompileError> {
-    let mut subst_params = Vec::new();
-    for p in param_types {
-        subst_params.push(substitute_type(p, mapping, injected_class)?);
-    }
+    let subst_params = super::pack_expansion::expand_type_list(param_types, mapping)?;
     Ok(Type::Function {
         return_type: Box::new(substitute_type(return_type, mapping, injected_class)?),
         param_types: subst_params,

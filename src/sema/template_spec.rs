@@ -4,6 +4,7 @@ use super::*;
 use crate::ast::template::TemplateClass;
 use crate::diagnostics::CompileError;
 use crate::name::QualifiedName;
+use std::collections::HashSet;
 
 use crate::sema::pack_expansion::TemplateArg;
 
@@ -16,6 +17,54 @@ pub struct InstantiationTarget<'a> {
 }
 
 impl Sema {
+    pub fn register_class_template(
+        &mut self,
+        decl: TemplateClass,
+        params: Vec<TemplateParam>,
+        pos: (usize, usize),
+    ) -> Result<(), CompileError> {
+        let known_packs: HashSet<String> = params
+            .iter()
+            .filter(|p| p.is_pack)
+            .map(|p| p.name.clone())
+            .collect();
+        if !known_packs.is_empty() {
+            Self::validate_template_member_packs(&decl, &known_packs, pos)?;
+        }
+        super::template_registry::insert_template_aliases(&mut self.class_templates, decl.name.clone(), (decl, params));
+        Ok(())
+    }
+
+    fn validate_template_member_packs(
+        decl: &TemplateClass,
+        known_packs: &HashSet<String>,
+        pos: (usize, usize),
+    ) -> Result<(), CompileError> {
+        for (_, f_ty, _) in &decl.fields {
+            if let Some(pack) = super::pack_expansion::find_unexpanded_packs_in_type(f_ty, known_packs).first() {
+                return Err(CompileError::new(
+                    format!("data member type contains unexpanded parameter pack '{pack}'"),
+                    pos.0,
+                    pos.1,
+                ));
+            }
+        }
+        for m in &decl.methods {
+            for p in &m.params {
+                if !p.is_pack
+                    && let Some(pack) = super::pack_expansion::find_unexpanded_packs_in_type(&p.ty, known_packs).first()
+                {
+                    return Err(CompileError::new(
+                        format!("declaration type contains unexpanded parameter pack '{pack}'"),
+                        pos.0,
+                        pos.1,
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn register_class_specialization(
         &mut self,
         decl: TemplateClass,

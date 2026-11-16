@@ -6,7 +6,6 @@ use super::*;
 use crate::ast::template::TemplateParam;
 use crate::ast::types::Type;
 use crate::name::QualifiedName;
-use std::collections::HashMap;
 
 impl Sema {
     pub fn register_alias_template(&mut self, name: String, ty: Type, params: Vec<TemplateParam>) {
@@ -45,10 +44,7 @@ impl Sema {
             return Ok(None);
         };
         let effective_args = fill_default_template_args(name, &params, args, (line, col))?;
-        let mut mapping: HashMap<String, crate::sema::TemplateArg> = HashMap::new();
-        for (param, arg) in params.iter().zip(effective_args.iter()) {
-            mapping.insert(param.name.clone(), arg.clone().into());
-        }
+        let mapping = super::template_deduce::build_template_arg_map(&params, &effective_args);
         let mut expanded = substitute_type(&target_ty, &mapping, None)?;
         self.resolve_and_instantiate_type(&mut expanded, line, col)?;
         Ok(Some(expanded))

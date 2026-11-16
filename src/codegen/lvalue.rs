@@ -42,6 +42,13 @@ impl<'a> Codegen<'a> {
         }
     }
 
+    pub(super) fn is_expr_lvalue(&self, expr: &Expr, ctx: &FunctionContext) -> bool {
+        match expr {
+            Expr::Call { .. } => self.get_expr_type_raw(expr, ctx).is_lvalue_reference(),
+            _ => expr.is_lvalue(),
+        }
+    }
+
     pub(super) fn is_expr_xvalue(&self, expr: &Expr, ctx: &FunctionContext) -> bool {
         match expr {
             Expr::Cast { target_type, .. } => target_type.is_rvalue_reference(),

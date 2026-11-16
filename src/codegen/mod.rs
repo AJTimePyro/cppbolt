@@ -222,6 +222,40 @@ pub struct FunctionContext {
     pub is_main: bool,
 }
 
+impl Default for FunctionContext {
+    fn default() -> Self {
+        FunctionContext {
+            fp_local: 0,
+            scratch1: 1,
+            scratch2: 2,
+            scratch_i64: 3,
+            scratch_f64: 4,
+            scratch_f32: 5,
+            ret_temp_i32: 6,
+            ret_temp_i64: 7,
+            ret_temp_f64: 8,
+            var_offsets: HashMap::new(),
+            var_types: HashMap::new(),
+            static_var_offsets: HashMap::new(),
+            next_local_offset: 16,
+            frame_size: 0,
+            frame_size_patches: Vec::new(),
+            var_scopes: vec![Vec::new()],
+            scope_objects: vec![Vec::new()],
+            temp_objects: Vec::new(),
+            initializer_list_temps: Vec::new(),
+            current_class: None,
+            current_func_name: String::new(),
+            line: 0,
+            col: 0,
+            return_type: Type::Void,
+            is_dtor: false,
+            is_reference_return: false,
+            is_main: false,
+        }
+    }
+}
+
 impl FunctionContext {
     pub fn enter_scope(&mut self) {
         self.var_scopes.push(Vec::new());

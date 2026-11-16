@@ -123,7 +123,7 @@ impl Sema {
                                 (t.line, t.col),
                             )?;
                         } else {
-                            self.register_class_template(c.clone(), t.params.clone());
+                            self.register_class_template(c.clone(), t.params.clone(), (t.line, t.col))?;
                         }
                     }
                     TemplateKind::Function(f) => {

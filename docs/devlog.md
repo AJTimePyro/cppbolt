@@ -24,13 +24,19 @@ Completed C++11 variadic template support across the compiler and embedded stand
 12. Supported nested member class templates containing parameter packs (`Outer<Ts...>::Inner<Us...>`) in `src/parser/structs_nested.rs` and `src/sema/template_nested.rs`, substituting outer parameters while preserving inner parameters.
 13. Added `alignas(Ts...)` and `alignof(T)` in `src/parser/struct_align.rs`, evaluating maximum alignment across pack types in `src/sema/template_subst_align.rs` and `src/sema/layout.rs`.
 14. Removed the non-standard `f(args)...;` expression-statement extension from `src/parser/stmt.rs`.
+15. Fixed explicit function-template argument pack deduction in `src/sema/template_deduce.rs`, starting trailing argument deduction at `non_pack_count + explicit_pack.len()` so calls like `foo<int, int>(1, 2)` do not duplicate deduced parameters or produce mismatched WebAssembly call arity.
+16. Implemented alias template parameter pack expansion in `src/sema/template_alias.rs` by grouping trailing template arguments into `TemplateArg::TypePack` via `build_template_arg_map`.
+17. Enforced compile-time diagnostics in `src/sema/template_spec.rs` rejecting unexpanded parameter packs in class template data member types and method parameter types.
+18. Supported function pointer parameter packs (`void (*fn)(Args...)`) in `src/parser/decl_func.rs` and `src/sema/template_subst.rs`, expanding pack parameters in function pointer signatures.
+19. Supported C++11 dynamic exception specifications (`throw(Ts...)` and `throw()`) in `src/parser/decl_func.rs`.
+20. Preserved lvalue reference value categories in `src/codegen/lvalue.rs` and `src/codegen/overload.rs` for call expressions returning references (such as `std::forward<T>`), preventing spurious scalar loads during nested call argument conversion.
 
 ### Verification Results
 
-- Test runner: 543/543 corpus tests passed, 0 failures.
+- Test runner: 549/549 corpus tests passed, 0 failures.
 - Unit and integration tests: 119 unit tests passed, 0 failed.
 - Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
-- Native oracle gate: 100% byte-for-byte output match against host native Clang in C++11 mode.
+- Native oracle gate: 100% byte-for-byte output match against host native Clang in C++11 mode across all positive tests.
 - Clippy: 0 warnings with `-D warnings` across all targets.
 
 ---

@@ -146,7 +146,11 @@ impl Parser {
         self.expect(TokenKind::LParen)?;
         let mut fn_params = Vec::new();
         while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
-            let pt = self.parse_type()?;
+            let mut pt = self.parse_type()?;
+            if self.peek() == &TokenKind::Ellipsis {
+                self.advance();
+                pt = Type::PackExpansion(Box::new(pt));
+            }
             fn_params.push(pt);
             if self.peek() == &TokenKind::Comma {
                 self.advance();
@@ -171,7 +175,7 @@ impl Parser {
         let mut ref_qualifier = RefQualifier::None;
         while matches!(
             self.peek(),
-            TokenKind::KwConst | TokenKind::KwOverride | TokenKind::Amp | TokenKind::AndAnd
+            TokenKind::KwConst | TokenKind::KwOverride | TokenKind::Amp | TokenKind::AndAnd | TokenKind::KwThrow
         ) || matches!(self.peek(), TokenKind::Ident(id) if id == "noexcept")
         {
             if self.peek() == &TokenKind::KwConst {
@@ -185,7 +189,9 @@ impl Parser {
                 ref_qualifier = RefQualifier::RValue;
             } else if self.peek() == &TokenKind::KwOverride {
                 self.advance();
-            } else if matches!(self.peek(), TokenKind::Ident(id) if id == "noexcept") {
+            } else if self.peek() == &TokenKind::KwThrow
+                || matches!(self.peek(), TokenKind::Ident(id) if id == "noexcept")
+            {
                 self.advance();
                 if self.peek() == &TokenKind::LParen {
                     self.advance();

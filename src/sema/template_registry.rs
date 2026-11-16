@@ -11,7 +11,7 @@ use crate::ast::types::Type;
 use crate::name::QualifiedName;
 use std::collections::HashMap;
 
-fn insert_template_aliases<T: Clone>(map: &mut HashMap<String, T>, name: String, item: T) {
+pub(crate) fn insert_template_aliases<T: Clone>(map: &mut HashMap<String, T>, name: String, item: T) {
     if let Some(short) = name.split("::").last() {
         map.insert(short.to_string(), item.clone());
     }
@@ -25,10 +25,6 @@ fn insert_template_aliases<T: Clone>(map: &mut HashMap<String, T>, name: String,
 }
 
 impl Sema {
-    pub fn register_class_template(&mut self, decl: TemplateClass, params: Vec<TemplateParam>) {
-        insert_template_aliases(&mut self.class_templates, decl.name.clone(), (decl, params));
-    }
-
     pub fn register_function_template(&mut self, decl: FunctionDecl, params: Vec<TemplateParam>) {
         let short = decl
             .name
@@ -88,6 +84,8 @@ impl Sema {
                     if resolved_name != &sname_clone {
                         self.check_nested_type_access(resolved_name, line, col)?;
                     }
+                } else {
+                    self.resolve_and_instantiate_type(ty, line, col)?;
                 }
             }
             Type::Pointer(inner)
