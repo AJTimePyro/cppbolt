@@ -165,6 +165,9 @@ impl Sema {
                 };
             acc.max_align = acc.max_align.max(base_layout.align);
             acc.base_offsets.push((base_name.clone(), base_offset));
+            for (sub_b, sub_off) in &base_layout.base_offsets {
+                acc.base_offsets.push((sub_b.clone(), base_offset + sub_off));
+            }
             if base_layout.has_vtable && acc.vtable_slots.is_empty() {
                 acc.vtable_slots = base_layout.vtable_slots.clone();
             }

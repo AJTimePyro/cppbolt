@@ -1,0 +1,1 @@
+tests/negative/multiple_inheritance_unrelated_cast.cpp:6:5: error: static_cast from 'Unrelated *' to 'Base1 *', which are not related by inheritance, is not allowed

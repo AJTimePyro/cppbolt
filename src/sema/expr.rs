@@ -99,9 +99,10 @@ impl Sema {
     fn analyze_cast(
         &mut self,
         kind: CastKind,
-        target_type: &Type,
+        target_type: &mut Type,
         expr: &mut Expr,
     ) -> Result<Type, CompileError> {
+        self.resolve_and_instantiate_type(target_type, self.current_line, self.current_col)?;
         let expr_ty = self.analyze_expr(expr)?;
         if kind == CastKind::Reinterpret {
             if target_type.is_reference() && !expr.is_lvalue() {
@@ -149,7 +150,33 @@ impl Sema {
                 self.current_col,
             ));
         }
+        if kind == CastKind::Static {
+            self.validate_static_cast(&expr_ty, target_type)?;
+        }
         Ok(target_type.clone())
+    }
+
+    fn validate_static_cast(&self, src: &Type, target: &Type) -> Result<(), CompileError> {
+        let src_inner = src.deref_type().or(Some(src)).map(|t| t.strip_const());
+        let tgt_inner = target.deref_type().or(Some(target)).map(|t| t.strip_const());
+        if let (Some(Type::Struct(s_src)), Some(Type::Struct(s_tgt))) = (src_inner, tgt_inner)
+            && (target.is_pointer() && src.is_pointer()
+                || target.is_reference() && (src.is_reference() || matches!(src.strip_const(), Type::Struct(_))))
+            && s_src != s_tgt
+            && !self.is_subclass(s_src, s_tgt)
+            && !self.is_subclass(s_tgt, s_src)
+        {
+            return Err(CompileError::new(
+                format!(
+                    "static_cast from '{}' to '{}', which are not related by inheritance, is not allowed",
+                    src.to_c_type(),
+                    target.to_c_type()
+                ),
+                self.current_line,
+                self.current_col,
+            ));
+        }
+        Ok(())
     }
 
     fn validate_reinterpret_cast(&self, src: &Type, target: &Type) -> Result<(), CompileError> {

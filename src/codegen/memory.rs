@@ -83,6 +83,27 @@ impl<'a> Codegen<'a> {
         if from == to {
             return;
         }
+        if let (Type::Pointer(f_inner), Type::Pointer(t_inner)) = (from, to)
+            && let (Type::Struct(s_from), Type::Struct(s_to)) =
+                (f_inner.strip_const(), t_inner.strip_const())
+            && s_from != s_to
+        {
+            if let Some(offset) = self.sema.base_subobject_offset(s_from, s_to) {
+                if offset != 0 {
+                    code.push(OP_I32_CONST);
+                    write_i32(code, offset as i32);
+                    code.push(OP_I32_ADD);
+                }
+                return;
+            } else if let Some(offset) = self.sema.base_subobject_offset(s_to, s_from) {
+                if offset != 0 {
+                    code.push(OP_I32_CONST);
+                    write_i32(code, offset as i32);
+                    code.push(OP_I32_SUB);
+                }
+                return;
+            }
+        }
         if from.to_wasm_type() == to.to_wasm_type() {
             emit_integer_narrowing(to, code);
             return;

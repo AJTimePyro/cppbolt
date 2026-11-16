@@ -113,12 +113,20 @@ impl<'a> Codegen<'a> {
                     (target_type.deref_type(), aty.deref_type().or(Some(&aty)))
                     && let (Type::Struct(s_target), Type::Struct(s_src)) =
                         (clean_target.strip_const(), clean_src.strip_const())
-                    && let Some(offset) = self.sema.base_subobject_offset(s_src, s_target)
-                    && offset != 0
                 {
-                    code.push(OP_I32_CONST);
-                    write_i32(code, offset as i32);
-                    code.push(OP_I32_ADD);
+                    if let Some(offset) = self.sema.base_subobject_offset(s_src, s_target)
+                        && offset != 0
+                    {
+                        code.push(OP_I32_CONST);
+                        write_i32(code, offset as i32);
+                        code.push(OP_I32_ADD);
+                    } else if let Some(offset) = self.sema.base_subobject_offset(s_target, s_src)
+                        && offset != 0
+                    {
+                        code.push(OP_I32_CONST);
+                        write_i32(code, offset as i32);
+                        code.push(OP_I32_SUB);
+                    }
                 }
                 Ok(())
             }

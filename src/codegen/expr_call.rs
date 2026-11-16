@@ -375,11 +375,9 @@ impl<'a> Codegen<'a> {
         };
         let mut field_idx = 0;
         let mut elem_idx = 0;
-        if let Some(base_name) = layout.base_classes.first()
-            && let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned()
-        {
-            let base_field_count = base_layout.fields.len();
-            if elem_idx < args.len()
+        for (base_name, base_off) in &layout.base_offsets {
+            if let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned()
+                && elem_idx < args.len()
                 && matches!(
                     &args[elem_idx],
                     Expr::InitializerList { .. } | Expr::TypedInitList { .. }
@@ -390,9 +388,10 @@ impl<'a> Codegen<'a> {
                     | Expr::TypedInitList { elements, .. } => elements.as_slice(),
                     _ => &[],
                 };
-                self.compile_struct_value_ctor(base_name, temp_ptr_slot, sub_elements, ctx, code)?;
+                let base_slot = self.compute_base_ptr_slot(temp_ptr_slot, *base_off, ctx, code)?;
+                self.compile_struct_value_ctor(base_name, base_slot, sub_elements, ctx, code)?;
                 elem_idx += 1;
-                field_idx += base_field_count;
+                field_idx += base_layout.fields.len();
             }
         }
         while elem_idx < args.len() {
