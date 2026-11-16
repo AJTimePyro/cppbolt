@@ -83,13 +83,8 @@ impl Sema {
                 self.analyze_initializer(expr)
             }
             Expr::Lambda { .. } => self.analyze_lambda(expr),
-            Expr::PackExpansion { pos, .. } => Err(CompileError::new(
+            Expr::PackExpansion { pos, .. } | Expr::FoldExpr { pos, .. } => Err(CompileError::new(
                 "pack expansion does not contain any unexpanded parameter packs",
-                pos.line,
-                pos.col,
-            )),
-            Expr::FoldExpr { pos, .. } => Err(CompileError::new(
-                "fold expression is not supported yet",
                 pos.line,
                 pos.col,
             )),

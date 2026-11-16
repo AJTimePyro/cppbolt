@@ -45,6 +45,9 @@ mod template_subst_align;
 mod template_subst_nontype;
 mod template_name;
 mod template_subst_stmt;
+pub mod fold_expansion;
+#[cfg(test)]
+mod fold_tests;
 #[cfg(test)]
 mod pack_expansion_tests;
 #[cfg(test)]

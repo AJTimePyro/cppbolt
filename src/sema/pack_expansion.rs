@@ -81,6 +81,14 @@ fn for_each_child_expr<'a, F: FnMut(&'a Expr)>(expr: &'a Expr, mut f: F) {
         Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } => {
             elements.iter().for_each(&mut f);
         }
+        Expr::FoldExpr { left, right, .. } => {
+            if let Some(l) = left {
+                f(l);
+            }
+            if let Some(r) = right {
+                f(r);
+            }
+        }
         _ => {}
     }
 }
@@ -132,6 +140,17 @@ pub fn rename_pack_identifiers(
         Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } => {
             elements.iter_mut().for_each(|el| rename_pack_identifiers(el, packs, mapping, index));
         }
+        Expr::PackExpansion { pattern, .. } => {
+            rename_pack_identifiers(pattern, packs, mapping, index);
+        }
+        Expr::FoldExpr { left, right, .. } => {
+            if let Some(l) = left {
+                rename_pack_identifiers(l, packs, mapping, index);
+            }
+            if let Some(r) = right {
+                rename_pack_identifiers(r, packs, mapping, index);
+            }
+        }
         _ => {}
     }
 }
@@ -160,6 +179,14 @@ fn scan_packs_in_type(ty: &Type, known: &HashSet<String>, expanded: bool, out: &
 fn scan_packs_in_expr(expr: &Expr, known: &HashSet<String>, expanded: bool, out: &mut Vec<(String, bool)>) {
     match expr {
         Expr::PackExpansion { pattern, .. } => scan_packs_in_expr(pattern, known, true, out),
+        Expr::FoldExpr { left, right, .. } => {
+            if let Some(l) = left {
+                scan_packs_in_expr(l, known, true, out);
+            }
+            if let Some(r) = right {
+                scan_packs_in_expr(r, known, true, out);
+            }
+        }
         Expr::SizeofPack { .. } => {}
         Expr::Identifier(name) if known.contains(name) => out.push((name.clone(), expanded)),
         Expr::Identifier(name) if name.contains('<') => {

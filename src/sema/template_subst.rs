@@ -303,18 +303,12 @@ pub fn substitute_expr(
             substitute_expr(object, mapping, injected_class)?;
             substitute_member_name(member, mapping);
         }
-        Expr::Ternary {
-            cond,
-            then_expr,
-            else_expr,
-        } => {
+        Expr::Ternary { cond, then_expr, else_expr } => {
             for e in [cond, then_expr, else_expr] {
                 substitute_expr(e, mapping, injected_class)?;
             }
         }
-        Expr::Cast {
-            target_type, expr, ..
-        } => {
+        Expr::Cast { target_type, expr, .. } => {
             *target_type = substitute_type(target_type, mapping, injected_class)?;
             substitute_expr(expr, mapping, injected_class)?;
         }
@@ -339,8 +333,11 @@ pub fn substitute_expr(
                 ));
             }
         }
-        Expr::PackExpansion { pattern, .. } => {
-            substitute_expr(pattern, mapping, injected_class)?;
+        Expr::PackExpansion { pattern, .. } => substitute_expr(pattern, mapping, injected_class)?,
+        Expr::FoldExpr { op, left, right, pos } => {
+            *expr = crate::sema::fold_expansion::expand_fold_expr(
+                *op, left.as_deref(), right.as_deref(), mapping, *pos,
+            )?;
         }
         Expr::Lambda { .. } => {
             crate::sema::template_subst_lambda::substitute_lambda(expr, mapping, injected_class)?;
