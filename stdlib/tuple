@@ -23,6 +23,8 @@ public:
     tuple() : tuple<Tail...>(), head() {}
     explicit tuple(const Head& h, const Tail&... tail)
         : tuple<Tail...>(tail...), head(h) {}
+    explicit tuple(Head&& h, Tail&&... tail)
+        : tuple<Tail...>(static_cast<Tail&&>(tail)...), head(static_cast<Head&&>(h)) {}
 
     template <typename UHead, typename... UTail>
     tuple(UHead&& h, UTail&&... tail)
