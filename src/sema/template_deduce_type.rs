@@ -18,6 +18,9 @@ pub fn type_has_template_param(ty: &Type) -> bool {
         | Type::PackExpansion(inner)
         | Type::Array(inner, _) => type_has_template_param(inner),
         Type::TemplateInstance { args, .. } => args.iter().any(type_has_template_param),
+        Type::Function { return_type, param_types } => {
+            type_has_template_param(return_type) || param_types.iter().any(type_has_template_param)
+        }
         _ => false,
     }
 }
@@ -36,6 +39,12 @@ fn collect_type_param_names(ty: &Type, out: &mut Vec<String>) {
         Type::TemplateInstance { args, .. } => {
             for a in args {
                 collect_type_param_names(a, out);
+            }
+        }
+        Type::Function { return_type, param_types } => {
+            collect_type_param_names(return_type, out);
+            for p in param_types {
+                collect_type_param_names(p, out);
             }
         }
         _ => {}
@@ -122,14 +131,21 @@ pub fn deduce_type(
             deduce_type(inner, arg_ty.strip_const(), deduced, is_lvalue, pos)?;
         }
         Type::Pointer(inner) => {
-            if let Type::Pointer(arg_inner) = arg_ty.strip_reference().strip_const() {
-                deduce_type(inner, arg_inner, deduced, true, pos)?;
-            } else {
-                return Err(CompileError::new(
-                    "type mismatch in deduction: expected pointer".to_string(),
-                    pos.line,
-                    pos.col,
-                ));
+            let stripped = arg_ty.strip_reference().strip_const();
+            match stripped {
+                Type::Pointer(arg_inner) => {
+                    deduce_type(inner, arg_inner, deduced, true, pos)?;
+                }
+                Type::Function { .. } if matches!(&**inner, Type::Function { .. }) => {
+                    deduce_type(inner, stripped, deduced, true, pos)?;
+                }
+                _ => {
+                    return Err(CompileError::new(
+                        "type mismatch in deduction: expected pointer".to_string(),
+                        pos.line,
+                        pos.col,
+                    ));
+                }
             }
         }
         Type::Array(inner, size) => {
@@ -148,7 +164,108 @@ pub fn deduce_type(
         Type::TemplateInstance { name, args } => {
             deduce_template_instance(name, args, arg_ty, deduced, pos)?;
         }
+        Type::Function {
+            return_type,
+            param_types,
+        } => {
+            deduce_function(return_type, param_types, arg_ty, deduced, pos)?;
+        }
         _ => {}
+    }
+    Ok(())
+}
+
+fn deduce_function(
+    param_ret: &Type,
+    param_params: &[Type],
+    arg_ty: &Type,
+    deduced: &mut HashMap<String, TemplateArg>,
+    pos: ExprPos,
+) -> Result<(), CompileError> {
+    let stripped = arg_ty.strip_reference().strip_const();
+    let (arg_ret, arg_params) = match stripped {
+        Type::Function {
+            return_type,
+            param_types,
+        } => (&**return_type, param_types.as_slice()),
+        Type::Pointer(inner) => match &**inner {
+            Type::Function {
+                return_type,
+                param_types,
+            } => (&**return_type, param_types.as_slice()),
+            _ => {
+                return Err(CompileError::new(
+                    "type mismatch in deduction: expected function".to_string(),
+                    pos.line,
+                    pos.col,
+                ));
+            }
+        },
+        _ => {
+            return Err(CompileError::new(
+                "type mismatch in deduction: expected function".to_string(),
+                pos.line,
+                pos.col,
+            ));
+        }
+    };
+    deduce_type(param_ret, arg_ret, deduced, false, pos)?;
+    let has_pack = param_params.last().is_some_and(|p| matches!(p, Type::PackExpansion(_)));
+    let non_pack_count = if has_pack {
+        param_params.len().saturating_sub(1)
+    } else {
+        param_params.len()
+    };
+    if (!has_pack && arg_params.len() != non_pack_count)
+        || (has_pack && arg_params.len() < non_pack_count)
+    {
+        return Err(CompileError::new(
+            "function parameter count mismatch in deduction".to_string(),
+            pos.line,
+            pos.col,
+        ));
+    }
+    for i in 0..non_pack_count {
+        deduce_type(&param_params[i], &arg_params[i], deduced, false, pos)?;
+    }
+    if has_pack && let Some(Type::PackExpansion(inner)) = param_params.last() {
+        deduce_function_pack(inner, &arg_params[non_pack_count..], deduced, pos)?;
+    }
+    Ok(())
+}
+
+fn deduce_function_pack(
+    inner: &Type,
+    pack_slice: &[Type],
+    deduced: &mut HashMap<String, TemplateArg>,
+    pos: ExprPos,
+) -> Result<(), CompileError> {
+    if let Type::TypeParam(pack_name) = inner {
+        record_deduced(
+            pack_name,
+            TemplateArg::TypePack(pack_slice.to_vec()),
+            deduced,
+            pos,
+        )?;
+    } else {
+        let mut elem_types = Vec::new();
+        for arg_p in pack_slice {
+            let mut elem_map = HashMap::new();
+            deduce_type(inner, arg_p, &mut elem_map, false, pos)?;
+            if let Some((_, TemplateArg::Type(t))) = elem_map.into_iter().next() {
+                elem_types.push(t);
+            }
+        }
+        let mut out = Vec::new();
+        collect_type_param_names(inner, &mut out);
+        if let Some(name) = out.first() {
+            record_deduced(
+                name,
+                TemplateArg::TypePack(elem_types),
+                deduced,
+                pos,
+            )?;
+        }
     }
     Ok(())
 }

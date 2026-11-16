@@ -1,0 +1,1 @@
+tests/negative/variadic_fn_ptr_deduce_mismatch.cpp:7:5: error: function parameter count mismatch in deduction
