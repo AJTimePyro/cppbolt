@@ -216,7 +216,13 @@ impl Parser {
         let _guard = self.enter_parenthesis()?;
         self.template_arg_paren_depth += 1;
         let start = self.current_pos();
-        let res = if self.is_cast_ahead() {
+        let res = if self.has_depth1_ellipsis() {
+            self.advance();
+            match self.parse_fold_expr(start) {
+                Ok(expr) => self.parse_postfix(expr, start),
+                Err(err) => Err(err),
+            }
+        } else if self.is_cast_ahead() {
             let saved_pos = self.pos;
             let saved_splits = self.shr_splits.len();
             self.advance();

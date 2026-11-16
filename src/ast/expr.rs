@@ -1,4 +1,5 @@
 use super::decl::Param;
+use super::fold_op::FoldOp;
 use super::stmt::Stmt;
 use super::types::Type;
 
@@ -202,12 +203,10 @@ pub enum Expr {
         pattern: Box<Expr>,
         pos: ExprPos,
     },
-    #[allow(dead_code)]
     FoldExpr {
-        op: BinaryOp,
+        op: FoldOp,
         left: Option<Box<Expr>>,
         right: Option<Box<Expr>>,
-        is_left_fold: bool,
         pos: ExprPos,
     },
 }
@@ -403,10 +402,9 @@ mod tests {
         let mut cur = Expr::IntLiteral(1, Type::Int);
         for _ in 0..10_000 {
             cur = Expr::FoldExpr {
-                op: BinaryOp::Add,
+                op: FoldOp::Binary(BinaryOp::Add),
                 left: Some(Box::new(cur)),
                 right: None,
-                is_left_fold: true,
                 pos: ExprPos::new(1, 1),
             };
         }

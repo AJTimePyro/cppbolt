@@ -15,6 +15,7 @@ mod decl;
 mod decl_func;
 mod enums_operators;
 mod expr;
+mod expr_fold;
 mod expr_lambda;
 mod prefix;
 mod stmt;
