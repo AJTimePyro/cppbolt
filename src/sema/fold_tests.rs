@@ -342,3 +342,102 @@ fn test_fold_expr_in_sema_analyze_expr_fails() {
         Err(e) if e.message.contains("pack expansion does not contain any unexpanded parameter packs")
     ));
 }
+
+#[test]
+fn test_nttp_fold_expression_evaluation() -> Result<(), Box<dyn std::error::Error>> {
+    use super::template_subst_nontype::evaluate_dependent_nontype;
+
+    // Serialization via expr_to_dependent_str
+    use crate::parser::types_array::expr_to_dependent_str;
+    let unary_left_expr = Expr::FoldExpr {
+        op: FoldOp::Binary(BinaryOp::Add),
+        left: None,
+        right: Some(Box::new(id_expr("Sizes"))),
+        pos: ExprPos::default(),
+    };
+    assert_eq!(
+        expr_to_dependent_str(&unary_left_expr),
+        Some("(... + Sizes)".to_string())
+    );
+
+    let unary_right_expr = Expr::FoldExpr {
+        op: FoldOp::Binary(BinaryOp::Add),
+        left: Some(Box::new(id_expr("Sizes"))),
+        right: None,
+        pos: ExprPos::default(),
+    };
+    assert_eq!(
+        expr_to_dependent_str(&unary_right_expr),
+        Some("(Sizes + ...)".to_string())
+    );
+
+    let binary_expr = Expr::FoldExpr {
+        op: FoldOp::Binary(BinaryOp::Add),
+        left: Some(Box::new(int_lit(0))),
+        right: Some(Box::new(id_expr("Sizes"))),
+        pos: ExprPos::default(),
+    };
+    assert_eq!(
+        expr_to_dependent_str(&binary_expr),
+        Some("(0 + ... + Sizes)".to_string())
+    );
+
+    // Evaluation with evaluate_dependent_nontype
+    let mut mapping = HashMap::new();
+    mapping.insert(
+        "Sizes".to_string(),
+        TemplateArg::NonTypePack(vec![1, 2, 3]),
+    );
+    let res_right = evaluate_dependent_nontype("(Sizes + ...)", &mapping, None)?;
+    assert_eq!(res_right, Type::NonType(6));
+
+    let res_left = evaluate_dependent_nontype("(... + Sizes)", &mapping, None)?;
+    assert_eq!(res_left, Type::NonType(6));
+
+    let res_bin = evaluate_dependent_nontype("(0 + ... + Sizes)", &mapping, None)?;
+    assert_eq!(res_bin, Type::NonType(6));
+
+    let mut empty_mapping = HashMap::new();
+    empty_mapping.insert("Sizes".to_string(), TemplateArg::NonTypePack(vec![]));
+    let res_empty = evaluate_dependent_nontype("(Sizes + ... + 10)", &empty_mapping, None)?;
+    assert_eq!(res_empty, Type::NonType(10));
+
+    Ok(())
+}
+
+#[test]
+fn test_nttp_fold_expression_template_parsing_and_subst() -> Result<(), Box<dyn std::error::Error>> {
+    let mut lexer = crate::lexer::Lexer::new("FixedBuffer<(Sizes + ...)>");
+    let tokens = lexer.tokenize()?;
+    let mut parser = crate::parser::Parser::new(tokens);
+    parser.allow_unknown_types = true;
+    let parsed_type = parser.parse_type()?;
+    assert_eq!(
+        parsed_type,
+        Type::TemplateInstance {
+            name: "FixedBuffer".to_string(),
+            args: vec![Type::DependentNonType("(Sizes + ...)".to_string())],
+        }
+    );
+
+    let mut mapping = HashMap::new();
+    mapping.insert(
+        "Sizes".to_string(),
+        TemplateArg::NonTypePack(vec![1, 2, 3]),
+    );
+    let subst_type = crate::sema::template_subst::substitute_type(&parsed_type, &mapping, None)?;
+    assert_eq!(
+        subst_type,
+        Type::TemplateInstance {
+            name: "FixedBuffer".to_string(),
+            args: vec![Type::NonType(6)],
+        }
+    );
+
+    let dep_array = Type::DependentArray(Box::new(Type::Int), "(Sizes + ...)".to_string());
+    let subst_array = crate::sema::template_subst::substitute_type(&dep_array, &mapping, None)?;
+    assert_eq!(subst_array, Type::Array(Box::new(Type::Int), 6));
+
+    Ok(())
+}
+

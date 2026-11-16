@@ -46,6 +46,22 @@ pub(crate) fn expr_to_dependent_str(expr: &Expr) -> Option<String> {
             };
             Some(format!("({l} {sym} {r})"))
         }
+        Expr::FoldExpr { op, left, right, .. } => match (left.as_deref(), right.as_deref()) {
+            (None, Some(r)) => {
+                let r_str = expr_to_dependent_str(r)?;
+                Some(format!("(... {} {r_str})", op.as_str()))
+            }
+            (Some(l), None) => {
+                let l_str = expr_to_dependent_str(l)?;
+                Some(format!("({l_str} {} ...)", op.as_str()))
+            }
+            (Some(l), Some(r)) => {
+                let l_str = expr_to_dependent_str(l)?;
+                let r_str = expr_to_dependent_str(r)?;
+                Some(format!("({l_str} {} ... {} {r_str})", op.as_str(), op.as_str()))
+            }
+            (None, None) => None,
+        },
         _ => None,
     }
 }
