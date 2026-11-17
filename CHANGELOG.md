@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Alias and Specialization Identity
+- Resolved alias-named base mem-initializers to the canonical direct base, so `using Alias = Base<int>; struct D : Alias { D() : Alias(42) {} };` forwards its constructor arguments correctly. Covers namespace-qualified, enclosing-class, nested specialization, plain-struct, non-polymorphic, multiple-alias, multiple-inheritance, three-level, and covariant cases.
+- Canonicalized constructor argument collection and reachability so alias-named bases keep their constructor and destructor functions reachable; a genuinely unresolved mem-initializer is now a compile error instead of silently default-constructing the base.
+- Fixed missing destructors for direct template-specialization bases: early body analysis no longer drops a destructor before registration, and lifecycle synthesis seeds resource types before template instantiation so synthesized base destructors are emitted.
+- Resolved `new Alias(...)` and alias-typed variables/pointers to the canonical specialization type, fixing the pointer-type mismatch and destructor omission for `new`/`delete` through aliases.
+- Canonicalized `final` method and destructor propagation for alias-named bases, and removed a dead alias-layout cloning pass that never ran.
+- Added regression tests for every case plus negative tests for invalid mem-initializers and overriding a `final` method through an alias; refreshed golden hashes.
+
 ### Virtual Lifecycle and Integration
 - Constructors and destructors now initialize/destroy only direct non-virtual bases, in declaration and reverse declaration order, so indirect bases are no longer processed repeatedly.
 - Fixed phantom primary vtables: classes without their own virtuals reuse the actual polymorphic base subobject's vptr, including when non-polymorphic bases are declared first.
