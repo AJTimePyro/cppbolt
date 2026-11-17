@@ -272,7 +272,8 @@ fn test_parse_variadic_template_header_and_sizeof_pack() -> Result<(), Box<dyn s
 }
 
 #[test]
-fn test_parse_variadic_class_template_and_non_type_pack() -> Result<(), Box<dyn std::error::Error>> {
+fn test_parse_variadic_class_template_and_non_type_pack() -> Result<(), Box<dyn std::error::Error>>
+{
     let code = "template <typename T, typename... Rest> class Tuple {};";
     let tokens = Lexer::new(code).tokenize()?;
     let program = Parser::new(tokens).parse_program()?;
@@ -378,13 +379,17 @@ fn test_parse_pack_expansion_contexts() -> Result<(), Box<dyn std::error::Error>
         return Err("expected call expr 0".into());
     };
     assert_eq!(args.len(), 1);
-    assert!(matches!(&args[0], Expr::PackExpansion { pattern, .. } if matches!(**pattern, Expr::Identifier(ref id) if id == "args")));
+    assert!(
+        matches!(&args[0], Expr::PackExpansion { pattern, .. } if matches!(**pattern, Expr::Identifier(ref id) if id == "args"))
+    );
 
     let StmtKind::Expr(Expr::Call { ref args, .. }) = stmts[1].kind else {
         return Err("expected call expr 1".into());
     };
     assert_eq!(args.len(), 1);
-    assert!(matches!(&args[0], Expr::PackExpansion { pattern, .. } if matches!(**pattern, Expr::Call { .. })));
+    assert!(
+        matches!(&args[0], Expr::PackExpansion { pattern, .. } if matches!(**pattern, Expr::Call { .. }))
+    );
 
     let StmtKind::VarDecl { ref init, .. } = stmts[2].kind else {
         return Err("expected vardecl 2".into());
@@ -393,13 +398,16 @@ fn test_parse_pack_expansion_contexts() -> Result<(), Box<dyn std::error::Error>
         return Err("expected initializer list".into());
     };
     assert_eq!(elements.len(), 1);
-    assert!(matches!(&elements[0], Expr::PackExpansion { pattern, .. } if matches!(**pattern, Expr::Identifier(ref id) if id == "args")));
+    assert!(
+        matches!(&elements[0], Expr::PackExpansion { pattern, .. } if matches!(**pattern, Expr::Identifier(ref id) if id == "args"))
+    );
 
     Ok(())
 }
 
 #[test]
-fn test_parse_pack_expansion_in_base_classes_and_ctor_inits() -> Result<(), Box<dyn std::error::Error>> {
+fn test_parse_pack_expansion_in_base_classes_and_ctor_inits()
+-> Result<(), Box<dyn std::error::Error>> {
     let code = r#"
         template <typename... Bases>
         struct Derived : public Bases... {
@@ -470,6 +478,3 @@ fn test_parse_pack_expansion_in_ordinary_function() -> Result<(), Box<dyn std::e
     assert!(matches!(&elements[1], Expr::PackExpansion { .. }));
     Ok(())
 }
-
-
-

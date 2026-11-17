@@ -25,10 +25,10 @@ fn is_copy_suppressed(name: &str, methods: &[FunctionDecl]) -> bool {
         let is_assign = m.name == "operator=" && m.params.len() == 1;
         (is_ctor || is_assign)
             && matches!(
-                m.params[0].ty.strip_const(),
-                Type::RvalueReference(inner)
-                    if matches!(inner.strip_const(), Type::Struct(s)
-                        if QualifiedName::new(s).class_short_name() == short)
+            m.params[0].ty.strip_const(),
+            Type::RvalueReference(inner)
+            if matches!(inner.strip_const(), Type::Struct(s)
+            if QualifiedName::new(s).class_short_name() == short)
             )
     })
 }
@@ -57,10 +57,10 @@ fn is_move_suppressed(name: &str, methods: &[FunctionDecl]) -> bool {
         let is_assign = m.name == "operator=" && m.params.len() == 1;
         (is_ctor || is_assign)
             && matches!(
-                m.params[0].ty.strip_const(),
-                Type::Reference(inner) | Type::RvalueReference(inner)
-                    if matches!(inner.strip_const(), Type::Struct(s)
-                        if QualifiedName::new(s).class_short_name() == short)
+            m.params[0].ty.strip_const(),
+            Type::Reference(inner) | Type::RvalueReference(inner)
+            if matches!(inner.strip_const(), Type::Struct(s)
+            if QualifiedName::new(s).class_short_name() == short)
             )
     });
     has_custom_dtor || has_copy_or_move_op
@@ -79,8 +79,8 @@ fn synthesize_copy_constructor(
             || QualifiedName::new(&m.name).class_short_name() == short)
             && m.params.len() == 1
             && matches!(m.params[0].ty.strip_const(), Type::Reference(inner)
-                if matches!(inner.strip_const(), Type::Struct(s)
-                    if QualifiedName::new(s).class_short_name() == short))
+if matches!(inner.strip_const(), Type::Struct(s)
+if QualifiedName::new(s).class_short_name() == short))
     });
     if !has_copy_ctor {
         let param_ty = Type::Reference(Box::new(Type::Const(Box::new(Type::Struct(
@@ -102,6 +102,7 @@ fn synthesize_copy_constructor(
             )
         }));
         methods.push(FunctionDecl {
+            qualifiers: FunctionQualifiers::default(),
             name: name.to_string(),
             return_type: Type::Void,
             params: vec![Param {
@@ -121,7 +122,7 @@ fn synthesize_copy_constructor(
             template_params: vec![],
             line: 0,
             col: 0,
-        });
+        })
     }
 }
 
@@ -161,6 +162,7 @@ fn synthesize_move_constructor(
         )
     }));
     methods.push(FunctionDecl {
+        qualifiers: FunctionQualifiers::default(),
         name: name.to_string(),
         return_type: Type::Void,
         params: vec![Param {
@@ -180,7 +182,7 @@ fn synthesize_move_constructor(
         template_params: vec![],
         line: 0,
         col: 0,
-    });
+    })
 }
 
 fn synthesize_copy_assignment(
@@ -194,8 +196,8 @@ fn synthesize_copy_assignment(
         m.name == "operator="
             && m.params.len() == 1
             && matches!(m.params[0].ty.strip_const(), Type::Reference(inner)
-                if matches!(inner.strip_const(), Type::Struct(s)
-                    if QualifiedName::new(s).class_short_name() == short))
+if matches!(inner.strip_const(), Type::Struct(s)
+if QualifiedName::new(s).class_short_name() == short))
     });
     if !has_copy_assign {
         let param_ty = Type::Reference(Box::new(Type::Const(Box::new(Type::Struct(
@@ -203,6 +205,7 @@ fn synthesize_copy_assignment(
         )))));
         let body_stmts = synthesize_assignment_body(base_classes, fields, false);
         methods.push(FunctionDecl {
+            qualifiers: FunctionQualifiers::default(),
             name: "operator=".to_string(),
             return_type: Type::Reference(Box::new(Type::Struct(name.to_string()))),
             params: vec![Param {
@@ -222,7 +225,7 @@ fn synthesize_copy_assignment(
             template_params: vec![],
             line: 0,
             col: 0,
-        });
+        })
     }
 }
 
@@ -235,6 +238,7 @@ fn synthesize_move_assignment(
     let param_ty = Type::RvalueReference(Box::new(Type::Struct(name.to_string())));
     let body_stmts = synthesize_assignment_body(base_classes, fields, true);
     methods.push(FunctionDecl {
+        qualifiers: FunctionQualifiers::default(),
         name: "operator=".to_string(),
         return_type: Type::Reference(Box::new(Type::Struct(name.to_string()))),
         params: vec![Param {
@@ -254,7 +258,7 @@ fn synthesize_move_assignment(
         template_params: vec![],
         line: 0,
         col: 0,
-    });
+    })
 }
 
 fn synthesize_assignment_body(

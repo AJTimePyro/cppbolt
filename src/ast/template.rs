@@ -17,6 +17,7 @@ pub struct TemplateClass {
     pub name: String,
     pub is_class: bool,
     pub base_classes: Vec<String>,
+    pub base_access: Vec<crate::ast::BaseAccess>,
     pub fields: Vec<StructFieldDecl>,
     pub methods: Vec<FunctionDecl>,
     pub static_fields: Vec<(String, Type, Option<Expr>)>,

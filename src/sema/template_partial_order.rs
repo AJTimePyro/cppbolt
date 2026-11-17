@@ -59,7 +59,10 @@ fn synth_subst_type(ty: &Type, synth_map: &std::collections::HashMap<String, Typ
         }
         Type::TemplateInstance { name, args } => Type::TemplateInstance {
             name: name.clone(),
-            args: args.iter().map(|a| synth_subst_type(a, synth_map)).collect(),
+            args: args
+                .iter()
+                .map(|a| synth_subst_type(a, synth_map))
+                .collect(),
         },
         _ => ty.clone(),
     }
@@ -121,10 +124,10 @@ pub fn compare_function_templates(
         return Some(Ordering::Greater);
     }
 
-    let has_pack1 = cand1.decl.params.iter().any(|p| p.is_pack)
-        || cand1.params.iter().any(|p| p.is_pack);
-    let has_pack2 = cand2.decl.params.iter().any(|p| p.is_pack)
-        || cand2.params.iter().any(|p| p.is_pack);
+    let has_pack1 =
+        cand1.decl.params.iter().any(|p| p.is_pack) || cand1.params.iter().any(|p| p.is_pack);
+    let has_pack2 =
+        cand2.decl.params.iter().any(|p| p.is_pack) || cand2.params.iter().any(|p| p.is_pack);
 
     if !has_pack1 && has_pack2 {
         Some(Ordering::Less)
@@ -138,10 +141,12 @@ pub fn compare_function_templates(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::FunctionQualifiers;
     use crate::ast::decl::{Param, RefQualifier};
 
     fn make_fn_decl(name: &str, params: Vec<Param>) -> FunctionDecl {
         FunctionDecl {
+            qualifiers: FunctionQualifiers::default(),
             name: name.to_string(),
             return_type: Type::Void,
             params,

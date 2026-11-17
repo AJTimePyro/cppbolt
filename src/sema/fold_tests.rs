@@ -36,7 +36,14 @@ fn test_expand_fold_expr_unary_and_binary() -> Result<(), Box<dyn std::error::Er
         &mapping,
         ExprPos::default(),
     )?;
-    assert_eq!(unary_left, bin_op(BinaryOp::Add, bin_op(BinaryOp::Add, int_lit(1), int_lit(2)), int_lit(3)));
+    assert_eq!(
+        unary_left,
+        bin_op(
+            BinaryOp::Add,
+            bin_op(BinaryOp::Add, int_lit(1), int_lit(2)),
+            int_lit(3)
+        )
+    );
 
     let mut mapping_bin = HashMap::new();
     mapping_bin.insert("args".to_string(), TemplateArg::NonTypePack(vec![1, 2]));
@@ -47,7 +54,14 @@ fn test_expand_fold_expr_unary_and_binary() -> Result<(), Box<dyn std::error::Er
         &mapping_bin,
         ExprPos::default(),
     )?;
-    assert_eq!(bin_left, bin_op(BinaryOp::Shl, bin_op(BinaryOp::Shl, id_expr("s"), int_lit(1)), int_lit(2)));
+    assert_eq!(
+        bin_left,
+        bin_op(
+            BinaryOp::Shl,
+            bin_op(BinaryOp::Shl, id_expr("s"), int_lit(1)),
+            int_lit(2)
+        )
+    );
 
     let mut empty_mapping = HashMap::new();
     empty_mapping.insert("args".to_string(), TemplateArg::NonTypePack(vec![]));
@@ -83,10 +97,7 @@ fn test_expand_fold_expr_unary_and_binary() -> Result<(), Box<dyn std::error::Er
 #[test]
 fn test_expand_fold_expr_unary_right_and_binary_right() -> Result<(), Box<dyn std::error::Error>> {
     let mut mapping = HashMap::new();
-    mapping.insert(
-        "args".to_string(),
-        TemplateArg::NonTypePack(vec![1, 2, 3]),
-    );
+    mapping.insert("args".to_string(), TemplateArg::NonTypePack(vec![1, 2, 3]));
 
     // Unary Right: (args + ...) with [1, 2, 3] -> (1 + (2 + 3))
     let unary_right = expand_fold_expr(
@@ -111,10 +122,7 @@ fn test_expand_fold_expr_unary_right_and_binary_right() -> Result<(), Box<dyn st
 
     // Binary Right: (args + ... + 0) with [1, 2] -> (1 + (2 + 0))
     let mut mapping_bin = HashMap::new();
-    mapping_bin.insert(
-        "args".to_string(),
-        TemplateArg::NonTypePack(vec![1, 2]),
-    );
+    mapping_bin.insert("args".to_string(), TemplateArg::NonTypePack(vec![1, 2]));
     let bin_right = expand_fold_expr(
         FoldOp::Binary(BinaryOp::Add),
         Some(&id_expr("args")),
@@ -169,10 +177,7 @@ fn test_expand_fold_expr_empty_standard_fallbacks() -> Result<(), Box<dyn std::e
 #[test]
 fn test_expand_fold_expr_single_element() -> Result<(), Box<dyn std::error::Error>> {
     let mut mapping = HashMap::new();
-    mapping.insert(
-        "args".to_string(),
-        TemplateArg::NonTypePack(vec![42]),
-    );
+    mapping.insert("args".to_string(), TemplateArg::NonTypePack(vec![42]));
 
     // Unary: (... + args) with [42] -> 42
     let unary_left = expand_fold_expr(
@@ -241,10 +246,7 @@ fn test_expand_fold_expr_diagnostics() {
 #[test]
 fn test_substitute_expr_fold() -> Result<(), Box<dyn std::error::Error>> {
     let mut mapping = HashMap::new();
-    mapping.insert(
-        "vals".to_string(),
-        TemplateArg::NonTypePack(vec![10, 20]),
-    );
+    mapping.insert("vals".to_string(), TemplateArg::NonTypePack(vec![10, 20]));
 
     let mut fold_expr = Expr::FoldExpr {
         op: FoldOp::Binary(BinaryOp::Add),
@@ -284,12 +286,12 @@ fn test_expand_fold_expr_type_pack_renaming() -> Result<(), Box<dyn std::error::
 
     let expected = Expr::Binary {
         op: BinaryOp::Add,
-        left: Box::new(Expr::Identifier(
-            super::pack_expansion::pack_element_name("args", 0),
-        )),
-        right: Box::new(Expr::Identifier(
-            super::pack_expansion::pack_element_name("args", 1),
-        )),
+        left: Box::new(Expr::Identifier(super::pack_expansion::pack_element_name(
+            "args", 0,
+        ))),
+        right: Box::new(Expr::Identifier(super::pack_expansion::pack_element_name(
+            "args", 1,
+        ))),
         pos: ExprPos::default(),
     };
     assert_eq!(fold_res, expected);
@@ -299,10 +301,7 @@ fn test_expand_fold_expr_type_pack_renaming() -> Result<(), Box<dyn std::error::
 #[test]
 fn test_expand_fold_compound_assign() -> Result<(), Box<dyn std::error::Error>> {
     let mut mapping = HashMap::new();
-    mapping.insert(
-        "args".to_string(),
-        TemplateArg::NonTypePack(vec![1, 2]),
-    );
+    mapping.insert("args".to_string(), TemplateArg::NonTypePack(vec![1, 2]));
 
     let fold_res = expand_fold_expr(
         FoldOp::Compound(BinaryOp::Add),
@@ -384,10 +383,7 @@ fn test_nttp_fold_expression_evaluation() -> Result<(), Box<dyn std::error::Erro
 
     // Evaluation with evaluate_dependent_nontype
     let mut mapping = HashMap::new();
-    mapping.insert(
-        "Sizes".to_string(),
-        TemplateArg::NonTypePack(vec![1, 2, 3]),
-    );
+    mapping.insert("Sizes".to_string(), TemplateArg::NonTypePack(vec![1, 2, 3]));
     let res_right = evaluate_dependent_nontype("(Sizes + ...)", &mapping, None)?;
     assert_eq!(res_right, Type::NonType(6));
 
@@ -406,7 +402,8 @@ fn test_nttp_fold_expression_evaluation() -> Result<(), Box<dyn std::error::Erro
 }
 
 #[test]
-fn test_nttp_fold_expression_template_parsing_and_subst() -> Result<(), Box<dyn std::error::Error>> {
+fn test_nttp_fold_expression_template_parsing_and_subst() -> Result<(), Box<dyn std::error::Error>>
+{
     let mut lexer = crate::lexer::Lexer::new("FixedBuffer<(Sizes + ...)>");
     let tokens = lexer.tokenize()?;
     let mut parser = crate::parser::Parser::new(tokens);
@@ -421,10 +418,7 @@ fn test_nttp_fold_expression_template_parsing_and_subst() -> Result<(), Box<dyn 
     );
 
     let mut mapping = HashMap::new();
-    mapping.insert(
-        "Sizes".to_string(),
-        TemplateArg::NonTypePack(vec![1, 2, 3]),
-    );
+    mapping.insert("Sizes".to_string(), TemplateArg::NonTypePack(vec![1, 2, 3]));
     let subst_type = crate::sema::template_subst::substitute_type(&parsed_type, &mapping, None)?;
     assert_eq!(
         subst_type,
@@ -453,7 +447,14 @@ fn test_expand_fold_expr_member_pointers() -> Result<(), Box<dyn std::error::Err
         &mapping,
         ExprPos::default(),
     )?;
-    assert_eq!(dot, bin_op(BinaryOp::DotStar, bin_op(BinaryOp::DotStar, id_expr("r"), int_lit(1)), int_lit(2)));
+    assert_eq!(
+        dot,
+        bin_op(
+            BinaryOp::DotStar,
+            bin_op(BinaryOp::DotStar, id_expr("r"), int_lit(1)),
+            int_lit(2)
+        )
+    );
 
     let arrow = expand_fold_expr(
         FoldOp::ArrowStar,
@@ -462,13 +463,32 @@ fn test_expand_fold_expr_member_pointers() -> Result<(), Box<dyn std::error::Err
         &mapping,
         ExprPos::default(),
     )?;
-    assert_eq!(arrow, bin_op(BinaryOp::ArrowStar, bin_op(BinaryOp::ArrowStar, id_expr("p"), int_lit(1)), int_lit(2)));
+    assert_eq!(
+        arrow,
+        bin_op(
+            BinaryOp::ArrowStar,
+            bin_op(BinaryOp::ArrowStar, id_expr("p"), int_lit(1)),
+            int_lit(2)
+        )
+    );
 
     let mut empty = HashMap::new();
     empty.insert("ptrs".to_string(), TemplateArg::NonTypePack(vec![]));
-    let err_dot = expand_fold_expr(FoldOp::DotStar, Some(&id_expr("ptrs")), None, &empty, ExprPos::default());
+    let err_dot = expand_fold_expr(
+        FoldOp::DotStar,
+        Some(&id_expr("ptrs")),
+        None,
+        &empty,
+        ExprPos::default(),
+    );
     assert!(err_dot.is_err_and(|e| e.message.contains("empty expansion for operator '.*'")));
-    let err_arrow = expand_fold_expr(FoldOp::ArrowStar, Some(&id_expr("ptrs")), None, &empty, ExprPos::default());
+    let err_arrow = expand_fold_expr(
+        FoldOp::ArrowStar,
+        Some(&id_expr("ptrs")),
+        None,
+        &empty,
+        ExprPos::default(),
+    );
     assert!(err_arrow.is_err_and(|e| e.message.contains("empty expansion for operator '->*'")));
 
     Ok(())

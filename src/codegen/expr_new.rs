@@ -45,7 +45,7 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         if let Type::Struct(sname) = ty.strip_const() {
-            if let Some(&v_off) = self.vtable_offsets.get(sname) {
+            for (vptr_offset, v_off) in self.vtable_installs(sname) {
                 code.push(OP_LOCAL_GET);
                 write_u32(code, ctx.fp_local);
                 code.push(OP_I32_LOAD);
@@ -55,7 +55,7 @@ impl<'a> Codegen<'a> {
                 write_i32(code, v_off as i32);
                 code.push(OP_I32_STORE);
                 write_u32(code, 2);
-                write_u32(code, 0);
+                write_u32(code, vptr_offset);
             }
             let arg_types: Vec<Type> = args.iter().map(|a| self.get_expr_type(a, ctx)).collect();
             if let Some((ctor_idx, sig)) =
@@ -75,8 +75,8 @@ impl<'a> Codegen<'a> {
                 write_u32(code, ctor_idx);
             } else if args.len() == 1
                 && matches!(
-                    arg_types[0].strip_const().strip_reference(),
-                    Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(sname))
+                arg_types[0].strip_const().strip_reference(),
+                Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(sname))
                 )
             {
                 let size = self

@@ -69,16 +69,22 @@ impl<'a> Codegen<'a> {
         self.compile_member_initializers(f, layout, ctx, code)
     }
 
-    /// Installs the class's vtable pointer in the object under construction.
+    /// Returns `(vptr_offset, vtable_address)` for every polymorphic
+    /// subobject of `cls`.
+    pub(super) fn vtable_installs(&self, cls: &str) -> Vec<(u32, u32)> {
+        self.vtable_offsets.get(cls).cloned().unwrap_or_default()
+    }
+    /// Installs all of the class's vtable pointers in the object under
+    /// construction. `this` is local 0, as in every constructor body.
     pub(super) fn install_class_vtable(&mut self, cls: &str, code: &mut Vec<u8>) {
-        if let Some(&v_off) = self.vtable_offsets.get(cls) {
+        for (vptr_offset, v_off) in self.vtable_installs(cls) {
             code.push(OP_LOCAL_GET);
             write_u32(code, 0); // this
             code.push(OP_I32_CONST);
             write_i32(code, v_off as i32);
             code.push(OP_I32_STORE);
             write_u32(code, 2);
-            write_u32(code, 0);
+            write_u32(code, vptr_offset);
         }
     }
 
@@ -247,8 +253,8 @@ impl<'a> Codegen<'a> {
         } else if let Some(args) = init_args
             && args.len() == 1
             && matches!(
-                arg_types[0].clean_type(),
-                Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(sname))
+            arg_types[0].clean_type(),
+            Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(sname))
             )
         {
             self.compile_lvalue_addr(&args[0], ctx, code)?;

@@ -101,6 +101,7 @@ impl<'a> Codegen<'a> {
             Type::Pointer(Box::new(Type::Function {
                 return_type: Box::new(sig.return_type.clone()),
                 param_types: sig.param_types.clone(),
+                qualifiers: FunctionQualifiers::default(),
             }))
         } else {
             Type::Int
@@ -419,6 +420,7 @@ impl<'a> Codegen<'a> {
                 member_type: Box::new(Type::Function {
                     return_type: Box::new(sig.return_type.clone()),
                     param_types: sig.param_types.iter().skip(1).cloned().collect(),
+                    qualifiers: FunctionQualifiers::default(),
                 }),
             });
         }
@@ -440,6 +442,7 @@ impl<'a> Codegen<'a> {
                 } else {
                     sig.param_types.iter().skip(1).cloned().collect()
                 },
+                qualifiers: FunctionQualifiers::default(),
             };
             if sig.is_static {
                 return Some(Type::Pointer(Box::new(fn_type)));

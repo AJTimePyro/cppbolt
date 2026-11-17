@@ -1,16 +1,15 @@
 //! C++17 fold expression expansion and template substitution.
 
-use std::collections::HashSet;
-use std::collections::HashMap;
-
 use crate::ast::fold_op::FoldOp;
 use crate::ast::types::Type;
 use crate::ast::{BinaryOp, Expr, ExprPos};
 use crate::diagnostics::CompileError;
 use crate::sema::pack_expansion::{
-    build_slice_mapping, find_unexpanded_packs, rename_pack_identifiers, validate_pack_lengths,
-    TemplateArg,
+    TemplateArg, build_slice_mapping, find_unexpanded_packs, rename_pack_identifiers,
+    validate_pack_lengths,
 };
+use std::collections::HashMap;
+use std::collections::HashSet;
 
 enum FoldShape<'a> {
     Unary {
@@ -120,7 +119,12 @@ fn empty_unary_fold(op: FoldOp, pos: ExprPos) -> Result<Expr, CompileError> {
     }
 }
 
-fn build_fold_op_expr(op: FoldOp, left: Expr, right: Expr, pos: ExprPos) -> Result<Expr, CompileError> {
+fn build_fold_op_expr(
+    op: FoldOp,
+    left: Expr,
+    right: Expr,
+    pos: ExprPos,
+) -> Result<Expr, CompileError> {
     match op {
         FoldOp::Binary(b_op) => Ok(Expr::Binary {
             op: b_op,
@@ -186,7 +190,11 @@ pub fn expand_fold_expr(
         .collect();
     let shape = classify_fold(left, right, &known, pos)?;
     match shape {
-        FoldShape::Unary { pack_expr, packs, is_left } => {
+        FoldShape::Unary {
+            pack_expr,
+            packs,
+            is_left,
+        } => {
             let len = validate_pack_lengths(&packs, mapping, pos)?;
             if len == 0 {
                 return empty_unary_fold(op, pos);
@@ -209,7 +217,12 @@ pub fn expand_fold_expr(
                 Ok(acc)
             }
         }
-        FoldShape::Binary { pack_expr, packs, init, is_left } => {
+        FoldShape::Binary {
+            pack_expr,
+            packs,
+            init,
+            is_left,
+        } => {
             let len = validate_pack_lengths(&packs, mapping, pos)?;
             let mut init_subst = init.clone();
             crate::sema::template_subst::substitute_expr(&mut init_subst, mapping, None)?;

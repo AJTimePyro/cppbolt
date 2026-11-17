@@ -1,11 +1,43 @@
 use super::*;
 
+/// One entry of a per-subobject virtual table.
+#[derive(Debug, Clone)]
+pub struct VTableSlotInfo {
+    /// Source-level virtual function name. `~` and `__deleting_dtor` denote
+    /// the destructor and its deleting counterpart.
+    pub name: String,
+}
+
+/// One virtual table belonging to a base subobject of a complete object.
+///
+/// A polymorphic class with several polymorphic bases has one vptr (and one
+/// table) per such subobject. `vptr_offset` is measured from the start of the
+/// complete object; the primary table is normally at offset zero.
+#[derive(Debug, Clone)]
+pub struct VTableInfo {
+    /// Class of the subobject that owns this vptr.
+    pub owner: String,
+    /// Offset of the vptr from the start of the complete object.
+    pub vptr_offset: usize,
+    /// Slots in dispatch order.
+    pub slots: Vec<VTableSlotInfo>,
+}
+
+pub(super) fn element_struct_name(ty: &Type) -> Option<&str> {
+    match ty.strip_const() {
+        Type::Struct(name) => Some(name),
+        Type::Array(elem, _) => element_struct_name(elem),
+        _ => None,
+    }
+}
+
 /// The declaration of one record plus the source position used for layout
 /// diagnostics.
 pub(crate) struct RecordLayout<'a> {
     pub(super) name: &'a str,
     pub(super) is_class: bool,
     pub(super) base_classes: &'a [String],
+    pub(super) base_access: &'a [crate::ast::BaseAccess],
     pub(super) fields: &'a [StructFieldDecl],
     pub(super) methods: &'a [FunctionDecl],
     pub(super) private_members: &'a [String],
@@ -79,12 +111,18 @@ impl Sema {
 
         self.layout_base_subobjects(input.base_classes, &mut acc, input.line, input.col)?;
 
-        self.layout_vtable_slots(input.methods, has_vtable, &mut acc.vtable_slots);
+        self.layout_vtable_slots(
+            input.methods,
+            input.base_classes,
+            has_vtable,
+            &mut acc.vtable_slots,
+        );
 
         self.layout_own_fields(input.fields, &mut acc);
 
         acc.round_up();
         acc.round_up();
+        let vtables = self.build_vtables(input.name, input.base_classes, &acc, has_vtable);
 
         let pure_virtuals = self.collect_pure_virtuals(input.base_classes, input.methods);
         let is_abstract = !pure_virtuals.is_empty();
@@ -98,12 +136,14 @@ impl Sema {
             is_class: input.is_class,
             has_user_declared_constructors,
             base_classes: input.base_classes.to_vec(),
+            base_access: input.base_access.to_vec(),
             base_offsets: acc.base_offsets,
             fields: acc.struct_fields,
             size: acc.offset,
             align: acc.max_align,
             has_vtable,
-            vtable_slots: acc.vtable_slots,
+            vtable_slots: acc.vtable_slots.clone(),
+            vtables,
             private_members: input.private_members.iter().cloned().collect(),
             is_abstract,
             pure_virtuals,
@@ -157,16 +197,16 @@ impl Sema {
                         acc.offset += align - (acc.offset % align);
                     }
                     let base_offset = acc.offset;
-                    acc.offset = acc
-                        .offset
-                        .checked_add(base_layout.size)
-                        .ok_or_else(|| CompileError::new("object layout is too large", line, col))?;
+                    acc.offset = acc.offset.checked_add(base_layout.size).ok_or_else(|| {
+                        CompileError::new("object layout is too large", line, col)
+                    })?;
                     base_offset
                 };
             acc.max_align = acc.max_align.max(base_layout.align);
             acc.base_offsets.push((base_name.clone(), base_offset));
             for (sub_b, sub_off) in &base_layout.base_offsets {
-                acc.base_offsets.push((sub_b.clone(), base_offset + sub_off));
+                acc.base_offsets
+                    .push((sub_b.clone(), base_offset + sub_off));
             }
             if base_layout.has_vtable && acc.vtable_slots.is_empty() {
                 acc.vtable_slots = base_layout.vtable_slots.clone();
@@ -180,6 +220,64 @@ impl Sema {
         }
         Ok(())
     }
+    /// Builds one vtable descriptor per polymorphic subobject.
+    ///
+    /// The first polymorphic base shares the vptr at offset zero with the
+    /// complete object (the "primary" table). Every other polymorphic base
+    /// keeps its own vptr at its base-subobject offset. Bases are enumerated
+    /// through the flattened `base_offsets` list, so indirect and repeated
+    /// bases each receive their own descriptor.
+    fn build_vtables(
+        &self,
+        class_name: &str,
+        base_classes: &[String],
+        acc: &LayoutAccumulator,
+        has_vtable: bool,
+    ) -> Vec<VTableInfo> {
+        if !has_vtable {
+            return Vec::new();
+        }
+        let primary_base = base_classes
+            .first()
+            .filter(|b| self.struct_layouts.get(*b).is_some_and(|l| l.has_vtable));
+        let primary_owner = primary_base
+            .cloned()
+            .unwrap_or_else(|| class_name.to_string());
+        let as_slots = |names: &[String]| -> Vec<VTableSlotInfo> {
+            names
+                .iter()
+                .map(|n| VTableSlotInfo { name: n.clone() })
+                .collect()
+        };
+        let mut tables = vec![VTableInfo {
+            owner: primary_owner.clone(),
+            vptr_offset: 0,
+            slots: as_slots(&acc.vtable_slots),
+        }];
+        for (base_name, base_offset) in &acc.base_offsets {
+            if *base_offset == 0 && *base_name == primary_owner {
+                continue;
+            }
+            let Some(bl) = self.struct_layouts.get(base_name) else {
+                continue;
+            };
+            if !bl.has_vtable {
+                continue;
+            }
+            let Some(primary) = bl.vtables.first() else {
+                continue;
+            };
+            if tables.iter().any(|t| t.vptr_offset == *base_offset) {
+                continue;
+            }
+            tables.push(VTableInfo {
+                owner: base_name.clone(),
+                vptr_offset: *base_offset,
+                slots: primary.slots.clone(),
+            });
+        }
+        tables
+    }
 
     /// Adds newly introduced virtual methods to the inherited slot list.
     ///
@@ -188,22 +286,36 @@ impl Sema {
     fn layout_vtable_slots(
         &mut self,
         methods: &[FunctionDecl],
+        base_classes: &[String],
         has_vtable: bool,
         vtable_slots: &mut Vec<String>,
     ) {
         if !has_vtable {
             return;
         }
+        // An override of a virtual declared in *any* base (including a
+        // secondary polymorphic base) replaces that base's slot; it does not
+        // introduce a new slot in the primary table.
+        let mut inherited: Vec<String> = vtable_slots.clone();
+        for base in base_classes {
+            if let Some(bl) = self.struct_layouts.get(base) {
+                for slot in &bl.vtable_slots {
+                    if !inherited.contains(slot) {
+                        inherited.push(slot.clone());
+                    }
+                }
+            }
+        }
         for m in methods {
             if m.name.starts_with('~') {
-                let is_virt_dtor = m.is_virtual || vtable_slots.iter().any(|s| s == "~");
+                let is_virt_dtor = m.is_virtual || inherited.iter().any(|s| s == "~");
                 if is_virt_dtor && !vtable_slots.iter().any(|s| s == "~") {
                     vtable_slots.push("~".to_string());
                     vtable_slots.push("__deleting_dtor".to_string());
                 }
             } else {
-                let is_override = vtable_slots.iter().any(|s| s == &m.name);
-                if (m.is_virtual || is_override) && !is_override {
+                let is_override = inherited.iter().any(|s| s == &m.name);
+                if (m.is_virtual || is_override) && !vtable_slots.contains(&m.name) {
                     vtable_slots.push(m.name.clone());
                 }
             }
@@ -254,135 +366,6 @@ impl Sema {
         }
     }
 
-    pub(super) fn dump_base_layout(&self, base_name: &str, depth: usize, out: &mut String) {
-        if let Some(bl) = self.struct_layouts.get(base_name) {
-            let pad = "  ".repeat(depth);
-            let tag = if bl.is_class { "class" } else { "struct" };
-            if bl.fields.is_empty() && !bl.has_vtable && bl.base_classes.is_empty() {
-                out.push_str(&format!(
-                    "{:10} | {}{} {} (base) (empty)\n",
-                    0, pad, tag, base_name
-                ));
-            } else {
-                let kind = if bl.has_vtable {
-                    "(primary base)"
-                } else {
-                    "(base)"
-                };
-                out.push_str(&format!(
-                    "{:10} | {}{} {} {}\n",
-                    0, pad, tag, base_name, kind
-                ));
-                if !bl.base_classes.is_empty() {
-                    self.dump_base_layout(&bl.base_classes[0], depth + 1, out);
-                } else if bl.has_vtable {
-                    out.push_str(&format!(
-                        "{:10} | {}  ({} vtable pointer)\n",
-                        0, pad, base_name
-                    ));
-                }
-                let base_field_count = if !bl.base_classes.is_empty() {
-                    self.struct_layouts
-                        .get(&bl.base_classes[0])
-                        .map(|b| b.fields.len())
-                        .unwrap_or(0)
-                } else {
-                    0
-                };
-                for f in bl.fields.iter().skip(base_field_count) {
-                    self.dump_field(f, 0, depth + 1, out);
-                }
-            }
-        }
-    }
-
-    pub(super) fn dump_field(
-        &self,
-        f: &StructField,
-        base_offset: usize,
-        depth: usize,
-        out: &mut String,
-    ) {
-        let pad = "  ".repeat(depth);
-        if let Type::Struct(sname) = f.ty.strip_const()
-            && let Some(sl) = self.struct_layouts.get(sname)
-        {
-            let tag = if sl.is_class { "class" } else { "struct" };
-            out.push_str(&format!(
-                "{:10} | {}{} {} {}\n",
-                f.offset + base_offset,
-                pad,
-                tag,
-                sname,
-                f.name
-            ));
-            for sf in &sl.fields {
-                self.dump_field(sf, f.offset + base_offset, depth + 1, out);
-            }
-            return;
-        }
-        out.push_str(&format!(
-            "{:10} | {}{} {}\n",
-            f.offset + base_offset,
-            pad,
-            f.ty.to_c_type(),
-            f.name
-        ));
-    }
-
-    pub fn dump_record_layouts(&self) -> String {
-        let mut out = String::new();
-        for name in &self.struct_order {
-            if let Some(layout) = self.struct_layouts.get(name) {
-                out.push_str("\n*** Dumping AST Record Layout\n");
-                let tag = if layout.is_class { "class" } else { "struct" };
-                if layout.fields.is_empty() && !layout.has_vtable && layout.base_classes.is_empty()
-                {
-                    out.push_str(&format!("{:10} | {} {} (empty)\n", 0, tag, name));
-                    out.push_str(&format!(
-                        "           | [sizeof={}, dsize={}, align={},\n",
-                        layout.size, layout.size, layout.align
-                    ));
-                    out.push_str(&format!(
-                        "           |  nvsize={}, nvalign={}]\n",
-                        layout.size, layout.align
-                    ));
-                    continue;
-                }
-                out.push_str(&format!("{:10} | {} {}\n", 0, tag, name));
-                if !layout.base_classes.is_empty() {
-                    self.dump_base_layout(&layout.base_classes[0], 1, &mut out);
-                } else if layout.has_vtable {
-                    out.push_str(&format!("{:10} |   ({} vtable pointer)\n", 0, name));
-                }
-                let base_field_count = if !layout.base_classes.is_empty() {
-                    self.struct_layouts
-                        .get(&layout.base_classes[0])
-                        .map(|bl| bl.fields.len())
-                        .unwrap_or(0)
-                } else {
-                    0
-                };
-                for f in layout.fields.iter().skip(base_field_count) {
-                    self.dump_field(f, 0, 1, &mut out);
-                }
-                out.push_str(&format!(
-                    "           | [sizeof={}, dsize={}, align={},\n",
-                    layout.size, layout.size, layout.align
-                ));
-                out.push_str(&format!(
-                    "           |  nvsize={}, nvalign={}]\n",
-                    layout.size, layout.align
-                ));
-            }
-        }
-        out
-    }
-
-    /// Builds the compiler-private symbol name used to distinguish overloads.
-    ///
-    /// This is intentionally simpler than the Itanium C++ ABI; the resulting
-    /// names only need to be stable within one compilation.
     pub fn mangle_name(&self, name: &str, params: &[Param]) -> String {
         if name == "main"
             || name == "printf"

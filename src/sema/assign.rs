@@ -337,6 +337,7 @@ impl Sema {
             && let Type::Function {
                 return_type,
                 param_types,
+                ..
             } = &**inner
             && let Some(sig) =
                 self.find_method_in_class_for_receiver(sname, "__to_fn_ptr", is_const)
@@ -344,6 +345,7 @@ impl Sema {
             && let Type::Function {
                 return_type: sig_ret,
                 param_types: sig_params,
+                ..
             } = &**sig_inner
             && return_type == sig_ret
             && param_types == sig_params

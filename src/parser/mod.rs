@@ -11,6 +11,7 @@ use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 
 mod atom;
+mod base_classes;
 mod decl;
 mod decl_func;
 mod enums_operators;
@@ -18,15 +19,17 @@ mod expr;
 mod expr_fold;
 mod expr_lambda;
 mod prefix;
+mod static_assert;
 mod stmt;
 mod stmt_selection;
+mod struct_align;
 mod structs;
 mod structs_nested;
-mod struct_align;
 mod template;
 mod template_param;
 mod types;
 pub(crate) mod types_array;
+mod types_named;
 mod unsupported;
 
 /// Decrements the parser's nesting counter when a recursive parse completes,
@@ -41,6 +44,8 @@ pub struct Parser {
     pub known_templates: HashSet<String>,
     pub active_type_params: Vec<HashSet<String>>,
     pub type_aliases: HashMap<String, Type>,
+    pub member_types: HashMap<String, Type>,
+    pub scoped_aliases: Vec<HashMap<String, Type>>,
     pub current_namespace: Vec<String>,
     pub open_namespaces: Vec<String>,
     pub namespace_aliases: HashMap<String, String>,
@@ -73,6 +78,8 @@ impl Parser {
         let known_templates = HashSet::new();
         let active_type_params = Vec::new();
         let mut type_aliases = HashMap::new();
+        let member_types = HashMap::new();
+        let scoped_aliases = Vec::new();
         type_aliases.insert("nullptr_t".to_string(), Type::Nullptr);
         type_aliases.insert("std::nullptr_t".to_string(), Type::Nullptr);
         type_aliases.insert("ptrdiff_t".to_string(), Type::Int);
@@ -101,6 +108,8 @@ impl Parser {
             known_templates,
             active_type_params,
             type_aliases,
+            member_types,
+            scoped_aliases,
             current_namespace: Vec::new(),
             open_namespaces: Vec::new(),
             namespace_aliases: HashMap::new(),
@@ -468,7 +477,6 @@ pub(crate) fn strip_template_args(name: &str) -> String {
 }
 
 impl Parser {
-
     pub fn parse_program(&mut self) -> Result<Program, CompileError> {
         let mut declarations = Vec::new();
         while self.peek() != &TokenKind::Eof {

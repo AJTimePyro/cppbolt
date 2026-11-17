@@ -28,7 +28,9 @@ pub(crate) fn expr_to_dependent_str(expr: &Expr) -> Option<String> {
             };
             Some(format!("{sym}{inner}"))
         }
-        Expr::Binary { op, left, right, .. } => {
+        Expr::Binary {
+            op, left, right, ..
+        } => {
             let l = expr_to_dependent_str(left)?;
             let r = expr_to_dependent_str(right)?;
             let sym = match op {
@@ -46,7 +48,9 @@ pub(crate) fn expr_to_dependent_str(expr: &Expr) -> Option<String> {
             };
             Some(format!("({l} {sym} {r})"))
         }
-        Expr::FoldExpr { op, left, right, .. } => match (left.as_deref(), right.as_deref()) {
+        Expr::FoldExpr {
+            op, left, right, ..
+        } => match (left.as_deref(), right.as_deref()) {
             (None, Some(r)) => {
                 let r_str = expr_to_dependent_str(r)?;
                 Some(format!("(... {} {r_str})", op.as_str()))
@@ -58,7 +62,11 @@ pub(crate) fn expr_to_dependent_str(expr: &Expr) -> Option<String> {
             (Some(l), Some(r)) => {
                 let l_str = expr_to_dependent_str(l)?;
                 let r_str = expr_to_dependent_str(r)?;
-                Some(format!("({l_str} {} ... {} {r_str})", op.as_str(), op.as_str()))
+                Some(format!(
+                    "({l_str} {} ... {} {r_str})",
+                    op.as_str(),
+                    op.as_str()
+                ))
             }
             (None, None) => None,
         },
@@ -79,7 +87,8 @@ impl Parser {
                 {
                     ArrayDim::Dependent(id.clone())
                 } else if let Some(dep_str) = expr_to_dependent_str(&expr)
-                    && (!self.active_type_params.is_empty() || matches!(expr, Expr::SizeofPack { .. }))
+                    && (!self.active_type_params.is_empty()
+                        || matches!(expr, Expr::SizeofPack { .. }))
                 {
                     ArrayDim::Dependent(dep_str)
                 } else {

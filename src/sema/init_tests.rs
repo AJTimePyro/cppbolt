@@ -1,4 +1,5 @@
 use super::*;
+use crate::ast::types::FunctionQualifiers;
 
 #[test]
 fn test_narrowing_float_to_int_rejected() {
@@ -51,12 +52,14 @@ fn test_user_declared_default_ctor_disqualifies_aggregate() {
         is_class: false,
         has_user_declared_constructors: true,
         base_classes: vec![],
+        base_access: vec![],
         base_offsets: vec![],
         fields: vec![],
         size: 4,
         align: 4,
         has_vtable: false,
         vtable_slots: vec![],
+        vtables: vec![],
         private_members: HashSet::new(),
         is_abstract: false,
         pure_virtuals: HashSet::new(),
@@ -90,18 +93,21 @@ fn test_explicit_constructor_in_copy_list_rejected() {
         is_class: true,
         has_user_declared_constructors: true,
         base_classes: vec![],
+        base_access: vec![],
         base_offsets: vec![],
         fields: vec![],
         size: 4,
         align: 4,
         has_vtable: false,
         vtable_slots: vec![],
+        vtables: vec![],
         private_members: HashSet::new(),
         is_abstract: false,
         pure_virtuals: HashSet::new(),
     };
     sema.struct_layouts.insert("Foo".to_string(), layout);
     let sig = FunctionSig {
+        qualifiers: FunctionQualifiers::default(),
         name: "Foo::Foo".to_string(),
         mangled_name: "_ZN3FooC1Ei".to_string(),
         return_type: Type::Void,

@@ -12,11 +12,13 @@ impl Parser {
     ) -> Result<FunctionDecl, CompileError> {
         self.expect(TokenKind::LParen)?;
         let params = self.parse_function_params()?;
-        let (is_const, ref_qualifier) = self.parse_function_qualifiers()?;
+        let quals = self.parse_function_qualifiers()?;
+        let (is_const, ref_qualifier) = (quals.is_const, quals.ref_qualifier);
         let ctor_initializers = self.parse_ctor_initializers()?;
         let (body, is_pure_virtual) = self.parse_function_body(line, col)?;
 
         Ok(FunctionDecl {
+            qualifiers: quals,
             name,
             return_type,
             params,
@@ -66,27 +68,26 @@ impl Parser {
         } else {
             false
         };
-        let (ptype, pname) =
-            if self.is_function_pointer_declarator_ahead() {
-                self.parse_function_pointer_declarator(base_type, None)?
+        let (ptype, pname) = if self.is_function_pointer_declarator_ahead() {
+            self.parse_function_pointer_declarator(base_type, None)?
+        } else {
+            let name = if let TokenKind::Ident(id) = self.peek().clone() {
+                self.advance();
+                id
             } else {
-                let name = if let TokenKind::Ident(id) = self.peek().clone() {
-                    self.advance();
-                    id
-                } else {
-                    String::new()
-                };
-                let ptype = if self.peek() == &TokenKind::LBracket {
-                    let arr_type = self.parse_array_suffix(base_type)?;
-                    match arr_type {
-                        Type::Array(inner, _) => Type::Pointer(inner),
-                        other => other,
-                    }
-                } else {
-                    base_type
-                };
-                (ptype, name)
+                String::new()
             };
+            let ptype = if self.peek() == &TokenKind::LBracket {
+                let arr_type = self.parse_array_suffix(base_type)?;
+                match arr_type {
+                    Type::Array(inner, _) => Type::Pointer(inner),
+                    other => other,
+                }
+            } else {
+                base_type
+            };
+            (ptype, name)
+        };
 
         let default_val = if self.peek() == &TokenKind::Assign {
             if is_pack {
@@ -179,6 +180,28 @@ impl Parser {
     ///
     /// `name_error` is the diagnostic for a missing name; `None` accepts an
     /// unnamed declarator, as in a function-pointer parameter.
+    /// Parses the parameter list of a function-pointer type-id (already
+    /// positioned at the opening `(`).
+    fn parse_abstract_fn_params(&mut self) -> Result<Vec<Type>, CompileError> {
+        self.advance();
+        let mut fn_params = Vec::new();
+        while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
+            let mut pt = self.parse_type()?;
+            if self.peek() == &TokenKind::Ellipsis {
+                self.advance();
+                pt = Type::PackExpansion(Box::new(pt));
+            }
+            fn_params.push(pt);
+            if self.peek() == &TokenKind::Comma {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        self.expect(TokenKind::RParen)?;
+        Ok(fn_params)
+    }
+
     pub(super) fn parse_function_pointer_declarator(
         &mut self,
         base_type: Type,
@@ -211,75 +234,115 @@ impl Parser {
                 }
             }
         };
-        self.expect(TokenKind::RParen)?;
-        self.expect(TokenKind::LParen)?;
-        let mut fn_params = Vec::new();
-        while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
-            let mut pt = self.parse_type()?;
-            if self.peek() == &TokenKind::Ellipsis {
-                self.advance();
-                pt = Type::PackExpansion(Box::new(pt));
-            }
-            fn_params.push(pt);
-            if self.peek() == &TokenKind::Comma {
-                self.advance();
-            } else {
-                break;
-            }
+        // `getpmf()` inside `(S::*getpmf())` is the declared function's own
+        // parameter list; the suffix after the closing parenthesis belongs to
+        // the pointed-to type.
+        let mut entity_params: Option<Vec<crate::ast::Param>> = None;
+        if self.peek() == &TokenKind::LParen {
+            self.advance();
+            entity_params = Some(self.parse_function_params()?);
         }
         self.expect(TokenKind::RParen)?;
-        let fn_type = Type::Function {
-            return_type: Box::new(base_type),
-            param_types: fn_params,
+        // A parenthesized declarator may denote a pointer to function, a
+        // pointer to array, or just a grouped pointer. The trailing `)`, `[`,
+        // or `(` decides which derivation applies.
+        let inner = if self.peek() == &TokenKind::LParen {
+            let fn_params = self.parse_abstract_fn_params()?;
+            let qualifiers = self.parse_function_qualifiers()?;
+            Type::Function {
+                return_type: Box::new(base_type),
+                param_types: fn_params,
+                qualifiers,
+            }
+        } else if self.peek() == &TokenKind::LBracket {
+            self.parse_array_suffix(base_type)?
+        } else {
+            base_type
         };
         let final_type = match class_name {
             Some(cls) => Type::MemberPointer {
                 class_name: cls,
-                member_type: Box::new(fn_type),
+                member_type: Box::new(inner),
             },
-            None => Type::Pointer(Box::new(fn_type)),
+            None => Type::Pointer(Box::new(inner)),
         };
-        Ok((final_type, name))
+        let entity_type = match entity_params {
+            Some(params) => Type::Function {
+                return_type: Box::new(final_type),
+                param_types: params.iter().map(|p| p.ty.clone()).collect(),
+                qualifiers: FunctionQualifiers::default(),
+            },
+            None => final_type,
+        };
+        Ok((entity_type, name))
     }
 
-    pub(super) fn parse_function_qualifiers(
-        &mut self,
-    ) -> Result<(bool, RefQualifier), CompileError> {
-        let mut is_const = false;
-        let mut ref_qualifier = RefQualifier::None;
+    pub(super) fn parse_function_qualifiers(&mut self) -> Result<FunctionQualifiers, CompileError> {
+        let mut quals = FunctionQualifiers::default();
         while matches!(
             self.peek(),
-            TokenKind::KwConst | TokenKind::KwOverride | TokenKind::Amp | TokenKind::AndAnd | TokenKind::KwThrow
-        ) || matches!(self.peek(), TokenKind::Ident(id) if id == "noexcept")
+            TokenKind::KwConst
+                | TokenKind::KwOverride
+                | TokenKind::Amp
+                | TokenKind::AndAnd
+                | TokenKind::KwThrow
+        ) || matches!(self.peek(), TokenKind::Ident(id) if id == "noexcept" || id == "volatile" || id == "final")
         {
-            if self.peek() == &TokenKind::KwConst {
-                self.advance();
-                is_const = true;
-            } else if self.peek() == &TokenKind::Amp {
-                self.advance();
-                ref_qualifier = RefQualifier::LValue;
-            } else if self.peek() == &TokenKind::AndAnd {
-                self.advance();
-                ref_qualifier = RefQualifier::RValue;
-            } else if self.peek() == &TokenKind::KwOverride {
-                self.advance();
-            } else if self.peek() == &TokenKind::KwThrow
-                || matches!(self.peek(), TokenKind::Ident(id) if id == "noexcept")
-            {
-                self.advance();
-                if self.peek() == &TokenKind::LParen {
+            match self.peek().clone() {
+                TokenKind::KwConst => {
                     self.advance();
-                    while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
+                    quals.is_const = true;
+                }
+                TokenKind::Amp => {
+                    self.advance();
+                    quals.ref_qualifier = RefQualifier::LValue;
+                }
+                TokenKind::AndAnd => {
+                    self.advance();
+                    quals.ref_qualifier = RefQualifier::RValue;
+                }
+                TokenKind::KwOverride => {
+                    self.advance();
+                }
+                TokenKind::Ident(id) if id == "volatile" => {
+                    self.advance();
+                    quals.is_volatile = true;
+                }
+                TokenKind::Ident(id) if id == "final" => {
+                    self.advance();
+                }
+                TokenKind::KwThrow | TokenKind::Ident(_) => {
+                    let is_noexcept =
+                        matches!(&self.peek(), TokenKind::Ident(id) if id == "noexcept");
+                    let is_throw = matches!(self.peek(), TokenKind::KwThrow);
+                    self.advance();
+                    let mut value = true;
+                    if self.peek() == &TokenKind::LParen {
                         self.advance();
+                        if is_throw {
+                            // Dynamic exception specifications are not a type
+                            // qualifier; skip their (possibly dependent) list.
+                            while self.peek() != &TokenKind::RParen
+                                && self.peek() != &TokenKind::Eof
+                            {
+                                self.advance();
+                            }
+                        } else if self.peek() != &TokenKind::RParen
+                            && let Expr::BoolLiteral(b) = self.parse_expr()?
+                        {
+                            value = b;
+                        }
+                        self.expect(TokenKind::RParen)?;
                     }
-                    if self.peek() == &TokenKind::RParen {
-                        self.advance();
+                    if is_noexcept {
+                        quals.is_noexcept = value;
                     }
                 }
+                _ => break,
             }
         }
 
-        Ok((is_const, ref_qualifier))
+        Ok(quals)
     }
 
     pub(super) fn parse_ctor_initializers(
@@ -307,7 +370,11 @@ impl Parser {
                 }
                 if self.peek() == &TokenKind::Lt {
                     let args = self.parse_template_args()?;
-                    let canonical = args.iter().map(|a| a.to_c_type()).collect::<Vec<_>>().join(", ");
+                    let canonical = args
+                        .iter()
+                        .map(|a| a.to_c_type())
+                        .collect::<Vec<_>>()
+                        .join(", ");
                     iname = format!("{}<{}>", iname, canonical);
                 }
                 let args = if self.peek() == &TokenKind::LBrace {

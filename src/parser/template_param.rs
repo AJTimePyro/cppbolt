@@ -28,7 +28,10 @@ impl Parser {
             self.advance();
             id
         } else if is_pack
-            || matches!(self.peek(), TokenKind::Comma | TokenKind::Gt | TokenKind::Shr)
+            || matches!(
+                self.peek(),
+                TokenKind::Comma | TokenKind::Gt | TokenKind::Shr
+            )
         {
             String::new()
         } else {

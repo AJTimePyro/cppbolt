@@ -54,6 +54,7 @@ impl Parser {
             name,
             is_class,
             base_classes,
+            base_access,
             fields,
             methods,
             static_fields,
@@ -73,6 +74,7 @@ impl Parser {
             name,
             is_class,
             base_classes,
+            base_access,
             fields,
             methods,
             static_fields,
@@ -117,11 +119,11 @@ impl Parser {
             );
         }
 
-        let base_classes = self.parse_base_classes()?;
+        let base_classes = self.parse_base_classes(is_class)?;
         self.expect(TokenKind::LBrace)?;
 
         self.active_struct_scopes.push(full_name.clone());
-        let mut inner_body = StructBody::new(full_name, is_class, start.line, start.col);
+        let mut inner_body = StructBody::new(full_name.clone(), is_class, start.line, start.col);
         while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
             self.parse_struct_member(&mut inner_body)?;
         }
@@ -129,6 +131,13 @@ impl Parser {
 
         self.expect(TokenKind::RBrace)?;
         self.expect(TokenKind::Semi)?;
+        for (fname, fty, _) in &inner_body.fields {
+            self.member_types
+                .insert(format!("{}::{}", full_name, fname), fty.clone());
+            self.member_types
+                .entry(fname.clone())
+                .or_insert_with(|| fty.clone());
+        }
 
         Ok(inner_body.into_decl(base_classes))
     }
@@ -184,7 +193,10 @@ impl Parser {
         Ok(false)
     }
 
-    pub(super) fn parse_struct_access(&mut self, body: &mut StructBody) -> Result<bool, CompileError> {
+    pub(super) fn parse_struct_access(
+        &mut self,
+        body: &mut StructBody,
+    ) -> Result<bool, CompileError> {
         if self.peek() == &TokenKind::KwPublic {
             self.advance();
             self.expect(TokenKind::Colon)?;

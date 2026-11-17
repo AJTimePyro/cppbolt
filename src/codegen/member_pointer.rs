@@ -1,3 +1,4 @@
+use super::emit_context::{PmfInvokeSite, PmfReceiver};
 use super::*;
 
 pub(crate) struct MemberPointerCall<'a> {
@@ -14,15 +15,6 @@ pub(crate) struct MemberPointerCmp<'a> {
     pub left: Option<&'a Expr>,
     pub right: &'a Expr,
 }
-
-struct PmfInvokeSite<'a> {
-    this_slot: u32,
-    fn_slot: u32,
-    args: &'a [Expr],
-    param_types: &'a [Type],
-    ret_ty: &'a Type,
-}
-
 impl<'a> Codegen<'a> {
     pub(super) fn compile_member_pointer_lvalue(
         &mut self,
@@ -32,11 +24,13 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let delta = self.member_pointer_receiver_delta(left, right, is_arrow, ctx);
         if is_arrow {
             self.compile_expr(left, ctx, code)?;
         } else {
             self.compile_lvalue_addr(left, ctx, code)?;
         }
+        self.emit_receiver_base_adjustment(delta, is_arrow, code);
         self.compile_expr(right, ctx, code)?;
         code.push(OP_I32_ADD);
         Ok(())
@@ -50,27 +44,37 @@ impl<'a> Codegen<'a> {
         sig: &FunctionSig,
         code: &mut Vec<u8>,
     ) -> Result<bool, CompileError> {
-        let layout = self.sema.struct_layouts.get(class_name);
-        let vslot = layout.and_then(|l| l.vtable_slots.iter().position(|s| s == member_name));
-        let ptr = if let Some(slot_idx) = vslot {
-            ((slot_idx as i64) << 1) | 1
+        // A virtual member is reached through the vptr of the subobject that
+        // owns its slot. That subobject's offset within `class_name` becomes
+        // the pointer's `this` adjustment; the vtable entry then performs the
+        // final-overrider adjustment at the call site.
+        let vslot = self.sema.struct_layouts.get(class_name).and_then(|l| {
+            l.vtables.iter().find_map(|t| {
+                t.slots
+                    .iter()
+                    .position(|s| s.name == member_name)
+                    .map(|idx| (idx, t.vptr_offset))
+            })
+        });
+        let (ptr, adj) = if let Some((slot_idx, vptr_offset)) = vslot {
+            ((((slot_idx as i64) << 1) | 1), vptr_offset as i64)
         } else {
             let table_idx = self
                 .func_table_indices
                 .get(&sig.mangled_name)
                 .copied()
                 .unwrap_or(0);
-            (table_idx as i64) << 1
+            let mut this_adjustment = 0i64;
+            if let Some(first_param) = sig.param_types.first()
+                && let Some(this_struct) = first_param.strip_reference().deref_type()
+                && let Type::Struct(decl_class) = this_struct.strip_const()
+                && decl_class != class_name
+                && let Some(off) = self.sema.base_subobject_offset(class_name, decl_class)
+            {
+                this_adjustment = off as i64;
+            }
+            ((table_idx as i64) << 1, this_adjustment)
         };
-        let mut adj = 0i64;
-        if let Some(first_param) = sig.param_types.first()
-            && let Some(this_struct) = first_param.strip_reference().deref_type()
-            && let Type::Struct(decl_class) = this_struct.strip_const()
-            && decl_class != class_name
-            && let Some(off) = self.sema.base_subobject_offset(class_name, decl_class)
-        {
-            adj = off as i64;
-        }
         let val = (adj << 32) | (ptr & 0xFFFFFFFF);
         code.push(OP_I64_CONST);
         write_i64(code, val);
@@ -138,10 +142,20 @@ impl<'a> Codegen<'a> {
 
         if let Some(left) = left {
             self.compile_expr(left, ctx, code)?;
-            Self::normalize_member_pointer_operand(lty, is_func, code);
+            Self::normalize_member_pointer_operand(
+                lty,
+                is_func,
+                Sema::is_null_pointer_constant(left),
+                code,
+            );
         }
         self.compile_expr(right, ctx, code)?;
-        Self::normalize_member_pointer_operand(rty, is_func, code);
+        Self::normalize_member_pointer_operand(
+            rty,
+            is_func,
+            Sema::is_null_pointer_constant(right),
+            code,
+        );
 
         if is_func {
             code.push(if *op == BinaryOp::Eq {
@@ -159,8 +173,13 @@ impl<'a> Codegen<'a> {
         Ok(())
     }
 
-    fn normalize_member_pointer_operand(ty: &Type, is_func: bool, code: &mut Vec<u8>) {
-        if matches!(ty.strip_const(), Type::Nullptr) {
+    fn normalize_member_pointer_operand(
+        ty: &Type,
+        is_func: bool,
+        is_null_constant: bool,
+        code: &mut Vec<u8>,
+    ) {
+        if is_null_constant || matches!(ty.strip_const(), Type::Nullptr) {
             code.push(OP_DROP);
             if is_func {
                 code.push(OP_I64_CONST);
@@ -191,6 +210,7 @@ impl<'a> Codegen<'a> {
                 Type::Function {
                     param_types,
                     return_type,
+                    ..
                 } => (param_types.clone(), (**return_type).clone()),
                 _ => (Vec::new(), Type::Int),
             },
@@ -200,7 +220,16 @@ impl<'a> Codegen<'a> {
         let this_slot = ctx.alloc_frame(4, 4)?;
         let fn_slot = ctx.alloc_frame(4, 4)?;
 
-        self.emit_pmf_receiver(left, is_arrow, this_slot, ctx, code)?;
+        self.emit_pmf_receiver(
+            PmfReceiver {
+                left,
+                right,
+                is_arrow,
+                this_slot,
+            },
+            ctx,
+            code,
+        )?;
         self.emit_pmf_target(right, this_slot, fn_slot, ctx, code)?;
         self.emit_pmf_invocation(
             PmfInvokeSite {
@@ -219,12 +248,17 @@ impl<'a> Codegen<'a> {
 
     fn emit_pmf_receiver(
         &mut self,
-        left: &Expr,
-        is_arrow: bool,
-        this_slot: u32,
+        site: PmfReceiver<'_>,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let PmfReceiver {
+            left,
+            right,
+            is_arrow,
+            this_slot,
+        } = site;
+        let delta = self.member_pointer_receiver_delta(left, right, is_arrow, ctx);
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.fp_local);
         if is_arrow {
@@ -232,6 +266,7 @@ impl<'a> Codegen<'a> {
         } else {
             self.compile_lvalue_addr(left, ctx, code)?;
         }
+        self.emit_receiver_base_adjustment(delta, is_arrow, code);
         code.push(OP_I32_STORE);
         write_u32(code, 2);
         write_u32(code, this_slot);
@@ -271,6 +306,26 @@ impl<'a> Codegen<'a> {
         self.emit_pmf_resolve_fn_slot(this_slot, fn_slot, ctx, code);
         Ok(())
     }
+    /// Pushes the address of the current PMF's 8-byte vtable entry. The vptr
+    /// is expected in `scratch2`; the slot comes from the PMF's low bits.
+    fn emit_pmf_entry_address(ctx: &FunctionContext, code: &mut Vec<u8>) {
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch2);
+        Self::emit_pmf_slot_index(ctx, code);
+        code.push(OP_I32_CONST);
+        write_i32(code, 8);
+        code.push(OP_I32_MUL);
+        code.push(OP_I32_ADD);
+    }
+
+    fn emit_pmf_slot_index(ctx: &FunctionContext, code: &mut Vec<u8>) {
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch_i64);
+        code.push(OP_I32_WRAP_I64);
+        code.push(OP_I32_CONST);
+        write_i32(code, 1);
+        code.push(OP_I32_SHR_U);
+    }
 
     fn emit_pmf_resolve_fn_slot(
         &mut self,
@@ -290,7 +345,23 @@ impl<'a> Codegen<'a> {
         code.push(OP_I32_AND);
         code.push(OP_IF);
         code.push(TYPE_I32);
+        self.emit_pmf_virtual_entry(this_slot, ctx, code);
+        code.push(OP_ELSE);
+        Self::emit_pmf_slot_index(ctx, code);
+        code.push(OP_END);
+        code.push(OP_I32_STORE);
+        write_u32(code, 2);
+        write_u32(code, fn_slot);
+    }
 
+    /// Emits the virtual branch: resolves the function index and applies the
+    /// entry's `this` adjustment, leaving the function index on the stack.
+    fn emit_pmf_virtual_entry(
+        &mut self,
+        this_slot: u32,
+        ctx: &FunctionContext,
+        code: &mut Vec<u8>,
+    ) {
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.fp_local);
         code.push(OP_I32_LOAD);
@@ -299,32 +370,37 @@ impl<'a> Codegen<'a> {
         code.push(OP_I32_LOAD);
         write_u32(code, 2);
         write_u32(code, 0);
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.scratch2);
+        Self::emit_pmf_entry_address(ctx, code);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, 0);
+        // entry[1]: this adjustment.
         code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.scratch_i64);
-        code.push(OP_I32_WRAP_I64);
-        code.push(OP_I32_CONST);
-        write_i32(code, 1);
-        code.push(OP_I32_SHR_U);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, this_slot);
+        Self::emit_pmf_entry_address(ctx, code);
         code.push(OP_I32_CONST);
         write_i32(code, 4);
-        code.push(OP_I32_MUL);
         code.push(OP_I32_ADD);
         code.push(OP_I32_LOAD);
         write_u32(code, 2);
         write_u32(code, 0);
 
-        code.push(OP_ELSE);
+        code.push(OP_I32_ADD);
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.scratch1);
         code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.scratch_i64);
-        code.push(OP_I32_WRAP_I64);
-        code.push(OP_I32_CONST);
-        write_i32(code, 1);
-        code.push(OP_I32_SHR_U);
-        code.push(OP_END);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch1);
 
         code.push(OP_I32_STORE);
         write_u32(code, 2);
-        write_u32(code, fn_slot);
+        write_u32(code, this_slot);
     }
 
     fn emit_pmf_invocation(

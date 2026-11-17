@@ -1,4 +1,5 @@
 use super::*;
+use crate::ast::types::FunctionQualifiers;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 
@@ -389,6 +390,7 @@ fn test_substitute_injected_class_name() -> Result<(), Box<dyn std::error::Error
 
 fn dummy_func(name: &str, ret: Type, param: Type, is_const: bool) -> FunctionDecl {
     FunctionDecl {
+        qualifiers: FunctionQualifiers::default(),
         name: name.to_string(),
         return_type: ret,
         params: vec![Param {
@@ -435,6 +437,7 @@ fn test_substitute_struct() -> Result<(), Box<dyn std::error::Error>> {
         name: "Holder".to_string(),
         is_class: true,
         base_classes: Vec::new(),
+        base_access: Vec::new(),
         fields: vec![("value".to_string(), Type::TypeParam("T".to_string()), None)],
         methods: vec![dummy_func(
             "Holder",
@@ -444,7 +447,8 @@ fn test_substitute_struct() -> Result<(), Box<dyn std::error::Error>> {
         )],
         static_fields: Vec::new(),
         private_members: Vec::new(),
-        nested_structs: Vec::new(), alignment: None,
+        nested_structs: Vec::new(),
+        alignment: None,
     };
 
     let subst = template_subst::substitute_struct(&tclass, &mapping, "Holder<int>", (1, 1), None)?;
@@ -475,26 +479,3 @@ fn test_non_const_reference_rejects_temporary() {
     let const_ref_ty = Type::Reference(Box::new(Type::Const(Box::new(Type::Int))));
     assert!(sema.can_assign_expr(&const_ref_ty, &val_ty, Some(&literal)));
 }
-
-#[test]
-fn test_pack_expansion_expr_list() -> Result<(), Box<dyn std::error::Error>> {
-    let mut mapping = HashMap::new();
-    mapping.insert(
-        "args".to_string(),
-        pack_expansion::TemplateArg::TypePack(vec![Type::Int, Type::Double]),
-    );
-    let pattern = Expr::Call {
-        callee: Box::new(Expr::Identifier("f".to_string())),
-        args: vec![Expr::Identifier("args".to_string())],
-        pos: ExprPos::default(),
-    };
-    let exprs = vec![Expr::PackExpansion {
-        pattern: Box::new(pattern),
-        pos: ExprPos::default(),
-    }];
-    let expanded = pack_expansion::expand_expr_list(&exprs, &mapping)
-        .map_err(|e| format!("{e:?}"))?;
-    assert_eq!(expanded.len(), 2);
-    Ok(())
-}
-

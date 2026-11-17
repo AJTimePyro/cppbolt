@@ -16,6 +16,8 @@ pub(crate) fn format_canonical_args(
         match mapping.get(&p.name) {
             Some(TemplateArg::Type(t)) => pieces.push(t.to_c_type()),
             Some(TemplateArg::NonType(v)) => pieces.push(v.to_string()),
+            Some(TemplateArg::NonTypeAddress(addr)) => pieces.push(format!("&{addr}")),
+            Some(TemplateArg::NonTypeNull(_)) => pieces.push("nullptr".to_string()),
             Some(TemplateArg::TypePack(types)) => {
                 for t in types {
                     pieces.push(t.to_c_type());
@@ -186,7 +188,9 @@ impl Sema {
                 Err(e) => last_err = Some(e),
             }
         }
-        if viable.is_empty() && let Some(e) = last_err {
+        if viable.is_empty()
+            && let Some(e) = last_err
+        {
             return Err(e);
         }
         Ok(viable)
@@ -201,8 +205,7 @@ impl Sema {
     ) -> Result<FunctionSig, CompileError> {
         let canonical_args = format_canonical_args(template_params, mapping);
         let inst_name = format!("{}<{}>", template_decl.name, canonical_args);
-        let mut func_decl =
-            substitute_function(template_decl, mapping, None, Some(inst_name))?;
+        let mut func_decl = substitute_function(template_decl, mapping, None, Some(inst_name))?;
 
         self.resolve_and_instantiate_type(&mut func_decl.return_type, pos.line, pos.col)?;
         for p in &mut func_decl.params {
@@ -211,6 +214,7 @@ impl Sema {
 
         let mangled = self.mangle_name(&func_decl.name, &func_decl.params);
         Ok(FunctionSig {
+            qualifiers: FunctionQualifiers::default(),
             name: func_decl.name,
             mangled_name: mangled,
             return_type: func_decl.return_type,
@@ -296,6 +300,7 @@ impl Sema {
 
         let mangled = self.mangle_name(&func_decl.name, &func_decl.params);
         let sig = FunctionSig {
+            qualifiers: FunctionQualifiers::default(),
             name: func_decl.name.clone(),
             mangled_name: mangled.clone(),
             return_type: func_decl.return_type.clone(),

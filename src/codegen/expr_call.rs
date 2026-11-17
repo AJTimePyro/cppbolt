@@ -266,7 +266,7 @@ impl<'a> Codegen<'a> {
         write_u32(code, 2);
         write_u32(code, temp_ptr_slot);
 
-        if let Some(&v_off) = self.vtable_offsets.get(name) {
+        for (vptr_offset, v_off) in self.vtable_installs(name) {
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.fp_local);
             code.push(OP_I32_LOAD);
@@ -276,7 +276,7 @@ impl<'a> Codegen<'a> {
             write_i32(code, v_off as i32);
             code.push(OP_I32_STORE);
             write_u32(code, 2);
-            write_u32(code, 0);
+            write_u32(code, vptr_offset);
         }
 
         self.compile_struct_value_ctor(name, temp_ptr_slot, args, ctx, code)?;
@@ -316,8 +316,8 @@ impl<'a> Codegen<'a> {
         let arg_types: Vec<Type> = args.iter().map(|a| self.get_expr_type(a, ctx)).collect();
         let is_same_struct = match arg_types.first() {
             Some(ty) => matches!(
-                ty.strip_const().strip_reference(),
-                Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(name))
+            ty.strip_const().strip_reference(),
+            Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(name))
             ),
             None => false,
         };

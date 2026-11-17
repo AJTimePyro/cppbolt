@@ -321,6 +321,7 @@ fn classify_word(word: &str) -> TokenKind {
         "void" => TokenKind::KwVoid,
         "auto" => TokenKind::KwAuto,
         "const" => TokenKind::KwConst,
+        "static_assert" => TokenKind::KwStaticAssert,
         "static" => TokenKind::KwStatic,
         "if" => TokenKind::KwIf,
         "else" => TokenKind::KwElse,
@@ -406,4 +407,3 @@ mod tests {
         Ok(())
     }
 }
-

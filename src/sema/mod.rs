@@ -3,9 +3,13 @@
 //! See the mdBook guide at `docs/book/internals/semantic-analysis.md`.
 
 mod analyze;
+mod analyze_field_init;
 mod assign;
+mod call_arity;
 pub mod constexpr_eval;
+mod constexpr_globals;
 mod constructor;
+mod expected_type;
 mod expr;
 mod expr_call;
 mod expr_call_member;
@@ -14,15 +18,26 @@ mod expr_lambda_free_vars;
 mod expr_member;
 mod expr_ops;
 mod expr_subscript;
-mod expected_type;
+pub mod fold_expansion;
+#[cfg(test)]
+mod fold_tests;
+mod function_sig;
 mod init;
 mod init_aggregate;
 mod init_list;
 mod layout;
+mod layout_dump;
 mod lookup;
+mod method_return_type;
+pub(super) use lookup::MemberPointerBaseConversion;
 mod member_pointer;
+#[cfg(test)]
+mod member_ptr_tests;
 mod overload;
 pub mod pack_expansion;
+#[cfg(test)]
+mod pack_expansion_tests;
+mod receiver;
 mod stmt;
 mod stmt_decl;
 mod stmt_range_for;
@@ -31,43 +46,43 @@ mod stmt_structured_binding;
 mod synthesize;
 mod synthesize_ops;
 mod template_alias;
-pub mod template_deduce;
+pub mod template_arg_match;
+mod template_deduce;
 mod template_deduce_type;
 mod template_func;
 mod template_match;
+mod template_name;
 mod template_nested;
 pub mod template_partial_order;
 mod template_registry;
 mod template_spec;
 pub mod template_subst;
-mod template_subst_func;
-mod template_subst_array;
-mod template_subst_lambda;
 mod template_subst_align;
+mod template_subst_array;
+mod template_subst_expr_helpers;
+mod template_subst_func;
+mod template_subst_lambda;
 mod template_subst_nontype;
-mod template_name;
+mod template_subst_pack;
 mod template_subst_stmt;
-pub mod fold_expansion;
-#[cfg(test)]
-mod fold_tests;
-#[cfg(test)]
-mod pack_expansion_tests;
-#[cfg(test)]
-mod member_ptr_tests;
 #[cfg(test)]
 mod tests;
+mod tests_pack;
 
 pub(crate) use expected_type::is_member_pointer_address;
 pub use init::InitContext;
+pub(crate) use layout::RecordLayout;
 #[cfg(test)]
 pub use pack_expansion::TemplateArg;
-pub(crate) use layout::RecordLayout;
 pub(crate) use stmt_decl::VarDecl;
 
 use crate::ast::types::Type;
 use crate::ast::*;
 use crate::diagnostics::CompileError;
 use crate::name::QualifiedName;
+pub(crate) use function_sig::FunctionSig;
+pub(crate) use layout::VTableInfo;
+pub(crate) use receiver::{receiver_is_const_type, sig_receiver_is_const};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
@@ -88,30 +103,17 @@ pub struct StructLayout {
     pub is_class: bool,
     pub has_user_declared_constructors: bool,
     pub base_classes: Vec<String>,
+    pub base_access: Vec<crate::ast::BaseAccess>,
     pub base_offsets: Vec<(String, usize)>,
     pub fields: Vec<StructField>,
     pub size: usize,
     pub align: usize,
     pub has_vtable: bool,
     pub vtable_slots: Vec<String>,
+    pub vtables: Vec<VTableInfo>,
     pub private_members: std::collections::HashSet<String>,
     pub is_abstract: bool,
     pub pure_virtuals: std::collections::HashSet<String>,
-}
-
-/// One overload after parameter adjustment.
-///
-/// For non-static methods, `param_types[0]` is the implicit `this` pointer.
-#[derive(Debug, Clone)]
-pub struct FunctionSig {
-    pub name: String,
-    pub mangled_name: String,
-    pub return_type: Type,
-    pub param_types: Vec<Type>,
-    pub default_args: Vec<Option<Expr>>,
-    pub is_static: bool,
-    pub is_explicit: bool,
-    pub ref_qualifier: RefQualifier,
 }
 
 /// The first argument of a call that does not convert to its parameter.
@@ -123,28 +125,6 @@ pub(crate) struct ConversionFailure {
     pub from: Type,
     /// The type of the parameter.
     pub to: Type,
-}
-
-/// Returns true when a type refers to a const-qualified object, looking
-/// through references and pointers.
-pub(crate) fn receiver_is_const_type(ty: &Type) -> bool {
-    match ty {
-        Type::Const(_) => true,
-        Type::Reference(inner) | Type::RvalueReference(inner) | Type::Pointer(inner) => {
-            receiver_is_const_type(inner)
-        }
-        _ => false,
-    }
-}
-
-/// Returns true when a non-static method's implicit `this` is `const`.
-pub(crate) fn sig_receiver_is_const(sig: &FunctionSig) -> bool {
-    !sig.is_static
-        && sig
-            .param_types
-            .first()
-            .map(receiver_is_const_type)
-            .unwrap_or(false)
 }
 
 #[derive(Debug, Clone)]
@@ -269,6 +249,7 @@ impl Sema {
     fn register_builtins(&mut self) {
         // Built-in printf: variadic, mangled as "printf"
         self.register_function(FunctionSig {
+            qualifiers: FunctionQualifiers::default(),
             name: "printf".to_string(),
             mangled_name: "printf".to_string(),
             return_type: Type::Int,
@@ -279,6 +260,7 @@ impl Sema {
             ref_qualifier: RefQualifier::None,
         });
         self.register_function(FunctionSig {
+            qualifiers: FunctionQualifiers::default(),
             name: "std::printf".to_string(),
             mangled_name: "std::printf".to_string(),
             return_type: Type::Int,
@@ -291,6 +273,7 @@ impl Sema {
 
         // Built-in malloc & free
         self.register_function(FunctionSig {
+            qualifiers: FunctionQualifiers::default(),
             name: "malloc".to_string(),
             mangled_name: "malloc".to_string(),
             return_type: Type::Pointer(Box::new(Type::Void)),
@@ -302,6 +285,7 @@ impl Sema {
         });
 
         self.register_function(FunctionSig {
+            qualifiers: FunctionQualifiers::default(),
             name: "free".to_string(),
             mangled_name: "free".to_string(),
             return_type: Type::Void,
@@ -313,6 +297,7 @@ impl Sema {
         });
 
         self.register_function(FunctionSig {
+            qualifiers: FunctionQualifiers::default(),
             name: "__builtin_wasm_memory_size".to_string(),
             mangled_name: "__builtin_wasm_memory_size".to_string(),
             return_type: Type::Int,
@@ -457,11 +442,18 @@ impl Sema {
     pub fn lookup_type_alias(&self, name: &str) -> Option<Type> {
         let plain = QualifiedName::new(name).plain();
         for scope in self.scopes.iter().rev() {
-            if let Some(ty) = scope.type_aliases.get(name).or_else(|| scope.type_aliases.get(plain)) {
+            if let Some(ty) = scope
+                .type_aliases
+                .get(name)
+                .or_else(|| scope.type_aliases.get(plain))
+            {
                 return Some(ty.clone());
             }
         }
-        self.type_aliases.get(name).or_else(|| self.type_aliases.get(plain)).cloned()
+        self.type_aliases
+            .get(name)
+            .or_else(|| self.type_aliases.get(plain))
+            .cloned()
     }
 
     /// Resolves leading namespace aliases in `name` to the canonical namespace.

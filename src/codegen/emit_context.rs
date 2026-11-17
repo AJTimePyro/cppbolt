@@ -31,6 +31,9 @@ pub(super) struct CallSite<'e> {
     pub(super) member: &'e str,
     pub(super) args: &'e [Expr],
     pub(super) slot_idx: usize,
+    /// Offset of the vptr for this virtual slot from the receiver's class
+    /// start (non-zero for a secondary polymorphic base).
+    pub(super) vptr_offset: u32,
     pub(super) this_slot: u32,
     pub(super) fn_slot: u32,
     pub(super) receiver_const: bool,
@@ -84,7 +87,7 @@ pub(super) struct ArraySlots {
 /// Parameters for iterating array element constructors/vtables.
 pub(super) struct ArrayLoop {
     pub(super) ctor_idx: Option<u32>,
-    pub(super) v_off: Option<u32>,
+    pub(super) v_tables: Vec<(u32, u32)>,
     pub(super) slots: ArraySlots,
     pub(super) start_idx: i32,
     pub(super) user_slot: u32,
@@ -95,4 +98,19 @@ pub(super) struct GlobalInit<'e> {
     pub(super) ty: &'e Type,
     pub(super) init: &'e Option<Expr>,
     pub(super) offset: u32,
+}
+
+pub(super) struct PmfReceiver<'a> {
+    pub(super) left: &'a Expr,
+    pub(super) right: &'a Expr,
+    pub(super) is_arrow: bool,
+    pub(super) this_slot: u32,
+}
+
+pub(super) struct PmfInvokeSite<'a> {
+    pub(super) this_slot: u32,
+    pub(super) fn_slot: u32,
+    pub(super) args: &'a [Expr],
+    pub(super) param_types: &'a [Type],
+    pub(super) ret_ty: &'a Type,
 }

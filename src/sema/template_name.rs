@@ -20,12 +20,26 @@ pub fn substitute_template_name(name: &str, mapping: &HashMap<String, TemplateAr
             TemplateArg::NonType(val) => {
                 result = replace_whole_word(&result, param, &val.to_string());
             }
+            TemplateArg::NonTypeAddress(addr) => {
+                result = replace_whole_word(&result, param, &format!("&{addr}"));
+            }
+            TemplateArg::NonTypeNull(_) => {
+                result = replace_whole_word(&result, param, "nullptr");
+            }
             TemplateArg::TypePack(types) => {
-                let joined = types.iter().map(|t| t.to_c_type()).collect::<Vec<_>>().join(", ");
+                let joined = types
+                    .iter()
+                    .map(|t| t.to_c_type())
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 result = substitute_pack_string(result, param, &joined, types.len());
             }
             TemplateArg::NonTypePack(vals) => {
-                let joined = vals.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(", ");
+                let joined = vals
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 result = substitute_pack_string(result, param, &joined, vals.len());
             }
         }

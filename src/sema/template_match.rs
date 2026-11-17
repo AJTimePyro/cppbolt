@@ -64,7 +64,10 @@ pub fn match_pattern_arg(
             Type::Struct(sname) => {
                 if let Some((s_base, s_args_str)) = split_template_call_name(sname)
                     && QualifiedName::new(p_name).matches(QualifiedName::new(s_base))
-                    && let Ok(s_args) = super::template_deduce::parse_types_list(s_args_str, std::slice::from_ref(p_name))
+                    && let Ok(s_args) = super::template_deduce::parse_types_list(
+                        s_args_str,
+                        std::slice::from_ref(p_name),
+                    )
                 {
                     match_pattern_args(p_args, &s_args, bindings)
                 } else {
@@ -82,7 +85,9 @@ pub fn match_pattern_args(
     concrete_args: &[Type],
     bindings: &mut HashMap<String, TemplateArg>,
 ) -> bool {
-    let has_pack = patterns.last().is_some_and(|p| matches!(p, Type::PackExpansion(_)));
+    let has_pack = patterns
+        .last()
+        .is_some_and(|p| matches!(p, Type::PackExpansion(_)));
     if !has_pack {
         if patterns.len() != concrete_args.len() {
             return false;

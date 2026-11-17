@@ -1,13 +1,12 @@
 //! Lambda expression template AST substitution.
 
-use std::collections::HashMap;
-
-use super::pack_expansion::{pack_element_name, TemplateArg};
+use super::pack_expansion::{TemplateArg, pack_element_name};
 use super::template_subst::{substitute_expr, substitute_type};
 use super::template_subst_stmt::substitute_stmt;
 use crate::ast::expr::{Expr, LambdaCapture};
 use crate::ast::types::Type;
 use crate::diagnostics::CompileError;
+use std::collections::HashMap;
 
 pub fn substitute_lambda(
     expr: &mut Expr,
@@ -31,7 +30,10 @@ pub fn substitute_lambda(
         if cap.is_pack {
             let Some(pack_len) = mapping.get(&cap.name).and_then(|a| a.pack_len()) else {
                 return Err(CompileError::new(
-                    format!("'{}' does not refer to the name of a parameter pack", cap.name),
+                    format!(
+                        "'{}' does not refer to the name of a parameter pack",
+                        cap.name
+                    ),
                     pos.line,
                     pos.col,
                 ));

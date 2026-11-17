@@ -22,6 +22,7 @@ pub fn evaluate_dependent_alignas(
                 .max()
                 .unwrap_or(1),
             TemplateArg::NonType(n) => (*n).max(1) as usize,
+            TemplateArg::NonTypeAddress(_) | TemplateArg::NonTypeNull(_) => 1,
         }
     } else {
         1
@@ -51,11 +52,13 @@ pub fn substitute_type_param(
     match mapping.get(name) {
         Some(TemplateArg::Type(t)) => Ok(t.clone()),
         Some(TemplateArg::NonType(n)) => Ok(Type::NonType(*n)),
-        Some(TemplateArg::TypePack(_)) | Some(TemplateArg::NonTypePack(_)) => Err(CompileError::new(
-            format!("parameter pack '{}' used unexpanded", name),
-            pos.0,
-            pos.1,
-        )),
+        Some(TemplateArg::TypePack(_)) | Some(TemplateArg::NonTypePack(_)) => {
+            Err(CompileError::new(
+                format!("parameter pack '{}' used unexpanded", name),
+                pos.0,
+                pos.1,
+            ))
+        }
         _ => Ok(ty.clone()),
     }
 }
@@ -91,12 +94,16 @@ pub fn substitute_base_classes(
                     base_classes.push(ty.to_c_type());
                 }
             } else {
-                base_classes.push(super::template_name::substitute_template_name(base, mapping));
+                base_classes.push(super::template_name::substitute_template_name(
+                    base, mapping,
+                ));
             }
         } else if let Some(TemplateArg::Type(target)) = mapping.get(base) {
             base_classes.push(target.to_c_type());
         } else if base.contains('<') {
-            base_classes.push(super::template_name::substitute_template_name(base, mapping));
+            base_classes.push(super::template_name::substitute_template_name(
+                base, mapping,
+            ));
         } else {
             base_classes.push(base.clone());
         }

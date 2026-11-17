@@ -15,9 +15,7 @@ impl AlignasSpec {
             AlignasSpec::Dependent(pack) => {
                 Type::DependentAlignas(Box::new(Type::Void), pack.clone())
             }
-            AlignasSpec::Concrete(align) => {
-                Type::Aligned(Box::new(Type::Void), *align)
-            }
+            AlignasSpec::Concrete(align) => Type::Aligned(Box::new(Type::Void), *align),
         }
     }
 

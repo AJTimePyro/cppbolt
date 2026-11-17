@@ -5,6 +5,11 @@ use crate::diagnostics::CompileError;
 
 /// The member-pointer type denoted by taking the address of `sig`.
 fn member_pointer_type(class_name: &str, sig: &FunctionSig) -> Type {
+    let mut quals = sig.qualifiers;
+    if !sig.is_static {
+        quals.is_const = crate::sema::sig_receiver_is_const(sig);
+        quals.ref_qualifier = sig.ref_qualifier;
+    }
     let fn_type = Type::Function {
         return_type: Box::new(sig.return_type.clone()),
         param_types: if sig.is_static {
@@ -12,6 +17,7 @@ fn member_pointer_type(class_name: &str, sig: &FunctionSig) -> Type {
         } else {
             sig.param_types.iter().skip(1).cloned().collect()
         },
+        qualifiers: quals,
     };
     if sig.is_static {
         Type::Pointer(Box::new(fn_type))
@@ -51,7 +57,7 @@ impl Sema {
         pos: ExprPos,
     ) -> Result<FunctionSig, CompileError> {
         let Some(expected) = expected else {
-            return Ok(first_overload(overloads).clone());
+            return Self::resolve_unqualified_overload(class_name, overloads, pos);
         };
         let (expected_class, expected_fn) = match expected.strip_const() {
             Type::MemberPointer {
@@ -59,7 +65,7 @@ impl Sema {
                 member_type,
             } => (Some(class_name.as_str()), member_type.as_ref()),
             Type::Pointer(inner) => (None, inner.as_ref()),
-            _ => return Ok(first_overload(overloads).clone()),
+            _ => return Self::resolve_unqualified_overload(class_name, overloads, pos),
         };
         for sig in overloads {
             if member_pointer_type(class_name, sig) == *expected {
@@ -75,7 +81,10 @@ impl Sema {
                     member_type: sig_fn,
                 } = member_pointer_type(class_name, sig)
                     && *sig_fn == *expected_fn
-                    && self.is_subclass(expected_class, &sig_class)
+                    && matches!(
+                        self.check_member_pointer_base_conversion(expected_class, &sig_class),
+                        super::MemberPointerBaseConversion::Ok
+                    )
                 {
                     return Ok(sig.clone());
                 }
@@ -92,6 +101,25 @@ impl Sema {
             pos.col,
         ))
     }
+    /// Resolves `&Class::name` when no concrete target type is available.
+    /// An overload set cannot initialize `auto` (or any untyped context).
+    fn resolve_unqualified_overload(
+        class_name: &str,
+        overloads: &[FunctionSig],
+        pos: ExprPos,
+    ) -> Result<FunctionSig, CompileError> {
+        if overloads.len() > 1 {
+            return Err(CompileError::new(
+                format!(
+                    "cannot resolve address of overloaded function '{}::{}' without a target type",
+                    class_name, overloads[0].name
+                ),
+                pos.line,
+                pos.col,
+            ));
+        }
+        Ok(first_overload(overloads).clone())
+    }
 
     pub(super) fn try_resolve_member_pointer_address(
         &mut self,
@@ -104,6 +132,7 @@ impl Sema {
         let class_part = class_raw.strip_prefix("::").unwrap_or(class_raw);
         let class_name = self.resolve_alias_in_qualified_name(class_part);
         self.ensure_class_instantiated(&class_name, pos.line, pos.col);
+        self.check_member_access(&class_name, member_name, pos)?;
 
         if let Some(fld) = self.find_field_in_class(&class_name, member_name) {
             return Ok(Some(MemberPointerAddress {
@@ -128,6 +157,16 @@ impl Sema {
                 ty: member_pointer_type(&class_name, &sig),
                 encoded_name: (!sig.is_static)
                     .then(|| format!("{}@@{}", class_name, sig.mangled_name)),
+            }));
+        }
+        // Static data members are ordinary globals with a qualified name, not
+        // fields of the record layout. Taking their address yields a plain
+        // object pointer, not a pointer-to-member.
+        let qualified = format!("{}::{}", class_name, member_name);
+        if let Some(var) = self.global_vars.get(&qualified) {
+            return Ok(Some(MemberPointerAddress {
+                ty: Type::Pointer(Box::new(var.ty.clone())),
+                encoded_name: None,
             }));
         }
 
@@ -155,7 +194,10 @@ impl Sema {
                 match clean.strip_const() {
                     Type::Struct(name) => Ok((name.clone(), is_c)),
                     _ => Err(CompileError::new(
-                        format!("left operand of '.*' must be a class object, found '{}'", lty.to_c_type()),
+                        format!(
+                            "left operand of '.*' must be a class object, found '{}'",
+                            lty.to_c_type()
+                        ),
                         pos.line,
                         pos.col,
                     )),
@@ -170,7 +212,10 @@ impl Sema {
                     }
                 }
                 Err(CompileError::new(
-                    format!("left operand of '->*' must be a pointer to class, found '{}'", lty.to_c_type()),
+                    format!(
+                        "left operand of '->*' must be a pointer to class, found '{}'",
+                        lty.to_c_type()
+                    ),
                     pos.line,
                     pos.col,
                 ))
@@ -204,7 +249,9 @@ impl Sema {
             ));
         };
 
-        if !self.is_subclass(&obj_class, target_class) {
+        let obj_class_canonical = self.resolve_alias_in_qualified_name(&obj_class);
+        let target_class_canonical = self.resolve_alias_in_qualified_name(target_class);
+        if !self.is_subclass(&obj_class_canonical, &target_class_canonical) {
             return Err(CompileError::new(
                 format!(
                     "pointer-to-member of type '{}' is incompatible with object of type '{}'",
@@ -246,7 +293,9 @@ impl Sema {
         if matches!(value.strip_const(), Type::Nullptr) {
             return true;
         }
-        if let Some(e) = expr && Self::is_null_pointer_constant(e) {
+        if let Some(e) = expr
+            && Self::is_null_pointer_constant(e)
+        {
             return true;
         }
         let Type::MemberPointer {
@@ -262,6 +311,11 @@ impl Sema {
         {
             return false;
         }
-        self.is_subclass(target_cls, val_cls)
+        let target_cls = self.resolve_alias_in_qualified_name(target_cls);
+        let val_cls = self.resolve_alias_in_qualified_name(val_cls);
+        matches!(
+            self.check_member_pointer_base_conversion(&target_cls, &val_cls),
+            super::MemberPointerBaseConversion::Ok
+        )
     }
 }

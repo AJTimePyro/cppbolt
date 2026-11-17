@@ -105,6 +105,7 @@ impl<'a> Codegen<'a> {
         Some((
             idx,
             FunctionSig {
+                qualifiers: FunctionQualifiers::default(),
                 name: chosen.clone(),
                 mangled_name: chosen,
                 return_type: Type::Void,

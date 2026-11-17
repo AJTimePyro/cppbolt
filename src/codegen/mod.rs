@@ -1,11 +1,11 @@
 //! Direct WebAssembly lowering of the typed AST (see mdBook internals/wasm-codegen.md).
 
 mod analysis;
+mod analysis_vars;
 mod call_args;
 mod call_types;
 mod cond;
 mod construct;
-mod analysis_vars;
 mod emit_context;
 mod expr;
 mod expr_assign;
@@ -27,6 +27,7 @@ mod function_lookup;
 mod initializer_list;
 mod lvalue;
 mod member_pointer;
+mod member_pointer_receiver;
 mod memory;
 mod method_lookup;
 mod overload;
@@ -52,8 +53,7 @@ use crate::sema::{FunctionSig, Sema};
 use crate::wasm::*;
 use analysis::{
     FuncCandidate, FuncDeclRef, check_stmt_has_new_delete, collect_address_taken_expr,
-    collect_address_taken_stmt, collect_expr_calls, collect_stmt_calls,
-    collect_type_lifecycle,
+    collect_address_taken_stmt, collect_expr_calls, collect_stmt_calls, collect_type_lifecycle,
 };
 use analysis_vars::collect_static_vars;
 use emit_context::{
@@ -82,7 +82,9 @@ pub struct Codegen<'a> {
     pub func_printf: u32,
     pub loop_depths: Vec<(u32, u32, usize)>,
     pub current_block_depth: u32,
-    pub vtable_offsets: HashMap<String, u32>,
+    /// Per class: `(vptr_offset_in_object, vtable_data_address)` for every
+    /// polymorphic subobject of that class.
+    pub vtable_offsets: HashMap<String, Vec<(u32, u32)>>,
     pub vtable_func_indices: Vec<u32>,
     pub t_i32_v: u32,
     pub global_offsets: HashMap<String, u32>,

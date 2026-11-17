@@ -122,6 +122,7 @@ impl Sema {
             | StmtKind::UsingDecl(_)
             | StmtKind::NamespaceAlias { .. }
             | StmtKind::TypeAlias { .. }
+            | StmtKind::StaticAssert { .. }
             | StmtKind::Expr(_) => {}
             StmtKind::Return(expr_opt) => {
                 self.analyze_return(expr_opt, stmt.line, stmt.col)?;

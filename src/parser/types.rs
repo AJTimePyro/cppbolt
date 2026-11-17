@@ -15,6 +15,7 @@ impl Parser {
             | TokenKind::KwVoid
             | TokenKind::KwAuto
             | TokenKind::KwConst
+            | TokenKind::KwConstexpr
             | TokenKind::KwDecltype
             | TokenKind::KwTypename
             | TokenKind::KwAlignas => true,
@@ -74,6 +75,16 @@ impl Parser {
         let base_type = self.parse_specifier_type_inner()?;
         self.parse_declarator_prefix(&base_type)
     }
+    /// Parses a complete type-id, including parenthesized function- and
+    /// member-function-pointer declarators (`int (S::*)(int) const`).
+    pub(super) fn parse_type_id(&mut self) -> Result<Type, CompileError> {
+        let _guard = self.enter_type()?;
+        let base_type = self.parse_specifier_type_inner()?;
+        if self.is_function_pointer_declarator_ahead() {
+            return Ok(self.parse_function_pointer_declarator(base_type, None)?.0);
+        }
+        self.parse_declarator_prefix(&base_type)
+    }
 
     /// Parses the type specifiers of a declaration: the builtin or named type
     /// with its `const` qualifiers.
@@ -91,7 +102,7 @@ impl Parser {
         let mut is_typename = false;
         let mut alignas_specs = Vec::new();
         loop {
-            if self.peek() == &TokenKind::KwConst {
+            if self.peek() == &TokenKind::KwConst || self.peek() == &TokenKind::KwConstexpr {
                 self.advance();
                 is_const = true;
             } else if self.peek() == &TokenKind::KwTypename {
@@ -144,7 +155,7 @@ impl Parser {
         }
 
         loop {
-            if self.peek() == &TokenKind::KwConst {
+            if self.peek() == &TokenKind::KwConst || self.peek() == &TokenKind::KwConstexpr {
                 self.advance();
                 base_type = Type::Const(Box::new(base_type));
             } else {
@@ -335,20 +346,6 @@ impl Parser {
         Ok(ty)
     }
 
-    fn parse_decltype_specifier(&mut self) -> Result<Type, CompileError> {
-        self.advance();
-        self.expect(TokenKind::LParen)?;
-        let res = if self.peek() == &TokenKind::KwNullptr {
-            self.advance();
-            Type::Nullptr
-        } else {
-            let _ = self.parse_expr()?;
-            Type::Pointer(Box::new(Type::Void))
-        };
-        self.expect(TokenKind::RParen)?;
-        Ok(res)
-    }
-
     fn parse_named_type(&mut self, is_typename: bool) -> Result<Type, CompileError> {
         let ty = match self.peek() {
             TokenKind::KwDecltype => self.parse_decltype_specifier()?,
@@ -381,7 +378,13 @@ impl Parser {
                     Type::Int
                 } else if let Some(scoped) = self.resolve_active_struct_scope_type(&id) {
                     scoped
-                } else if let Some(alias) = self.type_aliases.get(&id).cloned() {
+                } else if let Some(alias) = self
+                    .scoped_aliases
+                    .iter()
+                    .rev()
+                    .find_map(|scope| scope.get(&id).cloned())
+                    .or_else(|| self.type_aliases.get(&id).cloned())
+                {
                     alias
                 } else if self.known_enums.contains(&id) {
                     Type::Enum(id)
@@ -402,36 +405,16 @@ impl Parser {
                 } else if self.known_types.contains(&id) {
                     Type::Struct(id)
                 } else {
-                    self.resolve_named_struct_fallback(&id, is_typename, (self.current().line, self.current().col))?
+                    self.resolve_named_struct_fallback(
+                        &id,
+                        is_typename,
+                        (self.current().line, self.current().col),
+                    )?
                 }
             }
             _ => unreachable!(),
         };
         Ok(ty)
-    }
-
-    fn resolve_named_struct_fallback(
-        &self,
-        id: &str,
-        is_typename: bool,
-        pos: (usize, usize),
-    ) -> Result<Type, CompileError> {
-        let (line, col) = pos;
-        if QualifiedName::new(id).in_std() {
-            let plain = QualifiedName::new(id).plain();
-            if self.known_types.contains(plain) {
-                return Ok(Type::Struct(plain.to_string()));
-            }
-            return Err(CompileError::new(format!("Unknown type '{}'", id), line, col));
-        }
-        if self.allow_unknown_types
-            || is_typename
-            || self.known_types.contains(&format!("std::{}", id))
-            || self.is_template_member_type(id)
-        {
-            return Ok(Type::Struct(id.to_string()));
-        }
-        Err(CompileError::new(format!("Unknown type '{}'", id), line, col))
     }
 
     pub(super) fn is_template_member_type(&self, id: &str) -> bool {

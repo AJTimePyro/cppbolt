@@ -139,8 +139,8 @@ impl<'a> Codegen<'a> {
     ) -> Option<FunctionSig> {
         let is_copy_init = arg_types.len() == 1
             && matches!(
-                arg_types[0].strip_const().strip_reference(),
-                Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(class_name))
+            arg_types[0].strip_const().strip_reference(),
+            Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(class_name))
             );
         let mut best_sig = None;
         let mut best_score = usize::MAX;
@@ -266,6 +266,7 @@ impl<'a> Codegen<'a> {
         Some((
             idx,
             FunctionSig {
+                qualifiers: FunctionQualifiers::default(),
                 name: format!("{}_{}", class_name, short_name),
                 mangled_name: format!("{}_{}", class_name, short_name),
                 return_type: Type::Void,
@@ -318,8 +319,8 @@ fn copy_constructor_param_const(sig: &FunctionSig, class_name: &str) -> Option<b
     }
     let inner = sig.param_types[1].deref_type()?;
     if !matches!(
-        inner.strip_const(),
-        Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(class_name))
+    inner.strip_const(),
+    Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(class_name))
     ) {
         return None;
     }
@@ -342,8 +343,8 @@ fn move_constructor_matches(sig: &FunctionSig, class_name: &str) -> bool {
         return false;
     };
     if !matches!(
-        inner.strip_const(),
-        Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(class_name))
+    inner.strip_const(),
+    Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(class_name))
     ) {
         return false;
     }

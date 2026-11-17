@@ -12,6 +12,20 @@ impl Parser {
         let line = tok.line;
         let col = tok.col;
         match self.peek() {
+            TokenKind::KwStaticAssert => {
+                let decl = self.parse_static_assert_decl()?;
+                let Decl::StaticAssert {
+                    condition, message, ..
+                } = decl
+                else {
+                    unreachable!()
+                };
+                Ok(Stmt::new(
+                    StmtKind::StaticAssert { condition, message },
+                    line,
+                    col,
+                ))
+            }
             TokenKind::KwUsing => self.parse_using_stmt(line, col),
             TokenKind::Semi => {
                 self.advance();
@@ -89,6 +103,9 @@ impl Parser {
                 let ty = self.parse_type()?;
                 self.expect(TokenKind::Semi)?;
                 self.known_types.insert(name.clone());
+                if let Some(scope) = self.scoped_aliases.last_mut() {
+                    scope.insert(name.clone(), ty.clone());
+                }
                 Ok(Stmt::new(StmtKind::TypeAlias { name, ty }, line, col))
             } else {
                 self.expect(TokenKind::Semi)?;
@@ -167,12 +184,14 @@ impl Parser {
         let tok = self.current().clone();
         self.expect(TokenKind::LBrace)?;
         let prev_aliases = self.namespace_aliases.clone();
+        self.scoped_aliases.push(HashMap::new());
         let mut stmts = Vec::new();
         while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
             stmts.push(self.parse_stmt()?);
         }
         self.expect(TokenKind::RBrace)?;
         self.namespace_aliases = prev_aliases;
+        self.scoped_aliases.pop();
         Ok(Stmt::new(StmtKind::Compound(stmts), tok.line, tok.col))
     }
 

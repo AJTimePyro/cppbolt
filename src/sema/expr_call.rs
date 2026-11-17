@@ -1,7 +1,7 @@
+use super::call_arity::check_indirect_call_arity;
 use super::constructor::ConstructorCall;
 use super::overload::CandidateSelection;
 use super::*;
-
 /// The return type of a function pointer or of a function type.
 fn function_return_type(ty: &Type) -> Option<Type> {
     match ty.strip_const() {
@@ -46,6 +46,7 @@ impl Sema {
             let var_ty = self.lookup_var(&name).map(|v| v.ty.clone());
             if let Some(ty) = var_ty {
                 if let Some(return_type) = function_return_type(&ty) {
+                    check_indirect_call_arity(&ty, args.len(), *pos)?;
                     return Ok(return_type);
                 }
                 if let Type::Struct(sname) = ty.strip_const().strip_reference()
@@ -75,6 +76,7 @@ impl Sema {
         }
 
         let callee_ty = self.analyze_expr(callee)?;
+        check_indirect_call_arity(&callee_ty, args.len(), *pos)?;
         if let Type::Struct(sname) = callee_ty.strip_const().strip_reference()
             && let Some(ret) = self.try_functor_call(callee, sname, args, &arg_types, *pos)?
         {
@@ -167,9 +169,7 @@ impl Sema {
             } else {
                 Expr::Cast {
                     kind: CastKind::Functional,
-                    target_type: Type::Pointer(Box::new(Type::Struct(
-                        target_class.to_string(),
-                    ))),
+                    target_type: Type::Pointer(Box::new(Type::Struct(target_class.to_string()))),
                     expr: Box::new(Expr::This),
                 }
             };
@@ -390,11 +390,7 @@ impl Sema {
         pos: ExprPos,
     ) -> CompileError {
         let (Some(candidates), Some(selection)) = sel_cand else {
-            return CompileError::new(
-                format!("Undefined function '{name}'"),
-                pos.line,
-                pos.col,
-            );
+            return CompileError::new(format!("Undefined function '{name}'"), pos.line, pos.col);
         };
         if selection.ambiguous {
             return self.ambiguous_call(name, arg_types, pos);

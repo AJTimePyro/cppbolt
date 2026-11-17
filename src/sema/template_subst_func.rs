@@ -1,12 +1,13 @@
 //! Function-level template AST substitution.
 
 use super::pack_expansion::{
-    build_slice_mapping, collect_packs_in_expr, collect_packs_in_type, pack_element_name,
-    rename_pack_identifiers, validate_pack_lengths, TemplateArg,
+    TemplateArg, build_slice_mapping, collect_packs_in_expr, collect_packs_in_type,
+    pack_element_name, rename_pack_identifiers, validate_pack_lengths,
 };
 use super::template_name::substitute_template_name;
 use super::template_subst::{substitute_expr, substitute_type};
 use super::template_subst_stmt::substitute_stmt;
+use crate::ast::FunctionQualifiers;
 use crate::ast::decl::{FunctionDecl, Param};
 use crate::ast::expr::Expr;
 use crate::ast::types::Type;
@@ -132,8 +133,7 @@ fn substitute_ctor_initializers(
                 }
             });
             if !has_unexpanded_member_pack {
-                subst_inits =
-                    crate::sema::pack_expansion::expand_expr_list(&subst_inits, mapping)?;
+                subst_inits = crate::sema::pack_expansion::expand_expr_list(&subst_inits, mapping)?;
             } else {
                 for init in &mut subst_inits {
                     substitute_expr(init, mapping, injected_class)?;
@@ -195,6 +195,7 @@ pub fn substitute_function(
     }
 
     Ok(FunctionDecl {
+        qualifiers: FunctionQualifiers::default(),
         name,
         return_type,
         params,

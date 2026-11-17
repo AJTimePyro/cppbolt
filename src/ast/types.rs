@@ -8,6 +8,15 @@ pub enum WasmType {
     F32,
     F64,
 }
+/// cv/ref/noexcept qualifiers attached to a function type. These are part of
+/// the type of a pointer to member function in C++17.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct FunctionQualifiers {
+    pub is_const: bool,
+    pub is_volatile: bool,
+    pub is_noexcept: bool,
+    pub ref_qualifier: crate::ast::RefQualifier,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
@@ -46,6 +55,7 @@ pub enum Type {
     Function {
         return_type: Box<Type>,
         param_types: Vec<Type>,
+        qualifiers: FunctionQualifiers,
     },
     MemberPointer {
         class_name: String,
@@ -134,9 +144,7 @@ impl Type {
             Type::DependentArray(inner, param) => {
                 Type::DependentArray(Box::new(inner.strip_all_const()), param.clone())
             }
-            Type::Aligned(inner, align) => {
-                Type::Aligned(Box::new(inner.strip_all_const()), *align)
-            }
+            Type::Aligned(inner, align) => Type::Aligned(Box::new(inner.strip_all_const()), *align),
             Type::DependentAlignas(inner, param) => {
                 Type::DependentAlignas(Box::new(inner.strip_all_const()), param.clone())
             }
@@ -339,12 +347,18 @@ impl Type {
             | Type::DependentNonType(_)
             | Type::DependentArray(_, _) => 4,
             Type::MemberPointer { member_type, .. } => {
-                if matches!(member_type.strip_const(), Type::Function { .. }) { 8 } else { 4 }
+                if matches!(member_type.strip_const(), Type::Function { .. }) {
+                    8
+                } else {
+                    4
+                }
             }
             Type::Function { .. } | Type::BoundMemberFunction { .. } => 4,
             Type::PackExpansion(_) => 0,
             Type::Const(_) => unreachable!(),
-            Type::Aligned(inner, _) | Type::DependentAlignas(inner, _) => inner.size_of(struct_sizes),
+            Type::Aligned(inner, _) | Type::DependentAlignas(inner, _) => {
+                inner.size_of(struct_sizes)
+            }
         }
     }
 
@@ -358,7 +372,9 @@ impl Type {
                 Type::Nullptr => 4,
                 Type::Bool | Type::Char | Type::SignedChar | Type::UnsignedChar => 1,
                 Type::Short | Type::UnsignedShort => 2,
-                Type::Int | Type::UnsignedInt | Type::Long | Type::UnsignedLong | Type::Enum(_) => 4,
+                Type::Int | Type::UnsignedInt | Type::Long | Type::UnsignedLong | Type::Enum(_) => {
+                    4
+                }
                 Type::LongLong | Type::UnsignedLongLong => 8,
                 Type::Float => 4,
                 Type::Double => 8,
@@ -374,9 +390,9 @@ impl Type {
                     .or_else(|| struct_aligns.get(QualifiedName::new(name).plain()))
                     .unwrap_or(&4),
                 Type::TypeParam(_)
-            | Type::NonType(_)
-            | Type::DependentNonType(_)
-            | Type::DependentArray(_, _) => 4,
+                | Type::NonType(_)
+                | Type::DependentNonType(_)
+                | Type::DependentArray(_, _) => 4,
                 Type::MemberPointer { member_type, .. } => {
                     if matches!(member_type.strip_const(), Type::Function { .. }) {
                         8

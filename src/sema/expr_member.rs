@@ -1,6 +1,57 @@
 use super::*;
 
 impl Sema {
+    /// Checks that `member` is accessible on `class_name` from the current
+    /// class context. Used both for ordinary member access and for
+    /// `&Class::member`.
+    pub(super) fn check_member_access(
+        &self,
+        class_name: &str,
+        member: &str,
+        pos: ExprPos,
+    ) -> Result<(), CompileError> {
+        let cur_clean = self
+            .current_class
+            .as_deref()
+            .map(|c| QualifiedName::new(c).plain());
+        let s_clean = QualifiedName::new(class_name).plain();
+        let in_class = match cur_clean {
+            Some(cur) => cur == s_clean || cur.starts_with(&format!("{}::", s_clean)),
+            None => false,
+        };
+        if in_class {
+            return Ok(());
+        }
+        let mut visited = std::collections::HashSet::new();
+        if self.is_member_private_in_hierarchy(class_name, member, &mut visited) {
+            return Err(CompileError::new(
+                format!("'{}' is a private member of '{}'", member, class_name),
+                pos.line,
+                pos.col,
+            ));
+        }
+        Ok(())
+    }
+    fn is_member_private_in_hierarchy(
+        &self,
+        class_name: &str,
+        member: &str,
+        visited: &mut std::collections::HashSet<String>,
+    ) -> bool {
+        if !visited.insert(class_name.to_string()) {
+            return false;
+        }
+        let Some(layout) = self.struct_layouts.get(class_name) else {
+            return false;
+        };
+        if layout.private_members.contains(member) {
+            return true;
+        }
+        layout
+            .base_classes
+            .iter()
+            .any(|b| self.is_member_private_in_hierarchy(b, member, visited))
+    }
     pub(super) fn analyze_member(&mut self, expr: &mut Expr) -> Result<Type, CompileError> {
         let Expr::MemberAccess {
             object,
@@ -19,26 +70,7 @@ impl Sema {
         let obj_ty = self.analyze_expr(object)?;
         let (struct_name, is_target_const) = self.member_struct_name(&obj_ty, *is_arrow, *pos)?;
 
-        if let Some(layout) = self.struct_layouts.get(&struct_name)
-            && layout.private_members.contains(member)
-        {
-            let cur_clean = self
-                .current_class
-                .as_deref()
-                .map(|c| QualifiedName::new(c).plain());
-            let s_clean = QualifiedName::new(&struct_name).plain();
-            let in_class = match cur_clean {
-                Some(cur) => cur == s_clean || cur.starts_with(&format!("{}::", s_clean)),
-                None => false,
-            };
-            if !in_class {
-                return Err(CompileError::new(
-                    format!("'{}' is a private member of '{}'", member, struct_name),
-                    pos.line,
-                    pos.col,
-                ));
-            }
-        }
+        self.check_member_access(&struct_name, member, *pos)?;
 
         if let Some(fld) = self.find_field_in_class(&struct_name, member) {
             let mut ret_ty = fld.ty.clone();
@@ -50,6 +82,7 @@ impl Sema {
             Ok(Type::Function {
                 return_type: Box::new(Type::Int),
                 param_types: Vec::new(),
+                qualifiers: FunctionQualifiers::default(),
             })
         } else {
             Err(CompileError::new(

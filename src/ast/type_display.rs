@@ -1,16 +1,42 @@
 //! C++ spelling of AST types, split from `types.rs` to keep that file under the size cap.
 
-use super::types::Type;
+use super::types::{FunctionQualifiers, Type};
 
-fn function_type(return_type: &Type, params: &[Type], class: Option<&str>) -> String {
+fn function_type(
+    return_type: &Type,
+    params: &[Type],
+    class: Option<&str>,
+    quals: FunctionQualifiers,
+) -> String {
     let p = params
         .iter()
         .map(|t| t.to_c_type())
         .collect::<Vec<_>>()
         .join(", ");
+    let mut suffix = String::new();
+    if quals.is_const {
+        suffix.push_str(" const");
+    }
+    if quals.is_volatile {
+        suffix.push_str(" volatile");
+    }
+    match quals.ref_qualifier {
+        crate::ast::RefQualifier::LValue => suffix.push_str(" &"),
+        crate::ast::RefQualifier::RValue => suffix.push_str(" &&"),
+        crate::ast::RefQualifier::None => {}
+    }
+    if quals.is_noexcept {
+        suffix.push_str(" noexcept");
+    }
     match class {
-        Some(class) => format!("{} ({}::*)({})", return_type.to_c_type(), class, p),
-        None => format!("{} (*)({})", return_type.to_c_type(), p),
+        Some(class) => format!(
+            "{} ({}::*)({}){}",
+            return_type.to_c_type(),
+            class,
+            p,
+            suffix
+        ),
+        None => format!("{} (*)({}){}", return_type.to_c_type(), p, suffix),
     }
 }
 
@@ -41,7 +67,15 @@ impl Type {
             Type::Array(inner, n) => format!("{}[{}]", inner.to_c_type(), n),
             Type::DependentArray(inner, param) => format!("{}[{}]", inner.to_c_type(), param),
             Type::NonType(n) => n.to_string(),
-            Type::DependentNonType(s) => s.clone(),
+            Type::DependentNonType(s) => {
+                if let Some(addr) = s.strip_prefix("@addr:") {
+                    format!("&{addr}")
+                } else if s == "@null:" {
+                    "nullptr".to_string()
+                } else {
+                    s.clone()
+                }
+            }
             Type::TypeParam(name) => name.clone(),
             Type::TemplateInstance { name, args } => {
                 let formatted = args
@@ -66,15 +100,43 @@ impl Type {
                 Type::Function {
                     return_type,
                     param_types,
-                } => function_type(return_type, param_types, Some(class_name)),
+                    qualifiers,
+                } => function_type(return_type, param_types, Some(class_name), *qualifiers),
                 other => format!("{} {}::*", other.to_c_type(), class_name),
             },
             Type::Function {
                 return_type,
                 param_types,
-            } => function_type(return_type, param_types, None),
+                qualifiers,
+            } => function_type(return_type, param_types, None, *qualifiers),
             Type::PackExpansion(inner) => format!("{}...", inner.to_c_type()),
             Type::Aligned(inner, _) | Type::DependentAlignas(inner, _) => inner.to_c_type(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn qualified_member_function_pointer_spelling() {
+        let ty = Type::MemberPointer {
+            class_name: "S".to_string(),
+            member_type: Box::new(Type::Function {
+                return_type: Box::new(Type::Int),
+                param_types: vec![Type::Double],
+                qualifiers: FunctionQualifiers {
+                    is_const: true,
+                    is_volatile: true,
+                    is_noexcept: true,
+                    ref_qualifier: crate::ast::RefQualifier::LValue,
+                },
+            }),
+        };
+        assert_eq!(
+            ty.to_c_type(),
+            "int (S::*)(double) const volatile & noexcept"
+        );
     }
 }

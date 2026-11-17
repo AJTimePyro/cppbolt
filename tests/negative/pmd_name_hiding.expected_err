@@ -1,0 +1,1 @@
+tests/negative/pmd_name_hiding.cpp:4:22: error: no overload of 'D::g' matches member pointer type 'int (D::*)(int)'

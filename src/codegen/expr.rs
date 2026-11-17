@@ -17,9 +17,10 @@ impl<'a> Codegen<'a> {
             | Expr::BoolLiteral(..)
             | Expr::CharLiteral(..)
             | Expr::StringLiteral(..)
-            | Expr::This | Expr::SizeofType(..) | Expr::AlignofType(..) | Expr::SizeofExpr(..) => {
-                self.compile_literal(expr, ctx, code)?
-            }
+            | Expr::This
+            | Expr::SizeofType(..)
+            | Expr::AlignofType(..)
+            | Expr::SizeofExpr(..) => self.compile_literal(expr, ctx, code)?,
             Expr::Identifier { .. } => self.compile_identifier(expr, ctx, code)?,
             Expr::Binary {
                 op: BinaryOp::LogicalAnd,
@@ -114,10 +115,11 @@ impl<'a> Codegen<'a> {
         let src_ty = self.get_expr_type(expr, ctx);
         if target_type.is_reference() {
             self.compile_lvalue_addr(expr, ctx, code)?;
-            if let (Some(clean_target), Some(clean_src)) =
-                (target_type.deref_type(), src_ty.deref_type().or(Some(&src_ty)))
-                && let (Type::Struct(s_target), Type::Struct(s_src)) =
-                    (clean_target.strip_const(), clean_src.strip_const())
+            if let (Some(clean_target), Some(clean_src)) = (
+                target_type.deref_type(),
+                src_ty.deref_type().or(Some(&src_ty)),
+            ) && let (Type::Struct(s_target), Type::Struct(s_src)) =
+                (clean_target.strip_const(), clean_src.strip_const())
             {
                 if let Some(offset) = self.sema.base_subobject_offset(s_src, s_target)
                     && offset != 0

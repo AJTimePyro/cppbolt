@@ -11,7 +11,11 @@ use crate::ast::types::Type;
 use crate::name::QualifiedName;
 use std::collections::HashMap;
 
-pub(crate) fn insert_template_aliases<T: Clone>(map: &mut HashMap<String, T>, name: String, item: T) {
+pub(crate) fn insert_template_aliases<T: Clone>(
+    map: &mut HashMap<String, T>,
+    name: String,
+    item: T,
+) {
     if let Some(short) = name.split("::").last() {
         map.insert(short.to_string(), item.clone());
     }
@@ -104,6 +108,13 @@ impl Sema {
                 }
                 self.resolve_and_instantiate_type(inner, line, col)?;
             }
+            Type::MemberPointer {
+                class_name,
+                member_type,
+            } => {
+                *class_name = self.resolve_alias_in_qualified_name(class_name);
+                self.resolve_and_instantiate_type(member_type, line, col)?;
+            }
             _ => {}
         }
         Ok(())
@@ -166,8 +177,7 @@ impl Sema {
             return Ok(expanded.to_c_type());
         }
 
-        let (template_class, template_params) =
-            self.resolve_class_template(name, line, col)?;
+        let (template_class, template_params) = self.resolve_class_template(name, line, col)?;
 
         let effective_args = super::template_deduce::fill_default_template_args(
             name,
@@ -229,13 +239,19 @@ impl Sema {
         let (line, col) = pos;
         self.instantiate_nested_structs(template_class, inst_name, &mapping, pos)?;
 
-        let mut struct_decl =
-            substitute_struct(template_class, &mapping, inst_name, pos, Some(&self.struct_aligns))?;
+        let mut struct_decl = substitute_struct(
+            template_class,
+            &mapping,
+            inst_name,
+            pos,
+            Some(&self.struct_aligns),
+        )?;
         let Decl::StructDecl {
             fields,
             methods,
             static_fields,
             base_classes,
+            base_access,
             is_class,
             private_members,
             alignment,
@@ -268,12 +284,15 @@ impl Sema {
             name: inst_name,
             is_class: *is_class,
             base_classes,
+            base_access,
             fields,
             methods,
             private_members,
             line,
             col,
-            alignment: alignment.as_ref().map(|ty| ty.align_of(&self.struct_aligns)),
+            alignment: alignment
+                .as_ref()
+                .map(|ty| ty.align_of(&self.struct_aligns)),
         })?;
 
         self.register_instantiated_static_fields(inst_name, static_fields, base_classes, line, col);
@@ -452,6 +471,7 @@ impl Sema {
                     name: class_name,
                     is_class: false,
                     base_classes: vec![],
+                    base_access: vec![],
                     fields: vec![],
                     methods: vec![method_decl],
                     static_fields: vec![],

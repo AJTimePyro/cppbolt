@@ -156,7 +156,13 @@ impl<'a> Codegen<'a> {
                         let base_local_offset = offset
                             .checked_add(*base_off as u32)
                             .ok_or_else(|| self.internal_error("object is too large"))?;
-                        self.compile_aggregate_local(&base_ty, base_item, base_local_offset, ctx, code)?;
+                        self.compile_aggregate_local(
+                            &base_ty,
+                            base_item,
+                            base_local_offset,
+                            ctx,
+                            code,
+                        )?;
                         field_idx += base_field_count;
                     }
                 }
@@ -260,6 +266,9 @@ impl<'a> Codegen<'a> {
                 code.push(OP_I64_CONST);
                 write_i64(code, 0);
             }
+            Type::MemberPointer { member_type, .. } => {
+                Self::emit_null_member_pointer(member_type, code);
+            }
             _ => {
                 code.push(OP_I32_CONST);
                 write_i32(code, 0);
@@ -320,8 +329,8 @@ impl<'a> Codegen<'a> {
     ) -> Result<(), CompileError> {
         let init_ty = self.get_expr_type(init, ctx);
         if matches!(
-            init_ty.strip_const().strip_reference(),
-            Type::Struct(other) if other == sname
+        init_ty.strip_const().strip_reference(),
+        Type::Struct(other) if other == sname
         ) {
             let is_rvalue = self.is_expr_xvalue(init, ctx);
             let is_const = init_ty.strip_reference().is_const();

@@ -1,0 +1,1 @@
+tests/negative/pmd_overload_auto.cpp:3:12: error: cannot resolve address of overloaded function 'S::f' without a target type

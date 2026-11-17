@@ -3,6 +3,13 @@
 use super::call_types::{wasm_params_from_types, wasm_result_types};
 use super::*;
 
+struct VTableDispatch {
+    vptr_offset: u32,
+    slot_idx: usize,
+    this_slot: u32,
+    fn_slot: u32,
+}
+
 impl<'a> Codegen<'a> {
     /// Lowers a member call.
     pub(super) fn compile_member_call(
@@ -33,20 +40,36 @@ impl<'a> Codegen<'a> {
         self.emit_member_receiver(object, is_arrow, this_slot, ctx, code)?;
 
         let layout = self.sema.struct_layouts.get(&sname);
-        let is_virtual = layout.and_then(|l| l.vtable_slots.iter().position(|s| s == member));
+        let virtual_slot = layout.and_then(|l| {
+            l.vtables.iter().find_map(|t| {
+                t.slots
+                    .iter()
+                    .position(|s| s.name == member)
+                    .map(|slot_idx| (slot_idx, t.vptr_offset as u32))
+            })
+        });
         let site = CallSite {
             class_name: &sname,
             member,
             args,
             slot_idx: 0,
+            vptr_offset: 0,
             this_slot,
             fn_slot,
             receiver_const,
         };
 
         let receiver_is_lvalue = is_arrow || obj_ty.is_reference() || object.is_lvalue();
-        if let Some(slot_idx) = is_virtual {
-            self.compile_member_call_virtual(CallSite { slot_idx, ..site }, ctx, code)?;
+        if let Some((slot_idx, vptr_offset)) = virtual_slot {
+            self.compile_member_call_virtual(
+                CallSite {
+                    slot_idx,
+                    vptr_offset,
+                    ..site
+                },
+                ctx,
+                code,
+            )?;
         } else if let Some((m_idx, sig)) = self.find_method_for_receiver_category(
             &sname,
             member,
@@ -214,12 +237,22 @@ impl<'a> Codegen<'a> {
             member,
             args,
             slot_idx,
+            vptr_offset,
             this_slot,
             fn_slot,
             receiver_const,
         } = site;
-        // Virtual dispatch via vtable
-        self.load_vtable_slot(slot_idx, this_slot, fn_slot, ctx, code)?;
+        // Virtual dispatch via the vtable of this slot's owning subobject.
+        self.load_vtable_slot(
+            VTableDispatch {
+                vptr_offset,
+                slot_idx,
+                this_slot,
+                fn_slot,
+            },
+            ctx,
+            code,
+        )?;
 
         let Some(sig) = self
             .sema
@@ -283,35 +316,80 @@ impl<'a> Codegen<'a> {
         Ok(())
     }
 
-    /// Loads the function pointer of a virtual call from the vtable.
+    /// Loads the function index of a virtual call from the vtable and applies
+    /// the entry's `this` adjustment. Each entry is eight bytes:
+    /// `[function_table_index: i32, this_adjustment: i32]`.
     fn load_vtable_slot(
         &mut self,
-        slot_idx: usize,
-        this_slot: u32,
-        fn_slot: u32,
+        site: VTableDispatch,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let VTableDispatch {
+            vptr_offset,
+            slot_idx,
+            this_slot,
+            fn_slot,
+        } = site;
+        // scratch2 holds the vtable base address.
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.fp_local);
         code.push(OP_I32_LOAD);
         write_u32(code, 2);
         write_u32(code, this_slot);
+        if vptr_offset != 0 {
+            code.push(OP_I32_CONST);
+            write_i32(code, vptr_offset as i32);
+            code.push(OP_I32_ADD);
+        }
         code.push(OP_I32_LOAD);
         write_u32(code, 2);
         write_u32(code, 0); // vptr
-        code.push(OP_I32_LOAD);
-        write_u32(code, 2);
-        write_u32(code, (slot_idx * 4) as u32); // table_idx
         code.push(OP_LOCAL_SET);
         write_u32(code, ctx.scratch2);
+        // Load the function table index into fn_slot.
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.fp_local);
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.scratch2);
+        code.push(OP_I32_CONST);
+        write_i32(code, (slot_idx * 8) as i32);
+        code.push(OP_I32_ADD);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, 0);
         code.push(OP_I32_STORE);
         write_u32(code, 2);
         write_u32(code, fn_slot);
+        // Adjust `this` by the vptr offset plus the per-slot adjustment.
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, this_slot);
+        if vptr_offset != 0 {
+            code.push(OP_I32_CONST);
+            write_i32(code, vptr_offset as i32);
+            code.push(OP_I32_ADD);
+        }
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch2);
+        code.push(OP_I32_CONST);
+        write_i32(code, (slot_idx * 8 + 4) as i32);
+        code.push(OP_I32_ADD);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, 0);
+        code.push(OP_I32_ADD);
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.scratch1);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch1);
+        code.push(OP_I32_STORE);
+        write_u32(code, 2);
+        write_u32(code, this_slot);
         Ok(())
     }
 
@@ -335,7 +413,9 @@ impl<'a> Codegen<'a> {
             write_u32(code, this_slot);
             if let Some(Type::Pointer(inner)) = sig.param_types.first()
                 && let Type::Struct(method_class) = inner.strip_const()
-                && let Some(offset) = self.sema.base_subobject_offset(site.class_name, method_class)
+                && let Some(offset) = self
+                    .sema
+                    .base_subobject_offset(site.class_name, method_class)
                 && offset != 0
             {
                 code.push(OP_I32_CONST);

@@ -184,6 +184,11 @@ pub(super) fn return_local(ty: &Type, ctx: &FunctionContext) -> Option<u32> {
     match ty.strip_const() {
         Type::Void => None,
         Type::LongLong | Type::UnsignedLongLong => Some(ctx.ret_temp_i64),
+        Type::MemberPointer { member_type, .. }
+            if matches!(member_type.strip_const(), Type::Function { .. }) =>
+        {
+            Some(ctx.ret_temp_i64)
+        }
         Type::Double => Some(ctx.ret_temp_f64),
         Type::Float => Some(ctx.scratch_f32),
         _ => Some(ctx.ret_temp_i32),

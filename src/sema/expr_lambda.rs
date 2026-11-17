@@ -61,6 +61,7 @@ impl Sema {
             name: lambda_name,
             is_class: true,
             base_classes: &[],
+            base_access: &[],
             fields: &capture_info.fields,
             methods: std::slice::from_ref(ctor_decl),
             private_members: &[],
@@ -87,6 +88,7 @@ impl Sema {
             name: lambda_name.to_string(),
             is_class: true,
             base_classes: vec![],
+            base_access: vec![],
             fields: capture_info.fields.clone(),
             methods,
             static_fields: vec![],
@@ -119,7 +121,10 @@ impl Sema {
         for cap in captures {
             if cap.is_pack {
                 return Err(CompileError::new(
-                    format!("'{}' does not refer to the name of a parameter pack", cap.name),
+                    format!(
+                        "'{}' does not refer to the name of a parameter pack",
+                        cap.name
+                    ),
                     pos.line,
                     pos.col,
                 ));
@@ -244,6 +249,7 @@ impl Sema {
 
 fn base_fn_decl(name: &str, pos: ExprPos) -> FunctionDecl {
     FunctionDecl {
+        qualifiers: FunctionQualifiers::default(),
         name: name.to_string(),
         return_type: Type::Void,
         params: vec![],
@@ -302,6 +308,7 @@ fn build_lambda_fn_ptr_methods(
     let fn_ptr_type = Type::Pointer(Box::new(Type::Function {
         return_type: Box::new(op_decl.return_type.clone()),
         param_types: op_decl.params.iter().map(|p| p.ty.clone()).collect(),
+        qualifiers: FunctionQualifiers::default(),
     }));
     let ret_expr = Expr::Identifier(format!("{}::__invoke", lambda_name));
     let to_fn_ptr_decl = FunctionDecl {

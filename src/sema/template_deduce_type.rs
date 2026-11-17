@@ -1,4 +1,5 @@
 //! Type-level deduction logic for function templates and partial ordering.
+use super::template_arg_match::record_deduced;
 
 use crate::ast::expr::ExprPos;
 use crate::ast::types::Type;
@@ -11,17 +12,24 @@ use std::collections::HashMap;
 pub fn type_has_template_param(ty: &Type) -> bool {
     match ty {
         Type::TypeParam(_) => true,
-        Type::Pointer(inner) | Type::Reference(inner) | Type::RvalueReference(inner)
-        | Type::Const(inner) | Type::PackExpansion(inner) | Type::Array(inner, _) => {
-            type_has_template_param(inner)
-        }
+        Type::Pointer(inner)
+        | Type::Reference(inner)
+        | Type::RvalueReference(inner)
+        | Type::Const(inner)
+        | Type::PackExpansion(inner)
+        | Type::Array(inner, _) => type_has_template_param(inner),
         Type::TemplateInstance { args, .. } => args.iter().any(type_has_template_param),
-        Type::Function { return_type, param_types } => {
+        Type::Function {
+            return_type,
+            param_types,
+            ..
+        } => {
             type_has_template_param(return_type) || param_types.iter().any(type_has_template_param)
         }
-        Type::MemberPointer { class_name, member_type } => {
-            !class_name.contains("::") || type_has_template_param(member_type)
-        }
+        Type::MemberPointer {
+            class_name,
+            member_type,
+        } => !class_name.contains("::") || type_has_template_param(member_type),
         _ => false,
     }
 }
@@ -29,18 +37,33 @@ pub fn type_has_template_param(ty: &Type) -> bool {
 fn collect_type_param_names(ty: &Type, out: &mut Vec<String>) {
     match ty {
         Type::TypeParam(name) => out.push(name.clone()),
-        Type::Pointer(inner) | Type::Reference(inner) | Type::RvalueReference(inner)
-        | Type::Const(inner) | Type::PackExpansion(inner) | Type::Array(inner, _) => {
+        Type::Pointer(inner)
+        | Type::Reference(inner)
+        | Type::RvalueReference(inner)
+        | Type::Const(inner)
+        | Type::PackExpansion(inner)
+        | Type::Array(inner, _) => {
             collect_type_param_names(inner, out);
         }
         Type::TemplateInstance { args, .. } => {
-            for a in args { collect_type_param_names(a, out); }
+            for a in args {
+                collect_type_param_names(a, out);
+            }
         }
-        Type::Function { return_type, param_types } => {
+        Type::Function {
+            return_type,
+            param_types,
+            ..
+        } => {
             collect_type_param_names(return_type, out);
-            for p in param_types { collect_type_param_names(p, out); }
+            for p in param_types {
+                collect_type_param_names(p, out);
+            }
         }
-        Type::MemberPointer { class_name, member_type } => {
+        Type::MemberPointer {
+            class_name,
+            member_type,
+        } => {
             if !class_name.contains("::") {
                 out.push(class_name.clone());
             }
@@ -172,6 +195,7 @@ pub fn deduce_type(
         Type::Function {
             return_type,
             param_types,
+            ..
         } => {
             deduce_function(return_type, param_types, arg_ty, deduced, pos)?;
         }
@@ -188,7 +212,11 @@ fn deduce_member_pointer(
     pos: ExprPos,
 ) -> Result<(), CompileError> {
     let stripped = arg_ty.strip_reference().strip_const();
-    if let Type::MemberPointer { class_name: arg_class, member_type: arg_member } = stripped {
+    if let Type::MemberPointer {
+        class_name: arg_class,
+        member_type: arg_member,
+    } = stripped
+    {
         if deduced.contains_key(class_name) || !class_name.contains("::") {
             let _ = deduce_type(
                 &Type::TypeParam(class_name.to_string()),
@@ -220,11 +248,13 @@ fn deduce_function(
         Type::Function {
             return_type,
             param_types,
+            ..
         } => (&**return_type, param_types.as_slice()),
         Type::Pointer(inner) => match &**inner {
             Type::Function {
                 return_type,
                 param_types,
+                ..
             } => (&**return_type, param_types.as_slice()),
             _ => {
                 return Err(CompileError::new(
@@ -243,7 +273,9 @@ fn deduce_function(
         }
     };
     deduce_type(param_ret, arg_ret, deduced, false, pos)?;
-    let has_pack = param_params.last().is_some_and(|p| matches!(p, Type::PackExpansion(_)));
+    let has_pack = param_params
+        .last()
+        .is_some_and(|p| matches!(p, Type::PackExpansion(_)));
     let non_pack_count = if has_pack {
         param_params.len().saturating_sub(1)
     } else {
@@ -292,12 +324,7 @@ fn deduce_function_pack(
         let mut out = Vec::new();
         collect_type_param_names(inner, &mut out);
         if let Some(name) = out.first() {
-            record_deduced(
-                name,
-                TemplateArg::TypePack(elem_types),
-                deduced,
-                pos,
-            )?;
+            record_deduced(name, TemplateArg::TypePack(elem_types), deduced, pos)?;
         }
     }
     Ok(())
@@ -353,7 +380,13 @@ fn deduce_pack_expansion(
         let arg = if is_nontype {
             let vals: Vec<i128> = pack_slice
                 .iter()
-                .filter_map(|t| if let Type::NonType(v) = t { Some(*v) } else { None })
+                .filter_map(|t| {
+                    if let Type::NonType(v) = t {
+                        Some(*v)
+                    } else {
+                        None
+                    }
+                })
                 .collect();
             TemplateArg::NonTypePack(vals)
         } else {
@@ -378,9 +411,7 @@ fn deduce_pack_expansion(
                 for (k, v) in elem_deduced {
                     match v {
                         TemplateArg::Type(t) => collected_types.entry(k).or_default().push(t),
-                        TemplateArg::NonType(n) => {
-                            collected_nontypes.entry(k).or_default().push(n)
-                        }
+                        TemplateArg::NonType(n) => collected_nontypes.entry(k).or_default().push(n),
                         _ => {}
                     }
                 }
@@ -434,64 +465,6 @@ fn deduce_template_instance(
         for (p_arg, a_arg) in args.iter().zip(concrete_args.iter()) {
             deduce_type(p_arg, a_arg, deduced, true, pos)?;
         }
-    }
-    Ok(())
-}
-
-fn template_args_match(a: &TemplateArg, b: &TemplateArg) -> bool {
-    match (a, b) {
-        (TemplateArg::Type(t1), TemplateArg::Type(t2)) => {
-            t1 == t2 || t1.to_c_type() == t2.to_c_type()
-        }
-        (TemplateArg::TypePack(p1), TemplateArg::TypePack(p2)) => {
-            p1.len() == p2.len()
-                && p1
-                    .iter()
-                    .zip(p2.iter())
-                    .all(|(t1, t2)| t1 == t2 || t1.to_c_type() == t2.to_c_type())
-        }
-        (TemplateArg::NonType(v1), TemplateArg::NonType(v2)) => v1 == v2,
-        (TemplateArg::NonTypePack(v1), TemplateArg::NonTypePack(v2)) => v1 == v2,
-        _ => false,
-    }
-}
-
-fn format_template_arg(arg: &TemplateArg) -> String {
-    match arg {
-        TemplateArg::Type(t) => t.to_c_type(),
-        TemplateArg::NonType(v) => v.to_string(),
-        TemplateArg::TypePack(ts) => {
-            let names: Vec<_> = ts.iter().map(|t| t.to_c_type()).collect();
-            names.join(", ")
-        }
-        TemplateArg::NonTypePack(vs) => {
-            let names: Vec<_> = vs.iter().map(|v| v.to_string()).collect();
-            names.join(", ")
-        }
-    }
-}
-
-fn record_deduced(
-    name: &str,
-    deduced_arg: TemplateArg,
-    deduced: &mut HashMap<String, TemplateArg>,
-    pos: ExprPos,
-) -> Result<(), CompileError> {
-    if let Some(existing) = deduced.get(name) {
-        if !template_args_match(existing, &deduced_arg) {
-            return Err(CompileError::new(
-                format!(
-                    "template argument deduction conflict for '{}': deduced '{}' and '{}'",
-                    name,
-                    format_template_arg(existing),
-                    format_template_arg(&deduced_arg)
-                ),
-                pos.line,
-                pos.col,
-            ));
-        }
-    } else {
-        deduced.insert(name.to_string(), deduced_arg);
     }
     Ok(())
 }

@@ -51,7 +51,10 @@ impl Sema {
                 mapping.insert(short.to_string(), TemplateArg::Type(inst_ty.clone()));
                 mapping.insert(name.to_string(), TemplateArg::Type(inst_ty.clone()));
                 let plain_tmpl = QualifiedName::new(&template_class.name).plain();
-                mapping.insert(format!("{}::{}", plain_tmpl, short), TemplateArg::Type(inst_ty));
+                mapping.insert(
+                    format!("{}::{}", plain_tmpl, short),
+                    TemplateArg::Type(inst_ty),
+                );
             }
         }
 
@@ -224,6 +227,7 @@ impl Sema {
             name: nested_tmpl_name.clone(),
             is_class: p.inner_tmpl.is_class,
             base_classes: p.inner_tmpl.base_classes.clone(),
+            base_access: p.inner_tmpl.base_access.clone(),
             fields: subst_fields,
             methods: subst_methods,
             static_fields: subst_static_fields,
@@ -271,9 +275,7 @@ impl Sema {
                 let plain = QualifiedName::new(name).plain();
                 self.class_templates.get(plain).cloned()
             })
-            .ok_or_else(|| {
-                CompileError::new(format!("Template '{}' not found", name), line, col)
-            })
+            .ok_or_else(|| CompileError::new(format!("Template '{}' not found", name), line, col))
     }
 
     fn instantiate_single_nested_struct(
@@ -321,6 +323,7 @@ impl Sema {
             name: p.nested_inst_name,
             is_class: p.is_class,
             base_classes: p.base_classes,
+            base_access: &[],
             fields: &fields_for_layout,
             methods: &methods_for_layout,
             private_members: p.private_members,
@@ -334,6 +337,7 @@ impl Sema {
             name: p.nested_inst_name.to_string(),
             is_class: p.is_class,
             base_classes: p.base_classes.to_vec(),
+            base_access: Vec::new(),
             fields: subst_fields,
             methods: subst_methods,
             static_fields: Vec::new(),

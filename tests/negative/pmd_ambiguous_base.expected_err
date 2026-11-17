@@ -1,0 +1,1 @@
+tests/negative/pmd_ambiguous_base.cpp:7:3: error: cannot initialize variable 'pd' of type int D::* with int A::*

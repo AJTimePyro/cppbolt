@@ -1,8 +1,8 @@
 //! Statement-level template AST substitution.
 
 use super::pack_expansion::{
-    build_slice_mapping, collect_packs_in_expr, rename_pack_identifiers, validate_pack_lengths,
-    TemplateArg,
+    TemplateArg, build_slice_mapping, collect_packs_in_expr, rename_pack_identifiers,
+    validate_pack_lengths,
 };
 use super::template_subst::{substitute_expr, substitute_type};
 use crate::ast::expr::Expr;
@@ -109,7 +109,8 @@ pub fn substitute_stmt(
         | StmtKind::Empty
         | StmtKind::UsingNamespace(_)
         | StmtKind::UsingDecl(_)
-        | StmtKind::NamespaceAlias { .. } => {}
+        | StmtKind::NamespaceAlias { .. }
+        | StmtKind::StaticAssert { .. } => {}
     }
     Ok(())
 }

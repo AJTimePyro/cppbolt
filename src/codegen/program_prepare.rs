@@ -338,7 +338,11 @@ impl<'a> Codegen<'a> {
             self.sema
                 .struct_layouts
                 .get(name)
-                .map(|l| l.vtable_slots.iter().any(|s| s == "__deleting_dtor"))
+                .map(|l| {
+                    l.vtables
+                        .iter()
+                        .any(|t| t.slots.iter().any(|s| s.name == "__deleting_dtor"))
+                })
                 .unwrap_or(false)
         })
     }

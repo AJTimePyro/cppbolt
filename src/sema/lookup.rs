@@ -1,6 +1,71 @@
 use super::*;
+/// Result of checking a base-to-derived pointer-to-member conversion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MemberPointerBaseConversion {
+    Ok,
+    Ambiguous,
+    Inaccessible,
+    Unrelated,
+}
 
 impl Sema {
+    /// Counts distinct derivation paths from `derived` to `base`. Virtual
+    /// inheritance is unsupported, so each path is a distinct subobject.
+    pub fn base_subobject_path_count(&self, derived: &str, base: &str) -> usize {
+        if derived == base {
+            return 1;
+        }
+        let Some(layout) = self.struct_layouts.get(derived) else {
+            return 0;
+        };
+        layout
+            .base_classes
+            .iter()
+            .map(|b| self.base_subobject_path_count(b, base))
+            .sum()
+    }
+    fn base_path_is_accessible(&self, derived: &str, base: &str) -> bool {
+        if derived == base {
+            return true;
+        }
+        let Some(layout) = self.struct_layouts.get(derived) else {
+            return false;
+        };
+        let inside_derived = self
+            .current_class
+            .as_deref()
+            .is_some_and(|c| self.is_subclass(c, derived));
+        for (i, b) in layout.base_classes.iter().enumerate() {
+            let access = layout.base_access.get(i).copied().unwrap_or_default();
+            let accessible = match access {
+                crate::ast::BaseAccess::Public => true,
+                crate::ast::BaseAccess::Protected | crate::ast::BaseAccess::Private => {
+                    inside_derived
+                }
+            };
+            if accessible && self.base_path_is_accessible(b, base) {
+                return true;
+            }
+        }
+        false
+    }
+    pub(super) fn check_member_pointer_base_conversion(
+        &self,
+        derived: &str,
+        base: &str,
+    ) -> MemberPointerBaseConversion {
+        if derived == base {
+            return MemberPointerBaseConversion::Ok;
+        }
+        match self.base_subobject_path_count(derived, base) {
+            0 => MemberPointerBaseConversion::Unrelated,
+            n if n > 1 => MemberPointerBaseConversion::Ambiguous,
+            _ if !self.base_path_is_accessible(derived, base) => {
+                MemberPointerBaseConversion::Inaccessible
+            }
+            _ => MemberPointerBaseConversion::Ok,
+        }
+    }
     pub fn is_subclass(&self, derived: &str, base: &str) -> bool {
         if derived == base {
             return true;
@@ -217,7 +282,9 @@ impl Sema {
                 }
             }
         }
-        if method_name == "operator=" && !out.is_empty() {
+        // A declaration in a derived class hides same-named base declarations
+        // regardless of parameter types.
+        if !out.is_empty() {
             return;
         }
         if let Some(layout) = self.struct_layouts.get(class_name) {
@@ -304,12 +371,14 @@ mod tests {
             is_class: true,
             has_user_declared_constructors: false,
             base_classes,
+            base_access: Vec::new(),
             base_offsets: Vec::new(),
             fields: Vec::new(),
             size: 4,
             align: 4,
             has_vtable: false,
             vtable_slots: Vec::new(),
+            vtables: Vec::new(),
             private_members: HashSet::new(),
             is_abstract: false,
             pure_virtuals: HashSet::new(),
@@ -318,6 +387,7 @@ mod tests {
 
     fn method(name: &str, mangled_name: &str, is_static: bool) -> FunctionSig {
         FunctionSig {
+            qualifiers: FunctionQualifiers::default(),
             name: name.to_string(),
             mangled_name: mangled_name.to_string(),
             return_type: Type::Int,

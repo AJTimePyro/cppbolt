@@ -1,6 +1,19 @@
 use super::*;
 
 impl<'a> Codegen<'a> {
+    /// Emits the canonical null value for a pointer-to-member type.
+    ///
+    /// Data-member pointers use `-1` because offset `0` is a valid member
+    /// offset; member-function pointers use the all-zero 64-bit descriptor.
+    pub(super) fn emit_null_member_pointer(member_type: &Type, code: &mut Vec<u8>) {
+        if matches!(member_type.strip_const(), Type::Function { .. }) {
+            code.push(OP_I64_CONST);
+            write_i64(code, 0);
+        } else {
+            code.push(OP_I32_CONST);
+            write_i32(code, -1);
+        }
+    }
     /// Emits a store of the value on top of the stack to `[address + offset]`.
     /// The address is already on the stack below the value.
     pub(super) fn emit_store(&self, ty: &Type, offset: u32, code: &mut Vec<u8>) {
@@ -94,17 +107,15 @@ impl<'a> Codegen<'a> {
         if from == to {
             return;
         }
-        if matches!(from, Type::Nullptr)
+        if (matches!(from, Type::Nullptr) || from.is_integer())
             && let Type::MemberPointer { member_type, .. } = to
         {
+            // Sema only permits integer -> member pointer conversions for the
+            // null pointer constant `0`; every other integer is rejected before
+            // codegen. Emit the canonical null representation so that `0` and
+            // `nullptr` compare equal and have the right Wasm value type.
             code.push(OP_DROP);
-            if matches!(member_type.strip_const(), Type::Function { .. }) {
-                code.push(OP_I64_CONST);
-                write_i64(code, 0);
-            } else {
-                code.push(OP_I32_CONST);
-                write_i32(code, -1);
-            }
+            Self::emit_null_member_pointer(member_type, code);
             return;
         }
         if let (
@@ -154,7 +165,12 @@ impl<'a> Codegen<'a> {
         emit_integer_narrowing(to, code);
     }
 
-    fn emit_guarded_pointer_adjustment(&self, offset: usize, is_add: bool, code: &mut Vec<u8>) {
+    pub(super) fn emit_guarded_pointer_adjustment(
+        &self,
+        offset: usize,
+        is_add: bool,
+        code: &mut Vec<u8>,
+    ) {
         let s = self.current_scratch1.get();
         if s != 0 {
             code.push(OP_LOCAL_TEE);

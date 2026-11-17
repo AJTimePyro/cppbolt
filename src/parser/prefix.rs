@@ -186,7 +186,13 @@ impl Parser {
             let id_pos = self.current_pos();
             let name = match self.advance().kind.clone() {
                 TokenKind::Ident(id) => id,
-                _ => return Err(CompileError::new("expected identifier", id_pos.line, id_pos.col)),
+                _ => {
+                    return Err(CompileError::new(
+                        "expected identifier",
+                        id_pos.line,
+                        id_pos.col,
+                    ));
+                }
             };
             self.expect(TokenKind::RParen)?;
             return Ok(Expr::SizeofPack { name, pos });

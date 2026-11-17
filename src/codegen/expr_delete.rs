@@ -174,6 +174,73 @@ impl<'a> Codegen<'a> {
 
         Ok(())
     }
+    /// Loads the deleting destructor from the subobject's vtable and calls it.
+    /// `scratch1` holds the object pointer (possibly a base subobject pointer).
+    fn emit_virtual_delete_dispatch(
+        &mut self,
+        slot_idx: usize,
+        vptr_offset: u32,
+        fn_slot: u32,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) {
+        // scratch2 holds the vptr of the subobject being deleted.
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch1);
+        if vptr_offset != 0 {
+            code.push(OP_I32_CONST);
+            write_i32(code, vptr_offset as i32);
+            code.push(OP_I32_ADD);
+        }
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, 0);
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.scratch2);
+        // entry[0]: function table index.
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch2);
+        code.push(OP_I32_CONST);
+        write_i32(code, (slot_idx * 8) as i32);
+        code.push(OP_I32_ADD);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, 0);
+        code.push(OP_I32_STORE);
+        write_u32(code, 2);
+        write_u32(code, fn_slot);
+        // entry[1]: adjustment to the final overrider's subobject.
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch1);
+        if vptr_offset != 0 {
+            code.push(OP_I32_CONST);
+            write_i32(code, vptr_offset as i32);
+            code.push(OP_I32_ADD);
+        }
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch2);
+        code.push(OP_I32_CONST);
+        write_i32(code, (slot_idx * 8 + 4) as i32);
+        code.push(OP_I32_ADD);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, 0);
+        code.push(OP_I32_ADD);
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.scratch1);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch1);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, fn_slot);
+        code.push(OP_CALL_INDIRECT);
+        write_u32(code, self.t_i32_v);
+        code.push(0);
+    }
 
     /// Returns `true` when the object was released by a virtual destructor.
     fn compile_delete_class_scalar(
@@ -183,10 +250,15 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<bool, CompileError> {
         let layout = self.sema.struct_layouts.get(sname);
-        let is_virtual_dtor =
-            layout.and_then(|l| l.vtable_slots.iter().position(|s| s == "__deleting_dtor"));
-
-        if let Some(slot_idx) = is_virtual_dtor {
+        let is_virtual_dtor = layout.and_then(|l| {
+            l.vtables.iter().find_map(|t| {
+                t.slots
+                    .iter()
+                    .position(|s| s.name == "__deleting_dtor")
+                    .map(|idx| (idx, t.vptr_offset as u32))
+            })
+        });
+        if let Some((slot_idx, vptr_offset)) = is_virtual_dtor {
             // Virtual deleting destructor dispatch via vtable slot. The
             // deleting destructor releases the object itself.
             code.push(OP_BLOCK);
@@ -197,25 +269,8 @@ impl<'a> Codegen<'a> {
             code.push(OP_BR_IF);
             write_u32(code, 0);
 
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.scratch1);
-            code.push(OP_I32_LOAD);
-            write_u32(code, 2);
-            write_u32(code, 0); // vptr
-            code.push(OP_I32_LOAD);
-            write_u32(code, 2);
-            write_u32(code, (slot_idx * 4) as u32); // table_idx
-            code.push(OP_LOCAL_SET);
-            write_u32(code, ctx.scratch2);
-
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.scratch1);
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.scratch2);
-
-            code.push(OP_CALL_INDIRECT);
-            write_u32(code, self.t_i32_v);
-            code.push(0);
+            let fn_slot = ctx.alloc_frame(4, 4)?;
+            self.emit_virtual_delete_dispatch(slot_idx, vptr_offset, fn_slot, ctx, code);
             code.push(OP_END);
 
             return Ok(true);

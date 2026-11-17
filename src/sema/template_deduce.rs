@@ -52,7 +52,9 @@ pub fn parse_types_list_with_params(
     let mut types = Vec::new();
     while parser.peek() != &TokenKind::Eof {
         types.push(parser.parse_template_arg_type()?);
-        if parser.peek() != &TokenKind::Comma { break; }
+        if parser.peek() != &TokenKind::Comma {
+            break;
+        }
         parser.advance();
     }
     Ok(types)
@@ -76,8 +78,11 @@ fn deduce_pack_arguments(
         Type::PackExpansion(inner) => &**inner,
         other => other,
     };
-    let pack_name = template_params.iter().find(|p| p.is_pack)
-        .map(|p| p.name.clone()).unwrap_or_else(|| pack_param.name.clone());
+    let pack_name = template_params
+        .iter()
+        .find(|p| p.is_pack)
+        .map(|p| p.name.clone())
+        .unwrap_or_else(|| pack_param.name.clone());
 
     let mut pack_types = Vec::new();
     for (i, arg_ty) in arg_types.iter().enumerate().skip(start) {
@@ -88,14 +93,26 @@ fn deduce_pack_arguments(
             arg_ty.clone()
         };
         let mut elem_deduced = HashMap::new();
-        deduce_type(pattern_ty, &adjusted_arg_ty, &mut elem_deduced, is_lval, pos)?;
-        let deduced_ty = elem_deduced.remove(&pack_name).or_else(|| {
-            template_params.iter().find(|p| p.is_pack).and_then(|p| elem_deduced.remove(&p.name))
-        }).or_else(|| {
-            let mut items: Vec<_> = elem_deduced.into_iter().collect();
-            items.sort_by(|a, b| a.0.cmp(&b.0));
-            items.into_iter().next().map(|(_, ty)| ty)
-        });
+        deduce_type(
+            pattern_ty,
+            &adjusted_arg_ty,
+            &mut elem_deduced,
+            is_lval,
+            pos,
+        )?;
+        let deduced_ty = elem_deduced
+            .remove(&pack_name)
+            .or_else(|| {
+                template_params
+                    .iter()
+                    .find(|p| p.is_pack)
+                    .and_then(|p| elem_deduced.remove(&p.name))
+            })
+            .or_else(|| {
+                let mut items: Vec<_> = elem_deduced.into_iter().collect();
+                items.sort_by(|a, b| a.0.cmp(&b.0));
+                items.into_iter().next().map(|(_, ty)| ty)
+            });
         match deduced_ty {
             Some(TemplateArg::Type(t)) => pack_types.push(t),
             Some(TemplateArg::NonType(v)) => pack_types.push(Type::NonType(v)),
@@ -128,7 +145,10 @@ fn validate_arg_counts(
             pos.col,
         ));
     }
-    let min_args = non_pack_params.iter().take_while(|p| p.default_val.is_none()).count();
+    let min_args = non_pack_params
+        .iter()
+        .take_while(|p| p.default_val.is_none())
+        .count();
     if arg_count < min_args {
         return Err(CompileError::new(
             format!(
@@ -166,6 +186,35 @@ fn fill_missing_deduced(
     Ok(())
 }
 
+fn insert_explicit_template_args(
+    template_params: &[TemplateParam],
+    explicit_args: &[Type],
+    deduced: &mut HashMap<String, TemplateArg>,
+    explicit_pack: &mut Vec<Type>,
+) {
+    let has_t_pack = template_params.last().is_some_and(|p| p.is_pack);
+    let non_pack_t_count = if has_t_pack {
+        template_params.len().saturating_sub(1)
+    } else {
+        template_params.len()
+    };
+    for (i, explicit_arg) in explicit_args.iter().enumerate() {
+        if i < non_pack_t_count {
+            let mut arg = TemplateArg::from(explicit_arg.clone());
+            // A null non-type argument needs the declared parameter type so
+            // substitution can emit a correctly typed null member pointer.
+            if let TemplateArg::NonTypeNull(ty) = &mut arg
+                && ty.is_none()
+            {
+                *ty = template_params[i].param_type.clone();
+            }
+            deduced.insert(template_params[i].name.clone(), arg);
+        } else if has_t_pack {
+            explicit_pack.push(explicit_arg.clone());
+        }
+    }
+}
+
 /// Deduces template arguments for a function template call.
 pub fn deduce_template_arguments(
     template_params: &[TemplateParam],
@@ -182,24 +231,23 @@ pub fn deduce_template_arguments(
         func_decl.params.len()
     };
     let non_pack_params = &func_decl.params[..non_pack_count];
-    validate_arg_counts(has_pack, non_pack_params, func_decl.params.len(), arg_types.len(), pos)?;
+    validate_arg_counts(
+        has_pack,
+        non_pack_params,
+        func_decl.params.len(),
+        arg_types.len(),
+        pos,
+    )?;
 
     let has_t_pack = template_params.last().is_some_and(|p| p.is_pack);
-    let non_pack_t_count = if has_t_pack {
-        template_params.len().saturating_sub(1)
-    } else {
-        template_params.len()
-    };
-
     let mut deduced: HashMap<String, TemplateArg> = HashMap::new();
     let mut explicit_pack = Vec::new();
-    for (i, explicit_arg) in explicit_args.iter().enumerate() {
-        if i < non_pack_t_count {
-            deduced.insert(template_params[i].name.clone(), TemplateArg::from(explicit_arg.clone()));
-        } else if has_t_pack {
-            explicit_pack.push(explicit_arg.clone());
-        }
-    }
+    insert_explicit_template_args(
+        template_params,
+        explicit_args,
+        &mut deduced,
+        &mut explicit_pack,
+    );
 
     for (i, p) in non_pack_params.iter().enumerate() {
         if i >= arg_types.len() {
@@ -317,7 +365,9 @@ fn validate_template_arg_kinds(
         } else {
             continue;
         };
-        if param.param_type.is_some() && !matches!(arg, Type::NonType(_) | Type::TypeParam(_)) {
+        let is_nontype_arg = matches!(arg, Type::NonType(_) | Type::TypeParam(_))
+            || matches!(arg, Type::DependentNonType(s) if s.starts_with(crate::sema::pack_expansion::ADDRESS_ARG_PREFIX));
+        if param.param_type.is_some() && !is_nontype_arg {
             return Err(CompileError::new(
                 "template argument for non-type parameter must be a constant expression",
                 pos.0,
@@ -350,7 +400,10 @@ pub fn build_template_arg_map(
     } else {
         template_params.len()
     };
-    for (param, arg) in template_params[..non_pack_count].iter().zip(effective_args.iter()) {
+    for (param, arg) in template_params[..non_pack_count]
+        .iter()
+        .zip(effective_args.iter())
+    {
         mapping.insert(param.name.clone(), TemplateArg::from(arg.clone()));
     }
     if has_pack && let Some(pack_param) = template_params.last() {

@@ -223,7 +223,13 @@ impl<'a> Codegen<'a> {
             {
                 let base_ty = Type::Struct(base_name.clone());
                 let base_global_offset = global.offset + *base_off as u32;
-                self.compile_global_field_elided(&base_ty, &mut cursor, base_global_offset, ctx, code)?;
+                self.compile_global_field_elided(
+                    &base_ty,
+                    &mut cursor,
+                    base_global_offset,
+                    ctx,
+                    code,
+                )?;
                 field_idx += base_layout.fields.len();
             }
         }

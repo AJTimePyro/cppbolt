@@ -4,9 +4,8 @@ use super::*;
 use crate::ast::template::TemplateClass;
 use crate::diagnostics::CompileError;
 use crate::name::QualifiedName;
-use std::collections::HashSet;
-
 use crate::sema::pack_expansion::TemplateArg;
+use std::collections::HashSet;
 
 pub struct InstantiationTarget<'a> {
     pub name: &'a str,
@@ -31,7 +30,11 @@ impl Sema {
         if !known_packs.is_empty() {
             Self::validate_template_member_packs(&decl, &known_packs, pos)?;
         }
-        super::template_registry::insert_template_aliases(&mut self.class_templates, decl.name.clone(), (decl, params));
+        super::template_registry::insert_template_aliases(
+            &mut self.class_templates,
+            decl.name.clone(),
+            (decl, params),
+        );
         Ok(())
     }
 
@@ -41,7 +44,9 @@ impl Sema {
         pos: (usize, usize),
     ) -> Result<(), CompileError> {
         for (_, f_ty, _) in &decl.fields {
-            if let Some(pack) = super::pack_expansion::find_unexpanded_packs_in_type(f_ty, known_packs).first() {
+            if let Some(pack) =
+                super::pack_expansion::find_unexpanded_packs_in_type(f_ty, known_packs).first()
+            {
                 return Err(CompileError::new(
                     format!("data member type contains unexpanded parameter pack '{pack}'"),
                     pos.0,
@@ -52,7 +57,9 @@ impl Sema {
         for m in &decl.methods {
             for p in &m.params {
                 if !p.is_pack
-                    && let Some(pack) = super::pack_expansion::find_unexpanded_packs_in_type(&p.ty, known_packs).first()
+                    && let Some(pack) =
+                        super::pack_expansion::find_unexpanded_packs_in_type(&p.ty, known_packs)
+                            .first()
                 {
                     return Err(CompileError::new(
                         format!("declaration type contains unexpanded parameter pack '{pack}'"),

@@ -3,6 +3,7 @@
 //! of the class.
 
 use super::analyze::this_param;
+use super::layout::element_struct_name;
 use super::template_deduce::{
     deduce_template_arguments, parse_types_list, split_template_call_name,
 };
@@ -16,14 +17,6 @@ pub(super) enum ConstructorCall {
     Elided(Expr),
     /// A constructor was selected for the arguments.
     Selected,
-}
-
-fn element_struct_name(ty: &Type) -> Option<&str> {
-    match ty.strip_const() {
-        Type::Struct(name) => Some(name),
-        Type::Array(elem, _) => element_struct_name(elem),
-        _ => None,
-    }
 }
 
 impl Sema {
@@ -157,8 +150,8 @@ impl Sema {
         }
         let is_copy_init = arg_types.len() == 1
             && matches!(
-                arg_types[0].strip_const().strip_reference(),
-                Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(class_name))
+            arg_types[0].strip_const().strip_reference(),
+            Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(class_name))
             );
         let mut best: Option<FunctionSig> = None;
         let mut best_score = usize::MAX;
@@ -380,7 +373,11 @@ impl Sema {
             if let Ok(mapping) =
                 deduce_template_arguments(&cand.template_params, &cand, &[], (arg_types, args), pos)
             {
-                let new_name = if method_name.is_none() { Some(short.to_string()) } else { None };
+                let new_name = if method_name.is_none() {
+                    Some(short.to_string())
+                } else {
+                    None
+                };
                 let Ok(mut spec_func) = substitute_function(&cand, &mapping, None, new_name) else {
                     continue;
                 };
@@ -404,6 +401,7 @@ impl Sema {
                     .insert(mangled.clone(), (class_name.to_string(), spec_func.clone()));
 
                 let sig = FunctionSig {
+                    qualifiers: FunctionQualifiers::default(),
                     name: spec_func.name,
                     mangled_name: mangled,
                     return_type: spec_func.return_type,

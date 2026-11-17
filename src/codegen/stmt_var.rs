@@ -243,13 +243,13 @@ impl<'a> Codegen<'a> {
         ctx: &FunctionContext,
         code: &mut Vec<u8>,
     ) {
-        if let Some(&v_off) = self.vtable_offsets.get(sname) {
+        for (vptr_offset, v_off) in self.vtable_installs(sname) {
             self.emit_local_address(offset, ctx, code);
             code.push(OP_I32_CONST);
             write_i32(code, v_off as i32);
             code.push(OP_I32_STORE);
             write_u32(code, 2);
-            write_u32(code, 0);
+            write_u32(code, vptr_offset);
         }
     }
 }

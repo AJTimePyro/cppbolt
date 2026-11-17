@@ -153,10 +153,14 @@ impl Sema {
 
     fn validate_static_cast(&self, src: &Type, target: &Type) -> Result<(), CompileError> {
         let src_inner = src.deref_type().or(Some(src)).map(|t| t.strip_const());
-        let tgt_inner = target.deref_type().or(Some(target)).map(|t| t.strip_const());
+        let tgt_inner = target
+            .deref_type()
+            .or(Some(target))
+            .map(|t| t.strip_const());
         if let (Some(Type::Struct(s_src)), Some(Type::Struct(s_tgt))) = (src_inner, tgt_inner)
             && (target.is_pointer() && src.is_pointer()
-                || target.is_reference() && (src.is_reference() || matches!(src.strip_const(), Type::Struct(_))))
+                || target.is_reference()
+                    && (src.is_reference() || matches!(src.strip_const(), Type::Struct(_))))
             && s_src != s_tgt
             && !self.is_subclass(s_src, s_tgt)
             && !self.is_subclass(s_tgt, s_src)
@@ -352,6 +356,7 @@ impl Sema {
                 Ok(Type::Function {
                     return_type: Box::new(Type::Int),
                     param_types: Vec::new(),
+                    qualifiers: FunctionQualifiers::default(),
                 })
             } else {
                 Err(CompileError::new(
@@ -364,6 +369,7 @@ impl Sema {
             Ok(Type::Pointer(Box::new(Type::Function {
                 return_type: Box::new(sigs[0].return_type.clone()),
                 param_types: sigs[0].param_types.clone(),
+                qualifiers: FunctionQualifiers::default(),
             })))
         } else {
             Err(CompileError::new(
@@ -383,6 +389,7 @@ impl Sema {
             Ok(Type::Pointer(Box::new(Type::Function {
                 return_type: Box::new(sigs[0].return_type.clone()),
                 param_types: sigs[0].param_types.clone(),
+                qualifiers: FunctionQualifiers::default(),
             })))
         } else {
             Err(CompileError::new(

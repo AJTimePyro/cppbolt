@@ -16,7 +16,9 @@ pub fn evaluate_dependent_array_size(
     {
         return Ok(*n as usize);
     }
-    if let Some(pack) = param_name.strip_prefix("sizeof...(").and_then(|s| s.strip_suffix(')'))
+    if let Some(pack) = param_name
+        .strip_prefix("sizeof...(")
+        .and_then(|s| s.strip_suffix(')'))
         && let Some(len) = mapping.get(pack).and_then(|a| a.pack_len())
     {
         return Ok(len);

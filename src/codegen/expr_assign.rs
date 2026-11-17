@@ -164,7 +164,12 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) {
         let target_raw = target_ty.strip_const();
-        if matches!(target_raw, Type::LongLong | Type::UnsignedLongLong) {
+        let is_pmf = matches!(
+        target_raw,
+        Type::MemberPointer { member_type, .. }
+        if matches!(member_type.strip_const(), Type::Function { .. })
+        );
+        if matches!(target_raw, Type::LongLong | Type::UnsignedLongLong) || is_pmf {
             code.push(OP_LOCAL_SET);
             write_u32(code, ctx.scratch_i64);
 

@@ -11,8 +11,12 @@ fn parse_ok(src: &str) -> bool {
 #[test]
 fn test_parse_member_pointer_types_and_exprs() {
     assert!(parse_ok("struct Point { int x; int y; }; int Point::* pm;"));
-    assert!(parse_ok("struct Point { int x; }; void (Point::* pmf)(int, double);"));
-    assert!(parse_ok("struct Point { int x; }; using PM = int Point::*;"));
+    assert!(parse_ok(
+        "struct Point { int x; }; void (Point::* pmf)(int, double);"
+    ));
+    assert!(parse_ok(
+        "struct Point { int x; }; using PM = int Point::*;"
+    ));
     assert!(parse_ok(
         "struct Point { int x; int y; }; \
          int main() { Point p; int Point::* ptr; p .* ptr; }"

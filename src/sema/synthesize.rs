@@ -1,6 +1,5 @@
-use std::collections::HashSet;
-
 use super::*;
+use std::collections::HashSet;
 
 pub(crate) fn insert_type_aliases(set: &mut HashSet<String>, name: &str) {
     set.insert(name.to_string());
@@ -78,6 +77,7 @@ impl Sema {
             let dtor_name = format!("~{}", inst_name);
             if !methods.iter().any(|m| m.name == dtor_name) {
                 methods.push(FunctionDecl {
+                    qualifiers: FunctionQualifiers::default(),
                     name: dtor_name,
                     return_type: Type::Void,
                     params: vec![],
@@ -102,6 +102,7 @@ impl Sema {
             .any(|m| m.name == inst_name || m.name == short);
         if !has_user_ctor {
             methods.push(FunctionDecl {
+                qualifiers: FunctionQualifiers::default(),
                 name: inst_name.to_string(),
                 return_type: Type::Void,
                 params: Vec::new(),
@@ -167,6 +168,7 @@ impl Sema {
                     .any(|(_, ty, _)| type_ctor_status(ty, &any_ctor, &default_ctor).1);
                 if !base_blocks && !field_blocks {
                     methods.push(FunctionDecl {
+                        qualifiers: FunctionQualifiers::default(),
                         name: name.clone(),
                         return_type: Type::Void,
                         params: vec![],

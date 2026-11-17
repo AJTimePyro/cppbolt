@@ -28,8 +28,16 @@ fn test_parse_fold_expressions_all_forms() -> Result<(), Box<dyn std::error::Err
     let tokens = lexer.tokenize()?;
     let expr = Parser::new(tokens).parse_expr()?;
     match expr {
-        Expr::FoldExpr { op, ref left, ref right, .. } => {
-            assert_eq!(op, crate::ast::fold_op::FoldOp::Binary(crate::ast::expr::BinaryOp::Add));
+        Expr::FoldExpr {
+            op,
+            ref left,
+            ref right,
+            ..
+        } => {
+            assert_eq!(
+                op,
+                crate::ast::fold_op::FoldOp::Binary(crate::ast::expr::BinaryOp::Add)
+            );
             assert!(left.is_none());
             assert!(right.is_some());
         }
@@ -40,7 +48,12 @@ fn test_parse_fold_expressions_all_forms() -> Result<(), Box<dyn std::error::Err
     let tokens = lexer.tokenize()?;
     let expr = Parser::new(tokens).parse_expr()?;
     match expr {
-        Expr::FoldExpr { op, ref left, ref right, .. } => {
+        Expr::FoldExpr {
+            op,
+            ref left,
+            ref right,
+            ..
+        } => {
             assert_eq!(op, crate::ast::fold_op::FoldOp::DotStar);
             assert!(left.is_some());
             assert!(right.is_none());
