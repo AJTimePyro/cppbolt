@@ -67,7 +67,7 @@ Member-function pointers pack `{ ptr: u32, adj: u32 }` into a WebAssembly `i64` 
 - `adj` (high 32 bits): Signed byte adjustment added to the `this` pointer before dispatch to navigate multiple inheritance subobjects.
 - Null representation: `0i64` (`ptr == 0 && adj == 0`). Comparisons against null check `eqz` or `ne` against `0i64`.
 
-Under multiple inheritance a polymorphic class has one vptr per polymorphic base subobject, not a single vptr at offset zero. Each vtable entry is eight bytes: a function-table index followed by a signed `this` adjustment that converts the caller's subobject pointer into the one the final overrider expects. This keeps ordinary virtual calls and member-pointer virtual calls on the same dispatch path.
+Under multiple inheritance a polymorphic class has one vptr per polymorphic base subobject, not a single vptr at offset zero. Each vtable entry is twelve bytes: a function-table index, a signed `this` adjustment converting the caller's subobject pointer into the one the final overrider expects, and a signed return adjustment converting a covariant return value into the base interface's return type. This keeps ordinary virtual calls and member-pointer virtual calls on the same dispatch path.
 
 ### 4. Member-Function Call Lowering
 The compiler lowers `(obj.*pmf)(args...)` and `(ptr->*pmf)(args...)` in `src/codegen/member_pointer.rs`:
@@ -75,7 +75,7 @@ The compiler lowers `(obj.*pmf)(args...)` and `(ptr->*pmf)(args...)` in `src/cod
 2. Evaluates the member function pointer `pmf` into a 64-bit scratch register.
 3. Unpacks `adj`: shifts the `i64` right by 32, wraps to `i32`, adds it to `this_slot`, and updates `this_slot`.
 4. Tests bit 0 of `ptr`:
-   - If bit 0 is 1 (virtual): loads the vtable pointer from offset 0 of `this_slot`, shifts `ptr` right by 1, multiplies by 8, adds to the vtable address, and loads the target function index from the 8-byte vtable entry.
+   - If bit 0 is 1 (virtual): loads the vtable pointer from offset 0 of `this_slot`, shifts `ptr` right by 1, multiplies by 12, adds to the vtable address, and loads the target function index from the 12-byte vtable entry.
    - If bit 0 is 0 (non-virtual): shifts `ptr` right by 1 to get the target function index.
    - Stores the resolved function index into a 4-byte local frame slot (`fn_slot`).
 5. Loads `this_slot` as the first argument, compiles remaining call arguments, loads `fn_slot`, and emits `call_indirect`.

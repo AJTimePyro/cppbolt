@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Virtual Function Infrastructure
+- Canonicalized virtual function parameters before building VirtualKey: top-level cv is dropped, arrays and functions decay to pointers, and pointee/reference qualification is preserved.
+- Validated covariant pointer and reference returns with accessibility, ambiguity and cv rules, and added a per-vtable-entry return adjustment so overrides yield the correct base subobject through ordinary and member-pointer calls.
+- Instantiated template-specialization bases before derived layout, so vptrs, slots and override checks are correct for non-template derived classes.
+- Unified destructor resolution so explicit destructor calls and vtable entries use the same function index.
+- Applied base-subobject adjustments when binding references to secondary bases, and fixed ref-qualified dispatch on rvalue receivers.
+
 ### Virtual Function Identity
 - Keyed virtual dispatch on the semantic function signature (name, parameters, cv/ref qualifiers) instead of the name alone, giving overloaded virtuals distinct vtable slots and correct final overriders across multiple inheritance.
 - Validated `override`/`final` against matching signatures, including return-type covariance and C++17 exception-specification compatibility; rejected static, non-virtual, and mismatched overrides, and enforced `final` on destructors.
