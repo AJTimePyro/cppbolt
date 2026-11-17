@@ -240,6 +240,7 @@ cxx17/covariant_pmf
 cxx17/covariant_ptr_mi
 cxx17/covariant_ptr_multi
 cxx17/covariant_ref_mi
+cxx17/explicit_dtor_call
 cxx17/final_class
 cxx17/fold_binary_left
 cxx17/fold_binary_right

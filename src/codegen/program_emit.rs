@@ -195,9 +195,8 @@ impl<'a> Codegen<'a> {
         }
         if slot.key.is_destructor() {
             let idx = self
-                .func_indices
-                .get(&format!("{}_~", class_name))
-                .copied()
+                .find_destructor_sig(class_name, "~")
+                .map(|(idx, _)| idx)
                 .unwrap_or(trap_idx);
             return (idx, -(vptr_offset as i32), 0);
         }

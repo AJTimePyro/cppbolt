@@ -180,7 +180,7 @@ impl<'a> Codegen<'a> {
             return Some(idx);
         }
         if key.is_destructor()
-            && let Some(&idx) = self.func_indices.get(&format!("{}_~", class_name))
+            && let Some((idx, _)) = self.find_destructor_sig(class_name, "~")
         {
             return Some(idx);
         }
