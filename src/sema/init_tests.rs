@@ -50,6 +50,7 @@ fn test_user_declared_default_ctor_disqualifies_aggregate() {
     let mut sema = Sema::new();
     let layout = StructLayout {
         is_class: false,
+        is_final: false,
         has_user_declared_constructors: true,
         base_classes: vec![],
         base_access: vec![],
@@ -92,6 +93,7 @@ fn test_explicit_constructor_in_copy_list_rejected() {
     let mut sema = Sema::new();
     let layout = StructLayout {
         is_class: true,
+        is_final: false,
         has_user_declared_constructors: true,
         base_classes: vec![],
         base_access: vec![],

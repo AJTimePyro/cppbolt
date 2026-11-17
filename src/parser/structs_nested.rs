@@ -53,6 +53,7 @@ impl Parser {
         let Decl::StructDecl {
             name,
             is_class,
+            is_final,
             base_classes,
             base_access,
             fields,
@@ -73,6 +74,7 @@ impl Parser {
         let template_class = TemplateClass {
             name,
             is_class,
+            is_final,
             base_classes,
             base_access,
             fields,
@@ -105,6 +107,12 @@ impl Parser {
                 ));
             }
         };
+        let is_final = if matches!(self.peek(), TokenKind::Ident(id) if id == "final") {
+            self.advance();
+            true
+        } else {
+            false
+        };
         let full_name = format!("{}::{}", body.name, short_name);
         self.known_types.insert(full_name.clone());
         if body.is_private {
@@ -115,7 +123,8 @@ impl Parser {
         if self.peek() == &TokenKind::Semi {
             self.advance();
             return Ok(
-                StructBody::new(full_name, is_class, start.line, start.col).into_decl(Vec::new())
+                StructBody::new(full_name, is_class, is_final, start.line, start.col)
+                    .into_decl(Vec::new()),
             );
         }
 
@@ -123,7 +132,8 @@ impl Parser {
         self.expect(TokenKind::LBrace)?;
 
         self.active_struct_scopes.push(full_name.clone());
-        let mut inner_body = StructBody::new(full_name.clone(), is_class, start.line, start.col);
+        let mut inner_body =
+            StructBody::new(full_name.clone(), is_class, is_final, start.line, start.col);
         while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
             self.parse_struct_member(&mut inner_body)?;
         }

@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Virtual Function Identity
+- Keyed virtual dispatch on the semantic function signature (name, parameters, cv/ref qualifiers) instead of the name alone, giving overloaded virtuals distinct vtable slots and correct final overriders across multiple inheritance.
+- Validated `override`/`final` against matching signatures, including return-type covariance and C++17 exception-specification compatibility; rejected static, non-virtual, and mismatched overrides, and enforced `final` on destructors.
+- Parsed class-level `final` and rejected deriving from final classes; rejected virtual member-function templates.
+- Added regression tests for overload identity, qualifier mismatches, covariant returns, noexcept compatibility, and class-level final.
+
 ### Pointer-to-Member Audit Remediation
 - Preserved and validated `override` and `final`: they now imply virtual, same-signature methods override without a keyword, and overriding a `final` method or using `override` with no base virtual is rejected.
 - Fixed invalid Wasm when synthesized constructors copied a base subobject containing 8-byte fields (`long long`/`double`); base subobjects are now copied bytewise.

@@ -37,6 +37,7 @@ pub(super) fn element_struct_name(ty: &Type) -> Option<&str> {
 pub(crate) struct RecordLayout<'a> {
     pub(super) name: &'a str,
     pub(super) is_class: bool,
+    pub(super) is_final: bool,
     pub(super) base_classes: &'a [String],
     pub(super) base_access: &'a [crate::ast::BaseAccess],
     pub(super) fields: &'a [StructFieldDecl],
@@ -96,6 +97,19 @@ impl Sema {
         if let Some(align) = input.alignment {
             acc.max_align = acc.max_align.max(align);
         }
+        for base in input.base_classes {
+            if self
+                .struct_layouts
+                .get(base)
+                .is_some_and(|layout| layout.is_final)
+            {
+                return Err(CompileError::new(
+                    format!("cannot derive from final class '{}'", base),
+                    input.line,
+                    input.col,
+                ));
+            }
+        }
         let inherited_virtuals: Vec<(String, VirtualKey)> = input
             .base_classes
             .iter()
@@ -152,6 +166,7 @@ impl Sema {
 
         let layout = StructLayout {
             is_class: input.is_class,
+            is_final: input.is_final,
             has_user_declared_constructors,
             base_classes: input.base_classes.to_vec(),
             base_access: input.base_access.to_vec(),

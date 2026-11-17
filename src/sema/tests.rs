@@ -436,6 +436,7 @@ fn test_substitute_struct() -> Result<(), Box<dyn std::error::Error>> {
     let tclass = TemplateClass {
         name: "Holder".to_string(),
         is_class: true,
+        is_final: false,
         base_classes: Vec::new(),
         base_access: Vec::new(),
         fields: vec![("value".to_string(), Type::TypeParam("T".to_string()), None)],

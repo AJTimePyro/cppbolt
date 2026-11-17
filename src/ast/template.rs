@@ -16,6 +16,7 @@ pub struct TemplateParam {
 pub struct TemplateClass {
     pub name: String,
     pub is_class: bool,
+    pub is_final: bool,
     pub base_classes: Vec<String>,
     pub base_access: Vec<crate::ast::BaseAccess>,
     pub fields: Vec<StructFieldDecl>,

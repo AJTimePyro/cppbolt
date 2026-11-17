@@ -75,7 +75,7 @@ The compiler lowers `(obj.*pmf)(args...)` and `(ptr->*pmf)(args...)` in `src/cod
 2. Evaluates the member function pointer `pmf` into a 64-bit scratch register.
 3. Unpacks `adj`: shifts the `i64` right by 32, wraps to `i32`, adds it to `this_slot`, and updates `this_slot`.
 4. Tests bit 0 of `ptr`:
-   - If bit 0 is 1 (virtual): loads the vtable pointer from offset 0 of `this_slot`, shifts `ptr` right by 1, multiplies by 4, adds to the vtable address, and loads the target function index from the vtable slot.
+   - If bit 0 is 1 (virtual): loads the vtable pointer from offset 0 of `this_slot`, shifts `ptr` right by 1, multiplies by 8, adds to the vtable address, and loads the target function index from the 8-byte vtable entry.
    - If bit 0 is 0 (non-virtual): shifts `ptr` right by 1 to get the target function index.
    - Stores the resolved function index into a 4-byte local frame slot (`fn_slot`).
 5. Loads `this_slot` as the first argument, compiles remaining call arguments, loads `fn_slot`, and emits `call_indirect`.

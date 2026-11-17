@@ -272,6 +272,7 @@ impl Parser {
         let Decl::StructDecl {
             name,
             is_class,
+            is_final,
             base_classes,
             base_access,
             fields,
@@ -294,6 +295,7 @@ impl Parser {
         let template_class = TemplateClass {
             name,
             is_class,
+            is_final,
             base_classes,
             base_access,
             fields,

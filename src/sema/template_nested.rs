@@ -226,6 +226,7 @@ impl Sema {
         let subst_inner_tmpl = TemplateClass {
             name: nested_tmpl_name.clone(),
             is_class: p.inner_tmpl.is_class,
+            is_final: p.inner_tmpl.is_final,
             base_classes: p.inner_tmpl.base_classes.clone(),
             base_access: p.inner_tmpl.base_access.clone(),
             fields: subst_fields,
@@ -322,6 +323,7 @@ impl Sema {
         self.compute_struct_layout(RecordLayout {
             name: p.nested_inst_name,
             is_class: p.is_class,
+            is_final: false,
             base_classes: p.base_classes,
             base_access: &[],
             fields: &fields_for_layout,
@@ -336,6 +338,7 @@ impl Sema {
         let subst_decl = Decl::StructDecl {
             name: p.nested_inst_name.to_string(),
             is_class: p.is_class,
+            is_final: false,
             base_classes: p.base_classes.to_vec(),
             base_access: Vec::new(),
             fields: subst_fields,

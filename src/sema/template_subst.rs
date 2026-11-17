@@ -473,6 +473,7 @@ pub fn substitute_struct(
     Ok(Decl::StructDecl {
         name: instantiated_name.to_string(),
         is_class: template_class.is_class,
+        is_final: template_class.is_final,
         base_classes,
         base_access: template_class.base_access.clone(),
         fields,

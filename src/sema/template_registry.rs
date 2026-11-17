@@ -283,6 +283,7 @@ impl Sema {
         self.compute_struct_layout(RecordLayout {
             name: inst_name,
             is_class: *is_class,
+            is_final: false,
             base_classes,
             base_access,
             fields,
@@ -470,6 +471,7 @@ impl Sema {
                 self.synthesized_decls.push(Decl::StructDecl {
                     name: class_name,
                     is_class: false,
+                    is_final: false,
                     base_classes: vec![],
                     base_access: vec![],
                     fields: vec![],

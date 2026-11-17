@@ -8,14 +8,14 @@ impl Parser {
             struct_align = Some(spec.to_type());
         }
         let start = self.current().clone();
-        let (name, is_class) = self.parse_struct_name(&mut struct_align)?;
+        let (name, is_class, is_final) = self.parse_struct_name(&mut struct_align)?;
         if !self.active_type_params.is_empty() {
             self.register_template_name(&name);
         }
 
         if self.peek() == &TokenKind::Semi {
             self.advance();
-            let mut body = StructBody::new(name.clone(), is_class, start.line, start.col);
+            let mut body = StructBody::new(name.clone(), is_class, is_final, start.line, start.col);
             body.alignment = struct_align;
             return Ok(body.into_decl(Vec::new()));
         }
@@ -24,7 +24,7 @@ impl Parser {
         self.expect(TokenKind::LBrace)?;
 
         self.active_struct_scopes.push(name.clone());
-        let mut body = StructBody::new(name.clone(), is_class, start.line, start.col);
+        let mut body = StructBody::new(name.clone(), is_class, is_final, start.line, start.col);
         body.alignment = struct_align;
         while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
             self.parse_struct_member(&mut body)?;
@@ -47,7 +47,7 @@ impl Parser {
     fn parse_struct_name(
         &mut self,
         struct_align: &mut Option<Type>,
-    ) -> Result<(String, bool), CompileError> {
+    ) -> Result<(String, bool, bool), CompileError> {
         let is_class = self.current().kind == TokenKind::KwClass;
         self.advance();
         if self.peek() == &TokenKind::KwAlignas {
@@ -74,6 +74,12 @@ impl Parser {
                 .join(", ");
             name = format!("{}<{}>", name, canonical_args);
         }
+        let is_final = if matches!(self.peek(), TokenKind::Ident(id) if id == "final") {
+            self.advance();
+            true
+        } else {
+            false
+        };
         self.known_types.insert(name.clone());
         if let Some(short) = name.split("::").last() {
             self.known_types.insert(short.to_string());
@@ -84,7 +90,7 @@ impl Parser {
         } else if qualified.in_std() {
             self.known_types.insert(qualified.plain().to_string());
         }
-        Ok((name, is_class))
+        Ok((name, is_class, is_final))
     }
 
     pub(super) fn parse_struct_member(
@@ -123,6 +129,13 @@ impl Parser {
             if body.methods.len() > initial_methods_len
                 && let Some(last) = body.methods.last_mut()
             {
+                if last.is_virtual {
+                    return Err(CompileError::new(
+                        "virtual member function templates are not supported",
+                        last.line,
+                        last.col,
+                    ));
+                }
                 last.template_params = params;
             }
         }
@@ -165,6 +178,7 @@ impl Parser {
 pub(super) struct StructBody {
     pub(super) name: String,
     pub(super) is_class: bool,
+    pub(super) is_final: bool,
     pub(super) fields: Vec<StructFieldDecl>,
     pub(super) methods: Vec<FunctionDecl>,
     pub(super) static_fields: Vec<(String, Type, Option<Expr>)>,
@@ -177,10 +191,17 @@ pub(super) struct StructBody {
 }
 
 impl StructBody {
-    pub(super) fn new(name: String, is_class: bool, line: usize, col: usize) -> Self {
+    pub(super) fn new(
+        name: String,
+        is_class: bool,
+        is_final: bool,
+        line: usize,
+        col: usize,
+    ) -> Self {
         Self {
             name,
             is_class,
+            is_final,
             fields: Vec::new(),
             methods: Vec::new(),
             static_fields: Vec::new(),
@@ -198,6 +219,7 @@ impl StructBody {
         Decl::StructDecl {
             name: self.name,
             is_class: self.is_class,
+            is_final: self.is_final,
             base_classes,
             base_access,
             fields: self.fields,

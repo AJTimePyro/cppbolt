@@ -95,6 +95,7 @@ impl Sema {
                 Decl::StructDecl {
                     name,
                     is_class,
+                    is_final,
                     base_classes,
                     base_access,
                     fields,
@@ -114,6 +115,7 @@ impl Sema {
                     self.compute_struct_layout(RecordLayout {
                         name: name.as_str(),
                         is_class: *is_class,
+                        is_final: *is_final,
                         base_classes,
                         base_access,
                         fields,

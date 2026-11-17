@@ -64,6 +64,7 @@ pub enum Decl {
     StructDecl {
         name: String,
         is_class: bool,
+        is_final: bool,
         base_classes: Vec<String>,
         base_access: Vec<BaseAccess>,
         fields: Vec<StructFieldDecl>,
