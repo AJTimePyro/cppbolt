@@ -151,6 +151,24 @@ impl Sema {
                     .map(move |key| (base.clone(), key.clone()))
             })
             .collect();
+        // An implicitly declared destructor overrides the base destructor, so
+        // deriving from a class with a final virtual destructor is ill-formed
+        // even when the derived class declares no destructor.
+        if input
+            .base_classes
+            .iter()
+            .filter_map(|base| self.struct_layouts.get(base))
+            .any(|layout| layout.final_methods.iter().any(|key| key.is_destructor()))
+        {
+            return Err(CompileError::new(
+                format!(
+                    "cannot derive from class '{}' with a final destructor",
+                    input.base_classes[0]
+                ),
+                input.line,
+                input.col,
+            ));
+        }
         self.validate_virtual_declarations(&input, &inherited_virtuals)?;
         let keys: Vec<VirtualKey> = inherited_virtuals.iter().map(|(_, k)| k.clone()).collect();
         let has_virtual_methods = input

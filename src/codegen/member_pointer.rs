@@ -38,6 +38,29 @@ impl<'a> Codegen<'a> {
     }
 
     /// Emits a member-function pointer for one exact overload.
+    /// Resolves a member function to an indirect-call table index, registering
+    /// one if the candidate pass missed it (e.g. template specializations).
+    /// A failed lookup is an error, never a silent use of table index zero.
+    fn member_function_table_index(&mut self, mangled: &str) -> Result<u32, CompileError> {
+        if let Some(idx) = self.func_table_indices.get(mangled).copied() {
+            return Ok(idx);
+        }
+        let fn_idx = self.func_indices.get(mangled).copied().ok_or_else(|| {
+            CompileError::new(
+                format!(
+                    "cannot resolve member function pointer target '{}'",
+                    mangled
+                ),
+                0,
+                0,
+            )
+        })?;
+        let idx = self.vtable_func_indices.len() as u32;
+        self.vtable_func_indices.push(fn_idx);
+        self.func_table_indices.insert(mangled.to_string(), idx);
+        Ok(idx)
+    }
+
     fn emit_member_function_pointer(
         &mut self,
         class_name: &str,
@@ -60,11 +83,7 @@ impl<'a> Codegen<'a> {
         let (ptr, adj) = if let Some((slot_idx, vptr_offset)) = vslot {
             ((((slot_idx as i64) << 1) | 1), vptr_offset as i64)
         } else {
-            let table_idx = self
-                .func_table_indices
-                .get(&sig.mangled_name)
-                .copied()
-                .unwrap_or(0);
+            let table_idx = self.member_function_table_index(&sig.mangled_name)?;
             let mut this_adjustment = 0i64;
             if let Some(first_param) = sig.param_types.first()
                 && let Some(this_struct) = first_param.strip_reference().deref_type()

@@ -203,10 +203,15 @@ impl Sema {
             && let Expr::Identifier(name) = expr.as_ref()
             && let Some(resolved) = self.try_resolve_member_pointer_address(name, *pos)?
         {
-            if let Some(encoded_name) = resolved.encoded_name
-                && let Expr::Identifier(name) = &mut **expr
-            {
-                *name = encoded_name;
+            if let Some(encoded_name) = resolved.encoded_name {
+                // Taking the address of a template-specialization method must
+                // force its deferred instantiation so codegen can emit it.
+                if let Some((_, mangled)) = encoded_name.split_once("@@") {
+                    self.instantiate_pending_method(mangled)?;
+                }
+                if let Expr::Identifier(name) = &mut **expr {
+                    *name = encoded_name;
+                }
             }
             return Ok(resolved.ty);
         }

@@ -275,6 +275,8 @@ cxx17/pmf_nttp
 cxx17/pmf_nttp_null
 cxx17/pmf_qualifiers
 cxx17/pmf_return_types
+cxx17/pmf_specialized_cases
+cxx17/pmf_specialized_member
 cxx17/pmf_virtual_override_isolation
 cxx17/ref_qualified_dispatch
 cxx17/secondary_base_reference
