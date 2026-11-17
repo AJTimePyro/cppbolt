@@ -20,6 +20,9 @@ pub struct VTableInfo {
     pub owner: String,
     /// Offset of the vptr from the start of the complete object.
     pub vptr_offset: usize,
+    /// Offset of the base subobject that owns this vptr (may differ from
+    /// vptr_offset when the base inherited its vptr from another base).
+    pub owner_offset: usize,
     /// Slots in dispatch order.
     pub slots: Vec<VTableSlotInfo>,
 }
@@ -130,15 +133,15 @@ impl Sema {
             .methods
             .iter()
             .any(|m| m.is_virtual || keys.contains(&VirtualKey::from_decl(m)));
+        // Any polymorphic base contributes a vptr; it need not be the first
+        // declared base (a non-polymorphic pad may come first).
         let primary_has_vtable = input
             .base_classes
-            .first()
-            .and_then(|base| self.struct_layouts.get(base))
-            .map(|layout| layout.has_vtable)
-            .unwrap_or(false);
+            .iter()
+            .any(|base| self.struct_layouts.get(base).is_some_and(|l| l.has_vtable));
         let has_vtable = has_virtual_methods || primary_has_vtable;
         if has_virtual_methods && !primary_has_vtable {
-            // A vtable pointer precedes the primary base subobject.
+            // No polymorphic base: a vtable pointer precedes the fields.
             acc.offset = 4;
             acc.max_align = 4;
         }
@@ -364,11 +367,10 @@ impl Sema {
     }
     /// Builds one vtable descriptor per polymorphic subobject.
     ///
-    /// The first polymorphic base shares the vptr at offset zero with the
-    /// complete object (the "primary" table). Every other polymorphic base
-    /// keeps its own vptr at its base-subobject offset. Bases are enumerated
-    /// through the flattened `base_offsets` list, so indirect and repeated
-    /// bases each receive their own descriptor.
+    /// A derived class has no own vptr of its own; it reuses the vptr of the
+    /// first polymorphic base, wherever that subobject actually sits. A class
+    /// only owns a vptr at offset zero when it declares virtuals and no base
+    /// is polymorphic.
     fn build_vtables(
         &self,
         class_name: &str,
@@ -379,12 +381,6 @@ impl Sema {
         if !has_vtable {
             return Vec::new();
         }
-        let primary_base = base_classes
-            .first()
-            .filter(|b| self.struct_layouts.get(*b).is_some_and(|l| l.has_vtable));
-        let primary_owner = primary_base
-            .cloned()
-            .unwrap_or_else(|| class_name.to_string());
         let as_slots = |keys: &[VirtualKey]| -> Vec<VTableSlotInfo> {
             keys.iter()
                 .map(|key| VTableSlotInfo {
@@ -393,13 +389,32 @@ impl Sema {
                 })
                 .collect()
         };
-        let mut tables = vec![VTableInfo {
-            owner: primary_owner.clone(),
-            vptr_offset: 0,
-            slots: as_slots(&acc.vtable_slots),
-        }];
+        let primary = base_classes.iter().find_map(|base| {
+            let layout = self.struct_layouts.get(base)?;
+            if !layout.has_vtable {
+                return None;
+            }
+            let base_offset = acc
+                .base_offsets
+                .iter()
+                .find(|(name, _)| name == base)
+                .map(|(_, off)| *off)?;
+            // The base's vptr may live inside it at a nonzero offset when the
+            // base itself inherited polymorphism from a non-primary base.
+            let vptr_offset = layout.vtables.first().map(|v| v.vptr_offset).unwrap_or(0);
+            Some((base.clone(), base_offset, base_offset + vptr_offset))
+        });
+        let mut tables = Vec::new();
+        if let Some((owner, owner_offset, vptr_offset)) = primary {
+            tables.push(VTableInfo {
+                owner,
+                vptr_offset,
+                owner_offset,
+                slots: as_slots(&acc.vtable_slots),
+            });
+        }
         for (base_name, base_offset) in &acc.base_offsets {
-            if *base_offset == 0 && *base_name == primary_owner {
+            if tables.iter().any(|t| t.owner_offset == *base_offset) {
                 continue;
             }
             let Some(bl) = self.struct_layouts.get(base_name) else {
@@ -408,16 +423,22 @@ impl Sema {
             if !bl.has_vtable {
                 continue;
             }
-            let Some(primary) = bl.vtables.first() else {
+            let Some(first) = bl.vtables.first() else {
                 continue;
             };
-            if tables.iter().any(|t| t.vptr_offset == *base_offset) {
-                continue;
-            }
             tables.push(VTableInfo {
                 owner: base_name.clone(),
                 vptr_offset: *base_offset,
-                slots: primary.slots.clone(),
+                owner_offset: *base_offset,
+                slots: first.slots.clone(),
+            });
+        }
+        if tables.is_empty() {
+            tables.push(VTableInfo {
+                owner: class_name.to_string(),
+                vptr_offset: 0,
+                owner_offset: 0,
+                slots: as_slots(&acc.vtable_slots),
             });
         }
         tables

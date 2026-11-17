@@ -259,6 +259,7 @@ cxx17/lifecycle_four_levels
 cxx17/param_alias_cv
 cxx17/param_array_adjust
 cxx17/param_top_level_cv
+cxx17/phantom_vtable_layout
 cxx17/pm_application_valid
 cxx17/pmd_access_and_bases
 cxx17/pmd_aliases

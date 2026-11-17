@@ -180,6 +180,7 @@ impl<'a> Codegen<'a> {
         &mut self,
         class_name: &str,
         owner: &str,
+        owner_offset: usize,
         vptr_offset: usize,
         slot: &crate::sema::VTableSlotInfo,
         plan: &Plan,
@@ -203,7 +204,7 @@ impl<'a> Codegen<'a> {
         let base_ret =
             crate::sema::find_sig(self.sema, owner, &slot.key).map(|sig| sig.return_type.clone());
         let (func_idx, overrider_offset, ret_adjust) =
-            match self.find_final_overrider(class_name, owner, vptr_offset, &slot.key) {
+            match self.find_final_overrider(class_name, owner, owner_offset, &slot.key) {
                 Some((cls, offset)) => {
                     let derived_ret = crate::sema::find_sig(self.sema, &cls, &slot.key)
                         .map(|sig| sig.return_type.clone());
@@ -217,7 +218,7 @@ impl<'a> Codegen<'a> {
                         adjust,
                     )
                 }
-                None => (trap_idx, vptr_offset, 0),
+                None => (trap_idx, owner_offset, 0),
             };
         (
             func_idx,
@@ -241,8 +242,14 @@ impl<'a> Codegen<'a> {
 
                 let mut vtable_bytes = Vec::new();
                 for slot in &table.slots {
-                    let (func_idx, adjustment, ret_adjust) =
-                        self.vtable_entry(name, &table.owner, table.vptr_offset, slot, plan);
+                    let (func_idx, adjustment, ret_adjust) = self.vtable_entry(
+                        name,
+                        &table.owner,
+                        table.owner_offset,
+                        table.vptr_offset,
+                        slot,
+                        plan,
+                    );
 
                     let table_elem_idx = self.vtable_func_indices.len() as u32;
                     self.vtable_func_indices.push(func_idx);
