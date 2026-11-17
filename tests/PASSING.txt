@@ -247,6 +247,7 @@ cxx17/fold_nttp
 cxx17/fold_overloaded_op
 cxx17/fold_unary_left
 cxx17/fold_unary_right
+cxx17/inheritance_eight_byte_fields
 cxx17/pmd_access_and_bases
 cxx17/pmd_aliases
 cxx17/pmd_base_offset

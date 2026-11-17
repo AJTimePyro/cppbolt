@@ -128,14 +128,86 @@ impl<'a> Codegen<'a> {
                 code.push(OP_CALL);
                 write_u32(code, b_idx);
             } else if let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned() {
-                self.emit_field_initializers(
-                    &base_layout,
-                    base_args,
-                    *base_offset as u32,
-                    ctx,
-                    code,
-                )?;
+                let whole_object = base_args.len() == 1
+                    && matches!(
+                        self.get_expr_type(&base_args[0], ctx)
+                            .strip_reference()
+                            .strip_const(),
+                        Type::Struct(_)
+                    );
+                if whole_object {
+                    self.emit_base_subobject_copy(
+                        base_name,
+                        &base_layout,
+                        *base_offset as u32,
+                        &base_args[0],
+                        ctx,
+                        code,
+                    )?;
+                } else {
+                    self.emit_field_initializers(
+                        &base_layout,
+                        base_args,
+                        *base_offset as u32,
+                        ctx,
+                        code,
+                    )?;
+                }
             }
+        }
+        Ok(())
+    }
+
+    /// Copies a whole base subobject from a synthesized copy/move constructor
+    /// argument. The argument is an object, not a field value, so it must be
+    /// copied bytewise; treating it as a field value would store the object's
+    /// address with the field's width (e.g. `i64.store` of an `i32`).
+    fn emit_base_subobject_copy(
+        &mut self,
+        base_name: &str,
+        base_layout: &StructLayout,
+        base_offset: u32,
+        src: &Expr,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        // Destination: this + base_offset, held in scratch2.
+        code.push(OP_LOCAL_GET);
+        write_u32(code, 0);
+        if base_offset != 0 {
+            code.push(OP_I32_CONST);
+            write_i32(code, base_offset as i32);
+            code.push(OP_I32_ADD);
+        }
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.scratch2);
+
+        // Source: the argument may already point at the base subobject (move
+        // constructors cast to Base&&), or at the complete derived object.
+        self.compile_expr(src, ctx, code)?;
+        let src_is_base = matches!(
+            self.get_expr_type(src, ctx).strip_reference().strip_const(),
+            Type::Struct(name) if name == base_name
+        );
+        if !src_is_base && base_offset != 0 {
+            code.push(OP_I32_CONST);
+            write_i32(code, base_offset as i32);
+            code.push(OP_I32_ADD);
+        }
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.scratch1);
+
+        for i in 0..base_layout.size {
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.scratch2);
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.scratch1);
+            code.push(OP_I32_LOAD8_U);
+            write_u32(code, 0);
+            write_u32(code, i as u32);
+            code.push(OP_I32_STORE8);
+            write_u32(code, 0);
+            write_u32(code, i as u32);
         }
         Ok(())
     }
