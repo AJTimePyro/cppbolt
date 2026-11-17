@@ -16,6 +16,17 @@ pub(crate) struct VirtualKey {
     pub(crate) ref_qualifier: RefQualifier,
 }
 
+/// C++17 [dcl.fct]: top-level cv on a by-value parameter is ignored; array and
+/// function parameters become pointers. Pointee qualification is preserved.
+pub(crate) fn canonical_param(ty: &Type) -> Type {
+    match ty {
+        Type::Const(inner) => canonical_param(inner),
+        Type::Array(elem, _) => Type::Pointer(Box::new(canonical_param(elem))),
+        Type::Function { .. } => Type::Pointer(Box::new(ty.clone())),
+        other => other.clone(),
+    }
+}
+
 impl VirtualKey {
     pub(crate) fn new(name: &str) -> Self {
         Self {
@@ -30,7 +41,7 @@ impl VirtualKey {
     pub(crate) fn from_decl(m: &FunctionDecl) -> Self {
         Self {
             name: normalize_name(&m.name),
-            params: m.params.iter().map(|p| p.ty.clone()).collect(),
+            params: m.params.iter().map(|p| canonical_param(&p.ty)).collect(),
             is_const: m.is_const,
             is_volatile: m.qualifiers.is_volatile,
             ref_qualifier: m.ref_qualifier,
@@ -38,10 +49,14 @@ impl VirtualKey {
     }
 
     pub(crate) fn from_sig(sig: &FunctionSig) -> Self {
-        let params = if sig.is_static {
-            sig.param_types.clone()
+        let params: Vec<Type> = if sig.is_static {
+            sig.param_types.iter().map(canonical_param).collect()
         } else {
-            sig.param_types.iter().skip(1).cloned().collect()
+            sig.param_types
+                .iter()
+                .skip(1)
+                .map(canonical_param)
+                .collect()
         };
         Self {
             name: normalize_name(&sig.name),

@@ -105,6 +105,10 @@ impl Parser {
             if self.peek() == &TokenKind::KwConst || self.peek() == &TokenKind::KwConstexpr {
                 self.advance();
                 is_const = true;
+            } else if matches!(self.peek(), TokenKind::Ident(id) if id == "volatile") {
+                // Volatile is not a distinct Wasm type; top-level cv is
+                // ignored in function parameter types per C++17.
+                self.advance();
             } else if self.peek() == &TokenKind::KwTypename {
                 self.advance();
                 is_typename = true;
