@@ -1,5 +1,6 @@
 use super::emit_context::{PmfInvokeSite, PmfReceiver};
 use super::*;
+use crate::sema::VirtualKey;
 
 pub(crate) struct MemberPointerCall<'a> {
     pub left: &'a Expr,
@@ -40,7 +41,6 @@ impl<'a> Codegen<'a> {
     fn emit_member_function_pointer(
         &mut self,
         class_name: &str,
-        member_name: &str,
         sig: &FunctionSig,
         code: &mut Vec<u8>,
     ) -> Result<bool, CompileError> {
@@ -48,11 +48,12 @@ impl<'a> Codegen<'a> {
         // owns its slot. That subobject's offset within `class_name` becomes
         // the pointer's `this` adjustment; the vtable entry then performs the
         // final-overrider adjustment at the call site.
+        let key = VirtualKey::from_sig(sig);
         let vslot = self.sema.struct_layouts.get(class_name).and_then(|l| {
             l.vtables.iter().find_map(|t| {
                 t.slots
                     .iter()
-                    .position(|s| s.name == member_name)
+                    .position(|s| !s.is_deleting_dtor && s.key == key)
                     .map(|idx| (idx, t.vptr_offset))
             })
         });
@@ -91,7 +92,7 @@ impl<'a> Codegen<'a> {
         {
             let class_part = class_raw.strip_prefix("::").unwrap_or(class_raw);
             let class_name = self.sema.resolve_alias_in_qualified_name(class_part);
-            return self.emit_member_function_pointer(&class_name, &sig.name, sig, code);
+            return self.emit_member_function_pointer(&class_name, sig, code);
         }
 
         let Some((class_raw, member_name)) = name.rsplit_once("::") else {
@@ -109,7 +110,7 @@ impl<'a> Codegen<'a> {
         if let Some(sig) = self.sema.find_method_in_class(&class_name, member_name)
             && !sig.is_static
         {
-            return self.emit_member_function_pointer(&class_name, member_name, &sig, code);
+            return self.emit_member_function_pointer(&class_name, &sig, code);
         }
 
         Ok(false)

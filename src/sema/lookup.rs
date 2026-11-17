@@ -382,7 +382,7 @@ mod tests {
             private_members: HashSet::new(),
             is_abstract: false,
             pure_virtuals: HashSet::new(),
-            final_methods: HashSet::new(),
+            final_methods: Vec::new(),
         }
     }
 

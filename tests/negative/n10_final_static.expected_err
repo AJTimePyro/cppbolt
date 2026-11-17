@@ -1,0 +1,1 @@
+tests/negative/n10_final_static.cpp:1:12: error: static member function 'B::f' cannot be override or final

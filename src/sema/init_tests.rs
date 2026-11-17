@@ -63,7 +63,7 @@ fn test_user_declared_default_ctor_disqualifies_aggregate() {
         private_members: HashSet::new(),
         is_abstract: false,
         pure_virtuals: HashSet::new(),
-        final_methods: HashSet::new(),
+        final_methods: Vec::new(),
     };
     sema.struct_layouts.insert("HasDefCtor".to_string(), layout);
     assert!(!sema.is_cxx17_aggregate("HasDefCtor"));
@@ -105,7 +105,7 @@ fn test_explicit_constructor_in_copy_list_rejected() {
         private_members: HashSet::new(),
         is_abstract: false,
         pure_virtuals: HashSet::new(),
-        final_methods: HashSet::new(),
+        final_methods: Vec::new(),
     };
     sema.struct_layouts.insert("Foo".to_string(), layout);
     let sig = FunctionSig {

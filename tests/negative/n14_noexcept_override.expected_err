@@ -1,0 +1,1 @@
+tests/negative/n14_noexcept_override.cpp:2:16: error: 'D::f' has a looser exception specification than the function it overrides

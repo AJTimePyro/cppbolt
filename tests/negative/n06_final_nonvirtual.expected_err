@@ -1,0 +1,1 @@
+tests/negative/n06_final_nonvirtual.cpp:1:12: error: only virtual member functions can be marked final

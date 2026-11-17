@@ -85,6 +85,47 @@ impl<'a> Codegen<'a> {
         self.find_method_in_bases(class_name, method_name, arg_types, args, receiver)
     }
 
+    /// Selects the overload for vtable-key purposes, without requiring an
+    /// emitted function (pure virtual methods have none).
+    pub(super) fn find_method_sig(
+        &self,
+        class_name: &str,
+        method_name: &str,
+        arg_types: &[Type],
+        args: Option<&[Expr]>,
+        receiver: (bool, bool),
+    ) -> Option<FunctionSig> {
+        if let Some((_, sig)) = self.find_destructor_sig(class_name, method_name) {
+            return Some(sig);
+        }
+        for qual_name in [
+            format!("{}::{}", class_name, method_name),
+            format!(
+                "{}::{}",
+                QualifiedName::new(class_name).alternate(),
+                method_name
+            ),
+        ] {
+            if let Some(sigs) = self.sema.functions.get(&qual_name)
+                && let Some(sig) = self.best_method_overload(
+                    sigs,
+                    arg_types,
+                    args,
+                    (Some(receiver.0), Some(receiver.1)),
+                )
+            {
+                return Some(sig);
+            }
+        }
+        let layout = self.sema.struct_layouts.get(class_name)?;
+        for base in &layout.base_classes {
+            if let Some(sig) = self.find_method_sig(base, method_name, arg_types, args, receiver) {
+                return Some(sig);
+            }
+        }
+        None
+    }
+
     /// Resolves a destructor call, which has no overloads.
     pub(super) fn find_destructor_sig(
         &self,

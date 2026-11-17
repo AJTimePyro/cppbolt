@@ -1,0 +1,112 @@
+//! Canonical identity of a virtual function.
+//!
+//! C++ virtual dispatch keys on the function's name (with destructors
+//! normalized), its parameter types, and its cv/ref qualifiers. Return type,
+//! `noexcept`, and `override`/`final` are not part of the identity; they are
+//! validated separately when an override is declared.
+
+use super::*;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct VirtualKey {
+    pub(crate) name: String,
+    pub(crate) params: Vec<Type>,
+    pub(crate) is_const: bool,
+    pub(crate) is_volatile: bool,
+    pub(crate) ref_qualifier: RefQualifier,
+}
+
+impl VirtualKey {
+    pub(crate) fn new(name: &str) -> Self {
+        Self {
+            name: normalize_name(name),
+            params: Vec::new(),
+            is_const: false,
+            is_volatile: false,
+            ref_qualifier: RefQualifier::None,
+        }
+    }
+
+    pub(crate) fn from_decl(m: &FunctionDecl) -> Self {
+        Self {
+            name: normalize_name(&m.name),
+            params: m.params.iter().map(|p| p.ty.clone()).collect(),
+            is_const: m.is_const,
+            is_volatile: m.qualifiers.is_volatile,
+            ref_qualifier: m.ref_qualifier,
+        }
+    }
+
+    pub(crate) fn from_sig(sig: &FunctionSig) -> Self {
+        let params = if sig.is_static {
+            sig.param_types.clone()
+        } else {
+            sig.param_types.iter().skip(1).cloned().collect()
+        };
+        Self {
+            name: normalize_name(&sig.name),
+            params,
+            is_const: sig.qualifiers.is_const,
+            is_volatile: sig.qualifiers.is_volatile,
+            ref_qualifier: sig.ref_qualifier,
+        }
+    }
+
+    pub(crate) fn is_destructor(&self) -> bool {
+        self.name == "~"
+    }
+
+    pub(crate) fn matches_sig(&self, sig: &FunctionSig) -> bool {
+        self == &Self::from_sig(sig)
+    }
+}
+
+pub(crate) fn normalize_name(name: &str) -> String {
+    if name.starts_with('~') {
+        "~".to_string()
+    } else {
+        name.to_string()
+    }
+}
+
+/// Finds a registered overload of `class_name::name` whose VirtualKey matches.
+pub(crate) fn find_sig<'a>(
+    sema: &'a Sema,
+    class_name: &str,
+    key: &VirtualKey,
+) -> Option<&'a FunctionSig> {
+    let qualified = format!("{}::{}", class_name, key.name);
+    let sigs = sema.functions.get(&qualified);
+    if let Some(sig) = sigs.and_then(|sigs| sigs.iter().find(|sig| key.matches_sig(sig))) {
+        return Some(sig);
+    }
+    if key.is_destructor() {
+        let prefix = format!("{}::~", class_name);
+        return sema
+            .functions
+            .iter()
+            .filter(|(name, _)| name.starts_with(&prefix))
+            .flat_map(|(_, sigs)| sigs)
+            .find(|sig| key.matches_sig(sig));
+    }
+    None
+}
+
+/// C++17 exception-specification compatibility: an override may be at least
+/// as restrictive as the base, but cannot be laxer.
+pub(crate) fn noexcept_compatible(base: &FunctionSig, derived: &FunctionDecl) -> bool {
+    !base.qualifiers.is_noexcept || derived.qualifiers.is_noexcept
+}
+
+/// Return types must match, or be a pointer/reference to a class derived from
+/// the base return class (C++ covariant returns).
+pub(crate) fn return_compatible(base: &Type, derived: &Type, sema: &Sema) -> bool {
+    if base == derived {
+        return true;
+    }
+    let (Type::Pointer(b), Type::Pointer(d)) = (base.strip_const(), derived.strip_const()) else {
+        return false;
+    };
+    matches!((b.strip_const(), d.strip_const()),
+        (Type::Struct(bc), Type::Struct(dc)) if sema.is_subclass(dc, bc))
+}

@@ -229,7 +229,7 @@ impl<'a> Codegen<'a> {
             .map(|l| {
                 l.vtable_slots
                     .iter()
-                    .any(|s| s == &m.name || (s.starts_with('~') && m.name.starts_with('~')))
+                    .any(|s| *s == crate::sema::VirtualKey::from_decl(m))
             })
             .unwrap_or(false);
 
@@ -341,7 +341,7 @@ impl<'a> Codegen<'a> {
                 .map(|l| {
                     l.vtables
                         .iter()
-                        .any(|t| t.slots.iter().any(|s| s.name == "__deleting_dtor"))
+                        .any(|t| t.slots.iter().any(|s| s.is_deleting_dtor))
                 })
                 .unwrap_or(false)
         })

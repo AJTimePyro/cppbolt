@@ -1,0 +1,1 @@
+tests/negative/n13_final_dtor_override.cpp:2:16: error: 'D::~D' overrides a final method

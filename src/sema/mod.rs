@@ -29,7 +29,10 @@ mod layout;
 mod layout_dump;
 mod lookup;
 mod method_return_type;
+mod virtual_key;
+mod virtual_validate;
 pub(super) use lookup::MemberPointerBaseConversion;
+pub(crate) use virtual_key::{VirtualKey, find_sig, noexcept_compatible, return_compatible};
 mod member_pointer;
 #[cfg(test)]
 mod member_ptr_tests;
@@ -81,7 +84,7 @@ use crate::ast::*;
 use crate::diagnostics::CompileError;
 use crate::name::QualifiedName;
 pub(crate) use function_sig::FunctionSig;
-pub(crate) use layout::VTableInfo;
+pub(crate) use layout::{VTableInfo, VTableSlotInfo};
 pub(crate) use receiver::{receiver_is_const_type, sig_receiver_is_const};
 use std::collections::{HashMap, HashSet};
 
@@ -109,12 +112,12 @@ pub struct StructLayout {
     pub size: usize,
     pub align: usize,
     pub has_vtable: bool,
-    pub vtable_slots: Vec<String>,
+    pub vtable_slots: Vec<VirtualKey>,
     pub vtables: Vec<VTableInfo>,
     pub private_members: std::collections::HashSet<String>,
     pub is_abstract: bool,
     pub pure_virtuals: std::collections::HashSet<String>,
-    pub final_methods: std::collections::HashSet<String>,
+    pub final_methods: Vec<VirtualKey>,
 }
 
 /// The first argument of a call that does not convert to its parameter.

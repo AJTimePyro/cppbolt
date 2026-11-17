@@ -254,7 +254,7 @@ impl<'a> Codegen<'a> {
             l.vtables.iter().find_map(|t| {
                 t.slots
                     .iter()
-                    .position(|s| s.name == "__deleting_dtor")
+                    .position(|s| s.is_deleting_dtor)
                     .map(|idx| (idx, t.vptr_offset as u32))
             })
         });

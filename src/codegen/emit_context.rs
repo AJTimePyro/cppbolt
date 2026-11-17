@@ -28,7 +28,6 @@ pub(super) struct NamedCall<'e> {
 /// method index instead.
 pub(super) struct CallSite<'e> {
     pub(super) class_name: &'e str,
-    pub(super) member: &'e str,
     pub(super) args: &'e [Expr],
     pub(super) slot_idx: usize,
     /// Offset of the vptr for this virtual slot from the receiver's class
@@ -36,7 +35,6 @@ pub(super) struct CallSite<'e> {
     pub(super) vptr_offset: u32,
     pub(super) this_slot: u32,
     pub(super) fn_slot: u32,
-    pub(super) receiver_const: bool,
 }
 
 /// A local array declaration being lowered.

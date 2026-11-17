@@ -2,6 +2,23 @@
 
 use super::call_types::{wasm_params_from_types, wasm_result_types};
 use super::*;
+use crate::sema::VirtualKey;
+
+fn default_sig_from_class(class_name: &str) -> FunctionSig {
+    FunctionSig {
+        name: class_name.to_string(),
+        mangled_name: class_name.to_string(),
+        return_type: Type::Int,
+        param_types: vec![Type::Pointer(Box::new(Type::Struct(
+            class_name.to_string(),
+        )))],
+        default_args: Vec::new(),
+        is_static: false,
+        is_explicit: false,
+        ref_qualifier: RefQualifier::None,
+        qualifiers: FunctionQualifiers::default(),
+    }
+}
 
 struct VTableDispatch {
     vptr_offset: u32,
@@ -39,27 +56,45 @@ impl<'a> Codegen<'a> {
         // argument evaluation may clobber the scratch locals.
         self.emit_member_receiver(object, is_arrow, this_slot, ctx, code)?;
 
-        let layout = self.sema.struct_layouts.get(&sname);
-        let virtual_slot = layout.and_then(|l| {
-            l.vtables.iter().find_map(|t| {
-                t.slots
-                    .iter()
-                    .position(|s| s.name == member)
-                    .map(|slot_idx| (slot_idx, t.vptr_offset as u32))
+        let receiver_is_lvalue = is_arrow || obj_ty.is_reference() || object.is_lvalue();
+        let resolved = self.find_method_for_receiver_category(
+            &sname,
+            member,
+            &arg_types,
+            Some(args),
+            (receiver_const, receiver_is_lvalue),
+        );
+        let sig_for_key = self.find_method_sig(
+            &sname,
+            member,
+            &arg_types,
+            Some(args),
+            (receiver_const, receiver_is_lvalue),
+        );
+        let virtual_slot = sig_for_key.as_ref().and_then(|sig| {
+            let key = if member.starts_with('~') {
+                VirtualKey::new("~")
+            } else {
+                VirtualKey::from_sig(sig)
+            };
+            self.sema.struct_layouts.get(&sname).and_then(|l| {
+                l.vtables.iter().find_map(|t| {
+                    t.slots
+                        .iter()
+                        .position(|s| !s.is_deleting_dtor && s.key == key)
+                        .map(|slot_idx| (slot_idx, t.vptr_offset as u32))
+                })
             })
         });
         let site = CallSite {
             class_name: &sname,
-            member,
             args,
             slot_idx: 0,
             vptr_offset: 0,
             this_slot,
             fn_slot,
-            receiver_const,
         };
 
-        let receiver_is_lvalue = is_arrow || obj_ty.is_reference() || object.is_lvalue();
         if let Some((slot_idx, vptr_offset)) = virtual_slot {
             self.compile_member_call_virtual(
                 CallSite {
@@ -67,16 +102,13 @@ impl<'a> Codegen<'a> {
                     vptr_offset,
                     ..site
                 },
+                sig_for_key
+                    .clone()
+                    .unwrap_or_else(|| default_sig_from_class(&sname)),
                 ctx,
                 code,
             )?;
-        } else if let Some((m_idx, sig)) = self.find_method_for_receiver_category(
-            &sname,
-            member,
-            &arg_types,
-            Some(args),
-            (receiver_const, receiver_is_lvalue),
-        ) {
+        } else if let Some((m_idx, sig)) = resolved {
             self.compile_member_call_direct(site, &sig, m_idx, ctx, code)?;
         } else {
             return Err(CompileError::new(
@@ -229,18 +261,17 @@ impl<'a> Codegen<'a> {
     pub(super) fn compile_member_call_virtual(
         &mut self,
         site: CallSite<'_>,
+        sig: FunctionSig,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let CallSite {
-            class_name: sname,
-            member,
             args,
             slot_idx,
             vptr_offset,
             this_slot,
             fn_slot,
-            receiver_const,
+            ..
         } = site;
         // Virtual dispatch via the vtable of this slot's owning subobject.
         self.load_vtable_slot(
@@ -253,17 +284,6 @@ impl<'a> Codegen<'a> {
             ctx,
             code,
         )?;
-
-        let Some(sig) = self
-            .sema
-            .find_method_in_class_for_receiver(sname, member, receiver_const)
-        else {
-            return Err(CompileError::new(
-                format!("Method '{}' not found in class '{}'", member, sname),
-                self.current_line,
-                self.current_col,
-            ));
-        };
 
         // The implicit `this` argument comes first.
         code.push(OP_LOCAL_GET);

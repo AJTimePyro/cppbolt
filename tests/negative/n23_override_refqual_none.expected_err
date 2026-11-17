@@ -1,0 +1,1 @@
+tests/negative/n23_override_refqual_none.cpp:2:16: error: 'D::f' marked override but overrides no virtual method

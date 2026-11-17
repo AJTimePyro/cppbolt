@@ -1,4 +1,5 @@
 use super::*;
+use crate::sema::{VirtualKey, find_sig};
 
 impl<'a> Codegen<'a> {
     /// Resolves a free-function call, including ADL and the implicit `std`
@@ -132,21 +133,17 @@ impl<'a> Codegen<'a> {
     fn declaring_class(
         &self,
         cls: &str,
-        method_name: &str,
+        key: &VirtualKey,
         depth: usize,
     ) -> Option<(String, usize)> {
         if depth > 64 {
             return None;
         }
-        if self
-            .sema
-            .functions
-            .contains_key(&format!("{}::{}", cls, method_name))
-        {
+        if find_sig(self.sema, cls, key).is_some() {
             return Some((cls.to_string(), 0));
         }
         for (base, offset) in self.direct_base_offsets(cls) {
-            if let Some((decl, relative)) = self.declaring_class(&base, method_name, depth + 1) {
+            if let Some((decl, relative)) = self.declaring_class(&base, key, depth + 1) {
                 return Some((decl, offset + relative));
             }
         }
@@ -161,33 +158,35 @@ impl<'a> Codegen<'a> {
         class_name: &str,
         owner: &str,
         vptr_offset: usize,
-        method_name: &str,
+        key: &VirtualKey,
     ) -> Option<(String, usize)> {
         let path = self.inheritance_path(class_name, 0, owner, vptr_offset, 0)?;
         for (cls, offset) in &path {
-            if self
-                .sema
-                .functions
-                .contains_key(&format!("{}::{}", cls, method_name))
-            {
+            if find_sig(self.sema, cls, key).is_some() {
                 return Some((cls.clone(), *offset));
             }
         }
         // No class on the path overrides this slot. Use the class that
         // originally declared it in the owner's own hierarchy.
-        let (decl, relative) = self.declaring_class(owner, method_name, 0)?;
+        let (decl, relative) = self.declaring_class(owner, key, 0)?;
         Some((decl, vptr_offset + relative))
     }
 
     /// Looks up a virtual method on a class or one of its bases.
-    pub fn find_class_vmethod(&self, class_name: &str, method_name: &str) -> Option<u32> {
-        let m_name = format!("{}_{}", class_name, method_name);
-        if let Some(&idx) = self.func_indices.get(&m_name) {
+    pub fn find_class_vmethod(&self, class_name: &str, key: &VirtualKey) -> Option<u32> {
+        if let Some(sig) = find_sig(self.sema, class_name, key)
+            && let Some(&idx) = self.func_indices.get(&sig.mangled_name)
+        {
+            return Some(idx);
+        }
+        if key.is_destructor()
+            && let Some(&idx) = self.func_indices.get(&format!("{}_~", class_name))
+        {
             return Some(idx);
         }
         if let Some(layout) = self.sema.struct_layouts.get(class_name) {
             for b in &layout.base_classes {
-                if let Some(idx) = self.find_class_vmethod(b, method_name) {
+                if let Some(idx) = self.find_class_vmethod(b, key) {
                     return Some(idx);
                 }
             }

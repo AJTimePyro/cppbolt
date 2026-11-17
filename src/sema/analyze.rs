@@ -21,6 +21,7 @@ impl Sema {
         self.synthesize_destructors(program);
         self.synthesize_constructors(program);
         self.register_declarations(program)?;
+        self.validate_virtual_returns(program)?;
         self.analyze_declarations(program)?;
         program.declarations.append(&mut self.synthesized_decls);
         Ok(())

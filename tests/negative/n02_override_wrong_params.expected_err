@@ -1,0 +1,1 @@
+tests/negative/n02_override_wrong_params.cpp:2:16: error: 'D::f' marked override but overrides no virtual method

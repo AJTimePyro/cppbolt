@@ -3,9 +3,10 @@ use super::*;
 /// One entry of a per-subobject virtual table.
 #[derive(Debug, Clone)]
 pub struct VTableSlotInfo {
-    /// Source-level virtual function name. `~` and `__deleting_dtor` denote
-    /// the destructor and its deleting counterpart.
-    pub name: String,
+    /// Semantic identity of the virtual function in this slot.
+    pub key: VirtualKey,
+    /// The deleting-destructor companion slot (no ordinary call targets it).
+    pub is_deleting_dtor: bool,
 }
 
 /// One virtual table belonging to a base subobject of a complete object.
@@ -53,7 +54,7 @@ struct LayoutAccumulator {
     max_align: usize,
     struct_fields: Vec<StructField>,
     base_offsets: Vec<(String, usize)>,
-    vtable_slots: Vec<String>,
+    vtable_slots: Vec<VirtualKey>,
 }
 
 impl LayoutAccumulator {
@@ -95,51 +96,24 @@ impl Sema {
         if let Some(align) = input.alignment {
             acc.max_align = acc.max_align.max(align);
         }
-        // A method matching a base virtual is an override even without the
-        // `virtual` or `override` keyword, so it needs a vptr and a slot.
-        let inherited_virtuals: Vec<String> = input
+        let inherited_virtuals: Vec<(String, VirtualKey)> = input
             .base_classes
             .iter()
-            .filter_map(|base| self.struct_layouts.get(base))
-            .flat_map(|base| base.vtable_slots.iter().cloned())
+            .filter_map(|base| self.struct_layouts.get(base).map(|layout| (base, layout)))
+            .flat_map(|(base, layout)| {
+                layout
+                    .vtable_slots
+                    .iter()
+                    .filter(|key| key.name != "__deleting_dtor")
+                    .map(move |key| (base.clone(), key.clone()))
+            })
             .collect();
-        // `override` promises to replace a base virtual; reject it when no
-        // such virtual exists.
-        fn slot_name(name: &str) -> &str {
-            if name.starts_with('~') { "~" } else { name }
-        }
-        for m in input.methods.iter().filter(|m| m.qualifiers.is_override) {
-            if !inherited_virtuals.iter().any(|s| s == slot_name(&m.name)) {
-                return Err(CompileError::new(
-                    format!(
-                        "'{}::{}' marked override but overrides no virtual method",
-                        input.name, m.name
-                    ),
-                    m.line,
-                    m.col,
-                ));
-            }
-        }
-        // `final` methods cannot be overridden further by this class.
-        let inherited_finals: Vec<String> = input
-            .base_classes
-            .iter()
-            .filter_map(|base| self.struct_layouts.get(base))
-            .flat_map(|base| base.final_methods.iter().cloned())
-            .collect();
-        for m in input.methods.iter() {
-            if inherited_finals.iter().any(|s| s == slot_name(&m.name)) {
-                return Err(CompileError::new(
-                    format!("'{}::{}' overrides a final method", input.name, m.name),
-                    m.line,
-                    m.col,
-                ));
-            }
-        }
+        self.validate_virtual_declarations(&input, &inherited_virtuals)?;
+        let keys: Vec<VirtualKey> = inherited_virtuals.iter().map(|(_, k)| k.clone()).collect();
         let has_virtual_methods = input
             .methods
             .iter()
-            .any(|m| m.is_virtual || inherited_virtuals.contains(&m.name));
+            .any(|m| m.is_virtual || keys.contains(&VirtualKey::from_decl(m)));
         let primary_has_vtable = input
             .base_classes
             .first()
@@ -195,13 +169,110 @@ impl Sema {
                 .methods
                 .iter()
                 .filter(|m| m.qualifiers.is_final)
-                .map(|m| m.name.clone())
-                .chain(inherited_finals)
+                .map(VirtualKey::from_decl)
+                .chain(
+                    input
+                        .base_classes
+                        .iter()
+                        .filter_map(|base| self.struct_layouts.get(base))
+                        .flat_map(|layout| layout.final_methods.iter().cloned()),
+                )
                 .collect(),
         };
 
         self.record_struct_layout(input.name, layout, acc.offset, acc.max_align);
 
+        Ok(())
+    }
+
+    /// Validates `override`/`final` against the semantic signatures of base
+    /// virtuals, including return and exception-specification compatibility.
+    fn validate_virtual_declarations(
+        &self,
+        input: &RecordLayout<'_>,
+        inherited: &[(String, VirtualKey)],
+    ) -> Result<(), CompileError> {
+        let inherited_finals: Vec<VirtualKey> = input
+            .base_classes
+            .iter()
+            .filter_map(|base| self.struct_layouts.get(base))
+            .flat_map(|layout| layout.final_methods.iter().cloned())
+            .collect();
+        for m in input.methods.iter() {
+            let key = VirtualKey::from_decl(m);
+            if m.is_static && (m.qualifiers.is_override || m.qualifiers.is_final) {
+                return Err(CompileError::new(
+                    format!(
+                        "static member function '{}::{}' cannot be override or final",
+                        input.name, m.name
+                    ),
+                    m.line,
+                    m.col,
+                ));
+            }
+            let base = inherited.iter().find(|(_, k)| *k == key);
+            match base {
+                Some((base_name, _)) => {
+                    if m.is_static {
+                        return Err(CompileError::new(
+                            format!(
+                                "static member function '{}::{}' cannot override a virtual function",
+                                input.name, m.name
+                            ),
+                            m.line,
+                            m.col,
+                        ));
+                    }
+                    if inherited_finals.contains(&key) {
+                        return Err(CompileError::new(
+                            format!("'{}::{}' overrides a final method", input.name, m.name),
+                            m.line,
+                            m.col,
+                        ));
+                    }
+                    if let Some(base_sig) = find_sig(self, base_name, &key) {
+                        if !return_compatible(&base_sig.return_type, &m.return_type, self) {
+                            return Err(CompileError::new(
+                                format!(
+                                    "'{}::{}' has an incompatible return type",
+                                    input.name, m.name
+                                ),
+                                m.line,
+                                m.col,
+                            ));
+                        }
+                        if !noexcept_compatible(base_sig, m) {
+                            return Err(CompileError::new(
+                                format!(
+                                    "'{}::{}' has a looser exception specification than the function it overrides",
+                                    input.name, m.name
+                                ),
+                                m.line,
+                                m.col,
+                            ));
+                        }
+                    }
+                }
+                None if m.qualifiers.is_override => {
+                    return Err(CompileError::new(
+                        format!(
+                            "'{}::{}' marked override but overrides no virtual method",
+                            input.name, m.name
+                        ),
+                        m.line,
+                        m.col,
+                    ));
+                }
+                None if m.qualifiers.is_final && !m.is_virtual => {
+                    return Err(CompileError::new(
+                        "only virtual member functions can be marked final".to_string(),
+                        m.line,
+                        m.col,
+                    ));
+                }
+                _ => {}
+            }
+        }
         Ok(())
     }
 
@@ -294,10 +365,12 @@ impl Sema {
         let primary_owner = primary_base
             .cloned()
             .unwrap_or_else(|| class_name.to_string());
-        let as_slots = |names: &[String]| -> Vec<VTableSlotInfo> {
-            names
-                .iter()
-                .map(|n| VTableSlotInfo { name: n.clone() })
+        let as_slots = |keys: &[VirtualKey]| -> Vec<VTableSlotInfo> {
+            keys.iter()
+                .map(|key| VTableSlotInfo {
+                    is_deleting_dtor: key.name == "__deleting_dtor",
+                    key: key.clone(),
+                })
                 .collect()
         };
         let mut tables = vec![VTableInfo {
@@ -339,7 +412,7 @@ impl Sema {
         methods: &[FunctionDecl],
         base_classes: &[String],
         has_vtable: bool,
-        vtable_slots: &mut Vec<String>,
+        vtable_slots: &mut Vec<VirtualKey>,
     ) {
         if !has_vtable {
             return;
@@ -347,28 +420,26 @@ impl Sema {
         // An override of a virtual declared in *any* base (including a
         // secondary polymorphic base) replaces that base's slot; it does not
         // introduce a new slot in the primary table.
-        let mut inherited: Vec<String> = vtable_slots.clone();
+        let mut inherited: Vec<VirtualKey> = vtable_slots.clone();
         for base in base_classes {
             if let Some(bl) = self.struct_layouts.get(base) {
-                for slot in &bl.vtable_slots {
-                    if !inherited.contains(slot) {
-                        inherited.push(slot.clone());
+                for key in &bl.vtable_slots {
+                    if !inherited.contains(key) {
+                        inherited.push(key.clone());
                     }
                 }
             }
         }
         for m in methods {
-            if m.name.starts_with('~') {
-                let is_virt_dtor = m.is_virtual || inherited.iter().any(|s| s == "~");
-                if is_virt_dtor && !vtable_slots.iter().any(|s| s == "~") {
-                    vtable_slots.push("~".to_string());
-                    vtable_slots.push("__deleting_dtor".to_string());
+            let key = VirtualKey::from_decl(m);
+            if key.is_destructor() {
+                let is_virt_dtor = m.is_virtual || inherited.contains(&key);
+                if is_virt_dtor && !vtable_slots.contains(&key) {
+                    vtable_slots.push(key);
+                    vtable_slots.push(VirtualKey::new("__deleting_dtor"));
                 }
-            } else {
-                let is_override = inherited.iter().any(|s| s == &m.name);
-                if (m.is_virtual || is_override) && !vtable_slots.contains(&m.name) {
-                    vtable_slots.push(m.name.clone());
-                }
+            } else if (m.is_virtual || inherited.contains(&key)) && !vtable_slots.contains(&key) {
+                vtable_slots.push(key);
             }
         }
     }

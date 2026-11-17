@@ -160,7 +160,7 @@ impl<'a> Codegen<'a> {
                 && layout
                     .vtables
                     .iter()
-                    .any(|t| t.slots.iter().any(|s| s.name == "__deleting_dtor"))
+                    .any(|t| t.slots.iter().any(|s| s.is_deleting_dtor))
             {
                 let type_idx = self.t_i32_v;
                 let func_idx = (self.module.imports.len() + self.module.functions.len()) as u32;
@@ -181,11 +181,11 @@ impl<'a> Codegen<'a> {
         class_name: &str,
         owner: &str,
         vptr_offset: usize,
-        slot_name: &str,
+        slot: &crate::sema::VTableSlotInfo,
         plan: &Plan,
     ) -> (u32, i32) {
         let trap_idx = plan.trap_func_idx.unwrap_or(0);
-        if slot_name == "__deleting_dtor" {
+        if slot.is_deleting_dtor {
             let idx = self
                 .func_indices
                 .get(&format!("{}_deleting_dtor", class_name))
@@ -194,18 +194,18 @@ impl<'a> Codegen<'a> {
             // The deleting destructor expects a pointer to the complete object.
             return (idx, -(vptr_offset as i32));
         }
-        if slot_name.starts_with('~') {
+        if slot.key.is_destructor() {
             let idx = self
                 .func_indices
-                .get(&format!("{}_{}", class_name, slot_name))
+                .get(&format!("{}_~", class_name))
                 .copied()
                 .unwrap_or(trap_idx);
             return (idx, -(vptr_offset as i32));
         }
         let (func_idx, overrider_offset) =
-            match self.find_final_overrider(class_name, owner, vptr_offset, slot_name) {
+            match self.find_final_overrider(class_name, owner, vptr_offset, &slot.key) {
                 Some((cls, offset)) => (
-                    self.find_class_vmethod(&cls, slot_name).unwrap_or(trap_idx),
+                    self.find_class_vmethod(&cls, &slot.key).unwrap_or(trap_idx),
                     offset,
                 ),
                 None => (trap_idx, vptr_offset),
@@ -232,7 +232,7 @@ impl<'a> Codegen<'a> {
                 let mut vtable_bytes = Vec::new();
                 for slot in &table.slots {
                     let (func_idx, adjustment) =
-                        self.vtable_entry(name, &table.owner, table.vptr_offset, &slot.name, plan);
+                        self.vtable_entry(name, &table.owner, table.vptr_offset, slot, plan);
 
                     let table_elem_idx = self.vtable_func_indices.len() as u32;
                     self.vtable_func_indices.push(func_idx);
