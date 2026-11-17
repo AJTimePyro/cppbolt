@@ -85,6 +85,32 @@ impl Sema {
 
     fn register_types(&mut self, program: &mut Program) -> Result<(), CompileError> {
         self.type_aliases = program.type_aliases.clone();
+        // Make class aliases refer to the same record layout as their target,
+        // so lookups through either spelling see the same vptrs and slots.
+        let aliases: Vec<(String, String)> = program
+            .type_aliases
+            .iter()
+            .filter_map(|(alias, ty)| match ty {
+                Type::Struct(name) => Some((alias.clone(), name.clone())),
+                Type::TemplateInstance { name, args } => Some((
+                    alias.clone(),
+                    format!(
+                        "{}<{}>",
+                        name,
+                        args.iter()
+                            .map(|a| a.to_c_type())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                )),
+                _ => None,
+            })
+            .collect();
+        for (alias, target) in aliases {
+            if let Some(layout) = self.struct_layouts.get(&target).cloned() {
+                self.struct_layouts.insert(alias, layout);
+            }
+        }
         for decl in &mut program.declarations {
             match decl {
                 Decl::EnumDecl {

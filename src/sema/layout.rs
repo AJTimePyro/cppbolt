@@ -90,6 +90,22 @@ impl LayoutAccumulator {
 }
 
 impl Sema {
+    fn canonical_base(&self, name: &str) -> String {
+        if let Some(Type::Struct(s)) = self.lookup_type_alias(name) {
+            s
+        } else if let Some(Type::TemplateInstance { name: t, args }) = self.lookup_type_alias(name)
+        {
+            let args = args
+                .iter()
+                .map(|a| a.to_c_type())
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{}<{}>", t, args)
+        } else {
+            name.to_string()
+        }
+    }
+
     /// Computes field offsets, base-subobject offset, and vtable slot order.
     ///
     /// The parser permits at most one base class, so layout handles one base
@@ -99,13 +115,18 @@ impl Sema {
         input: RecordLayout<'_>,
     ) -> Result<(), CompileError> {
         let mut acc = LayoutAccumulator::new();
+        let bases: Vec<String> = input
+            .base_classes
+            .iter()
+            .map(|b| self.canonical_base(b))
+            .collect();
         if let Some(align) = input.alignment {
             acc.max_align = acc.max_align.max(align);
         }
-        for base in input.base_classes {
+        for base in &bases {
             if self
                 .struct_layouts
-                .get(base)
+                .get(base.as_str())
                 .is_some_and(|layout| layout.is_final)
             {
                 return Err(CompileError::new(
@@ -115,10 +136,13 @@ impl Sema {
                 ));
             }
         }
-        let inherited_virtuals: Vec<(String, VirtualKey)> = input
-            .base_classes
+        let inherited_virtuals: Vec<(String, VirtualKey)> = bases
             .iter()
-            .filter_map(|base| self.struct_layouts.get(base).map(|layout| (base, layout)))
+            .filter_map(|base| {
+                self.struct_layouts
+                    .get(base.as_str())
+                    .map(|layout| (base, layout))
+            })
             .flat_map(|(base, layout)| {
                 layout
                     .vtable_slots
@@ -135,10 +159,11 @@ impl Sema {
             .any(|m| m.is_virtual || keys.contains(&VirtualKey::from_decl(m)));
         // Any polymorphic base contributes a vptr; it need not be the first
         // declared base (a non-polymorphic pad may come first).
-        let primary_has_vtable = input
-            .base_classes
-            .iter()
-            .any(|base| self.struct_layouts.get(base).is_some_and(|l| l.has_vtable));
+        let primary_has_vtable = bases.iter().any(|base| {
+            self.struct_layouts
+                .get(base.as_str())
+                .is_some_and(|l| l.has_vtable)
+        });
         let has_vtable = has_virtual_methods || primary_has_vtable;
         if has_virtual_methods && !primary_has_vtable {
             // No polymorphic base: a vtable pointer precedes the fields.
@@ -146,22 +171,17 @@ impl Sema {
             acc.max_align = 4;
         }
 
-        self.layout_base_subobjects(input.base_classes, &mut acc, input.line, input.col)?;
+        self.layout_base_subobjects(&bases, &mut acc, input.line, input.col)?;
 
-        self.layout_vtable_slots(
-            input.methods,
-            input.base_classes,
-            has_vtable,
-            &mut acc.vtable_slots,
-        );
+        self.layout_vtable_slots(input.methods, &bases, has_vtable, &mut acc.vtable_slots);
 
         self.layout_own_fields(input.fields, &mut acc);
 
         acc.round_up();
         acc.round_up();
-        let vtables = self.build_vtables(input.name, input.base_classes, &acc, has_vtable);
+        let vtables = self.build_vtables(input.name, &bases, &acc, has_vtable);
 
-        let pure_virtuals = self.collect_pure_virtuals(input.base_classes, input.methods);
+        let pure_virtuals = self.collect_pure_virtuals(&bases, input.methods);
         let is_abstract = !pure_virtuals.is_empty();
         let short = QualifiedName::new(input.name).class_short_name();
         let has_user_declared_constructors = input
@@ -173,7 +193,7 @@ impl Sema {
             is_class: input.is_class,
             is_final: input.is_final,
             has_user_declared_constructors,
-            base_classes: input.base_classes.to_vec(),
+            base_classes: bases,
             base_access: input.base_access.to_vec(),
             base_offsets: acc.base_offsets,
             direct_base_offsets: acc.direct_base_offsets,
@@ -233,7 +253,7 @@ impl Sema {
             }
             let base = inherited.iter().find(|(_, k)| *k == key);
             match base {
-                Some((base_name, _)) => {
+                Some(_) => {
                     if m.is_static {
                         return Err(CompileError::new(
                             format!(
@@ -250,28 +270,6 @@ impl Sema {
                             m.line,
                             m.col,
                         ));
-                    }
-                    if let Some(base_sig) = find_sig(self, base_name, &key) {
-                        if !return_compatible(&base_sig.return_type, &m.return_type, self) {
-                            return Err(CompileError::new(
-                                format!(
-                                    "'{}::{}' has an incompatible return type",
-                                    input.name, m.name
-                                ),
-                                m.line,
-                                m.col,
-                            ));
-                        }
-                        if !noexcept_compatible(base_sig, m) {
-                            return Err(CompileError::new(
-                                format!(
-                                    "'{}::{}' has a looser exception specification than the function it overrides",
-                                    input.name, m.name
-                                ),
-                                m.line,
-                                m.col,
-                            ));
-                        }
                     }
                 }
                 None if m.qualifiers.is_override => {

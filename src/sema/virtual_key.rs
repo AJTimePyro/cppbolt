@@ -91,9 +91,17 @@ pub(crate) fn find_sig<'a>(
     key: &VirtualKey,
 ) -> Option<&'a FunctionSig> {
     let qualified = format!("{}::{}", class_name, key.name);
-    let sigs = sema.functions.get(&qualified);
-    if let Some(sig) = sigs.and_then(|sigs| sigs.iter().find(|sig| key.matches_sig(sig))) {
-        return Some(sig);
+    for name in [
+        qualified,
+        sema.resolve_alias_in_qualified_name(&format!("{}::{}", class_name, key.name)),
+    ] {
+        if let Some(sig) = sema
+            .functions
+            .get(&name)
+            .and_then(|sigs| sigs.iter().find(|sig| key.matches_sig(sig)))
+        {
+            return Some(sig);
+        }
     }
     if key.is_destructor() {
         let prefix = format!("{}::~", class_name);
