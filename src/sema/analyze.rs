@@ -112,6 +112,11 @@ impl Sema {
                             self.check_field_default_init(fname, fty, init_expr, (*fline, *fcol))?;
                         }
                     }
+                    // A base that is a template specialization must have a
+                    // layout before this class can inherit its vptr and slots.
+                    for base in base_classes.clone() {
+                        self.ensure_class_instantiated(&base, *line, *col);
+                    }
                     self.compute_struct_layout(RecordLayout {
                         name: name.as_str(),
                         is_class: *is_class,

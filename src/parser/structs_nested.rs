@@ -182,6 +182,20 @@ impl Parser {
     ) -> Result<bool, CompileError> {
         if self.peek() == &TokenKind::KwUsing {
             self.advance();
+            // `using Base::member;` / `using Base<T>::member;` brings base
+            // names into scope; the current lookup already sees base methods.
+            let rest: Vec<TokenKind> = self.tokens[self.pos..]
+                .iter()
+                .take_while(|t| t.kind != TokenKind::Semi && t.kind != TokenKind::Assign)
+                .map(|t| t.kind.clone())
+                .collect();
+            if rest.contains(&TokenKind::ColonColon) {
+                while self.peek() != &TokenKind::Semi && self.peek() != &TokenKind::Eof {
+                    self.advance();
+                }
+                self.expect(TokenKind::Semi)?;
+                return Ok(true);
+            }
             let alias = match self.advance().kind.clone() {
                 TokenKind::Ident(id) => id,
                 _ => {
