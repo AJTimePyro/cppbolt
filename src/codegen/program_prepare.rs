@@ -201,7 +201,7 @@ impl<'a> Codegen<'a> {
             calls.insert(format!("{}_{}", name, c_name));
             // An alias-named initializer still reaches the canonical base's
             // lifecycle methods, which are registered under the resolved name.
-            let canonical = self.sema.canonical_class_name(c_name);
+            let canonical = self.sema.canonical_class_name(c_name, Some(name));
             if canonical != *c_name {
                 calls.insert(canonical.clone());
                 calls.insert(format!("{}_{}", name, canonical));

@@ -469,8 +469,21 @@ impl Sema {
     /// Resolves a source-spelled class name through namespace and type aliases
     /// to the canonical name used in layouts and symbol tables. Only names are
     /// resolved; offsets stay untouched, so distinct base subobjects remain distinct.
-    pub(crate) fn canonical_class_name(&self, name: &str) -> String {
+    /// When `context` names an enclosing class, aliases declared there (e.g.
+    /// `Outer::Alias` used by `Outer::Inner`) are resolved as well.
+    pub(crate) fn canonical_class_name(&self, name: &str, context: Option<&str>) -> String {
         let mut current = name.to_string();
+        if let Some(ctx) = context {
+            let mut scope = ctx.rsplit_once("::").map(|(s, _)| s);
+            while let Some(s) = scope {
+                let qualified = format!("{}::{}", s, name);
+                if self.lookup_type_alias(&qualified).is_some() {
+                    current = qualified;
+                    break;
+                }
+                scope = s.rsplit_once("::").map(|(p, _)| p);
+            }
+        }
         for _ in 0..16 {
             let qualified = self.resolve_alias_in_qualified_name(&current);
             let next = match self.lookup_type_alias(&qualified) {

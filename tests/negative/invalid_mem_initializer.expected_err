@@ -1,0 +1,1 @@
+tests/negative/invalid_mem_initializer.cpp:2:25: error: mem-initializer 'NotABase' does not name a base, member, or delegating constructor of 'Derived'

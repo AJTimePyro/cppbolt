@@ -102,7 +102,7 @@ impl Sema {
         let bases: Vec<String> = input
             .base_classes
             .iter()
-            .map(|b| self.canonical_class_name(b))
+            .map(|b| self.canonical_class_name(b, Some(input.name)))
             .collect();
         if let Some(align) = input.alignment {
             acc.max_align = acc.max_align.max(align);
@@ -138,22 +138,21 @@ impl Sema {
         // An implicitly declared destructor overrides the base destructor, so
         // deriving from a class with a final virtual destructor is ill-formed
         // even when the derived class declares no destructor.
-        if input
-            .base_classes
+        if bases
             .iter()
-            .filter_map(|base| self.struct_layouts.get(base))
+            .filter_map(|base| self.struct_layouts.get(base.as_str()))
             .any(|layout| layout.final_methods.iter().any(|key| key.is_destructor()))
         {
             return Err(CompileError::new(
                 format!(
                     "cannot derive from class '{}' with a final destructor",
-                    input.base_classes[0]
+                    bases[0]
                 ),
                 input.line,
                 input.col,
             ));
         }
-        self.validate_virtual_declarations(&input, &inherited_virtuals)?;
+        self.validate_virtual_declarations(&input, &bases, &inherited_virtuals)?;
         let keys: Vec<VirtualKey> = inherited_virtuals.iter().map(|(_, k)| k.clone()).collect();
         let has_virtual_methods = input
             .methods
@@ -195,7 +194,7 @@ impl Sema {
             is_class: input.is_class,
             is_final: input.is_final,
             has_user_declared_constructors,
-            base_classes: bases,
+            base_classes: bases.clone(),
             base_access: input.base_access.to_vec(),
             base_offsets: acc.base_offsets,
             direct_base_offsets: acc.direct_base_offsets,
@@ -214,10 +213,9 @@ impl Sema {
                 .filter(|m| m.qualifiers.is_final)
                 .map(VirtualKey::from_decl)
                 .chain(
-                    input
-                        .base_classes
+                    bases
                         .iter()
-                        .filter_map(|base| self.struct_layouts.get(base))
+                        .filter_map(|base| self.struct_layouts.get(base.as_str()))
                         .flat_map(|layout| layout.final_methods.iter().cloned()),
                 )
                 .collect(),
@@ -233,12 +231,12 @@ impl Sema {
     fn validate_virtual_declarations(
         &self,
         input: &RecordLayout<'_>,
+        bases: &[String],
         inherited: &[(String, VirtualKey)],
     ) -> Result<(), CompileError> {
-        let inherited_finals: Vec<VirtualKey> = input
-            .base_classes
+        let inherited_finals: Vec<VirtualKey> = bases
             .iter()
-            .filter_map(|base| self.struct_layouts.get(base))
+            .filter_map(|base| self.struct_layouts.get(base.as_str()))
             .flat_map(|layout| layout.final_methods.iter().cloned())
             .collect();
         for m in input.methods.iter() {

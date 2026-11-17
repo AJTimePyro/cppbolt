@@ -17,6 +17,7 @@ fn method_matches_out_of_class(
 impl Sema {
     pub fn analyze_program(&mut self, program: &mut Program) -> Result<(), CompileError> {
         self.attach_out_of_class_methods(program);
+        self.seed_lifecycle_types(program);
         self.register_types(program)?;
         self.synthesize_destructors(program);
         self.synthesize_constructors(program);
@@ -85,32 +86,6 @@ impl Sema {
 
     fn register_types(&mut self, program: &mut Program) -> Result<(), CompileError> {
         self.type_aliases = program.type_aliases.clone();
-        // Make class aliases refer to the same record layout as their target,
-        // so lookups through either spelling see the same vptrs and slots.
-        let aliases: Vec<(String, String)> = program
-            .type_aliases
-            .iter()
-            .filter_map(|(alias, ty)| match ty {
-                Type::Struct(name) => Some((alias.clone(), name.clone())),
-                Type::TemplateInstance { name, args } => Some((
-                    alias.clone(),
-                    format!(
-                        "{}<{}>",
-                        name,
-                        args.iter()
-                            .map(|a| a.to_c_type())
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    ),
-                )),
-                _ => None,
-            })
-            .collect();
-        for (alias, target) in aliases {
-            if let Some(layout) = self.struct_layouts.get(&target).cloned() {
-                self.struct_layouts.insert(alias, layout);
-            }
-        }
         for decl in &mut program.declarations {
             match decl {
                 Decl::EnumDecl {
@@ -141,7 +116,8 @@ impl Sema {
                     // A base that is a template specialization must have a
                     // layout before this class can inherit its vptr and slots.
                     for base in base_classes.clone() {
-                        self.ensure_class_instantiated(&base, *line, *col);
+                        let canonical = self.canonical_class_name(&base, Some(name));
+                        self.ensure_class_instantiated(&canonical, *line, *col);
                     }
                     self.compute_struct_layout(RecordLayout {
                         name: name.as_str(),

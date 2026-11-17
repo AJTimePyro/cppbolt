@@ -417,9 +417,14 @@ impl Sema {
                 }
                 let res = self.analyze_function(&mut vmethod);
                 self.current_class = prev_class;
-                res?;
-                m.body = vmethod.body;
-                m.ctor_initializers = vmethod.ctor_initializers;
+                // Early analysis runs before globals/functions are registered,
+                // so a body referencing them can fail here. Keep the original
+                // substituted body; the method is still emitted and analyzed
+                // in the normal declaration pass where those names resolve.
+                if res.is_ok() {
+                    m.body = vmethod.body;
+                    m.ctor_initializers = vmethod.ctor_initializers;
+                }
                 for decl in &mut self.synthesized_decls {
                     if let Decl::StructDecl { name, methods, .. } = decl
                         && name == inst_name

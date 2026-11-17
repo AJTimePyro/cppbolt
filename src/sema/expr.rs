@@ -225,6 +225,11 @@ impl Sema {
         if let Some(p) = placement {
             self.analyze_expr(p)?;
         }
+        let pos = ExprPos::new(self.current_line, self.current_col);
+        // `new Alias(...)` carries the alias/template instance type from the
+        // parser; resolve it so constructor lookup and codegen see the
+        // canonical struct type, as variable declarations already do.
+        self.resolve_and_instantiate_type(ty, pos.line, pos.col)?;
         if let Type::Struct(sname) = ty.strip_const()
             && let Some(layout) = self.struct_layouts.get(sname)
             && layout.is_abstract
@@ -235,7 +240,6 @@ impl Sema {
                 self.current_col,
             ));
         }
-        let pos = ExprPos::new(self.current_line, self.current_col);
         if *is_array {
             if let Some(s) = array_size {
                 self.analyze_expr(s)?;

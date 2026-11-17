@@ -445,7 +445,7 @@ impl Sema {
     ) -> Result<(), CompileError> {
         let short_cls = cls.split("::").last().unwrap_or(cls).to_string();
         let has_delegating = func.ctor_initializers.iter().any(|(name, _)| {
-            let canonical = self.canonical_class_name(name);
+            let canonical = self.canonical_class_name(name, Some(cls));
             canonical == cls || canonical == short_cls
         });
         if has_delegating && func.ctor_initializers.len() > 1 {
@@ -461,7 +461,7 @@ impl Sema {
             for arg in args.iter_mut() {
                 tys.push(self.analyze_expr(arg)?);
             }
-            let canonical = self.canonical_class_name(init_name);
+            let canonical = self.canonical_class_name(init_name, Some(cls));
             if (canonical == cls || canonical == short_cls)
                 && let Some(sig) = self.find_constructor_for(cls, &tys, Some(args))
             {
@@ -477,7 +477,7 @@ impl Sema {
         // spelling still matches its specialization, but keep the raw name in
         // the diagnostic.
         for (init_name, _) in &func.ctor_initializers {
-            let canonical = self.canonical_class_name(init_name);
+            let canonical = self.canonical_class_name(init_name, Some(cls));
             let is_delegating = canonical == cls || canonical == short_cls;
             let is_base = layout.base_classes.contains(&canonical);
             let is_field = layout.fields.iter().any(|f| f.name == *init_name);
@@ -498,7 +498,7 @@ impl Sema {
         for base in &layout.base_classes {
             let tys = arg_types_map
                 .iter()
-                .find(|(k, _)| self.canonical_class_name(k) == *base)
+                .find(|(k, _)| self.canonical_class_name(k, Some(cls)) == *base)
                 .map(|(_, v)| v.as_slice())
                 .unwrap_or(&[]);
             if let Some(sig) = self.find_constructor_for(base, tys, None) {
