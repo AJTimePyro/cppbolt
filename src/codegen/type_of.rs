@@ -283,7 +283,12 @@ impl<'a> Codegen<'a> {
                 is_arrow,
                 ..
             } => self.type_of_member_call(object, member, is_arrow, ctx),
-            _ => Type::Int,
+            _ => {
+                // Derive the result from the callee's type so every callable
+                // shape (including `.*`/`->*` PMF calls) is handled the same way.
+                let callee_ty = self.get_expr_type(callee, ctx);
+                call_types::callee_return_type(&callee_ty)
+            }
         }
     }
 

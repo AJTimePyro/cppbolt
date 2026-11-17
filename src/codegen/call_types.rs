@@ -31,16 +31,18 @@ pub(crate) fn wasm_params_from_types(params: &[Type]) -> Vec<u8> {
     params.iter().map(wasm_value_type).collect()
 }
 
-/// The return type of a function pointer value.
+/// The return type of a callable value: a function, a function pointer, a
+/// pointer to member function, or a bound member function.
 pub(crate) fn callee_return_type(callee_ty: &Type) -> Type {
-    if let Type::Pointer(inner) = callee_ty.strip_const() {
-        if let Type::Function { return_type, .. } = &**inner {
-            return (**return_type).clone();
+    match callee_ty.strip_const() {
+        Type::Pointer(inner) => match &**inner {
+            Type::Function { return_type, .. } => (**return_type).clone(),
+            _ => Type::Int,
+        },
+        Type::Function { return_type, .. } => (**return_type).clone(),
+        Type::MemberPointer { member_type, .. } | Type::BoundMemberFunction { member_type, .. } => {
+            callee_return_type(member_type)
         }
-        Type::Int
-    } else if let Type::Function { return_type, .. } = callee_ty.strip_const() {
-        (**return_type).clone()
-    } else {
-        Type::Int
+        _ => Type::Int,
     }
 }

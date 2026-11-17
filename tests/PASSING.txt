@@ -259,6 +259,7 @@ cxx17/pmf_multiple_inheritance
 cxx17/pmf_nttp
 cxx17/pmf_nttp_null
 cxx17/pmf_qualifiers
+cxx17/pmf_return_types
 cxx17/pmf_virtual_override_isolation
 cxx17/virtual_override_keyword
 memory_model/allocator_correctness
