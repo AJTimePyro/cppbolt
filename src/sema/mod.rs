@@ -114,6 +114,7 @@ pub struct StructLayout {
     pub private_members: std::collections::HashSet<String>,
     pub is_abstract: bool,
     pub pure_virtuals: std::collections::HashSet<String>,
+    pub final_methods: std::collections::HashSet<String>,
 }
 
 /// The first argument of a call that does not convert to its parameter.

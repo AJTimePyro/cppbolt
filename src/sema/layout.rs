@@ -95,7 +95,51 @@ impl Sema {
         if let Some(align) = input.alignment {
             acc.max_align = acc.max_align.max(align);
         }
-        let has_virtual_methods = input.methods.iter().any(|m| m.is_virtual);
+        // A method matching a base virtual is an override even without the
+        // `virtual` or `override` keyword, so it needs a vptr and a slot.
+        let inherited_virtuals: Vec<String> = input
+            .base_classes
+            .iter()
+            .filter_map(|base| self.struct_layouts.get(base))
+            .flat_map(|base| base.vtable_slots.iter().cloned())
+            .collect();
+        // `override` promises to replace a base virtual; reject it when no
+        // such virtual exists.
+        fn slot_name(name: &str) -> &str {
+            if name.starts_with('~') { "~" } else { name }
+        }
+        for m in input.methods.iter().filter(|m| m.qualifiers.is_override) {
+            if !inherited_virtuals.iter().any(|s| s == slot_name(&m.name)) {
+                return Err(CompileError::new(
+                    format!(
+                        "'{}::{}' marked override but overrides no virtual method",
+                        input.name, m.name
+                    ),
+                    m.line,
+                    m.col,
+                ));
+            }
+        }
+        // `final` methods cannot be overridden further by this class.
+        let inherited_finals: Vec<String> = input
+            .base_classes
+            .iter()
+            .filter_map(|base| self.struct_layouts.get(base))
+            .flat_map(|base| base.final_methods.iter().cloned())
+            .collect();
+        for m in input.methods.iter() {
+            if inherited_finals.iter().any(|s| s == slot_name(&m.name)) {
+                return Err(CompileError::new(
+                    format!("'{}::{}' overrides a final method", input.name, m.name),
+                    m.line,
+                    m.col,
+                ));
+            }
+        }
+        let has_virtual_methods = input
+            .methods
+            .iter()
+            .any(|m| m.is_virtual || inherited_virtuals.contains(&m.name));
         let primary_has_vtable = input
             .base_classes
             .first()
@@ -147,6 +191,13 @@ impl Sema {
             private_members: input.private_members.iter().cloned().collect(),
             is_abstract,
             pure_virtuals,
+            final_methods: input
+                .methods
+                .iter()
+                .filter(|m| m.qualifiers.is_final)
+                .map(|m| m.name.clone())
+                .chain(inherited_finals)
+                .collect(),
         };
 
         self.record_struct_layout(input.name, layout, acc.offset, acc.max_align);

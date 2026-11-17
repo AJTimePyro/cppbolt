@@ -1,0 +1,1 @@
+tests/negative/override_final_method.cpp:3:5: error: 'Derived::f' overrides a final method

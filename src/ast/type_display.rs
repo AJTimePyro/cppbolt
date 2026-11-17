@@ -131,6 +131,8 @@ mod tests {
                     is_volatile: true,
                     is_noexcept: true,
                     ref_qualifier: crate::ast::RefQualifier::LValue,
+                    is_override: false,
+                    is_final: false,
                 },
             }),
         };

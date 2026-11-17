@@ -14,6 +14,7 @@ impl Parser {
         let params = self.parse_function_params()?;
         let quals = self.parse_function_qualifiers()?;
         let (is_const, ref_qualifier) = (quals.is_const, quals.ref_qualifier);
+        let is_virtual = quals.is_override;
         let ctor_initializers = self.parse_ctor_initializers()?;
         let (body, is_pure_virtual) = self.parse_function_body(line, col)?;
 
@@ -23,7 +24,7 @@ impl Parser {
             return_type,
             params,
             body,
-            is_virtual: false,
+            is_virtual,
             is_pure_virtual,
             is_const,
             is_explicit: false,
@@ -303,6 +304,7 @@ impl Parser {
                 }
                 TokenKind::KwOverride => {
                     self.advance();
+                    quals.is_override = true;
                 }
                 TokenKind::Ident(id) if id == "volatile" => {
                     self.advance();
@@ -310,6 +312,7 @@ impl Parser {
                 }
                 TokenKind::Ident(id) if id == "final" => {
                     self.advance();
+                    quals.is_final = true;
                 }
                 TokenKind::KwThrow | TokenKind::Ident(_) => {
                     let is_noexcept =

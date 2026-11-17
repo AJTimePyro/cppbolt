@@ -1,0 +1,1 @@
+tests/negative/override_without_base_virtual.cpp:3:5: error: 'Derived::f' marked override but overrides no virtual method

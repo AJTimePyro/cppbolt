@@ -247,7 +247,7 @@ impl Parser {
             };
             let mut dtor =
                 self.parse_function_tail(dname, Type::Void, start_tok.line, start_tok.col)?;
-            dtor.is_virtual = is_virtual;
+            dtor.is_virtual |= is_virtual;
             body.methods.push(dtor);
             return Ok(true);
         }
@@ -265,7 +265,7 @@ impl Parser {
                 start_tok.line,
                 start_tok.col,
             )?;
-            ctor.is_virtual = is_virtual;
+            ctor.is_virtual |= is_virtual;
             ctor.is_explicit = is_explicit;
             body.methods.push(ctor);
             return Ok(true);
@@ -307,7 +307,7 @@ impl Parser {
         let fname = format!("operator {}", target_type.to_c_type());
         let mut func =
             self.parse_function_tail(fname.clone(), target_type, start_tok.line, start_tok.col)?;
-        func.is_virtual = is_virtual;
+        func.is_virtual |= is_virtual;
         func.is_static = is_static;
         func.is_explicit = is_explicit;
         if body.is_private {
@@ -358,7 +358,7 @@ impl Parser {
             if !is_fn_pointer_field && self.peek() == &TokenKind::LParen {
                 let mut func =
                     self.parse_function_tail(fname.clone(), ty, start_tok.line, start_tok.col)?;
-                func.is_virtual = is_virtual;
+                func.is_virtual |= is_virtual;
                 func.is_static = is_static;
                 func.is_explicit = is_explicit;
                 if body.is_private {

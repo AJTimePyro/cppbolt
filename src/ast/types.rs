@@ -10,12 +10,26 @@ pub enum WasmType {
 }
 /// cv/ref/noexcept qualifiers attached to a function type. These are part of
 /// the type of a pointer to member function in C++17.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+///
+/// `is_override` and `is_final` describe a declaration, not the function
+/// type, so equality deliberately ignores them.
+#[derive(Debug, Clone, Copy, Eq, Default)]
 pub struct FunctionQualifiers {
     pub is_const: bool,
     pub is_volatile: bool,
     pub is_noexcept: bool,
     pub ref_qualifier: crate::ast::RefQualifier,
+    pub is_override: bool,
+    pub is_final: bool,
+}
+
+impl PartialEq for FunctionQualifiers {
+    fn eq(&self, other: &Self) -> bool {
+        self.is_const == other.is_const
+            && self.is_volatile == other.is_volatile
+            && self.is_noexcept == other.is_noexcept
+            && self.ref_qualifier == other.ref_qualifier
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
