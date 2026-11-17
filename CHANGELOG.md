@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Virtual Lifecycle and Integration
+- Constructors and destructors now initialize/destroy only direct non-virtual bases, in declaration and reverse declaration order, so indirect bases are no longer processed repeatedly.
+- Fixed phantom primary vtables: classes without their own virtuals reuse the actual polymorphic base subobject's vptr, including when non-polymorphic bases are declared first.
+- Resolved covariant return types through template specializations and aliases, validated overrides against every base declaration, and rejected ambiguous or inaccessible covariant conversions.
+- Fixed member-function pointers to template-specialization methods by forcing deferred instantiation and resolving a real function-table index instead of silently using index zero.
+- Rejected derivation from classes whose virtual destructor is final, including implicit derived destructors.
+
 ### Virtual Function Infrastructure
 - Canonicalized virtual function parameters before building VirtualKey: top-level cv is dropped, arrays and functions decay to pointers, and pointee/reference qualification is preserved.
 - Validated covariant pointer and reference returns with accessibility, ambiguity and cv rules, and added a per-vtable-entry return adjustment so overrides yield the correct base subobject through ordinary and member-pointer calls.
