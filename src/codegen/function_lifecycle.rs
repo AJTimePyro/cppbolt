@@ -103,7 +103,7 @@ impl<'a> Codegen<'a> {
             let base_args = f
                 .ctor_initializers
                 .iter()
-                .find(|(name, _)| name == base_name)
+                .find(|(name, _)| self.sema.canonical_class_name(name) == *base_name)
                 .map(|(_, args)| args.as_slice())
                 .unwrap_or(&[]);
             let arg_types: Vec<Type> = base_args

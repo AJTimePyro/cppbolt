@@ -444,10 +444,10 @@ impl Sema {
         func: &mut FunctionDecl,
     ) -> Result<(), CompileError> {
         let short_cls = cls.split("::").last().unwrap_or(cls).to_string();
-        let has_delegating = func
-            .ctor_initializers
-            .iter()
-            .any(|(name, _)| name == cls || name == &short_cls);
+        let has_delegating = func.ctor_initializers.iter().any(|(name, _)| {
+            let canonical = self.canonical_class_name(name);
+            canonical == cls || canonical == short_cls
+        });
         if has_delegating && func.ctor_initializers.len() > 1 {
             return Err(CompileError::new(
                 "mem-initializer for delegating constructor cannot be combined with other member or base initializers",
@@ -461,21 +461,46 @@ impl Sema {
             for arg in args.iter_mut() {
                 tys.push(self.analyze_expr(arg)?);
             }
-            if (init_name == cls || init_name == &short_cls)
+            let canonical = self.canonical_class_name(init_name);
+            if (canonical == cls || canonical == short_cls)
                 && let Some(sig) = self.find_constructor_for(cls, &tys, Some(args))
             {
                 self.instantiate_pending_method(&sig.mangled_name)?;
             }
             arg_types_map.insert(init_name.clone(), tys);
         }
-        if has_delegating {
-            return Ok(());
-        }
         let Some(layout) = self.struct_layouts.get(cls).cloned() else {
             return Ok(());
         };
+        // A mem-initializer must name a direct base, a member, or the class
+        // itself (delegating). Compare via canonical class names so an alias
+        // spelling still matches its specialization, but keep the raw name in
+        // the diagnostic.
+        for (init_name, _) in &func.ctor_initializers {
+            let canonical = self.canonical_class_name(init_name);
+            let is_delegating = canonical == cls || canonical == short_cls;
+            let is_base = layout.base_classes.contains(&canonical);
+            let is_field = layout.fields.iter().any(|f| f.name == *init_name);
+            if !is_delegating && !is_base && !is_field {
+                return Err(CompileError::new(
+                    format!(
+                        "mem-initializer '{}' does not name a base, member, or delegating constructor of '{}'",
+                        init_name, cls
+                    ),
+                    func.line,
+                    func.col,
+                ));
+            }
+        }
+        if has_delegating {
+            return Ok(());
+        }
         for base in &layout.base_classes {
-            let tys = arg_types_map.get(base).map_or(&[][..], |v| v.as_slice());
+            let tys = arg_types_map
+                .iter()
+                .find(|(k, _)| self.canonical_class_name(k) == *base)
+                .map(|(_, v)| v.as_slice())
+                .unwrap_or(&[]);
             if let Some(sig) = self.find_constructor_for(base, tys, None) {
                 self.instantiate_pending_method(&sig.mangled_name)?;
             }

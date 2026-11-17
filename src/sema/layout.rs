@@ -90,22 +90,6 @@ impl LayoutAccumulator {
 }
 
 impl Sema {
-    fn canonical_base(&self, name: &str) -> String {
-        if let Some(Type::Struct(s)) = self.lookup_type_alias(name) {
-            s
-        } else if let Some(Type::TemplateInstance { name: t, args }) = self.lookup_type_alias(name)
-        {
-            let args = args
-                .iter()
-                .map(|a| a.to_c_type())
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!("{}<{}>", t, args)
-        } else {
-            name.to_string()
-        }
-    }
-
     /// Computes field offsets, base-subobject offset, and vtable slot order.
     ///
     /// The parser permits at most one base class, so layout handles one base
@@ -118,7 +102,7 @@ impl Sema {
         let bases: Vec<String> = input
             .base_classes
             .iter()
-            .map(|b| self.canonical_base(b))
+            .map(|b| self.canonical_class_name(b))
             .collect();
         if let Some(align) = input.alignment {
             acc.max_align = acc.max_align.max(align);
