@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Pointer-to-Member Audit Remediation
+- Preserved and validated `override` and `final`: they now imply virtual, same-signature methods override without a keyword, and overriding a `final` method or using `override` with no base virtual is rejected.
+- Fixed invalid Wasm when synthesized constructors copied a base subobject containing 8-byte fields (`long long`/`double`); base subobjects are now copied bytewise.
+- Applied unambiguous, accessible-base checks and const-correctness at `.*`/`->*`, reusing the same inheritance path and access logic as base-to-derived member-pointer conversions.
+- Derived call result types from the callee type in codegen, so member-function pointers returning floating-point, pointers, references, `void`, and structures lower correctly.
+- Allowed converting `noexcept` member-function pointers to the potentially-throwing type, while rejecting the reverse.
+- Added regression tests for each finding and updated the pointer-to-member ABI documentation.
+
 ### Variadic Templates, Parameter Packs & std::tuple (C++11)
 - Added parameter packs across AST and parser: template type packs (`typename... Ts`, `class... Ts`), non-type parameter packs (`int... Ns`), template-template parameter packs (`template <template <typename...> class... Containers>`), and function parameter packs (`Ts... args`, `Ts...`).
 - Added pack expansion expressions (`expr...`) and type pack expansions across function call arguments, initializer lists, base class specifiers (`struct S : Bases...`), constructor member initializers (`: Bases(args)...`), template argument lists (`Tuple<Tail...>`, `f<Ts...>(args...)`), lambda captures (`[args...]`, `[&args...]`), and alignment specifiers (`alignas(Ts...)`).

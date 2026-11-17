@@ -94,6 +94,8 @@ Fold expressions over `.*` and `->*` are expanded during template substitution i
 
 ### Positive
 - Full support for ISO C++17 pointer-to-member operations, covering data members, non-virtual methods, virtual methods, multiple inheritance, base-to-derived conversions, and null comparisons.
+- Application (`.*`/`->*`) enforces const-correctness and rejects ambiguous or inaccessible base conversions; a `noexcept` member-function pointer converts to the throwing type but not the reverse.
+- Calls through member-function pointers yield the declared return type, including floating-point and struct results.
 - Flat `i64` member-function pointer representation fits into WebAssembly registers without linear memory allocations.
 - Offset -1 distinguishes null data-member pointers from member pointers at offset 0.
 - Direct integration with C++17 fold expressions across all four fold shapes.
