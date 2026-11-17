@@ -183,7 +183,7 @@ impl<'a> Codegen<'a> {
         vptr_offset: usize,
         slot: &crate::sema::VTableSlotInfo,
         plan: &Plan,
-    ) -> (u32, i32) {
+    ) -> (u32, i32, i32) {
         let trap_idx = plan.trap_func_idx.unwrap_or(0);
         if slot.is_deleting_dtor {
             let idx = self
@@ -191,8 +191,7 @@ impl<'a> Codegen<'a> {
                 .get(&format!("{}_deleting_dtor", class_name))
                 .copied()
                 .unwrap_or(trap_idx);
-            // The deleting destructor expects a pointer to the complete object.
-            return (idx, -(vptr_offset as i32));
+            return (idx, -(vptr_offset as i32), 0);
         }
         if slot.key.is_destructor() {
             let idx = self
@@ -200,19 +199,31 @@ impl<'a> Codegen<'a> {
                 .get(&format!("{}_~", class_name))
                 .copied()
                 .unwrap_or(trap_idx);
-            return (idx, -(vptr_offset as i32));
+            return (idx, -(vptr_offset as i32), 0);
         }
-        let (func_idx, overrider_offset) =
+        let base_ret =
+            crate::sema::find_sig(self.sema, owner, &slot.key).map(|sig| sig.return_type.clone());
+        let (func_idx, overrider_offset, ret_adjust) =
             match self.find_final_overrider(class_name, owner, vptr_offset, &slot.key) {
-                Some((cls, offset)) => (
-                    self.find_class_vmethod(&cls, &slot.key).unwrap_or(trap_idx),
-                    offset,
-                ),
-                None => (trap_idx, vptr_offset),
+                Some((cls, offset)) => {
+                    let derived_ret = crate::sema::find_sig(self.sema, &cls, &slot.key)
+                        .map(|sig| sig.return_type.clone());
+                    let adjust = match (&base_ret, &derived_ret) {
+                        (Some(b), Some(d)) => crate::sema::return_adjustment(b, d, self.sema),
+                        _ => 0,
+                    };
+                    (
+                        self.find_class_vmethod(&cls, &slot.key).unwrap_or(trap_idx),
+                        offset,
+                        adjust,
+                    )
+                }
+                None => (trap_idx, vptr_offset, 0),
             };
         (
             func_idx,
             (overrider_offset as i64 - vptr_offset as i64) as i32,
+            ret_adjust,
         )
     }
 
@@ -231,7 +242,7 @@ impl<'a> Codegen<'a> {
 
                 let mut vtable_bytes = Vec::new();
                 for slot in &table.slots {
-                    let (func_idx, adjustment) =
+                    let (func_idx, adjustment, ret_adjust) =
                         self.vtable_entry(name, &table.owner, table.vptr_offset, slot, plan);
 
                     let table_elem_idx = self.vtable_func_indices.len() as u32;
@@ -239,10 +250,11 @@ impl<'a> Codegen<'a> {
 
                     vtable_bytes.extend_from_slice(&table_elem_idx.to_le_bytes());
                     vtable_bytes.extend_from_slice(&adjustment.to_le_bytes());
+                    vtable_bytes.extend_from_slice(&ret_adjust.to_le_bytes());
                 }
 
                 self.module.data.push((vtable_addr, vtable_bytes));
-                self.next_data_offset += (table.slots.len() * 8) as u32;
+                self.next_data_offset += (table.slots.len() * 12) as u32;
             }
             self.vtable_offsets.insert(name.clone(), installs);
         }

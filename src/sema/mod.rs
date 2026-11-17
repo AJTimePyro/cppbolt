@@ -32,7 +32,9 @@ mod method_return_type;
 mod virtual_key;
 mod virtual_validate;
 pub(super) use lookup::MemberPointerBaseConversion;
-pub(crate) use virtual_key::{VirtualKey, find_sig, noexcept_compatible, return_compatible};
+pub(crate) use virtual_key::{
+    VirtualKey, find_sig, noexcept_compatible, return_adjustment, return_compatible,
+};
 mod member_pointer;
 #[cfg(test)]
 mod member_ptr_tests;

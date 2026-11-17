@@ -203,7 +203,7 @@ impl<'a> Codegen<'a> {
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.scratch2);
         code.push(OP_I32_CONST);
-        write_i32(code, (slot_idx * 8) as i32);
+        write_i32(code, (slot_idx * 12) as i32);
         code.push(OP_I32_ADD);
         code.push(OP_I32_LOAD);
         write_u32(code, 2);
@@ -222,7 +222,7 @@ impl<'a> Codegen<'a> {
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.scratch2);
         code.push(OP_I32_CONST);
-        write_i32(code, (slot_idx * 8 + 4) as i32);
+        write_i32(code, (slot_idx * 12 + 4) as i32);
         code.push(OP_I32_ADD);
         code.push(OP_I32_LOAD);
         write_u32(code, 2);

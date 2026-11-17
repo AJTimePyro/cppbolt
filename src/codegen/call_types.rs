@@ -31,6 +31,17 @@ pub(crate) fn wasm_params_from_types(params: &[Type]) -> Vec<u8> {
     params.iter().map(wasm_value_type).collect()
 }
 
+/// Applies an overrider's covariant-return adjustment to a returned
+/// pointer/reference value on the stack.
+pub(crate) fn emit_return_adjustment(adjust_slot: u32, ctx: &FunctionContext, code: &mut Vec<u8>) {
+    code.push(OP_LOCAL_GET);
+    write_u32(code, ctx.fp_local);
+    code.push(OP_I32_LOAD);
+    write_u32(code, 2);
+    write_u32(code, adjust_slot);
+    code.push(OP_I32_ADD);
+}
+
 /// The return type of a callable value: a function, a function pointer, a
 /// pointer to member function, or a bound member function.
 pub(crate) fn callee_return_type(callee_ty: &Type) -> Type {

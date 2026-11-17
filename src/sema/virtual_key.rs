@@ -114,14 +114,42 @@ pub(crate) fn noexcept_compatible(base: &FunctionSig, derived: &FunctionDecl) ->
 }
 
 /// Return types must match, or be a pointer/reference to a class derived from
-/// the base return class (C++ covariant returns).
+/// the base return class through an unambiguous, accessible path (C++17
+/// covariant returns). Pointee cv-qualification must be identical.
 pub(crate) fn return_compatible(base: &Type, derived: &Type, sema: &Sema) -> bool {
     if base == derived {
         return true;
     }
-    let (Type::Pointer(b), Type::Pointer(d)) = (base.strip_const(), derived.strip_const()) else {
-        return false;
+    let (b, d) = match (base.strip_const(), derived.strip_const()) {
+        (Type::Pointer(b), Type::Pointer(d)) | (Type::Reference(b), Type::Reference(d)) => (b, d),
+        _ => return false,
     };
+    // The derived class may be less cv-qualified than the base class, never
+    // more. The pointer/reference itself must have the same cv-qualification.
+    if d.is_const() && !b.is_const() {
+        return false;
+    }
     matches!((b.strip_const(), d.strip_const()),
-        (Type::Struct(bc), Type::Struct(dc)) if sema.is_subclass(dc, bc))
+        (Type::Struct(bc), Type::Struct(dc))
+            if sema.check_member_pointer_base_conversion(dc, bc)
+                == super::MemberPointerBaseConversion::Ok)
+}
+
+/// Byte adjustment converting an overrider's covariant return value into the
+/// static return type expected by the base interface.
+pub(crate) fn return_adjustment(base: &Type, derived: &Type, sema: &Sema) -> i32 {
+    if base == derived {
+        return 0;
+    }
+    let (b, d) = match (base.strip_const(), derived.strip_const()) {
+        (Type::Pointer(b), Type::Pointer(d)) | (Type::Reference(b), Type::Reference(d)) => (b, d),
+        _ => return 0,
+    };
+    match (b.strip_const(), d.strip_const()) {
+        (Type::Struct(bc), Type::Struct(dc)) => {
+            let off = sema.base_subobject_offset(dc, bc).unwrap_or(0);
+            off as i32
+        }
+        _ => 0,
+    }
 }

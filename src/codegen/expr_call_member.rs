@@ -1,6 +1,6 @@
 //! Lowering of member calls: `object.member(...)` and `ptr->member(...)`.
 
-use super::call_types::{wasm_params_from_types, wasm_result_types};
+use super::call_types::{emit_return_adjustment, wasm_params_from_types, wasm_result_types};
 use super::*;
 use crate::sema::VirtualKey;
 
@@ -25,6 +25,7 @@ struct VTableDispatch {
     slot_idx: usize,
     this_slot: u32,
     fn_slot: u32,
+    ret_adjust_slot: u32,
 }
 
 impl<'a> Codegen<'a> {
@@ -51,6 +52,7 @@ impl<'a> Codegen<'a> {
 
         let this_slot = ctx.alloc_frame(4, 4)?;
         let fn_slot = ctx.alloc_frame(4, 4)?;
+        let ret_adjust_slot = ctx.alloc_frame(4, 4)?;
 
         // Evaluate the object once and keep its address in a frame slot;
         // argument evaluation may clobber the scratch locals.
@@ -93,6 +95,7 @@ impl<'a> Codegen<'a> {
             vptr_offset: 0,
             this_slot,
             fn_slot,
+            ret_adjust_slot,
         };
 
         if let Some((slot_idx, vptr_offset)) = virtual_slot {
@@ -271,6 +274,7 @@ impl<'a> Codegen<'a> {
             vptr_offset,
             this_slot,
             fn_slot,
+            ret_adjust_slot,
             ..
         } = site;
         // Virtual dispatch via the vtable of this slot's owning subobject.
@@ -280,6 +284,7 @@ impl<'a> Codegen<'a> {
                 slot_idx,
                 this_slot,
                 fn_slot,
+                ret_adjust_slot,
             },
             ctx,
             code,
@@ -307,6 +312,12 @@ impl<'a> Codegen<'a> {
         code.push(OP_CALL_INDIRECT);
         write_u32(code, type_idx);
         code.push(0);
+        if matches!(
+            sig.return_type.strip_const(),
+            Type::Pointer(_) | Type::Reference(_)
+        ) {
+            emit_return_adjustment(ret_adjust_slot, ctx, code);
+        }
         self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
         Ok(())
     }
@@ -350,6 +361,7 @@ impl<'a> Codegen<'a> {
             slot_idx,
             this_slot,
             fn_slot,
+            ret_adjust_slot,
         } = site;
         // scratch2 holds the vtable base address.
         code.push(OP_LOCAL_GET);
@@ -373,7 +385,7 @@ impl<'a> Codegen<'a> {
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.scratch2);
         code.push(OP_I32_CONST);
-        write_i32(code, (slot_idx * 8) as i32);
+        write_i32(code, (slot_idx * 12) as i32);
         code.push(OP_I32_ADD);
         code.push(OP_I32_LOAD);
         write_u32(code, 2);
@@ -395,7 +407,7 @@ impl<'a> Codegen<'a> {
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.scratch2);
         code.push(OP_I32_CONST);
-        write_i32(code, (slot_idx * 8 + 4) as i32);
+        write_i32(code, (slot_idx * 12 + 4) as i32);
         code.push(OP_I32_ADD);
         code.push(OP_I32_LOAD);
         write_u32(code, 2);
@@ -410,6 +422,20 @@ impl<'a> Codegen<'a> {
         code.push(OP_I32_STORE);
         write_u32(code, 2);
         write_u32(code, this_slot);
+        // Load the covariant-return adjustment for after the call.
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch2);
+        code.push(OP_I32_CONST);
+        write_i32(code, (slot_idx * 12 + 8) as i32);
+        code.push(OP_I32_ADD);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, 0);
+        code.push(OP_I32_STORE);
+        write_u32(code, 2);
+        write_u32(code, ret_adjust_slot);
         Ok(())
     }
 

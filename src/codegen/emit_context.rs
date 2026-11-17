@@ -35,6 +35,7 @@ pub(super) struct CallSite<'e> {
     pub(super) vptr_offset: u32,
     pub(super) this_slot: u32,
     pub(super) fn_slot: u32,
+    pub(super) ret_adjust_slot: u32,
 }
 
 /// A local array declaration being lowered.
@@ -108,6 +109,7 @@ pub(super) struct PmfReceiver<'a> {
 pub(super) struct PmfInvokeSite<'a> {
     pub(super) this_slot: u32,
     pub(super) fn_slot: u32,
+    pub(super) ret_adjust_slot: u32,
     pub(super) args: &'a [Expr],
     pub(super) param_types: &'a [Type],
     pub(super) ret_ty: &'a Type,

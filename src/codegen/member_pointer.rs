@@ -220,6 +220,7 @@ impl<'a> Codegen<'a> {
 
         let this_slot = ctx.alloc_frame(4, 4)?;
         let fn_slot = ctx.alloc_frame(4, 4)?;
+        let ret_adjust_slot = ctx.alloc_frame(4, 4)?;
 
         self.emit_pmf_receiver(
             PmfReceiver {
@@ -231,11 +232,12 @@ impl<'a> Codegen<'a> {
             ctx,
             code,
         )?;
-        self.emit_pmf_target(right, this_slot, fn_slot, ctx, code)?;
+        self.emit_pmf_target(right, this_slot, fn_slot, ret_adjust_slot, ctx, code)?;
         self.emit_pmf_invocation(
             PmfInvokeSite {
                 this_slot,
                 fn_slot,
+                ret_adjust_slot,
                 args,
                 param_types: &param_types,
                 ret_ty: &ret_ty,
@@ -279,6 +281,7 @@ impl<'a> Codegen<'a> {
         right: &Expr,
         this_slot: u32,
         fn_slot: u32,
+        ret_adjust_slot: u32,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
@@ -304,7 +307,7 @@ impl<'a> Codegen<'a> {
         write_u32(code, 2);
         write_u32(code, this_slot);
 
-        self.emit_pmf_resolve_fn_slot(this_slot, fn_slot, ctx, code);
+        self.emit_pmf_resolve_fn_slot(this_slot, fn_slot, ret_adjust_slot, ctx, code);
         Ok(())
     }
     /// Pushes the address of the current PMF's 8-byte vtable entry. The vptr
@@ -314,7 +317,7 @@ impl<'a> Codegen<'a> {
         write_u32(code, ctx.scratch2);
         Self::emit_pmf_slot_index(ctx, code);
         code.push(OP_I32_CONST);
-        write_i32(code, 8);
+        write_i32(code, 12);
         code.push(OP_I32_MUL);
         code.push(OP_I32_ADD);
     }
@@ -332,6 +335,7 @@ impl<'a> Codegen<'a> {
         &mut self,
         this_slot: u32,
         fn_slot: u32,
+        ret_adjust_slot: u32,
         ctx: &FunctionContext,
         code: &mut Vec<u8>,
     ) {
@@ -346,7 +350,7 @@ impl<'a> Codegen<'a> {
         code.push(OP_I32_AND);
         code.push(OP_IF);
         code.push(TYPE_I32);
-        self.emit_pmf_virtual_entry(this_slot, ctx, code);
+        self.emit_pmf_virtual_entry(this_slot, ret_adjust_slot, ctx, code);
         code.push(OP_ELSE);
         Self::emit_pmf_slot_index(ctx, code);
         code.push(OP_END);
@@ -360,6 +364,7 @@ impl<'a> Codegen<'a> {
     fn emit_pmf_virtual_entry(
         &mut self,
         this_slot: u32,
+        ret_adjust_slot: u32,
         ctx: &FunctionContext,
         code: &mut Vec<u8>,
     ) {
@@ -402,6 +407,19 @@ impl<'a> Codegen<'a> {
         code.push(OP_I32_STORE);
         write_u32(code, 2);
         write_u32(code, this_slot);
+        // entry[2]: covariant-return adjustment for after the call.
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        Self::emit_pmf_entry_address(ctx, code);
+        code.push(OP_I32_CONST);
+        write_i32(code, 8);
+        code.push(OP_I32_ADD);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, 0);
+        code.push(OP_I32_STORE);
+        write_u32(code, 2);
+        write_u32(code, ret_adjust_slot);
     }
 
     fn emit_pmf_invocation(
@@ -413,6 +431,7 @@ impl<'a> Codegen<'a> {
         let PmfInvokeSite {
             this_slot,
             fn_slot,
+            ret_adjust_slot,
             args,
             param_types,
             ret_ty,
@@ -453,6 +472,9 @@ impl<'a> Codegen<'a> {
         code.push(OP_CALL_INDIRECT);
         write_u32(code, type_idx);
         code.push(0);
+        if matches!(ret_ty.strip_const(), Type::Pointer(_) | Type::Reference(_)) {
+            call_types::emit_return_adjustment(ret_adjust_slot, ctx, code);
+        }
 
         self.register_returned_struct_temp(ret_ty, ctx, code)?;
         Ok(())
