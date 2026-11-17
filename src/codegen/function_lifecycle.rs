@@ -99,7 +99,7 @@ impl<'a> Codegen<'a> {
         let Some(layout) = self.sema.struct_layouts.get(cls) else {
             return Ok(());
         };
-        for (base_name, base_offset) in &layout.base_offsets {
+        for (base_name, base_offset) in &layout.direct_base_offsets {
             let base_args = f
                 .ctor_initializers
                 .iter()
@@ -514,7 +514,7 @@ impl<'a> Codegen<'a> {
         let Some(layout) = self.sema.struct_layouts.get(cls) else {
             return;
         };
-        for (base_name, base_offset) in layout.base_offsets.iter().rev() {
+        for (base_name, base_offset) in layout.direct_base_offsets.iter().rev() {
             let base_dtor = format!("{}_~{}", base_name, base_name);
             if let Some(&b_idx) = self.func_indices.get(&base_dtor) {
                 code.push(OP_LOCAL_GET);

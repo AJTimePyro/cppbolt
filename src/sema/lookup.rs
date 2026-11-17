@@ -374,6 +374,7 @@ mod tests {
             base_classes,
             base_access: Vec::new(),
             base_offsets: Vec::new(),
+            direct_base_offsets: Vec::new(),
             fields: Vec::new(),
             size: 4,
             align: 4,

@@ -254,6 +254,8 @@ cxx17/fold_overloaded_op
 cxx17/fold_unary_left
 cxx17/fold_unary_right
 cxx17/inheritance_eight_byte_fields
+cxx17/lifecycle_direct_bases
+cxx17/lifecycle_four_levels
 cxx17/param_alias_cv
 cxx17/param_array_adjust
 cxx17/param_top_level_cv

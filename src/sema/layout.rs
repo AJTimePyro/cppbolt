@@ -55,6 +55,7 @@ struct LayoutAccumulator {
     max_align: usize,
     struct_fields: Vec<StructField>,
     base_offsets: Vec<(String, usize)>,
+    direct_base_offsets: Vec<(String, usize)>,
     vtable_slots: Vec<VirtualKey>,
 }
 
@@ -65,6 +66,7 @@ impl LayoutAccumulator {
             max_align: 1,
             struct_fields: Vec::new(),
             base_offsets: Vec::new(),
+            direct_base_offsets: Vec::new(),
             vtable_slots: Vec::new(),
         }
     }
@@ -171,6 +173,7 @@ impl Sema {
             base_classes: input.base_classes.to_vec(),
             base_access: input.base_access.to_vec(),
             base_offsets: acc.base_offsets,
+            direct_base_offsets: acc.direct_base_offsets,
             fields: acc.struct_fields,
             size: acc.offset,
             align: acc.max_align,
@@ -340,6 +343,8 @@ impl Sema {
                     base_offset
                 };
             acc.max_align = acc.max_align.max(base_layout.align);
+            acc.direct_base_offsets
+                .push((base_name.clone(), base_offset));
             acc.base_offsets.push((base_name.clone(), base_offset));
             for (sub_b, sub_off) in &base_layout.base_offsets {
                 acc.base_offsets

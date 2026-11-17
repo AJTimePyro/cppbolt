@@ -111,6 +111,9 @@ pub struct StructLayout {
     pub base_classes: Vec<String>,
     pub base_access: Vec<crate::ast::BaseAccess>,
     pub base_offsets: Vec<(String, usize)>,
+    /// Direct non-virtual bases in declaration order (virtual bases are
+    /// unsupported), with their offsets in this class.
+    pub direct_base_offsets: Vec<(String, usize)>,
     pub fields: Vec<StructField>,
     pub size: usize,
     pub align: usize,
