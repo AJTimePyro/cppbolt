@@ -251,19 +251,53 @@ impl Sema {
 
         let obj_class_canonical = self.resolve_alias_in_qualified_name(&obj_class);
         let target_class_canonical = self.resolve_alias_in_qualified_name(target_class);
-        if !self.is_subclass(&obj_class_canonical, &target_class_canonical) {
-            return Err(CompileError::new(
-                format!(
-                    "pointer-to-member of type '{}' is incompatible with object of type '{}'",
-                    rty.to_c_type(),
-                    obj_class
-                ),
-                pos.line,
-                pos.col,
-            ));
+        // Application converts the receiver to the member's class, so the same
+        // unambiguous/accessible base rules as Base::* -> Derived::* apply.
+        match self
+            .check_member_pointer_base_conversion(&obj_class_canonical, &target_class_canonical)
+        {
+            super::MemberPointerBaseConversion::Ok => {}
+            super::MemberPointerBaseConversion::Unrelated => {
+                return Err(CompileError::new(
+                    format!(
+                        "pointer-to-member of type '{}' is incompatible with object of type '{}'",
+                        rty.to_c_type(),
+                        obj_class
+                    ),
+                    pos.line,
+                    pos.col,
+                ));
+            }
+            super::MemberPointerBaseConversion::Ambiguous => {
+                return Err(CompileError::new(
+                    format!(
+                        "base '{}' is ambiguous in object of type '{}'",
+                        target_class, obj_class
+                    ),
+                    pos.line,
+                    pos.col,
+                ));
+            }
+            super::MemberPointerBaseConversion::Inaccessible => {
+                return Err(CompileError::new(
+                    format!(
+                        "base '{}' is inaccessible in object of type '{}'",
+                        target_class, obj_class
+                    ),
+                    pos.line,
+                    pos.col,
+                ));
+            }
         }
 
-        if matches!(member_type.strip_const(), Type::Function { .. }) {
+        if let Type::Function { qualifiers, .. } = member_type.strip_const() {
+            if is_const_obj && !qualifiers.is_const {
+                return Err(CompileError::new(
+                    "cannot apply a non-const member function pointer to a const object",
+                    pos.line,
+                    pos.col,
+                ));
+            }
             return Ok(Type::BoundMemberFunction {
                 class_name: target_class.clone(),
                 member_type: member_type.clone(),

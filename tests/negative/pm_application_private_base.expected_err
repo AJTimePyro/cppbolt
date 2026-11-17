@@ -1,0 +1,1 @@
+tests/negative/pm_application_private_base.cpp:6:12: error: base 'A' is inaccessible in object of type 'D'
