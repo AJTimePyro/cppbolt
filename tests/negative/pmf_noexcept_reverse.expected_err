@@ -1,0 +1,1 @@
+tests/negative/pmf_noexcept_reverse.cpp:7:5: error: cannot initialize variable 'pne' of type int (S::*)() noexcept with int (S::*)()

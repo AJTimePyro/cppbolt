@@ -256,6 +256,7 @@ cxx17/pmd_constexpr
 cxx17/pmd_null_zero
 cxx17/pmf_fields_and_functions
 cxx17/pmf_multiple_inheritance
+cxx17/pmf_noexcept_conversion
 cxx17/pmf_nttp
 cxx17/pmf_nttp_null
 cxx17/pmf_qualifiers

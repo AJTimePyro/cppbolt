@@ -45,6 +45,33 @@ fn first_overload(overloads: &[FunctionSig]) -> &FunctionSig {
         .unwrap_or(&overloads[0])
 }
 
+/// C++17 permits converting a pointer to a `noexcept` member function to the
+/// corresponding potentially-throwing type, but never the reverse. Other than
+/// that exception the function types must match exactly.
+fn function_type_compatible(target: &Type, value: &Type) -> bool {
+    let (
+        Type::Function {
+            return_type: tr,
+            param_types: tp,
+            qualifiers: tq,
+        },
+        Type::Function {
+            return_type: vr,
+            param_types: vp,
+            qualifiers: vq,
+        },
+    ) = (target.strip_const(), value.strip_const())
+    else {
+        return target == value;
+    };
+    tr == vr
+        && tp == vp
+        && tq.is_const == vq.is_const
+        && tq.is_volatile == vq.is_volatile
+        && tq.ref_qualifier == vq.ref_qualifier
+        && (!tq.is_noexcept || vq.is_noexcept)
+}
+
 impl Sema {
     /// Picks the overload whose member-pointer type matches the type expected
     /// at this site. Falls back to the first overload when no target type is
@@ -80,7 +107,7 @@ impl Sema {
                     class_name: sig_class,
                     member_type: sig_fn,
                 } = member_pointer_type(class_name, sig)
-                    && *sig_fn == *expected_fn
+                    && function_type_compatible(expected_fn, &sig_fn)
                     && matches!(
                         self.check_member_pointer_base_conversion(expected_class, &sig_class),
                         super::MemberPointerBaseConversion::Ok
@@ -339,7 +366,11 @@ impl Sema {
         else {
             return false;
         };
-        if target_mty != val_mty
+        let functions_compatible = matches!(target_mty.strip_const(), Type::Function { .. })
+            && matches!(val_mty.strip_const(), Type::Function { .. })
+            && function_type_compatible(target_mty, val_mty);
+        if !functions_compatible
+            && target_mty != val_mty
             && (target_mty.strip_const() != val_mty.strip_const()
                 || (!target_mty.is_const() && val_mty.is_const()))
         {
