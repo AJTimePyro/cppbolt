@@ -59,18 +59,11 @@ impl<'a> Codegen<'a> {
             _ => false,
         }
     }
-    fn emit_reference_cast_adjustment(
-        &self,
-        target_type: &Type,
-        expr: &Expr,
-        ctx: &FunctionContext,
-        code: &mut Vec<u8>,
-    ) -> Result<(), CompileError> {
-        let aty = self.get_expr_type(expr, ctx);
-        if let (Some(clean_target), Some(clean_src)) =
-            (target_type.deref_type(), aty.deref_type().or(Some(&aty)))
-            && let (Type::Struct(s_target), Type::Struct(s_src)) =
-                (clean_target.strip_const(), clean_src.strip_const())
+    /// Adjusts an address already on the stack from `source` to `target`,
+    /// which must be one of its base subobjects.
+    pub(super) fn emit_base_adjustment(&self, target: &Type, source: &Type, code: &mut Vec<u8>) {
+        if let (Type::Struct(s_target), Type::Struct(s_src)) =
+            (target.strip_const(), source.strip_const())
         {
             if let Some(offset) = self.sema.base_subobject_offset(s_src, s_target)
                 && offset != 0
@@ -85,6 +78,21 @@ impl<'a> Codegen<'a> {
                 write_i32(code, offset as i32);
                 code.push(OP_I32_SUB);
             }
+        }
+    }
+
+    fn emit_reference_cast_adjustment(
+        &self,
+        target_type: &Type,
+        expr: &Expr,
+        ctx: &FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        let aty = self.get_expr_type(expr, ctx);
+        if let (Some(clean_target), Some(clean_src)) =
+            (target_type.deref_type(), aty.deref_type().or(Some(&aty)))
+        {
+            self.emit_base_adjustment(clean_target, clean_src, code);
         }
         Ok(())
     }

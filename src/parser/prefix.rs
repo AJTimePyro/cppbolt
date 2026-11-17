@@ -148,6 +148,7 @@ impl Parser {
     }
 
     fn parse_static_cast_expr(&mut self) -> Result<Expr, CompileError> {
+        let start = self.current_pos();
         self.advance();
         self.expect(TokenKind::Lt)?;
         let target_type = self.parse_type()?;
@@ -155,14 +156,16 @@ impl Parser {
         self.expect(TokenKind::LParen)?;
         let expr = self.parse_expr()?;
         self.expect(TokenKind::RParen)?;
-        Ok(Expr::Cast {
+        let cast = Expr::Cast {
             kind: CastKind::Static,
             target_type,
             expr: Box::new(expr),
-        })
+        };
+        self.parse_postfix(cast, start)
     }
 
     fn parse_reinterpret_cast_expr(&mut self) -> Result<Expr, CompileError> {
+        let start = self.current_pos();
         self.advance();
         self.expect(TokenKind::Lt)?;
         let target_type = self.parse_type()?;
@@ -170,11 +173,12 @@ impl Parser {
         self.expect(TokenKind::LParen)?;
         let expr = self.parse_expr()?;
         self.expect(TokenKind::RParen)?;
-        Ok(Expr::Cast {
+        let cast = Expr::Cast {
             kind: CastKind::Reinterpret,
             target_type,
             expr: Box::new(expr),
-        })
+        };
+        self.parse_postfix(cast, start)
     }
 
     fn parse_sizeof_expr(&mut self) -> Result<Expr, CompileError> {
