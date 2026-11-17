@@ -63,9 +63,11 @@ Data-member pointers represent a byte offset into the struct layout and lower to
 Member-function pointers pack `{ ptr: u32, adj: u32 }` into a WebAssembly `i64` value `(adj << 32) | (ptr & 0xFFFFFFFF)`:
 - `ptr` (low 32 bits):
   - Bit 0 = 0: Non-virtual function. The WebAssembly function table index is `ptr >> 1`.
-  - Bit 0 = 1: Virtual function. The vtable slot index is `ptr >> 1`.
+  - Bit 0 = 1: Virtual function. The vtable slot index is `ptr >> 1`, looked up in the vptr of the subobject that declares the method (`adj` carries that subobject's offset within the pointer's class).
 - `adj` (high 32 bits): Signed byte adjustment added to the `this` pointer before dispatch to navigate multiple inheritance subobjects.
 - Null representation: `0i64` (`ptr == 0 && adj == 0`). Comparisons against null check `eqz` or `ne` against `0i64`.
+
+Under multiple inheritance a polymorphic class has one vptr per polymorphic base subobject, not a single vptr at offset zero. Each vtable entry is eight bytes: a function-table index followed by a signed `this` adjustment that converts the caller's subobject pointer into the one the final overrider expects. This keeps ordinary virtual calls and member-pointer virtual calls on the same dispatch path.
 
 ### 4. Member-Function Call Lowering
 The compiler lowers `(obj.*pmf)(args...)` and `(ptr->*pmf)(args...)` in `src/codegen/member_pointer.rs`:
@@ -79,7 +81,7 @@ The compiler lowers `(obj.*pmf)(args...)` and `(ptr->*pmf)(args...)` in `src/cod
 5. Loads `this_slot` as the first argument, compiles remaining call arguments, loads `fn_slot`, and emits `call_indirect`.
 
 ### 5. Base-to-Derived Conversions (`src/sema/assign.rs`, `src/codegen/memory.rs`)
-ISO C++17 [conv.mem] permits implicit conversion from `Base::*` to `Derived::*` when `Derived` is an unambiguous, accessible derived class of `Base`. The direction is inverted compared to object pointers: a member pointer expecting `Base` can safely operate on a `Derived` instance, but not vice versa.
+ISO C++17 [conv.mem] permits implicit conversion from `Base::*` to `Derived::*` when `Derived` is an unambiguous, accessible derived class of `Base`. The direction is inverted compared to object pointers: a member pointer expecting `Base` can safely operate on a `Derived` instance, but not vice versa. Ambiguous bases (multiple paths to the same base) and inaccessible (private/protected) bases are rejected during semantic analysis.
 
 The compiler handles this in `src/codegen/memory.rs`:
 - Data-member pointers: when non-null (`val != -1`), the conversion adds `base_subobject_offset(Derived, Base)` to the data-member offset. Null values remain `-1`.
