@@ -1,22 +1,22 @@
-# ADR 0010: Template Instantiation Model and Single-Phase Lookup
+# ADR 0010: Template Instantiation Model and Two-Phase Lookup
 
 ## Status
 Accepted
 
 ## Context
-Compiling templated standard library headers like `<vector>`, `<utility>`, and `<algorithm>` requires supporting class and function templates with type parameters (`stdlib/vector`, `stdlib/utility`, `stdlib/algorithm`, `src/ast/template.rs`, `src/sema/template_registry.rs`). Standard C++ specifies two-phase lookup: non-dependent names bind at definition time, and dependent names bind at instantiation time. Implementing two-phase lookup in `cppbolt` would require duplicate symbol tables and separate typing passes for uninstantiated ASTs before concrete types exist. In addition, real-world headers require out-of-class member method definitions, member function templates within both class templates and plain structs, dependent member type aliases, and multi-arity overload sets.
+Compiling templated standard library headers like `<vector>`, `<utility>`, and `<algorithm>` requires class and function templates with type parameters (`stdlib/vector`, `stdlib/utility`, `stdlib/algorithm`, `src/ast/template.rs`, `src/sema/template_registry.rs`). Standard C++ uses two-phase lookup: unqualified names bind in the definition context, and dependent calls add ADL candidates at instantiation. Real headers also need out-of-class member method definitions, member function templates inside class templates and plain structs, dependent member type aliases, and multi-arity overload sets.
 
 ## Options Considered
 - Option 1: Two-phase lookup conforming to ISO C++.
-  - Rejects invalid non-dependent symbols in uninstantiated templates early.
-  - Requires separate symbol resolution and typing passes over uninstantiated AST structures, adding substantial parser and semantic analysis complexity.
+  - Keeps definition-time bindings stable when later declarations would otherwise win overload resolution.
+  - Lets dependent calls find functions in the associated namespaces of their instantiated arguments.
+  - Adds a definition-time snapshot of visible overloads and an ADL candidate pass to the existing instantiation path.
 - Option 2: Single-phase lookup at instantiation time.
-  - Fits the existing compiler pipeline; the parser stores uninstantiated template declarations (`TemplateDecl`), and semantic analysis checks and lowers AST nodes when concrete types are supplied.
-  - Malformed non-dependent code in uninstantiated templates remains undetected unless instantiated.
+  - Fits the existing pipeline with no extra state, but a declaration later in the file can rebind a name in an earlier template.
 
 ## Decision
-1. Single-phase name lookup (`src/ast/template.rs`, `src/sema/template_registry.rs`).
-   We store template declarations directly in `Program` as `TemplateDecl` nodes without early name binding (`src/ast/template.rs`). We validate and resolve types only when a concrete specialization is requested (`src/sema/template_registry.rs`).
+1. Two-phase name lookup (`src/ast/template.rs`, `src/sema/analyze.rs`, `src/sema/overload.rs`).
+   `Program` stores template declarations as `TemplateDecl` nodes. When we register declarations, we record the overloads visible at each function template's definition, keyed by name, line and column. While we re-analyze a substituted template body or signature, ordinary unqualified lookup only sees that recorded set. A declaration that appears later in the file cannot rebind the name. Dependent calls also collect ADL candidates from the instantiated argument types and merge them with the ordinary set. We resolve types when a concrete specialization is requested (`src/sema/template_registry.rs`).
 
 2. Canonical specialization identity (`src/sema/template_registry.rs`).
    We name each specialization using its template name and canonical argument types (such as `Holder<int>` or `std::vector<int>`). We cache instantiated struct and function declarations in `Sema` so identical specializations reuse the same generated definitions. Only completed specializations enter the cache: a specialization still being built lives on the instantiation stack, and a failed one restores the state it wrote so a later request can retry it (`src/sema/template_state.rs`).
@@ -58,3 +58,5 @@ Compiling templated standard library headers like `<vector>`, `<utility>`, and `
 
 ### Negative / Trade-offs
 - Ill-formed non-dependent expressions in uninstantiated template bodies do not trigger compile errors unless an instantiation requests them.
+- The definition-time snapshot tracks overloads but not friend declarations introduced after a template definition.
+- Hidden friends declared in a class template are not associated with a concrete specialization, so ADL does not find them.

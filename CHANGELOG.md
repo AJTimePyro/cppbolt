@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Two-Phase Lookup and ADL (C++17)
+- Ordinary lookup inside a function template now uses the overloads visible at the template's definition. A function declared later in the file can no longer rebind a name in that template.
+- Dependent unqualified calls collect ADL candidates from the associated namespaces and classes of the instantiated arguments, and merge them with ordinary candidates. Associated entities include base classes, template type arguments, pointers, references and arrays. Qualified calls do not use ADL.
+- Friend functions defined inside a class are parsed and registered for ADL through that class. Ordinary unqualified lookup cannot find them.
+- Dependent calls in trailing return types, `decltype` and `void_t` detection continue to use substitution failures for invalid immediate-context calls while nested template instantiation errors stay hard.
+
 ### Standard Library (C++17)
 - Added C++17 SFINAE library traits: `std::enable_if`/`enable_if_t`, `std::void_t`, `std::declval`, and `std::is_integral`/`is_integral_v` in `<type_traits>` and `<utility>`. They reuse the compiler's substitution-failure machinery instead of special-casing names. Supporting changes fold static const data members and variable template specializations into non-type arguments, expand alias templates when checking partial-specialization patterns, parse unnamed template parameters and variable templates, treat `volatile` as a type-start qualifier, and keep both constant maps in instantiation snapshots so rejected candidates leave no state behind. Fixed base-class constant aliasing so a derived trait's own value shadows the inherited one.
 
