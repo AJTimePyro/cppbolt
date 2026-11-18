@@ -57,7 +57,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Extended dead-code elimination traversal in `src/codegen/analysis.rs` over `InitializerList`, `TypedInitList`, and `PackExpansion`, ensuring functions called in standard swallow idioms (`(f(args), 0)...`) remain reachable.
 - Removed non-standard `func(args)...;` statement extension, strictly enforcing standard C++11 pack expansion contexts.
 - Updated embedded `<memory>` with variadic `std::make_unique<T>(Args&&... args)`.
-- Updated embedded `<utility>` with `std::integer_sequence`, `std::index_sequence`, and `std::make_index_sequence`.
 - Added `<tuple>` header providing `std::tuple`, recursive base-indexed element storage, `std::make_tuple`, and `std::get<I>(tuple)` supporting up to 17 elements (indices 0..16).
 - Fixed explicit function-template argument pack deduction when explicit arguments are provided (`foo<int, int>(1, 2)`), preventing duplicate argument deduction and signature-arity mismatch in WebAssembly call emission.
 - Implemented alias template parameter pack expansion (`template <typename... Ts> using Alias = Target<Ts...>;`), grouping trailing arguments into `TemplateArg::TypePack`.

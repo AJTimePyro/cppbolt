@@ -45,7 +45,6 @@ Standard containers and utilities such as `std::tuple`, variadic `std::make_uniq
 
 8. Embedded standard library headers (`stdlib/`).
    - `<memory>`: Implements variadic `std::make_unique<T>(Args&&... args)` forwarding arguments directly to the target constructor.
-   - `<utility>`: Implements compile-time integer index sequences (`std::integer_sequence`, `std::index_sequence`).
    - `<tuple>`: Implements `std::tuple` using recursive base class inheritance, `std::make_tuple`, and `std::get<I>(tuple)` supporting up to 17 elements (indices 0..16) without runtime overhead.
 
 ## Consequences
