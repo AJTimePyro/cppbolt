@@ -132,7 +132,7 @@ impl Sema {
                     // layout before this class can inherit its vptr and slots.
                     for base in base_classes.clone() {
                         let canonical = self.canonical_class_name(&base, Some(name));
-                        self.ensure_class_instantiated(&canonical, *line, *col);
+                        let _ = self.ensure_class_instantiated(&canonical, *line, *col);
                     }
                     self.compute_struct_layout(RecordLayout {
                         name: name.as_str(),

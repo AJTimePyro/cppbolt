@@ -5,7 +5,7 @@ use super::template_deduce::{parse_types_list_with_params, split_template_call_n
 use super::*;
 use crate::ast::template::{TemplateClass, TemplateParam};
 use crate::ast::types::Type;
-use crate::diagnostics::CompileError;
+use crate::diagnostics::{CompileError, ErrorKind};
 use crate::name::QualifiedName;
 use std::collections::HashMap;
 
@@ -15,6 +15,131 @@ type MatchedPartial = (TemplateClass, HashMap<String, TemplateArg>);
 pub struct PartialSpec {
     pub pattern_args: Vec<Type>,
     pub template_class: TemplateClass,
+    /// Params must all be deduced for a candidate to be viable. A param used
+    /// only in a non-deduced context cannot be bound and makes the
+    /// specialization unusable, as in C++.
+    pub params: Vec<TemplateParam>,
+}
+
+fn pattern_has_decltype(ty: &Type) -> bool {
+    match ty {
+        Type::Decltype { .. } => true,
+        Type::Const(inner)
+        | Type::Pointer(inner)
+        | Type::Reference(inner)
+        | Type::RvalueReference(inner)
+        | Type::PackExpansion(inner) => pattern_has_decltype(inner),
+        Type::TemplateInstance { args, .. } => args.iter().any(pattern_has_decltype),
+        _ => false,
+    }
+}
+
+/// Confirms a pattern against a concrete argument after deduction. Only
+/// `decltype` nodes need work: they are non-deduced contexts, so substitute the
+/// bindings, resolve them, and compare the result. Everything else was already
+/// checked structurally by `match_pattern_arg`.
+fn confirm_resolved_pattern(
+    pattern: &Type,
+    concrete: &Type,
+    bindings: &HashMap<String, TemplateArg>,
+    sema: &mut Sema,
+    pos: (usize, usize),
+) -> Result<bool, CompileError> {
+    match pattern {
+        Type::Decltype {
+            expr,
+            parenthesized,
+        } => {
+            let original = Type::Decltype {
+                expr: expr.clone(),
+                parenthesized: *parenthesized,
+            };
+            let mut substituted =
+                super::template_subst::substitute_type(&original, bindings, None)?;
+            super::template_subst_func::mark_dependent_nested(
+                &original,
+                &mut substituted,
+                bindings,
+            );
+            // `resolve_decltype_type` analyzes the operand on its own clone and
+            // never mutates `sema`, so no extra probe copy is needed here.
+            let Type::Decltype {
+                expr: resolved_expr,
+                parenthesized,
+            } = &substituted
+            else {
+                return Ok(false);
+            };
+            match sema.resolve_decltype_type(resolved_expr, *parenthesized, pos.0, pos.1) {
+                Ok(resolved) => Ok(&resolved == concrete),
+                Err(error) => {
+                    if error.kind == ErrorKind::Substitution {
+                        Ok(false)
+                    } else {
+                        Err(error)
+                    }
+                }
+            }
+        }
+        Type::TemplateInstance {
+            name: p_name,
+            args: p_args,
+        } => {
+            let c_args: Vec<Type> = match concrete {
+                Type::TemplateInstance { name, args } => {
+                    if !QualifiedName::new(p_name).matches(QualifiedName::new(name)) {
+                        return Ok(false);
+                    }
+                    args.clone()
+                }
+                Type::Struct(sname) => {
+                    let Some((base, args_str)) = split_template_call_name(sname) else {
+                        return Ok(false);
+                    };
+                    if !QualifiedName::new(p_name).matches(QualifiedName::new(base)) {
+                        return Ok(false);
+                    }
+                    let Ok(args) = super::template_deduce::parse_types_list(
+                        args_str,
+                        std::slice::from_ref(p_name),
+                    ) else {
+                        return Ok(false);
+                    };
+                    args
+                }
+                _ => return Ok(false),
+            };
+            let fixed = p_args.len().saturating_sub(usize::from(
+                p_args
+                    .last()
+                    .is_some_and(|a| matches!(a, Type::PackExpansion(_))),
+            ));
+            for (p, c) in p_args[..fixed].iter().zip(c_args.iter()) {
+                if !confirm_resolved_pattern(p, c, bindings, sema, pos)? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        }
+        Type::Const(p) => match concrete {
+            Type::Const(c) => confirm_resolved_pattern(p, c, bindings, sema, pos),
+            _ => Ok(false),
+        },
+        Type::Pointer(p) => match concrete {
+            Type::Pointer(c) => confirm_resolved_pattern(p, c, bindings, sema, pos),
+            _ => Ok(false),
+        },
+        Type::Reference(p) => match concrete {
+            Type::Reference(c) => confirm_resolved_pattern(p, c, bindings, sema, pos),
+            _ => Ok(false),
+        },
+        Type::RvalueReference(p) => match concrete {
+            Type::RvalueReference(c) => confirm_resolved_pattern(p, c, bindings, sema, pos),
+            _ => Ok(false),
+        },
+        // Leaves and packs were already confirmed structurally.
+        _ => Ok(true),
+    }
 }
 
 pub fn match_pattern_arg(
@@ -45,7 +170,9 @@ pub fn match_pattern_arg(
             _ => false,
         },
         Type::RvalueReference(p_inner) => match concrete {
-            Type::RvalueReference(c_inner) => match_pattern_arg(p_inner, c_inner, bindings),
+            Type::RvalueReference(c_inner) => {
+                match_pattern_arg(p_inner, c_inner, bindings)
+            }
             _ => false,
         },
         Type::TemplateInstance {
@@ -76,6 +203,10 @@ pub fn match_pattern_arg(
             }
             _ => false,
         },
+        // A `decltype` operand is a non-deduced context. It cannot bind
+        // parameters by structure; `select_partial_specialization` resolves it
+        // after the other arguments have been deduced.
+        Type::Decltype { .. } => true,
         _ => pattern == concrete,
     }
 }
@@ -231,11 +362,17 @@ impl Sema {
         let mut known: Vec<String> = self.class_templates.keys().cloned().collect();
         let param_names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
         known.extend(param_names.clone());
-        let pattern_args = parse_types_list_with_params(&args_str, &known, &param_names)?;
+        // The canonical name string is lossy for `decltype` operands, so use
+        // the parsed arguments captured at parse time when available.
+        let pattern_args = match decl.pattern_args.clone() {
+            Some(args) => args,
+            None => parse_types_list_with_params(&args_str, &known, &param_names)?,
+        };
         let plain_primary = QualifiedName::new(&primary).plain().to_string();
         let spec = PartialSpec {
             pattern_args,
             template_class: decl,
+            params,
         };
         self.partial_specializations
             .entry(primary.clone())
@@ -251,21 +388,37 @@ impl Sema {
     }
 
     pub fn select_partial_specialization(
-        &self,
+        &mut self,
         name: &str,
         args: &[Type],
         pos: (usize, usize),
     ) -> Result<Option<MatchedPartial>, CompileError> {
-        let candidates = self.partial_specializations.get(name);
-        let Some(specs) = candidates else {
+        let Some(specs) = self.partial_specializations.get(name).cloned() else {
             return Ok(None);
         };
         let mut matches = Vec::new();
-        for spec in specs {
+        'candidate: for spec in specs {
             let mut bindings = HashMap::new();
-            if match_pattern_args(&spec.pattern_args, args, &mut bindings) {
-                matches.push((spec, bindings, spec.score()));
+            if !match_pattern_args(&spec.pattern_args, args, &mut bindings) {
+                continue;
             }
+            // A param reachable only through a non-deduced context is never
+            // bound; the specialization is unusable, not a match.
+            if spec.params.iter().any(|p| !bindings.contains_key(&p.name)) {
+                continue;
+            }
+            // Resolve non-deduced `decltype` nodes. Resolution is speculative
+            // inside `resolve_decltype_type`, so a rejected candidate leaves no
+            // semantic state behind.
+            if spec.pattern_args.iter().any(pattern_has_decltype) {
+                for (pattern, concrete) in spec.pattern_args.iter().zip(args.iter()) {
+                    if !confirm_resolved_pattern(pattern, concrete, &bindings, self, pos)? {
+                        continue 'candidate;
+                    }
+                }
+            }
+            let score = spec.score();
+            matches.push((spec, bindings, score));
         }
         if matches.is_empty() {
             return Ok(None);
@@ -288,5 +441,87 @@ impl Sema {
         }
         let best = matches.remove(0);
         Ok(Some((best.0.template_class.clone(), best.1)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::expr::Expr;
+    use crate::ast::template::TemplateClass;
+
+    fn pack_param(name: &str) -> TemplateParam {
+        TemplateParam {
+            name: name.to_string(),
+            default_type: None,
+            param_type: None,
+            is_pack: true,
+            line: 1,
+            col: 1,
+        }
+    }
+
+    fn dummy_class() -> TemplateClass {
+        TemplateClass {
+            name: "Pick".to_string(),
+            pattern_args: None,
+            is_class: false,
+            is_final: false,
+            base_classes: Vec::new(),
+            base_access: Vec::new(),
+            fields: Vec::new(),
+            methods: Vec::new(),
+            static_fields: Vec::new(),
+            private_members: Vec::new(),
+            nested_structs: Vec::new(),
+            alignment: None,
+        }
+    }
+
+    fn list(arg: Type) -> Type {
+        Type::TemplateInstance {
+            name: "List".to_string(),
+            args: vec![arg],
+        }
+    }
+
+    #[test]
+    fn non_deducible_partial_spec_is_not_selected() -> Result<(), Box<dyn std::error::Error>> {
+        let mut sema = Sema::new();
+        let decltype = Type::Decltype {
+            expr: Box::new(Expr::AlignofType(Type::Struct("T::type".to_string()))),
+            parenthesized: false,
+        };
+        sema.partial_specializations
+            .entry("Pick".to_string())
+            .or_default()
+            .push(PartialSpec {
+                pattern_args: vec![list(Type::PackExpansion(Box::new(decltype)))],
+                template_class: dummy_class(),
+                params: vec![pack_param("Ts")],
+            });
+
+        let concrete = list(Type::Int);
+        assert!(
+            sema.select_partial_specialization("Pick", std::slice::from_ref(&concrete), (1, 1))?
+                .is_none()
+        );
+
+        let specs = sema
+            .partial_specializations
+            .get_mut("Pick")
+            .ok_or("missing specialization list")?;
+        specs.push(PartialSpec {
+            pattern_args: vec![list(Type::PackExpansion(Box::new(Type::TypeParam(
+                "Us".to_string(),
+            ))))],
+            template_class: dummy_class(),
+            params: vec![pack_param("Us")],
+        });
+        let selected = sema
+            .select_partial_specialization("Pick", std::slice::from_ref(&concrete), (1, 1))?
+            .ok_or("viable fallback should be selected")?;
+        assert!(selected.1.contains_key("Us"));
+        Ok(())
     }
 }

@@ -76,7 +76,7 @@ impl Sema {
             Expr::SizeofExpr(_) => Ok(Type::UnsignedInt),
             Expr::AlignofType(ty) => {
                 self.resolve_and_instantiate_type(ty, self.current_line, self.current_col)?;
-                Ok(Type::UnsignedLong)
+                Ok(Type::UnsignedInt)
             }
             Expr::SizeofPack { name, pos } => Err(CompileError::new(
                 format!("'{name}' does not refer to the name of a parameter pack"),
@@ -328,7 +328,7 @@ impl Sema {
         }
         self.check_ambiguous_name(name)?;
         if let Some((class_part, _)) = name.rsplit_once("::") {
-            self.ensure_class_instantiated(class_part, self.current_line, self.current_col);
+            self.ensure_class_instantiated(class_part, self.current_line, self.current_col)?;
         }
         if let Some(var) = self.lookup_var(name) {
             Ok(var.ty.clone())

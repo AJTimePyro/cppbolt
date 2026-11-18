@@ -71,8 +71,10 @@ impl Parser {
             template::validate_trailing_pack(&params, "class template")?;
         }
         self.register_template_name(&name);
+        let pattern_args = self.struct_template_args.get(&name).cloned();
         let template_class = TemplateClass {
             name,
+            pattern_args,
             is_class,
             is_final,
             base_classes,

@@ -107,7 +107,26 @@ pub(super) fn mark_dependent_nested(
                 mark_dependent_nested(orig, subst, mapping);
             }
         }
+        (Type::Decltype { expr: a, .. }, Type::Decltype { expr: b, .. }) => {
+            mark_expr_dependent_nested(a, b, mapping);
+        }
         _ => {}
+    }
+}
+
+/// Marks nested names formed by substitution inside a `decltype` operand, so
+/// a missing nested type becomes a substitution failure rather than being
+/// silently treated as a struct name.
+fn mark_expr_dependent_nested(
+    original: &Expr,
+    substituted: &mut Expr,
+    mapping: &HashMap<String, TemplateArg>,
+) {
+    // Only `sizeof`/`alignof` carry a type in the patterns that reach here.
+    if let (Expr::SizeofType(a), Expr::SizeofType(b))
+    | (Expr::AlignofType(a), Expr::AlignofType(b)) = (original, substituted)
+    {
+        mark_dependent_nested(a, b, mapping);
     }
 }
 

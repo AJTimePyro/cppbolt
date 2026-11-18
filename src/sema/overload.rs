@@ -229,7 +229,8 @@ impl Sema {
             && let Some((class_name, method_name)) = name.rsplit_once("::")
         {
             if class_name.contains('<') {
-                self.ensure_class_instantiated(class_name, self.current_line, self.current_col);
+                let _ =
+                    self.ensure_class_instantiated(class_name, self.current_line, self.current_col);
             }
             let static_methods = self.find_static_methods_in_class(class_name, method_name);
             if !static_methods.is_empty() {

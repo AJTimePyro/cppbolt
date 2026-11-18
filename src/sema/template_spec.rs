@@ -139,9 +139,14 @@ impl Sema {
         }
     }
 
-    pub fn ensure_class_instantiated(&mut self, sname: &str, line: usize, col: usize) {
+    pub fn ensure_class_instantiated(
+        &mut self,
+        sname: &str,
+        line: usize,
+        col: usize,
+    ) -> Result<(), CompileError> {
         if self.struct_layouts.contains_key(sname) {
-            return;
+            return Ok(());
         }
         let plain = QualifiedName::new(sname).plain();
         if let Some(Type::TemplateInstance { name, args }) = self
@@ -154,11 +159,10 @@ impl Sema {
             for arg in &mut args {
                 let _ = self.resolve_and_instantiate_type(arg, line, col);
             }
-            if let Ok(inst) = self.instantiate_class_template(&name, &args, line, col) {
-                self.alias_static_fields(&inst, sname);
-                self.alias_static_fields(&inst, plain);
-            }
-            return;
+            let inst = self.instantiate_class_template(&name, &args, line, col)?;
+            self.alias_static_fields(&inst, sname);
+            self.alias_static_fields(&inst, plain);
+            return Ok(());
         }
         if let Some((base, args_str)) = super::template_deduce::split_template_call_name(sname) {
             let known: Vec<String> = self
@@ -171,9 +175,10 @@ impl Sema {
                 for arg in &mut args {
                     let _ = self.resolve_and_instantiate_type(arg, line, col);
                 }
-                let _ = self.instantiate_class_template(base, &args, line, col);
+                self.instantiate_class_template(base, &args, line, col)?;
             }
         }
+        Ok(())
     }
 
     pub fn alias_static_fields(&mut self, source: &str, target: &str) {

@@ -158,7 +158,7 @@ impl Sema {
         };
         let class_part = class_raw.strip_prefix("::").unwrap_or(class_raw);
         let class_name = self.resolve_alias_in_qualified_name(class_part);
-        self.ensure_class_instantiated(&class_name, pos.line, pos.col);
+        let _ = self.ensure_class_instantiated(&class_name, pos.line, pos.col);
         self.check_member_access(&class_name, member_name, pos)?;
 
         if let Some(fld) = self.find_field_in_class(&class_name, member_name) {

@@ -15,6 +15,9 @@ pub struct TemplateParam {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TemplateClass {
     pub name: String,
+    /// Parsed template arguments of a specialization pattern. Kept as AST
+    /// because `to_c_type()` is lossy for `decltype` operands.
+    pub pattern_args: Option<Vec<Type>>,
     pub is_class: bool,
     pub is_final: bool,
     pub base_classes: Vec<String>,

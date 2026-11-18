@@ -73,6 +73,7 @@ impl Parser {
                 .collect::<Vec<_>>()
                 .join(", ");
             name = format!("{}<{}>", name, canonical_args);
+            self.struct_template_args.insert(name.clone(), args);
         }
         let is_final = if matches!(self.peek(), TokenKind::Ident(id) if id == "final") {
             self.advance();

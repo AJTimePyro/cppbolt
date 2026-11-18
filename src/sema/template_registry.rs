@@ -351,7 +351,7 @@ impl Sema {
         }
 
         for base in base_classes.iter() {
-            self.ensure_class_instantiated(base, line, col);
+            let _ = self.ensure_class_instantiated(base, line, col);
         }
 
         for m in methods.iter_mut() {
@@ -414,7 +414,7 @@ impl Sema {
             }
         }
         for base in base_classes {
-            self.ensure_class_instantiated(base, line, col);
+            let _ = self.ensure_class_instantiated(base, line, col);
             self.alias_static_fields(base, inst_name);
         }
     }

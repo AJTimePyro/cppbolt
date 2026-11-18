@@ -46,6 +46,8 @@ pub struct Parser {
     pub active_type_params: Vec<HashSet<String>>,
     pub type_aliases: HashMap<String, Type>,
     pub member_types: HashMap<String, Type>,
+    /// Parsed `<...>` arguments of struct names, keyed by the canonical name.
+    pub struct_template_args: HashMap<String, Vec<Type>>,
     pub scoped_aliases: Vec<HashMap<String, Type>>,
     pub current_namespace: Vec<String>,
     pub open_namespaces: Vec<String>,
@@ -110,6 +112,7 @@ impl Parser {
             active_type_params,
             type_aliases,
             member_types,
+            struct_template_args: HashMap::new(),
             scoped_aliases,
             current_namespace: Vec::new(),
             open_namespaces: Vec::new(),

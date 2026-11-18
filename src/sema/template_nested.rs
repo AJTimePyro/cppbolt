@@ -263,6 +263,7 @@ impl Sema {
 
         let subst_inner_tmpl = TemplateClass {
             name: nested_tmpl_name.clone(),
+            pattern_args: None,
             is_class: p.inner_tmpl.is_class,
             is_final: p.inner_tmpl.is_final,
             base_classes: p.inner_tmpl.base_classes.clone(),
@@ -297,7 +298,7 @@ impl Sema {
         if !self.class_templates.contains_key(name)
             && let Some((owner, _)) = name.rsplit_once("::")
         {
-            self.ensure_class_instantiated(owner, line, col);
+            let _ = self.ensure_class_instantiated(owner, line, col);
         }
         if !self.class_templates.contains_key(name)
             && let Some(cls) = &self.current_class

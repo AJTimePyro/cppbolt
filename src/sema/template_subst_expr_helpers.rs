@@ -53,6 +53,11 @@ pub(super) fn substitute_identifier(
         && let Expr::Identifier(id) = expr
     {
         *id = substitute_template_name(&name, mapping);
+    } else if let Some((base, member)) = name.split_once("::")
+        && let Some(TemplateArg::Type(target)) = mapping.get(base)
+        && let Expr::Identifier(id) = expr
+    {
+        *id = format!("{}::{}", target.to_c_type(), member);
     }
     Ok(())
 }

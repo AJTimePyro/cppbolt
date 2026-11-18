@@ -435,6 +435,7 @@ fn test_substitute_struct() -> Result<(), Box<dyn std::error::Error>> {
     mapping.insert("T".to_string(), TemplateArg::Type(Type::Int));
     let tclass = TemplateClass {
         name: "Holder".to_string(),
+        pattern_args: None,
         is_class: true,
         is_final: false,
         base_classes: Vec::new(),
@@ -635,3 +636,4 @@ fn speculative_decltype_check_leaves_state_unchanged() -> Result<(), Box<dyn std
     assert_eq!(sema.instantiated_classes, before.instantiated_classes);
     Ok(())
 }
+
