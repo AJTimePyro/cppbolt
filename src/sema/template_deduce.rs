@@ -248,6 +248,17 @@ pub fn deduce_template_arguments(
         &mut deduced,
         &mut explicit_pack,
     );
+    if has_pack && arg_types.len() < non_pack_count + explicit_pack.len() {
+        return Err(CompileError::new(
+            format!(
+                "too few arguments for function template: expected at least {}, found {}",
+                non_pack_count + explicit_pack.len(),
+                arg_types.len()
+            ),
+            pos.line,
+            pos.col,
+        ));
+    }
 
     for (i, p) in non_pack_params.iter().enumerate() {
         if i >= arg_types.len() {
