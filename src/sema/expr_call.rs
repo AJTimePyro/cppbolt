@@ -274,7 +274,7 @@ impl Sema {
                 .get(&struct_name)
                 .or_else(|| {
                     self.member_templates
-                        .get(&QualifiedName::new(&struct_name).plain().to_string())
+                        .get(QualifiedName::new(&struct_name).plain())
                 })
                 .is_some_and(|templates| {
                     templates

@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Substitution Failure (C++17)
+- Added a typed `SubstitutionFailure` distinct from ordinary semantic errors. The compiler now discards only the candidate whose function or member template signature forms an invalid type, then continues with the remaining candidates.
+- Signature substitution no longer rewrites bodies or constructor initializers. The compiler substitutes member template bodies after selecting a candidate, so rejected candidates register no method or pending instantiation.
+- Hard errors from instantiating another template while resolving a signature type, and errors in a selected specialization's body, still abort compilation. When every candidate is rejected, the call reports `no matching function for call to '...'`.
+
 ### Fold Expressions (C++17)
 - Added unary and binary folds over all 32 fold operators, with standard empty-pack fallbacks (`&&` to `true`, `||` to `false`, `,` to a void expression) and evaluation in constexpr contexts, array bounds, and non-type template arguments.
 - Fixed folds over overloaded operators, assignment folds, folds whose pattern contains `new` or `sizeof...`, and chained results that need a converting constructor.
