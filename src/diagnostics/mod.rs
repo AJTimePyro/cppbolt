@@ -129,12 +129,6 @@ impl From<CompileError> for SubstitutionFailure {
     }
 }
 
-impl From<SubstitutionFailure> for CompileError {
-    fn from(failure: SubstitutionFailure) -> Self {
-        CompileError::new(failure.message, failure.line, failure.col)
-    }
-}
-
 /// Outcome of forming a function template candidate signature.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TemplateFailure {

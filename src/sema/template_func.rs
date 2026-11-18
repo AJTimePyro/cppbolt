@@ -137,6 +137,7 @@ impl Sema {
         let (arg_types, args) = call_args;
         let mut last_err = None;
         let mut last_substitution: Option<SubstitutionFailure> = None;
+        let mut rejections: Vec<String> = Vec::new();
         let mut viable = Vec::new();
         for (template_decl, template_params) in candidates {
             let has_pack = template_decl.params.last().is_some_and(|p| p.is_pack)
@@ -171,7 +172,9 @@ impl Sema {
                     ) {
                         Ok(sig) => sig,
                         Err(TemplateFailure::Substitution(failure)) => {
-                            last_substitution = Some(failure.at_call(pos.line, pos.col));
+                            let failure = failure.at_call(pos.line, pos.col);
+                            rejections.push(format!("substitution failure: {}", failure.message));
+                            last_substitution = Some(failure);
                             continue;
                         }
                         Err(TemplateFailure::Hard(error)) => return Err(error),
@@ -187,18 +190,35 @@ impl Sema {
                             ));
                         }
                         Err(failure) => {
-                            last_err = Some(self.no_matching_conversion(
-                                &template_decl.name,
-                                &failure,
-                                pos,
-                            ));
+                            let error =
+                                self.no_matching_conversion(&template_decl.name, &failure, pos);
+                            rejections.push(error.message.clone());
+                            last_err = Some(error);
                         }
                     }
                 }
-                Err(e) => last_err = Some(e),
+                Err(e) => {
+                    rejections.push(e.message.clone());
+                    last_err = Some(e);
+                }
             }
         }
         if viable.is_empty() {
+            if rejections.len() > 1 {
+                let name = candidates
+                    .first()
+                    .map(|(decl, _)| decl.name.as_str())
+                    .unwrap_or("template function");
+                return Err(CompileError::new(
+                    format!(
+                        "no matching function for call to '{name}': {} candidates rejected: {}",
+                        rejections.len(),
+                        rejections.join("; ")
+                    ),
+                    pos.line,
+                    pos.col,
+                ));
+            }
             if let Some(e) = last_err {
                 return Err(e);
             }
