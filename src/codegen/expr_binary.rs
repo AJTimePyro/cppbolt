@@ -72,10 +72,12 @@ impl<'a> Codegen<'a> {
         };
 
         // Walk the left-associative spine iteratively. The leftmost operand is
-        // compiled once; every later node consumes the previous result that is
-        // already on the stack, so a chain of `n` terms uses a constant number
-        // of Rust stack frames.
-        let mut spine: Vec<(&BinaryOp, &Expr)> = Vec::new();
+        // compiled once; later operands consume the previous result that is
+        // already on the stack. An overloaded step may need to convert its left
+        // operand to the declared parameter type. In that case the step compiles
+        // its left subtree as a call argument, and the previous step is skipped
+        // so no operator call runs twice.
+        let mut spine: Vec<(&BinaryOp, &Expr, &Expr)> = Vec::new();
         let mut cur = expr;
         while let Expr::Binary {
             op, left, right, ..
@@ -90,17 +92,31 @@ impl<'a> Codegen<'a> {
             ) {
                 break;
             }
-            spine.push((op, right));
+            spine.push((op, right, left));
             cur = left;
         }
         let base = cur;
+        let is_class = |ty: &Type| matches!(ty.strip_const(), Type::Struct(_) | Type::Enum(_));
 
         let mut lty = self.get_expr_type(base, ctx);
         for index in (0..spine.len()).rev() {
-            let (op, right) = spine[index];
+            let (op, right, whole_left) = spine[index];
             let rty = self.get_expr_type(right, ctx);
+            let next_result = self.binary_result_type(op, &lty, &rty).strip_reference().clone();
+            let overloaded = op.op_name().is_some() && (is_class(&lty) || is_class(&rty));
+            // The next step recompiles this whole subtree when it is overloaded.
+            if index > 0 {
+                let (next_op, next_right, _) = spine[index - 1];
+                let next_rty = self.get_expr_type(next_right, ctx);
+                if next_op.op_name().is_some() && (is_class(&next_result) || is_class(&next_rty)) {
+                    lty = next_result;
+                    continue;
+                }
+            }
             let left = if index + 1 == spine.len() {
                 Some(base)
+            } else if overloaded {
+                Some(whole_left)
             } else {
                 None
             };
@@ -115,10 +131,7 @@ impl<'a> Codegen<'a> {
                 ctx,
                 code,
             )?;
-            lty = self
-                .binary_result_type(op, &lty, &rty)
-                .strip_reference()
-                .clone();
+            lty = next_result;
         }
 
         Ok(())

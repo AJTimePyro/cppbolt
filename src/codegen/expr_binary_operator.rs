@@ -108,16 +108,18 @@ impl<'a> Codegen<'a> {
         };
         let param_ty0 = sig.param_types.first();
         let is_r0 = param_ty0.map(|p| p.is_reference()).unwrap_or(false);
-        if is_r0 {
-            if let Some(left) = left {
+        if let Some(left) = left {
+            if matches!(left, Expr::Binary { .. }) {
+                // A recompiled chain prefix goes through the normal call
+                // argument path so user-defined conversions are applied.
+                self.compile_call_arg(left, param_ty0, ctx, code)?;
+            } else if is_r0 {
                 self.compile_lvalue_addr(left, ctx, code)?;
-            }
-        } else {
-            if let Some(left) = left {
+            } else {
                 self.compile_expr(left, ctx, code)?;
-            }
-            if let Some(pty) = param_ty0 {
-                self.emit_conversion(lty, pty, code);
+                if let Some(pty) = param_ty0 {
+                    self.emit_conversion(lty, pty, code);
+                }
             }
         }
         let param_ty1 = sig.param_types.get(1);
