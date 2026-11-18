@@ -5,6 +5,11 @@
 //! to the same specialization must see those in-progress writes. A failed
 //! instantiation therefore cannot simply defer every write until the end;
 //! instead it snapshots the state it mutates and restores it on error.
+//!
+//! The snapshot covers state written from `resolve_instantiation_target`
+//! onward. Side effects of alias-template expansion before that point are
+//! not undone.
+//! shortcut: clones every mutation-bearing map on each class instantiation (~6% slower on heavy stdlib compiles); replace with a write journal if compile time ever matters.
 
 use super::*;
 
@@ -22,7 +27,6 @@ pub(super) struct InstantiationSnapshot {
     instantiated_functions: HashSet<String>,
     pending_template_methods: HashMap<String, (String, FunctionDecl)>,
     deferred_methods_len: usize,
-    object_use_classes: HashSet<String>,
     member_templates: HashMap<String, Vec<FunctionDecl>>,
     structs_with_dtor: HashSet<String>,
     structs_with_move: HashSet<String>,
@@ -46,7 +50,6 @@ impl InstantiationSnapshot {
             instantiated_functions: sema.instantiated_functions.clone(),
             pending_template_methods: sema.pending_template_methods.clone(),
             deferred_methods_len: sema.deferred_methods.len(),
-            object_use_classes: sema.object_use_classes.clone(),
             member_templates: sema.member_templates.clone(),
             structs_with_dtor: sema.structs_with_dtor.clone(),
             structs_with_move: sema.structs_with_move.clone(),
@@ -69,7 +72,6 @@ impl InstantiationSnapshot {
         sema.instantiated_functions = self.instantiated_functions;
         sema.pending_template_methods = self.pending_template_methods;
         sema.deferred_methods.truncate(self.deferred_methods_len);
-        sema.object_use_classes = self.object_use_classes;
         sema.member_templates = self.member_templates;
         sema.structs_with_dtor = self.structs_with_dtor;
         sema.structs_with_move = self.structs_with_move;

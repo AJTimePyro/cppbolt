@@ -532,3 +532,32 @@ fn failed_function_instantiation_does_not_cache_specialization()
     assert!(sema.synthesized_decls.is_empty());
     Ok(())
 }
+
+#[test]
+fn late_class_instantiation_failure_restores_published_state()
+-> Result<(), Box<dyn std::error::Error>> {
+    let code = r#"
+        template <typename T> struct V {
+            virtual int f() { return this->nope; }
+            int v;
+        };
+        V<int> x;
+    "#;
+    let tokens = Lexer::new(code).tokenize()?;
+    let mut parser = Parser::new(tokens);
+    let mut program = parser.parse_program()?;
+    let mut sema = Sema::new();
+    assert!(sema.analyze_program(&mut program).is_err());
+    assert!(!sema.struct_layouts.contains_key("V<int>"));
+    assert!(!sema.struct_sizes.contains_key("V<int>"));
+    assert!(
+        !sema
+            .synthesized_decls
+            .iter()
+            .any(|d| matches!(d, Decl::StructDecl { name, .. } if name == "V<int>"))
+    );
+    assert!(!sema.instantiated_classes.contains("V<int>"));
+    assert_eq!(sema.instantiation_depth, 0);
+    assert!(sema.instantiation_stack.is_empty());
+    Ok(())
+}
