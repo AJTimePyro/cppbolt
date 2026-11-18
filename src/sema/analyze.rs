@@ -197,6 +197,15 @@ impl Sema {
 
     fn register_declarations(&mut self, program: &mut Program) -> Result<(), CompileError> {
         let mut defined_functions = std::collections::HashSet::new();
+        // Track the overloads visible at each source position. Function
+        // templates snapshot this set so their bodies keep definition-time
+        // ordinary bindings when instantiated later in the file.
+        let mut visible_functions: std::collections::HashSet<String> = self
+            .functions
+            .values()
+            .flatten()
+            .map(|sig| sig.mangled_name.clone())
+            .collect();
         for decl in &mut program.declarations {
             match decl {
                 Decl::UsingNamespace(ns) => {
@@ -240,7 +249,17 @@ impl Sema {
                         is_explicit: f.is_explicit,
                         ref_qualifier: f.ref_qualifier,
                     };
+                    visible_functions.insert(sig.mangled_name.clone());
                     self.register_function(sig);
+                }
+                Decl::Template(t)
+                    if let crate::ast::template::TemplateKind::Function(f) = &t.kind =>
+                {
+                    let identity = super::template_registry::function_template_identity(
+                        &f.name, f.line, f.col,
+                    );
+                    self.template_definition_functions
+                        .insert(identity, visible_functions.clone());
                 }
                 Decl::StructDecl {
                     name,

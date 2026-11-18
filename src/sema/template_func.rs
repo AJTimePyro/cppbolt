@@ -267,7 +267,18 @@ impl Sema {
                 self.resolve_signature_type(&mut resolved, pos.line, pos.col)?;
             }
         }
-        self.resolve_signature_types(&mut func_decl, pos.line, pos.col)?;
+        // Calls inside a signature's `decltype` also belong to the template
+        // definition's lookup context.
+        let saved_identity = self.current_template_identity.take();
+        self.current_template_identity =
+            Some(super::template_registry::function_template_identity(
+                &template_decl.name,
+                template_decl.line,
+                template_decl.col,
+            ));
+        let sig_result = self.resolve_signature_types(&mut func_decl, pos.line, pos.col);
+        self.current_template_identity = saved_identity;
+        sig_result?;
 
         let mangled = self.mangle_name(&func_decl.name, &func_decl.params);
         let sig = FunctionSig {
@@ -372,7 +383,15 @@ impl Sema {
             // call can retry the specialization.
             self.instantiated_functions.insert(mangled.clone());
             self.instantiation_depth += 1;
+            let saved_identity = self.current_template_identity.take();
+            self.current_template_identity =
+                Some(super::template_registry::function_template_identity(
+                    &cand.decl.name,
+                    cand.decl.line,
+                    cand.decl.col,
+                ));
             let res = self.analyze_function(&mut func_decl);
+            self.current_template_identity = saved_identity;
             self.instantiation_depth -= 1;
             if let Err(error) = res {
                 if self.speculating {

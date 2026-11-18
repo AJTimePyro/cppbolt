@@ -157,6 +157,13 @@ pub struct Sema {
     pub class_specializations: HashMap<String, TemplateClass>,
     pub partial_specializations: HashMap<String, Vec<template_match::PartialSpec>>,
     pub function_templates: HashMap<String, Vec<(FunctionDecl, Vec<TemplateParam>)>>,
+    /// Function overloads visible when each function template was defined,
+    /// keyed by `name@line:col`. Ordinary lookup inside an instantiated body
+    /// only sees these, so a later declaration cannot rebind a template name.
+    pub template_definition_functions: HashMap<String, HashSet<String>>,
+    /// Identity of the template whose body (or signature) is being analyzed.
+    /// Set only while re-analyzing substituted template code.
+    pub current_template_identity: Option<String>,
     pub alias_templates: HashMap<String, (Vec<TemplateParam>, Type)>,
     /// Variable templates: name -> (params, type, initializer).
     pub variable_templates: HashMap<String, (Vec<TemplateParam>, Type, Option<Expr>)>,
@@ -205,6 +212,8 @@ impl Sema {
             class_specializations: HashMap::new(),
             partial_specializations: HashMap::new(),
             function_templates: HashMap::new(),
+            template_definition_functions: HashMap::new(),
+            current_template_identity: None,
             alias_templates: HashMap::new(),
             variable_templates: HashMap::new(),
             instantiated_variable_templates: HashMap::new(),

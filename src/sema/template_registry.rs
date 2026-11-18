@@ -13,6 +13,12 @@ use crate::diagnostics::{ErrorKind, SubstitutionFailure, TemplateFailure};
 use crate::name::QualifiedName;
 use std::collections::HashMap;
 
+/// Stable identity for a function template definition, used to find the
+/// ordinary lookup set captured when it was declared.
+pub(crate) fn function_template_identity(name: &str, line: usize, col: usize) -> String {
+    format!("{name}@{line}:{col}")
+}
+
 impl Sema {
     pub fn register_function_template(&mut self, decl: FunctionDecl, params: Vec<TemplateParam>) {
         let short = decl

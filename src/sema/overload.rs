@@ -213,6 +213,28 @@ impl Sema {
                     .find_map(|ns| self.functions.get(&format!("{}::{}", ns, name)))
             })
             .cloned();
+        // While re-analyzing a substituted template body, ordinary lookup is
+        // limited to the overloads that existed at the template's definition.
+        // ADL below is intentionally not filtered: it runs at instantiation.
+        // A mangled callee is already a resolved binding from an earlier
+        // analysis pass, not an unqualified name to re-look up.
+        let already_bound = self
+            .functions
+            .get(name)
+            .is_some_and(|sigs| sigs.iter().any(|sig| sig.mangled_name == name));
+        if !already_bound
+            && let Some(identity) = &self.current_template_identity
+            && let Some(visible) = self.template_definition_functions.get(identity)
+        {
+            candidates = candidates.map(|sigs| {
+                sigs.into_iter()
+                    .filter(|sig| visible.contains(&sig.mangled_name))
+                    .collect()
+            });
+            if candidates.as_ref().is_some_and(|sigs| sigs.is_empty()) {
+                candidates = None;
+            }
+        }
         if candidates.is_none() {
             for aty in arg_types {
                 let clean = aty.strip_const().strip_reference();
