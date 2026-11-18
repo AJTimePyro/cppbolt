@@ -152,6 +152,13 @@ pub struct Scope {
     pub type_aliases: HashMap<String, Type>,
 }
 
+/// A virtual or destructor body whose early analysis hit a name that may be
+/// declared later in the translation unit. Retried once registration is complete.
+pub(crate) struct DeferredMethod {
+    pub(crate) class_name: String,
+    pub(crate) method: FunctionDecl,
+}
+
 pub struct Sema {
     pub struct_layouts: HashMap<String, StructLayout>,
     pub struct_order: Vec<String>,
@@ -197,6 +204,9 @@ pub struct Sema {
     pub instantiated_classes: HashSet<String>,
     pub instantiated_functions: HashSet<String>,
     pub pending_template_methods: HashMap<String, (String, FunctionDecl)>,
+    pub(crate) deferred_methods: Vec<DeferredMethod>,
+    /// Classes used as complete objects; only their bodies need checking.
+    pub(crate) object_use_classes: HashSet<String>,
     pub member_templates: HashMap<String, Vec<FunctionDecl>>,
     pub instantiation_depth: usize,
     pub instantiation_stack: Vec<String>,
@@ -236,6 +246,8 @@ impl Sema {
             instantiated_classes: HashSet::new(),
             instantiated_functions: HashSet::new(),
             pending_template_methods: HashMap::new(),
+            deferred_methods: Vec::new(),
+            object_use_classes: HashSet::new(),
             member_templates: HashMap::new(),
             instantiation_depth: 0,
             instantiation_stack: Vec::new(),

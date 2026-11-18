@@ -363,7 +363,7 @@ impl Sema {
                     qualifiers: FunctionQualifiers::default(),
                 })
             } else {
-                Err(CompileError::new(
+                Err(CompileError::unresolved_name(
                     format!("Undeclared variable or identifier '{}'", name),
                     self.current_line,
                     self.current_col,
@@ -376,7 +376,7 @@ impl Sema {
                 qualifiers: FunctionQualifiers::default(),
             })))
         } else {
-            Err(CompileError::new(
+            Err(CompileError::unresolved_name(
                 format!("Undeclared variable or identifier '{}'", name),
                 self.current_line,
                 self.current_col,
@@ -396,7 +396,7 @@ impl Sema {
                 qualifiers: FunctionQualifiers::default(),
             })))
         } else {
-            Err(CompileError::new(
+            Err(CompileError::unresolved_name(
                 format!("Undeclared variable or identifier '{}'", raw),
                 self.current_line,
                 self.current_col,

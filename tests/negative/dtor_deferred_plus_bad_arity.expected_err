@@ -1,0 +1,1 @@
+tests/negative/dtor_deferred_plus_bad_arity.cpp:2:55: error: No matching function call for 'one': expected 1 arguments, found 2

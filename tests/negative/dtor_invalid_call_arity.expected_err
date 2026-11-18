@@ -1,0 +1,1 @@
+tests/negative/dtor_invalid_call_arity.cpp:6:12: error: No matching function call for 'one': expected 1 arguments, found 2

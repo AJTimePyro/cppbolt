@@ -1,0 +1,1 @@
+tests/negative/dtor_deferred_plus_type_error.cpp:3:64: error: cannot initialize variable 'p' of type int * with int

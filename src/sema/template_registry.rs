@@ -8,6 +8,7 @@ use crate::ast::decl::{Decl, FunctionDecl};
 use crate::ast::expr::Expr;
 use crate::ast::template::{TemplateClass, TemplateParam};
 use crate::ast::types::Type;
+use crate::diagnostics::ErrorKind;
 use crate::name::QualifiedName;
 use std::collections::HashMap;
 
@@ -366,6 +367,17 @@ impl Sema {
         }
     }
 
+    pub(super) fn add_synthesized_method(&mut self, class_name: &str, method: FunctionDecl) {
+        for decl in &mut self.synthesized_decls {
+            if let Decl::StructDecl { name, methods, .. } = decl
+                && name == class_name
+            {
+                methods.push(method);
+                return;
+            }
+        }
+    }
+
     pub(super) fn setup_instantiated_methods(
         &mut self,
         inst_name: &str,
@@ -417,25 +429,84 @@ impl Sema {
                 }
                 let res = self.analyze_function(&mut vmethod);
                 self.current_class = prev_class;
-                // Early analysis runs before globals/functions are registered,
-                // so a body referencing them can fail here. Keep the original
-                // substituted body; the method is still emitted and analyzed
-                // in the normal declaration pass where those names resolve.
-                if res.is_ok() {
-                    m.body = vmethod.body;
-                    m.ctor_initializers = vmethod.ctor_initializers;
-                }
-                for decl in &mut self.synthesized_decls {
-                    if let Decl::StructDecl { name, methods, .. } = decl
-                        && name == inst_name
+                match res {
+                    Ok(()) => {
+                        m.body = vmethod.body;
+                        m.ctor_initializers = vmethod.ctor_initializers;
+                        self.add_synthesized_method(inst_name, m);
+                    }
+                    Err(e) if e.kind == ErrorKind::UnresolvedName => {
+                        // Globals and functions are registered in a later pass.
+                        // Hold the substituted body for a bounded retry; never
+                        // emit a body that failed analysis.
+                        self.deferred_methods.push(DeferredMethod {
+                            class_name: inst_name.to_string(),
+                            method: m,
+                        });
+                    }
+                    Err(e)
+                        if e.kind == ErrorKind::Internal
+                            || self.object_use_classes.contains(inst_name) =>
                     {
-                        methods.push(m);
-                        break;
+                        return Err(e);
+                    }
+                    Err(_) => {
+                        // Only a pointer reaches this specialization: Clang
+                        // never instantiates its body, so neither do we.
                     }
                 }
             }
         }
         Ok(())
+    }
+
+    /// Retries bodies whose early analysis hit a name declared later in the
+    /// translation unit. Runs after registration, so a remaining failure is
+    /// genuine and propagates instead of leaving an invalid body for codegen.
+    pub(super) fn retry_deferred_methods(&mut self) -> Result<(), CompileError> {
+        const MAX_PASSES: usize = 8;
+        for _ in 0..MAX_PASSES {
+            if self.deferred_methods.is_empty() {
+                return Ok(());
+            }
+            // Take the batch so retry-triggered instantiations can queue more.
+            let batch = std::mem::take(&mut self.deferred_methods);
+            for deferred in batch {
+                let DeferredMethod { class_name, method } = deferred;
+                let mut analyzed = method;
+                if !analyzed.is_static {
+                    analyzed
+                        .params
+                        .insert(0, this_param(&class_name, analyzed.is_const));
+                }
+                let prev_class = self.current_class.take();
+                self.current_class = Some(class_name.clone());
+                let res = self.analyze_function(&mut analyzed);
+                self.current_class = prev_class;
+                if let Err(e) = res {
+                    if e.kind == ErrorKind::Internal
+                        || self.object_use_classes.contains(&class_name)
+                    {
+                        return Err(e);
+                    }
+                    continue;
+                }
+                if !analyzed.is_static && !analyzed.params.is_empty() {
+                    analyzed.params.remove(0);
+                }
+                self.update_registered_method_return_type(&class_name, &analyzed);
+                self.add_synthesized_method(&class_name, analyzed);
+            }
+        }
+        if self.deferred_methods.is_empty() {
+            Ok(())
+        } else {
+            Err(crate::internal_error!(
+                1,
+                1,
+                "deferred method analysis did not converge"
+            ))
+        }
     }
 
     pub fn instantiate_pending_method(&mut self, mangled_name: &str) -> Result<(), CompileError> {

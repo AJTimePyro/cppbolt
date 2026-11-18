@@ -390,7 +390,11 @@ impl Sema {
         pos: ExprPos,
     ) -> CompileError {
         let (Some(candidates), Some(selection)) = sel_cand else {
-            return CompileError::new(format!("Undefined function '{name}'"), pos.line, pos.col);
+            return CompileError::unresolved_name(
+                format!("Undefined function '{name}'"),
+                pos.line,
+                pos.col,
+            );
         };
         if selection.ambiguous {
             return self.ambiguous_call(name, arg_types, pos);

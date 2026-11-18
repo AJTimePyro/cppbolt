@@ -5,6 +5,7 @@ impl Sema {
         let prev_func_return_type = self.current_func_return_type.take();
         let prev_func_name = self.current_func_name.take();
         let prev_func_const = self.current_func_is_const;
+        let prev_scope_len = self.scopes.len();
         self.current_func_return_type =
             (func.return_type != Type::Auto).then(|| func.return_type.clone());
         self.current_func_name = Some(func.name.clone());
@@ -12,6 +13,23 @@ impl Sema {
         self.current_frame_size = 0;
         self.enter_scope();
 
+        let result = self.analyze_function_body(func);
+
+        // `?` in the body skips the normal cleanup. A failed analysis must not
+        // leave its scope or current-function context behind for later bodies.
+        while self.scopes.len() > prev_scope_len {
+            self.exit_scope();
+        }
+        self.current_func_is_const = prev_func_const;
+        if result.is_ok() && func.return_type == Type::Auto {
+            func.return_type = self.current_func_return_type.take().unwrap_or(Type::Void);
+        }
+        self.current_func_return_type = prev_func_return_type;
+        self.current_func_name = prev_func_name;
+        result
+    }
+
+    fn analyze_function_body(&mut self, func: &mut FunctionDecl) -> Result<(), CompileError> {
         let mut param_offset = 0;
         for param in &mut func.params {
             self.resolve_and_instantiate_type(&mut param.ty, func.line, func.col)?;
@@ -42,14 +60,6 @@ impl Sema {
         if let Some(body) = &mut func.body {
             self.analyze_stmt(body)?;
         }
-
-        self.exit_scope();
-        self.current_func_is_const = prev_func_const;
-        if func.return_type == Type::Auto {
-            func.return_type = self.current_func_return_type.take().unwrap_or(Type::Void);
-        }
-        self.current_func_return_type = prev_func_return_type;
-        self.current_func_name = prev_func_name;
         Ok(())
     }
 

@@ -1,0 +1,1 @@
+tests/negative/dtor_one_of_two_invalid.cpp:2:61: error: cannot initialize variable 'p' of type int * with int

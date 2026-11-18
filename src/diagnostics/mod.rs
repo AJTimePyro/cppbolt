@@ -11,6 +11,9 @@ pub enum ErrorKind {
     Syntax,
     /// Type checking, resolution, or layout error.
     Semantic,
+    /// A name whose declaration may appear later in the translation unit.
+    /// Only these errors may be deferred and retried after registration.
+    UnresolvedName,
     /// Feature outside the supported C++ subset.
     Unsupported,
     /// Internal invariant failure or resource limit reached.
@@ -42,6 +45,12 @@ impl CompileError {
             line,
             col,
         }
+    }
+
+    /// Creates a name-resolution diagnostic that may become resolvable once
+    /// all declarations have been registered.
+    pub fn unresolved_name(message: impl Into<String>, line: usize, col: usize) -> Self {
+        Self::new(message, line, col).with_kind(ErrorKind::UnresolvedName)
     }
 
     /// Sets the diagnostic kind.
