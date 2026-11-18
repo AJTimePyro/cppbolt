@@ -72,7 +72,11 @@ impl Sema {
             return;
         };
         for base in &layout.base_classes {
-            if find_sig(self, base, key).is_some() {
+            let is_virtual = self
+                .struct_layouts
+                .get(base)
+                .is_some_and(|base_layout| base_layout.vtable_slots.iter().any(|slot| slot == key));
+            if is_virtual && find_sig(self, base, key).is_some() {
                 result.push(base.clone());
             }
             self.collect_overridden_bases(base, key, visited, result);

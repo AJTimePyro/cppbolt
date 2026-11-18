@@ -261,6 +261,7 @@ cxx17/fold_overloaded_result
 cxx17/fold_sizeof_pack
 cxx17/fold_unary_left
 cxx17/fold_unary_right
+cxx17/hide_nonvirtual_return
 cxx17/inheritance_eight_byte_fields
 cxx17/lifecycle_direct_bases
 cxx17/lifecycle_four_levels
