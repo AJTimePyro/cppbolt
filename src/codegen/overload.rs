@@ -34,7 +34,8 @@ impl<'a> Codegen<'a> {
                 && let Some(inner) = p.deref_type()
             {
                 let is_lval = if let Some(arg_expr) = args.and_then(|s| s.get(i)) {
-                    a.is_lvalue_reference() || arg_expr.is_lvalue()
+                    a.is_lvalue_reference()
+                        || self.is_expr_lvalue(arg_expr, &FunctionContext::default())
                 } else {
                     !a.is_rvalue_reference()
                 };

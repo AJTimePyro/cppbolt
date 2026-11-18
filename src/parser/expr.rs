@@ -16,7 +16,14 @@ impl Parser {
                 break;
             }
 
+            let is_two_token = matches!(
+                op,
+                BinaryOpChoice::Binary(BinaryOp::DotStar | BinaryOp::ArrowStar)
+            );
             self.advance();
+            if is_two_token {
+                self.advance();
+            }
             let next_min = if right_assoc { prec } else { prec + 1 };
             let rhs = if op == BinaryOpChoice::Assign && self.peek() == &TokenKind::LBrace {
                 self.parse_initializer()?
@@ -103,6 +110,12 @@ impl Parser {
             }
             TokenKind::Plus => Some((BinaryOpChoice::Binary(BinaryOp::Add), 12, false)),
             TokenKind::Minus => Some((BinaryOpChoice::Binary(BinaryOp::Sub), 12, false)),
+            TokenKind::Dot if self.peek_ahead(1) == &TokenKind::Star => {
+                Some((BinaryOpChoice::Binary(BinaryOp::DotStar), 14, false))
+            }
+            TokenKind::Arrow if self.peek_ahead(1) == &TokenKind::Star => {
+                Some((BinaryOpChoice::Binary(BinaryOp::ArrowStar), 14, false))
+            }
             TokenKind::Star => Some((BinaryOpChoice::Binary(BinaryOp::Mul), 13, false)),
             TokenKind::Slash => Some((BinaryOpChoice::Binary(BinaryOp::Div), 13, false)),
             TokenKind::Percent => Some((BinaryOpChoice::Binary(BinaryOp::Rem), 13, false)),

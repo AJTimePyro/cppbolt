@@ -144,18 +144,27 @@ impl<'a> Codegen<'a> {
         if let Some(layout) = self.sema.struct_layouts.get(sname).cloned() {
             let mut field_idx = 0;
             let mut cursor = InitCursor { list, idx: 0 };
-            if let Some(base_name) = layout.base_classes.first()
-                && let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned()
-            {
-                let base_field_count = base_layout.fields.len();
-                if matches!(
-                    cursor.peek(),
-                    Some(Expr::InitializerList { .. } | Expr::TypedInitList { .. })
-                ) && let Some(base_item) = cursor.next()
-                {
-                    let base_ty = Type::Struct(base_name.clone());
-                    self.compile_aggregate_local(&base_ty, base_item, offset, ctx, code)?;
-                    field_idx += base_field_count;
+            for (base_name, base_off) in &layout.base_offsets {
+                if let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned() {
+                    let base_field_count = base_layout.fields.len();
+                    if matches!(
+                        cursor.peek(),
+                        Some(Expr::InitializerList { .. } | Expr::TypedInitList { .. })
+                    ) && let Some(base_item) = cursor.next()
+                    {
+                        let base_ty = Type::Struct(base_name.clone());
+                        let base_local_offset = offset
+                            .checked_add(*base_off as u32)
+                            .ok_or_else(|| self.internal_error("object is too large"))?;
+                        self.compile_aggregate_local(
+                            &base_ty,
+                            base_item,
+                            base_local_offset,
+                            ctx,
+                            code,
+                        )?;
+                        field_idx += base_field_count;
+                    }
                 }
             }
             while field_idx < layout.fields.len() {
@@ -257,6 +266,9 @@ impl<'a> Codegen<'a> {
                 code.push(OP_I64_CONST);
                 write_i64(code, 0);
             }
+            Type::MemberPointer { member_type, .. } => {
+                Self::emit_null_member_pointer(member_type, code);
+            }
             _ => {
                 code.push(OP_I32_CONST);
                 write_i32(code, 0);
@@ -317,8 +329,8 @@ impl<'a> Codegen<'a> {
     ) -> Result<(), CompileError> {
         let init_ty = self.get_expr_type(init, ctx);
         if matches!(
-            init_ty.strip_const().strip_reference(),
-            Type::Struct(other) if other == sname
+        init_ty.strip_const().strip_reference(),
+        Type::Struct(other) if other == sname
         ) {
             let is_rvalue = self.is_expr_xvalue(init, ctx);
             let is_const = init_ty.strip_reference().is_const();

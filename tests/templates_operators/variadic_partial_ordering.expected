@@ -1,0 +1,4 @@
+single: 42
+variadic: 42
+pick single: 7
+pick variadic: 7

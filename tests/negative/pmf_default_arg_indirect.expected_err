@@ -1,0 +1,1 @@
+tests/negative/pmf_default_arg_indirect.cpp:5:10: error: too few arguments to pointer-to-member function call, expected 1, have 0

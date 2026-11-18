@@ -8,7 +8,7 @@ The semantic analysis stage validates the Abstract Syntax Tree, computes record 
 
 1. **Symbol Registration & Scoping**: Registers struct definitions, function signatures, global variables, and type aliases across lexical and namespace scopes (`src/sema/analyze.rs`).
 2. **Record Layout & Alignment**: Computes struct field offsets, overall sizes, and alignment padding according to the 32-bit ILP32 target model (`src/sema/layout.rs`).
-3. **Vtable Layout & Hierarchy Analysis**: Analyzes single and linear inheritance hierarchies, computes base subobject offsets, identifies pure virtual methods (`= 0`), and assigns vtable function pointer slots in base-prefix order.
+3. **Vtable Layout & Hierarchy Analysis**: Analyzes single, linear, and multiple inheritance hierarchies, computes base subobject offsets, identifies pure virtual methods (`= 0`), and assigns vtable function pointer slots in base-prefix order.
 4. **Implicit Method Synthesis & Copy Suppression**: Synthesizes default constructors, copy constructors, copy assignment operators, move constructors, move assignment operators, and destructors (`src/sema/synthesize.rs`, `src/sema/synthesize_ops.rs`). Copy operations recursively copy base subobjects before member fields. Declaring user move operations suppresses implicit copy operations. Copying move-only types (`std::unique_ptr`) is rejected across variable initialization, assignment, call arguments, and return statements.
 5. **Overload Resolution Ranking & Value Categories**: Implements standard overload ranking rules to pick the best function or constructor candidate and detect ambiguous calls (`src/sema/overload.rs`). Categorizes expressions as lvalues, prvalues, or xvalues. Rvalues bind to `const T&` or `T&&`, with exact value-category bonuses favoring rvalue references over const lvalue references.
 6. **Forwarding References & Reference Collapsing**: Detects forwarding references in function templates (`template <typename T> void f(T&&)`) and applies standard reference collapsing rules (`&` + `&&` -> `&`, `&&` + `&&` -> `&&`) during template argument deduction (`src/sema/template_deduce.rs`).
@@ -19,11 +19,18 @@ The semantic analysis stage validates the Abstract Syntax Tree, computes record 
 11. **Closure Synthesis & Lambda Desugaring**: Synthesizes unique anonymous closure structs (`__lambda_N`) for C++17 lambda expressions (`src/sema/expr_lambda.rs`), generating fields for captures, constructor initialization, `operator()` call signatures, return type deduction, and static `__invoke` trampoline methods for implicit conversion to C function pointers.
 12. **Recursive `operator->` Resolution**: Resolves chained member-arrow accesses recursively until a raw pointer is reached, enforcing cycle detection and receiver `const` propagation (`src/sema/expr_member.rs`).
 13. **List Initialization**: Resolves braced initializers (`src/sema/init.rs`) across direct-list, copy-list, and value-initialization contexts. Enforces C++17 narrowing rules ([dcl.init.list] p7) and `explicit` constructor rejection in copy contexts, resolves aggregate base subobjects, and implements C++17 aggregate brace elision ([dcl.init.aggr] p11) for nested array and aggregate members.
+14. **Parameter Pack Substitution & Expansion**: Expands parameter packs at compile time across expressions, types, base class lists, and constructor initializers (`src/sema/pack_expansion.rs`). Validates that multiple packs expanded within the same pattern have identical lengths, rejects unexpanded parameter packs with clear diagnostics, lays out multiple base subobjects with offset adjustments, and evaluates `sizeof...(pack)` constant queries (`src/sema/constexpr_eval.rs`).
+15. **Function Template Partial Ordering**: Analyzes and orders function templates per C++11 [temp.func.order] in `src/sema/template_partial_order.rs`, scoring type specificity and treating non-pack parameters as strictly more specialized than parameter packs. Integrates partial ordering into overload resolution ([over.match.best]) in `src/sema/expr_call.rs`.
 
 ---
 
 ## 2. Key Data Structures
 
+- `TemplateArg`: Represents concrete template argument values during substitution and pack expansion:
+  - `Type(Type)`: Concrete type argument.
+  - `NonType(i128)`: Evaluated non-type constant argument.
+  - `TypePack(Vec<Type>)`: Type parameter pack.
+  - `NonTypePack(Vec<i128>)`: Non-type parameter pack.
 - `Sema`: Central semantic state containing:
   - `structs: HashMap<String, StructLayout>`: Layouts, field offsets, vtable slots, and pure virtual tracking for all defined records.
   - `functions: HashMap<String, Vec<FunctionSig>>`: All registered functions and method overloads.

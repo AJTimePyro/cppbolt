@@ -18,6 +18,11 @@ impl Parser {
         if self.peek() == &TokenKind::KwNamespace {
             return self.parse_namespace_decl(declarations);
         }
+        if self.peek() == &TokenKind::KwStaticAssert {
+            let decl = self.parse_static_assert_decl()?;
+            declarations.push(decl);
+            return Ok(());
+        }
 
         if self.peek() == &TokenKind::KwUsing {
             return self.parse_using_decl(declarations);
@@ -39,7 +44,10 @@ impl Parser {
             return Ok(());
         }
 
-        if self.peek() == &TokenKind::KwStruct || self.peek() == &TokenKind::KwClass {
+        if self.peek() == &TokenKind::KwStruct
+            || self.peek() == &TokenKind::KwClass
+            || self.is_struct_after_alignas()
+        {
             let decl = self.parse_struct()?;
             flatten_struct_decl(decl, declarations);
             return Ok(());
@@ -49,7 +57,6 @@ impl Parser {
         declarations.extend(decl);
         Ok(())
     }
-
     fn parse_namespace_decl(&mut self, declarations: &mut Vec<Decl>) -> Result<(), CompileError> {
         self.advance();
         if self.peek() == &TokenKind::LBrace {
@@ -132,7 +139,7 @@ impl Parser {
             name = self.qualify_name(name);
             if self.peek() == &TokenKind::Assign {
                 self.advance();
-                let ty = self.parse_type()?;
+                let ty = self.parse_type_id()?;
                 self.expect(TokenKind::Semi)?;
                 self.register_type_alias(name, ty);
                 return Ok(());
@@ -146,7 +153,7 @@ impl Parser {
     fn parse_typedef_decl(&mut self) -> Result<(), CompileError> {
         self.advance();
         let base_type = self.parse_type()?;
-        if self.peek() == &TokenKind::LParen && self.peek_ahead(1) == &TokenKind::Star {
+        if self.is_function_pointer_declarator_ahead() {
             // Function-pointer typedef: Base (*Name)(args).
             let (final_ty, id) =
                 self.parse_function_pointer_declarator(base_type, Some("Expected typedef name"))?;
@@ -193,6 +200,7 @@ impl Parser {
     /// `Decl` per declarator.
     pub(super) fn parse_global_or_func(&mut self) -> Result<Vec<Decl>, CompileError> {
         let start_tok = self.current().clone();
+        let mut is_constexpr = false;
         while matches!(
             self.peek(),
             TokenKind::KwInline
@@ -200,6 +208,9 @@ impl Parser {
                 | TokenKind::KwExplicit
                 | TokenKind::KwStatic
         ) {
+            if self.peek() == &TokenKind::KwConstexpr {
+                is_constexpr = true;
+            }
             self.advance();
         }
 
@@ -213,11 +224,12 @@ impl Parser {
         let mut declarations = Vec::new();
         loop {
             let ty = self.parse_declarator_prefix(&specifiers)?;
-            if declarations.is_empty()
-                && self.peek() == &TokenKind::LParen
-                && self.peek_ahead(1) == &TokenKind::Star
-            {
-                return Ok(vec![self.parse_function_pointer_global(ty, &start_tok)?]);
+            if declarations.is_empty() && self.is_function_pointer_declarator_ahead() {
+                return Ok(vec![self.parse_function_pointer_global(
+                    ty,
+                    &start_tok,
+                    is_constexpr,
+                )?]);
             }
             let mut name = if self.peek() == &TokenKind::KwOperator {
                 self.advance();
@@ -228,13 +240,14 @@ impl Parser {
             name = self.qualify_name(name);
 
             if declarations.is_empty() && self.peek() == &TokenKind::LParen {
-                let decl = self.parse_ambiguous_global_or_func(name, ty, &start_tok)?;
+                let decl =
+                    self.parse_ambiguous_global_or_func(name, ty, &start_tok, is_constexpr)?;
                 if matches!(decl, Decl::Function(_)) {
                     return Ok(vec![decl]);
                 }
-                declarations.push(decl);
+                declarations.push(self.mark_constexpr(decl, is_constexpr));
             } else {
-                declarations.push(self.parse_global_var(name, ty, &start_tok)?);
+                declarations.push(self.parse_global_var(name, ty, &start_tok, is_constexpr)?);
             }
 
             if self.peek() != &TokenKind::Comma {
@@ -253,6 +266,7 @@ impl Parser {
         name: String,
         ty: Type,
         start_tok: &Token,
+        is_constexpr: bool,
     ) -> Result<Decl, CompileError> {
         let is_definite_function =
             self.peek_ahead(1) == &TokenKind::RParen || self.has_function_tail_indicators();
@@ -263,14 +277,15 @@ impl Parser {
 
         let starts_with_expr = token_starts_expr(self.peek_ahead(1));
         let saved_pos = self.pos;
+        let saved_splits = self.shr_splits.len();
         match self.parse_function_tail(name.clone(), ty.clone(), start_tok.line, start_tok.col) {
             Ok(func) => Ok(Decl::Function(func)),
             Err(func_err) => {
                 if self.nesting_exceeded.get() {
                     return Err(func_err);
                 }
-                self.pos = saved_pos;
-                self.parse_global_var(name, ty, start_tok)
+                self.rollback_pos(saved_pos, saved_splits);
+                self.parse_global_var(name, ty, start_tok, is_constexpr)
                     .map_err(|var_err| {
                         if starts_with_expr || self.pos > saved_pos + 1 {
                             var_err
@@ -320,6 +335,30 @@ impl Parser {
         }
     }
 
+    /// Marks a global variable declaration as constexpr by wrapping its type
+    /// in `Const`. Functions are returned unchanged.
+    fn mark_constexpr(&self, decl: Decl, is_constexpr: bool) -> Decl {
+        if !is_constexpr {
+            return decl;
+        }
+        match decl {
+            Decl::GlobalVar {
+                name,
+                ty,
+                init,
+                line,
+                col,
+            } => Decl::GlobalVar {
+                name,
+                ty: Type::Const(Box::new(ty)),
+                init,
+                line,
+                col,
+            },
+            other => other,
+        }
+    }
+
     /// Parses one global variable declarator. The caller consumes the `,` that
     /// separates declarators and the terminating `;`.
     fn parse_global_var(
@@ -327,9 +366,15 @@ impl Parser {
         name: String,
         ty: Type,
         start_tok: &Token,
+        is_constexpr: bool,
     ) -> Result<Decl, CompileError> {
         let final_ty = self.parse_array_suffix(ty)?;
         let init = self.parse_var_init(&final_ty, start_tok.line, start_tok.col)?;
+        let final_ty = if is_constexpr {
+            Type::Const(Box::new(final_ty))
+        } else {
+            final_ty
+        };
         Ok(Decl::GlobalVar {
             name,
             ty: final_ty,
@@ -344,9 +389,46 @@ impl Parser {
         &mut self,
         ty: Type,
         start_tok: &Token,
+        is_constexpr: bool,
     ) -> Result<Decl, CompileError> {
         let (final_ty, name) =
             self.parse_function_pointer_declarator(ty, Some("Expected variable name"))?;
+        if let Type::Function {
+            return_type,
+            param_types,
+            ..
+        } = final_ty
+        {
+            let ctor_initializers = self.parse_ctor_initializers()?;
+            let (body, is_pure_virtual) =
+                self.parse_function_body(start_tok.line, start_tok.col)?;
+            let params = param_types
+                .into_iter()
+                .map(|ty| Param {
+                    name: String::new(),
+                    ty,
+                    default_val: None,
+                    is_pack: false,
+                })
+                .collect();
+            return Ok(Decl::Function(FunctionDecl {
+                qualifiers: FunctionQualifiers::default(),
+                name,
+                return_type: *return_type,
+                params,
+                body,
+                is_virtual: false,
+                is_pure_virtual,
+                is_const: false,
+                is_explicit: false,
+                ref_qualifier: RefQualifier::None,
+                is_static: false,
+                ctor_initializers,
+                template_params: Vec::new(),
+                line: start_tok.line,
+                col: start_tok.col,
+            }));
+        }
         let init = if self.peek() == &TokenKind::Assign {
             self.advance();
             Some(self.parse_initializer()?)
@@ -354,6 +436,11 @@ impl Parser {
             None
         };
         self.expect(TokenKind::Semi)?;
+        let final_ty = if is_constexpr {
+            Type::Const(Box::new(final_ty))
+        } else {
+            final_ty
+        };
         Ok(Decl::GlobalVar {
             name,
             ty: final_ty,

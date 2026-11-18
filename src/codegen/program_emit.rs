@@ -1,6 +1,13 @@
 use super::call_types::{wasm_result_types, wasm_value_type};
 use super::*;
 
+struct VTableEntryTarget<'a> {
+    class_name: &'a str,
+    owner: &'a str,
+    owner_offset: usize,
+    vptr_offset: usize,
+}
+
 impl<'a> Codegen<'a> {
     pub(super) fn emit(&mut self, plan: &Plan) -> Result<(), CompileError> {
         self.declare_functions(plan);
@@ -108,6 +115,7 @@ impl<'a> Codegen<'a> {
                     name: "this".to_string(),
                     ty: Type::Pointer(Box::new(this_inner)),
                     default_val: None,
+                    is_pack: false,
                 },
             );
         }
@@ -156,7 +164,10 @@ impl<'a> Codegen<'a> {
         let mut deleting_dtor_structs = Vec::new();
         for name in &self.sema.struct_order {
             if let Some(layout) = self.sema.struct_layouts.get(name)
-                && layout.vtable_slots.iter().any(|s| s == "__deleting_dtor")
+                && layout
+                    .vtables
+                    .iter()
+                    .any(|t| t.slots.iter().any(|s| s.is_deleting_dtor))
             {
                 let type_idx = self.t_i32_v;
                 let func_idx = (self.module.imports.len() + self.module.functions.len()) as u32;
@@ -168,41 +179,102 @@ impl<'a> Codegen<'a> {
         }
         deleting_dtor_structs
     }
+    /// Builds one 8-byte vtable entry: the function-table index followed by a
+    /// signed `this` adjustment. The adjustment converts the `this` value a
+    /// caller holds (pointing at the slot's owning subobject) into the one the
+    /// final overrider expects.
+    fn vtable_entry(
+        &mut self,
+        target: VTableEntryTarget<'_>,
+        slot: &crate::sema::VTableSlotInfo,
+        plan: &Plan,
+    ) -> (u32, i32, i32) {
+        let VTableEntryTarget {
+            class_name,
+            owner,
+            owner_offset,
+            vptr_offset,
+        } = target;
+        let trap_idx = plan.trap_func_idx.unwrap_or(0);
+        if slot.is_deleting_dtor {
+            let idx = self
+                .func_indices
+                .get(&format!("{}_deleting_dtor", class_name))
+                .copied()
+                .unwrap_or(trap_idx);
+            return (idx, -(vptr_offset as i32), 0);
+        }
+        if slot.key.is_destructor() {
+            let idx = self
+                .find_destructor_sig(class_name, "~")
+                .map(|(idx, _)| idx)
+                .unwrap_or(trap_idx);
+            return (idx, -(vptr_offset as i32), 0);
+        }
+        let base_ret =
+            crate::sema::find_sig(self.sema, owner, &slot.key).map(|sig| sig.return_type.clone());
+        let (func_idx, overrider_offset, ret_adjust) =
+            match self.find_final_overrider(class_name, owner, owner_offset, &slot.key) {
+                Some((cls, offset)) => {
+                    let derived_ret = crate::sema::find_sig(self.sema, &cls, &slot.key)
+                        .map(|sig| sig.return_type.clone());
+                    let adjust = match (&base_ret, &derived_ret) {
+                        (Some(b), Some(d)) => crate::sema::return_adjustment(b, d, self.sema),
+                        _ => 0,
+                    };
+                    (
+                        self.find_class_vmethod(&cls, &slot.key).unwrap_or(trap_idx),
+                        offset,
+                        adjust,
+                    )
+                }
+                None => (trap_idx, owner_offset, 0),
+            };
+        (
+            func_idx,
+            (overrider_offset as i64 - vptr_offset as i64) as i32,
+            ret_adjust,
+        )
+    }
 
     fn emit_vtables(&mut self, plan: &Plan) {
         for name in &self.sema.struct_order {
-            if let Some(layout) = self.sema.struct_layouts.get(name)
-                && layout.has_vtable
-            {
+            let Some(layout) = self.sema.struct_layouts.get(name).cloned() else {
+                continue;
+            };
+            if !layout.has_vtable {
+                continue;
+            }
+            let mut installs = Vec::new();
+            for table in &layout.vtables {
                 let vtable_addr = self.next_data_offset;
-                self.vtable_offsets.insert(name.clone(), vtable_addr);
+                installs.push((table.vptr_offset as u32, vtable_addr));
 
                 let mut vtable_bytes = Vec::new();
-                for slot_name in &layout.vtable_slots {
-                    let trap_idx = plan.trap_func_idx.unwrap_or(0);
-                    let func_idx = if slot_name == "__deleting_dtor" {
-                        self.func_indices
-                            .get(&format!("{}_deleting_dtor", name))
-                            .copied()
-                            .unwrap_or(trap_idx)
-                    } else if slot_name.starts_with('~') {
-                        let d_name = format!("{}_{}", name, slot_name);
-                        self.func_indices.get(&d_name).copied().unwrap_or(trap_idx)
-                    } else if let Some(idx) = self.find_class_vmethod(name, slot_name) {
-                        idx
-                    } else {
-                        trap_idx
-                    };
+                for slot in &table.slots {
+                    let (func_idx, adjustment, ret_adjust) = self.vtable_entry(
+                        VTableEntryTarget {
+                            class_name: name,
+                            owner: &table.owner,
+                            owner_offset: table.owner_offset,
+                            vptr_offset: table.vptr_offset,
+                        },
+                        slot,
+                        plan,
+                    );
 
                     let table_elem_idx = self.vtable_func_indices.len() as u32;
                     self.vtable_func_indices.push(func_idx);
 
                     vtable_bytes.extend_from_slice(&table_elem_idx.to_le_bytes());
+                    vtable_bytes.extend_from_slice(&adjustment.to_le_bytes());
+                    vtable_bytes.extend_from_slice(&ret_adjust.to_le_bytes());
                 }
 
                 self.module.data.push((vtable_addr, vtable_bytes));
-                self.next_data_offset += (layout.vtable_slots.len() * 4) as u32;
+                self.next_data_offset += (table.slots.len() * 12) as u32;
             }
+            self.vtable_offsets.insert(name.clone(), installs);
         }
     }
 
@@ -212,7 +284,7 @@ impl<'a> Codegen<'a> {
                 continue;
             }
             if cand.aliases.iter().any(|a| plan.address_taken.contains(a))
-                && let Some(&func_idx) = cand.aliases.iter().find_map(|a| self.func_indices.get(a))
+                && let Some(&func_idx) = self.func_indices.get(&cand.mangled)
             {
                 let table_elem_idx = self.vtable_func_indices.len() as u32;
                 self.vtable_func_indices.push(func_idx);
@@ -264,6 +336,7 @@ impl<'a> Codegen<'a> {
                                     name: "this".to_string(),
                                     ty: Type::Pointer(Box::new(this_inner)),
                                     default_val: None,
+                                    is_pack: false,
                                 },
                             );
                         }

@@ -1,0 +1,1 @@
+tests/negative/variadic_ambiguous_call.cpp:8:5: error: call of overloaded 'clash(int, int)' is ambiguous

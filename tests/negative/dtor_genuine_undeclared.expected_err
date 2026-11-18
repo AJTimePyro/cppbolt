@@ -1,0 +1,1 @@
+tests/negative/dtor_genuine_undeclared.cpp:1:55: error: Undefined function 'never_declared'

@@ -1,0 +1,1 @@
+tests/negative/pm_application_ambiguous_base.cpp:8:12: error: base 'A' is ambiguous in object of type 'D'

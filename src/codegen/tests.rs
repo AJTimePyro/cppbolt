@@ -1,4 +1,5 @@
 use super::*;
+use crate::ast::types::FunctionQualifiers;
 
 fn context() -> FunctionContext {
     FunctionContext {
@@ -121,6 +122,7 @@ fn array_subscripts_wrap_64_bit_indices() {
 fn copy_constructor_lookup_ignores_conversion_operators_and_scalar_constructors() {
     let mut sema = Sema::new();
     sema.register_function(FunctionSig {
+        qualifiers: FunctionQualifiers::default(),
         name: "Foo::Foo".to_string(),
         mangled_name: "Foo_Foo_i".to_string(),
         return_type: Type::Void,
@@ -134,6 +136,7 @@ fn copy_constructor_lookup_ignores_conversion_operators_and_scalar_constructors(
         ref_qualifier: RefQualifier::None,
     });
     sema.register_function(FunctionSig {
+        qualifiers: FunctionQualifiers::default(),
         name: "Foo::operator int".to_string(),
         mangled_name: "Foo_operator_int".to_string(),
         return_type: Type::Int,
@@ -147,6 +150,7 @@ fn copy_constructor_lookup_ignores_conversion_operators_and_scalar_constructors(
     });
 
     sema.register_function(FunctionSig {
+        qualifiers: FunctionQualifiers::default(),
         name: "Bar::Bar".to_string(),
         mangled_name: "Bar_Bar_R".to_string(),
         return_type: Type::Void,
@@ -215,6 +219,7 @@ fn dereferencing_pointer_to_array_does_not_emit_scalar_load() {
 fn copy_constructor_lookup_ignores_pointer_parameters() {
     let mut sema = Sema::new();
     sema.register_function(FunctionSig {
+        qualifiers: FunctionQualifiers::default(),
         name: "Buffer::Buffer".to_string(),
         mangled_name: "Buffer_Buffer_P".to_string(),
         return_type: Type::Void,
@@ -248,6 +253,7 @@ fn copy_constructor_lookup_ignores_pointer_parameters() {
 fn free_dereference_operator_lvalue_calls_operator() {
     let mut sema = Sema::new();
     sema.register_function(FunctionSig {
+        qualifiers: FunctionQualifiers::default(),
         name: "operator*".to_string(),
         mangled_name: "deref_iter".to_string(),
         return_type: Type::Reference(Box::new(Type::Int)),

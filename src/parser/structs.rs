@@ -2,22 +2,30 @@ use super::*;
 
 impl Parser {
     pub(super) fn parse_struct(&mut self) -> Result<Decl, CompileError> {
+        let mut struct_align = None;
+        if self.peek() == &TokenKind::KwAlignas {
+            let spec = self.parse_alignas_spec()?;
+            struct_align = Some(spec.to_type());
+        }
         let start = self.current().clone();
-        let (name, is_class) = self.parse_struct_name()?;
+        let (name, is_class, is_final) = self.parse_struct_name(&mut struct_align)?;
         if !self.active_type_params.is_empty() {
             self.register_template_name(&name);
         }
 
         if self.peek() == &TokenKind::Semi {
             self.advance();
-            return Ok(StructBody::new(name, is_class, start.line, start.col).into_decl(Vec::new()));
+            let mut body = StructBody::new(name.clone(), is_class, is_final, start.line, start.col);
+            body.alignment = struct_align;
+            return Ok(body.into_decl(Vec::new()));
         }
 
-        let base_classes = self.parse_base_classes()?;
+        let base_classes = self.parse_base_classes(is_class)?;
         self.expect(TokenKind::LBrace)?;
 
         self.active_struct_scopes.push(name.clone());
-        let mut body = StructBody::new(name, is_class, start.line, start.col);
+        let mut body = StructBody::new(name.clone(), is_class, is_final, start.line, start.col);
+        body.alignment = struct_align;
         while self.peek() != &TokenKind::RBrace && self.peek() != &TokenKind::Eof {
             self.parse_struct_member(&mut body)?;
         }
@@ -25,13 +33,27 @@ impl Parser {
 
         self.expect(TokenKind::RBrace)?;
         self.expect(TokenKind::Semi)?;
+        for (fname, fty, _) in &body.fields {
+            self.member_types
+                .insert(format!("{}::{}", name, fname), fty.clone());
+            self.member_types
+                .entry(fname.clone())
+                .or_insert_with(|| fty.clone());
+        }
 
         Ok(body.into_decl(base_classes))
     }
 
-    fn parse_struct_name(&mut self) -> Result<(String, bool), CompileError> {
+    fn parse_struct_name(
+        &mut self,
+        struct_align: &mut Option<Type>,
+    ) -> Result<(String, bool, bool), CompileError> {
         let is_class = self.current().kind == TokenKind::KwClass;
         self.advance();
+        if self.peek() == &TokenKind::KwAlignas {
+            let spec = self.parse_alignas_spec()?;
+            *struct_align = Some(spec.to_type());
+        }
         let mut name = match self.advance().kind.clone() {
             TokenKind::Ident(id) => id,
             _ => {
@@ -52,6 +74,12 @@ impl Parser {
                 .join(", ");
             name = format!("{}<{}>", name, canonical_args);
         }
+        let is_final = if matches!(self.peek(), TokenKind::Ident(id) if id == "final") {
+            self.advance();
+            true
+        } else {
+            false
+        };
         self.known_types.insert(name.clone());
         if let Some(short) = name.split("::").last() {
             self.known_types.insert(short.to_string());
@@ -62,60 +90,7 @@ impl Parser {
         } else if qualified.in_std() {
             self.known_types.insert(qualified.plain().to_string());
         }
-        Ok((name, is_class))
-    }
-
-    pub(super) fn parse_base_classes(&mut self) -> Result<Vec<String>, CompileError> {
-        let mut base_classes = Vec::new();
-        if self.peek() == &TokenKind::Colon {
-            self.advance();
-            loop {
-                loop {
-                    if self.peek() == &TokenKind::KwVirtual {
-                        let token = self.current();
-                        return Err(CompileError::new(
-                            "virtual inheritance is not supported",
-                            token.line,
-                            token.col,
-                        ));
-                    }
-                    if matches!(
-                        self.peek(),
-                        TokenKind::KwPublic | TokenKind::KwPrivate | TokenKind::KwProtected
-                    ) {
-                        self.advance();
-                    } else {
-                        break;
-                    }
-                }
-                let base_token = self.current().clone();
-                match self.advance().kind.clone() {
-                    TokenKind::Ident(base) => {
-                        if !base_classes.is_empty() {
-                            return Err(CompileError::new(
-                                "multiple inheritance is not supported",
-                                base_token.line,
-                                base_token.col,
-                            ));
-                        }
-                        base_classes.push(base);
-                    }
-                    _ => {
-                        return Err(CompileError::new(
-                            "Expected base class name",
-                            self.current().line,
-                            self.current().col,
-                        ));
-                    }
-                }
-                if self.peek() == &TokenKind::Comma {
-                    self.advance();
-                } else {
-                    break;
-                }
-            }
-        }
-        Ok(base_classes)
+        Ok((name, is_class, is_final))
     }
 
     pub(super) fn parse_struct_member(
@@ -154,6 +129,13 @@ impl Parser {
             if body.methods.len() > initial_methods_len
                 && let Some(last) = body.methods.last_mut()
             {
+                if last.is_virtual {
+                    return Err(CompileError::new(
+                        "virtual member function templates are not supported",
+                        last.line,
+                        last.col,
+                    ));
+                }
                 last.template_params = params;
             }
         }
@@ -196,42 +178,56 @@ impl Parser {
 pub(super) struct StructBody {
     pub(super) name: String,
     pub(super) is_class: bool,
+    pub(super) is_final: bool,
     pub(super) fields: Vec<StructFieldDecl>,
     pub(super) methods: Vec<FunctionDecl>,
     pub(super) static_fields: Vec<(String, Type, Option<Expr>)>,
     pub(super) private_members: Vec<String>,
     pub(super) nested_structs: Vec<Decl>,
     pub(super) is_private: bool,
+    pub(super) alignment: Option<Type>,
     pub(super) line: usize,
     pub(super) col: usize,
 }
 
 impl StructBody {
-    pub(super) fn new(name: String, is_class: bool, line: usize, col: usize) -> Self {
+    pub(super) fn new(
+        name: String,
+        is_class: bool,
+        is_final: bool,
+        line: usize,
+        col: usize,
+    ) -> Self {
         Self {
             name,
             is_class,
+            is_final,
             fields: Vec::new(),
             methods: Vec::new(),
             static_fields: Vec::new(),
             private_members: Vec::new(),
             nested_structs: Vec::new(),
             is_private: is_class,
+            alignment: None,
             line,
             col,
         }
     }
 
-    pub(super) fn into_decl(self, base_classes: Vec<String>) -> Decl {
+    pub(super) fn into_decl(self, bases: Vec<(String, BaseAccess)>) -> Decl {
+        let (base_classes, base_access) = bases.into_iter().unzip();
         Decl::StructDecl {
             name: self.name,
             is_class: self.is_class,
+            is_final: self.is_final,
             base_classes,
+            base_access,
             fields: self.fields,
             methods: self.methods,
             static_fields: self.static_fields,
             private_members: self.private_members,
             nested_structs: self.nested_structs,
+            alignment: self.alignment,
             line: self.line,
             col: self.col,
         }
@@ -239,36 +235,6 @@ impl StructBody {
 }
 
 impl Parser {
-    fn parse_struct_access(&mut self, body: &mut StructBody) -> Result<bool, CompileError> {
-        if self.peek() == &TokenKind::KwPublic {
-            self.advance();
-            self.expect(TokenKind::Colon)?;
-            body.is_private = false;
-            return Ok(true);
-        }
-        if matches!(self.peek(), TokenKind::KwPrivate | TokenKind::KwProtected) {
-            self.advance();
-            self.expect(TokenKind::Colon)?;
-            body.is_private = true;
-            return Ok(true);
-        }
-        Ok(false)
-    }
-
-    fn parse_struct_friend(&mut self) -> Result<bool, CompileError> {
-        if self.peek() == &TokenKind::KwFriend {
-            self.advance();
-            while self.peek() != &TokenKind::Semi && self.peek() != &TokenKind::Eof {
-                self.advance();
-            }
-            if self.peek() == &TokenKind::Semi {
-                self.advance();
-            }
-            return Ok(true);
-        }
-        Ok(false)
-    }
-
     /// Parses the conversion operator, destructor, and constructor forms of a
     /// class member. Returns `true` when one of them was parsed.
     fn parse_struct_special_member(
@@ -303,14 +269,15 @@ impl Parser {
             };
             let mut dtor =
                 self.parse_function_tail(dname, Type::Void, start_tok.line, start_tok.col)?;
-            dtor.is_virtual = is_virtual;
+            dtor.is_virtual |= is_virtual;
             body.methods.push(dtor);
             return Ok(true);
         }
 
-        let short_name = body.name.split("::").last().unwrap_or(&body.name);
+        let base_name = body.name.split('<').next().unwrap_or(&body.name);
+        let short_name = base_name.split("::").last().unwrap_or(base_name);
         if let TokenKind::Ident(id) = self.peek().clone()
-            && (id == body.name || id == short_name)
+            && (id == body.name || id == base_name || id == short_name)
             && self.peek_ahead(1) == &TokenKind::LParen
         {
             self.advance();
@@ -320,7 +287,7 @@ impl Parser {
                 start_tok.line,
                 start_tok.col,
             )?;
-            ctor.is_virtual = is_virtual;
+            ctor.is_virtual |= is_virtual;
             ctor.is_explicit = is_explicit;
             body.methods.push(ctor);
             return Ok(true);
@@ -362,7 +329,7 @@ impl Parser {
         let fname = format!("operator {}", target_type.to_c_type());
         let mut func =
             self.parse_function_tail(fname.clone(), target_type, start_tok.line, start_tok.col)?;
-        func.is_virtual = is_virtual;
+        func.is_virtual |= is_virtual;
         func.is_static = is_static;
         func.is_explicit = is_explicit;
         if body.is_private {
@@ -382,29 +349,38 @@ impl Parser {
     ) -> Result<(), CompileError> {
         if self.is_type_start() {
             let specifiers = self.parse_specifier_type()?;
-            let ty = self.parse_declarator_prefix(&specifiers)?;
-            let fname = if self.peek() == &TokenKind::KwOperator {
-                self.advance();
-                self.parse_operator_name()?
+            let (ty, fname, is_fn_pointer_field) = if self.is_function_pointer_declarator_ahead() {
+                let (t, n) = self.parse_function_pointer_declarator(
+                    specifiers.clone(),
+                    Some("Expected member identifier"),
+                )?;
+                (t, n, true)
             } else {
-                match self.advance().kind.clone() {
-                    TokenKind::Ident(id) => id,
-                    _ => {
-                        return Err(CompileError::new(
-                            "Expected member identifier",
-                            self.current().line,
-                            self.current().col,
-                        ));
+                let ty = self.parse_declarator_prefix(&specifiers)?;
+                let fname = if self.peek() == &TokenKind::KwOperator {
+                    self.advance();
+                    self.parse_operator_name()?
+                } else {
+                    match self.advance().kind.clone() {
+                        TokenKind::Ident(id) => id,
+                        _ => {
+                            return Err(CompileError::new(
+                                "Expected member identifier",
+                                self.current().line,
+                                self.current().col,
+                            ));
+                        }
                     }
-                }
+                };
+                (ty, fname, false)
             };
 
             // A parameter list after the name marks a member function;
             // otherwise this is a field declaration.
-            if self.peek() == &TokenKind::LParen {
+            if !is_fn_pointer_field && self.peek() == &TokenKind::LParen {
                 let mut func =
                     self.parse_function_tail(fname.clone(), ty, start_tok.line, start_tok.col)?;
-                func.is_virtual = is_virtual;
+                func.is_virtual |= is_virtual;
                 func.is_static = is_static;
                 func.is_explicit = is_explicit;
                 if body.is_private {
@@ -424,11 +400,12 @@ impl Parser {
         Ok(())
     }
     fn parse_optional_member_init(&mut self) -> Result<FieldInit, CompileError> {
-        if self.peek() == &TokenKind::Assign {
-            let tok = self.advance().clone();
-            Ok(Some((self.parse_initializer()?, tok.line, tok.col)))
-        } else if self.peek() == &TokenKind::LBrace {
-            let tok = self.current().clone();
+        if matches!(self.peek(), TokenKind::Assign | TokenKind::LBrace) {
+            let tok = if self.peek() == &TokenKind::Assign {
+                self.advance().clone()
+            } else {
+                self.current().clone()
+            };
             Ok(Some((self.parse_initializer()?, tok.line, tok.col)))
         } else {
             Ok(None)

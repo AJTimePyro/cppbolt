@@ -216,11 +216,11 @@ Diagnostics use the format `<file>:line:column: error: message`. The ABI does no
 
 ## Language coverage
 
-cppbolt supports scalar types, pointers, arrays, functions, classes, non-static data member initializers (NSDMI), aggregate initialization, selection initializers (`if`/`switch`), comma operator expressions, single inheritance, virtual functions, operator overloading, lambdas, range-based `for`, and the preprocessor, along with an embedded mini standard library (`<iostream>`, `<string>`, `<vector>`, `<array>`, `<map>`, `<set>`, `<algorithm>`, `<cstdio>`, `<cmath>`, `<iomanip>`, `<memory>`, `<utility>`, `<functional>`, and related headers).
+cppbolt supports scalar types, pointers, arrays, functions, classes, non-static data member initializers (NSDMI), aggregate initialization, selection initializers (`if`/`switch`), comma operator expressions, single and multiple inheritance, virtual functions, operator overloading, lambdas, range-based `for`, and the preprocessor, along with an embedded mini standard library (`<iostream>`, `<string>`, `<vector>`, `<array>`, `<map>`, `<set>`, `<algorithm>`, `<cstdio>`, `<cmath>`, `<iomanip>`, `<memory>`, `<utility>`, `<tuple>`, `<functional>`, and related headers).
 
-Function and class templates are supported, as are `std::vector`, `std::string`, `std::array`, `std::map`, `std::set`, and the common algorithms (`std::sort`, `std::reverse`, `std::find`, `std::count`, `std::max`, `std::min`). Coverage is not uniform: range-based `for` over `std::map` and `std::set` currently fails with an internal member-access diagnostic, and `<unordered_map>`, `<queue>`, and `<tuple>` are not available.
+Function and class templates are supported, as are `std::vector`, `std::string`, `std::array`, `std::map`, `std::set`, and the common algorithms (`std::sort`, `std::reverse`, `std::find`, `std::count`, `std::max`, `std::min`). Coverage is not uniform: range-based `for` over `std::map` and `std::set` currently fails with an internal member-access diagnostic, and `<unordered_map>` and `<queue>` are not available.
 
-Exceptions, RTTI, and multiple or virtual inheritance are not supported.
+Exceptions, RTTI, and virtual inheritance are not supported.
 
 Only the embedded headers can be included. The Wasm build has no filesystem access, so `#include` of any other file cannot be resolved.
 

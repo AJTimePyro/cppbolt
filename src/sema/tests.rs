@@ -1,4 +1,5 @@
 use super::*;
+use crate::ast::types::FunctionQualifiers;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 
@@ -358,41 +359,45 @@ fn test_functor_call_dispatch_requires_call_operator() -> Result<(), Box<dyn std
 }
 
 #[test]
-fn test_substitute_scalar_type() {
+fn test_substitute_scalar_type() -> Result<(), Box<dyn std::error::Error>> {
     let mut mapping = std::collections::HashMap::new();
-    mapping.insert("T".to_string(), Type::Int);
+    mapping.insert("T".to_string(), TemplateArg::Type(Type::Int));
 
     let t_param = Type::TypeParam("T".to_string());
     assert_eq!(
-        template_subst::substitute_type(&t_param, &mapping, None),
+        template_subst::substitute_type(&t_param, &mapping, None)?,
         Type::Int
     );
 
     let ptr = Type::Pointer(Box::new(Type::TypeParam("T".to_string())));
     assert_eq!(
-        template_subst::substitute_type(&ptr, &mapping, None),
+        template_subst::substitute_type(&ptr, &mapping, None)?,
         Type::Pointer(Box::new(Type::Int))
     );
+    Ok(())
 }
 
 #[test]
-fn test_substitute_injected_class_name() {
+fn test_substitute_injected_class_name() -> Result<(), Box<dyn std::error::Error>> {
     let mapping = std::collections::HashMap::new();
     let target_ty = Type::Struct("Holder<int>".to_string());
     let bare = Type::Struct("Holder".to_string());
 
-    let res = template_subst::substitute_type(&bare, &mapping, Some(("Holder", &target_ty)));
+    let res = template_subst::substitute_type(&bare, &mapping, Some(("Holder", &target_ty)))?;
     assert_eq!(res, target_ty);
+    Ok(())
 }
 
 fn dummy_func(name: &str, ret: Type, param: Type, is_const: bool) -> FunctionDecl {
     FunctionDecl {
+        qualifiers: FunctionQualifiers::default(),
         name: name.to_string(),
         return_type: ret,
         params: vec![Param {
             name: "val".to_string(),
             ty: param,
             default_val: None,
+            is_pack: false,
         }],
         body: None,
         is_virtual: false,
@@ -409,28 +414,31 @@ fn dummy_func(name: &str, ret: Type, param: Type, is_const: bool) -> FunctionDec
 }
 
 #[test]
-fn test_substitute_function() {
+fn test_substitute_function() -> Result<(), Box<dyn std::error::Error>> {
     let mut mapping = std::collections::HashMap::new();
-    mapping.insert("T".to_string(), Type::Int);
+    mapping.insert("T".to_string(), TemplateArg::Type(Type::Int));
     let func = dummy_func(
         "get",
         Type::TypeParam("T".to_string()),
         Type::TypeParam("T".to_string()),
         true,
     );
-    let subst = template_subst::substitute_function(&func, &mapping, None, None);
+    let subst = template_subst::substitute_function(&func, &mapping, None, None)?;
     assert_eq!(subst.return_type, Type::Int);
     assert_eq!(subst.params[0].ty, Type::Int);
+    Ok(())
 }
 
 #[test]
-fn test_substitute_struct() {
+fn test_substitute_struct() -> Result<(), Box<dyn std::error::Error>> {
     let mut mapping = std::collections::HashMap::new();
-    mapping.insert("T".to_string(), Type::Int);
+    mapping.insert("T".to_string(), TemplateArg::Type(Type::Int));
     let tclass = TemplateClass {
         name: "Holder".to_string(),
         is_class: true,
+        is_final: false,
         base_classes: Vec::new(),
+        base_access: Vec::new(),
         fields: vec![("value".to_string(), Type::TypeParam("T".to_string()), None)],
         methods: vec![dummy_func(
             "Holder",
@@ -441,9 +449,10 @@ fn test_substitute_struct() {
         static_fields: Vec::new(),
         private_members: Vec::new(),
         nested_structs: Vec::new(),
+        alignment: None,
     };
 
-    let subst = template_subst::substitute_struct(&tclass, &mapping, "Holder<int>", 1, 1);
+    let subst = template_subst::substitute_struct(&tclass, &mapping, "Holder<int>", (1, 1), None)?;
     let Decl::StructDecl {
         name,
         fields,
@@ -457,6 +466,7 @@ fn test_substitute_struct() {
     assert_eq!(fields[0].1, Type::Int);
     assert_eq!(methods[0].name, "Holder<int>");
     assert_eq!(methods[0].params[0].ty, Type::Int);
+    Ok(())
 }
 
 #[test]

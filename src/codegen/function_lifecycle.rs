@@ -3,6 +3,12 @@
 use super::*;
 use crate::sema::StructLayout;
 
+struct BaseCopyTarget<'a> {
+    name: &'a str,
+    layout: &'a StructLayout,
+    offset: u32,
+}
+
 impl<'a> Codegen<'a> {
     pub(super) fn compile_constructor_prologue(
         &mut self,
@@ -69,16 +75,22 @@ impl<'a> Codegen<'a> {
         self.compile_member_initializers(f, layout, ctx, code)
     }
 
-    /// Installs the class's vtable pointer in the object under construction.
+    /// Returns `(vptr_offset, vtable_address)` for every polymorphic
+    /// subobject of `cls`.
+    pub(super) fn vtable_installs(&self, cls: &str) -> Vec<(u32, u32)> {
+        self.vtable_offsets.get(cls).cloned().unwrap_or_default()
+    }
+    /// Installs all of the class's vtable pointers in the object under
+    /// construction. `this` is local 0, as in every constructor body.
     pub(super) fn install_class_vtable(&mut self, cls: &str, code: &mut Vec<u8>) {
-        if let Some(&v_off) = self.vtable_offsets.get(cls) {
+        for (vptr_offset, v_off) in self.vtable_installs(cls) {
             code.push(OP_LOCAL_GET);
             write_u32(code, 0); // this
             code.push(OP_I32_CONST);
             write_i32(code, v_off as i32);
             code.push(OP_I32_STORE);
             write_u32(code, 2);
-            write_u32(code, 0);
+            write_u32(code, vptr_offset);
         }
     }
 
@@ -93,11 +105,11 @@ impl<'a> Codegen<'a> {
         let Some(layout) = self.sema.struct_layouts.get(cls) else {
             return Ok(());
         };
-        for (base_name, base_offset) in &layout.base_offsets {
+        for (base_name, base_offset) in &layout.direct_base_offsets {
             let base_args = f
                 .ctor_initializers
                 .iter()
-                .find(|(name, _)| name == base_name)
+                .find(|(name, _)| self.sema.canonical_class_name(name, Some(cls)) == *base_name)
                 .map(|(_, args)| args.as_slice())
                 .unwrap_or(&[]);
             let arg_types: Vec<Type> = base_args
@@ -122,19 +134,94 @@ impl<'a> Codegen<'a> {
                 code.push(OP_CALL);
                 write_u32(code, b_idx);
             } else if let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned() {
-                self.emit_field_initializers(
-                    &base_layout,
-                    base_args,
-                    *base_offset as u32,
-                    ctx,
-                    code,
-                )?;
+                let whole_object = base_args.len() == 1
+                    && matches!(
+                        self.get_expr_type(&base_args[0], ctx)
+                            .strip_reference()
+                            .strip_const(),
+                        Type::Struct(_)
+                    );
+                if whole_object {
+                    self.emit_base_subobject_copy(
+                        BaseCopyTarget {
+                            name: base_name,
+                            layout: &base_layout,
+                            offset: *base_offset as u32,
+                        },
+                        &base_args[0],
+                        ctx,
+                        code,
+                    )?;
+                } else {
+                    self.emit_field_initializers(
+                        &base_layout,
+                        base_args,
+                        *base_offset as u32,
+                        ctx,
+                        code,
+                    )?;
+                }
             }
         }
         Ok(())
     }
 
-    fn emit_field_initializers(
+    /// Copies a whole base subobject from a synthesized copy/move constructor
+    /// argument. The argument is an object, not a field value, so it must be
+    /// copied bytewise; treating it as a field value would store the object's
+    /// address with the field's width (e.g. `i64.store` of an `i32`).
+    fn emit_base_subobject_copy(
+        &mut self,
+        target: BaseCopyTarget<'_>,
+        src: &Expr,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        let base_name = target.name;
+        let base_layout = target.layout;
+        let base_offset = target.offset;
+        // Destination: this + base_offset, held in scratch2.
+        code.push(OP_LOCAL_GET);
+        write_u32(code, 0);
+        if base_offset != 0 {
+            code.push(OP_I32_CONST);
+            write_i32(code, base_offset as i32);
+            code.push(OP_I32_ADD);
+        }
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.scratch2);
+
+        // Source: the argument may already point at the base subobject (move
+        // constructors cast to Base&&), or at the complete derived object.
+        self.compile_expr(src, ctx, code)?;
+        let src_is_base = matches!(
+            self.get_expr_type(src, ctx).strip_reference().strip_const(),
+            Type::Struct(name) if name == base_name
+        );
+        if !src_is_base && base_offset != 0 {
+            code.push(OP_I32_CONST);
+            write_i32(code, base_offset as i32);
+            code.push(OP_I32_ADD);
+        }
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.scratch1);
+
+        for i in 0..base_layout.size {
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.scratch2);
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.scratch1);
+            code.push(OP_I32_LOAD8_U);
+            write_u32(code, 0);
+            write_u32(code, i as u32);
+            code.push(OP_I32_STORE8);
+            write_u32(code, 0);
+            write_u32(code, i as u32);
+        }
+        Ok(())
+    }
+
+    pub(super) fn emit_field_initializers(
         &mut self,
         layout: &StructLayout,
         args: &[Expr],
@@ -216,170 +303,16 @@ impl<'a> Codegen<'a> {
         Ok(())
     }
 
-    fn compile_struct_field_init(
-        &mut self,
-        sname: &str,
-        fld_offset: usize,
-        init_args: Option<&[Expr]>,
-        ctx: &mut FunctionContext,
-        code: &mut Vec<u8>,
-    ) -> Result<(), CompileError> {
-        let arg_types: Vec<Type> = init_args
-            .map(|args| args.iter().map(|a| self.get_expr_type(a, ctx)).collect())
-            .unwrap_or_default();
-        if let Some((ctor_idx, sig)) =
-            self.find_constructor_sig_with_args(sname, &arg_types, init_args)
-        {
-            code.push(OP_LOCAL_GET);
-            write_u32(code, 0); // this
-            code.push(OP_I32_CONST);
-            write_i32(code, fld_offset as i32);
-            code.push(OP_I32_ADD);
-            let empty = [];
-            let args = init_args.unwrap_or(&empty);
-            let full_args = self.constructor_arguments(&sig, args);
-            for (i, a) in full_args.iter().enumerate() {
-                let param_ty = sig.param_types.get(i + 1);
-                self.compile_call_arg(a, param_ty, ctx, code)?;
-            }
-            code.push(OP_CALL);
-            write_u32(code, ctor_idx);
-        } else if let Some(args) = init_args
-            && args.len() == 1
-            && matches!(
-                arg_types[0].clean_type(),
-                Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(sname))
-            )
-        {
-            self.compile_lvalue_addr(&args[0], ctx, code)?;
-            code.push(OP_LOCAL_SET);
-            write_u32(code, ctx.scratch1);
-            let size = self
-                .sema
-                .struct_layouts
-                .get(sname)
-                .map(|l| l.size)
-                .ok_or_else(|| self.internal_error("missing struct layout"))?;
-            crate::codegen::raii::emit_struct_byte_copy(
-                size,
-                fld_offset as u32,
-                |code| {
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, 0); // this
-                },
-                |code| {
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.scratch1);
-                },
-                code,
-            );
-        } else if let Some(layout) = self.sema.struct_layouts.get(sname).cloned()
-            && let Some(args) = init_args
-        {
-            self.emit_field_initializers(&layout, args, fld_offset as u32, ctx, code)?;
-        }
-        Ok(())
-    }
-
-    fn compile_array_member_init(
-        &mut self,
-        (fld_offset, elem_ty, count, list): (usize, &Type, usize, &[Expr]),
-        ctx: &mut FunctionContext,
-        code: &mut Vec<u8>,
-    ) -> Result<(), CompileError> {
-        let elem_size = u32::try_from(elem_ty.size_of(&self.sema.struct_sizes))
-            .map_err(|_| self.internal_error("member is too large"))?;
-        for i in 0..count {
-            let elem_offset = (fld_offset as u32)
-                .checked_add(
-                    (i as u32)
-                        .checked_mul(elem_size)
-                        .ok_or_else(|| self.internal_error("member is too large"))?,
-                )
-                .ok_or_else(|| self.internal_error("member is too large"))?;
-            if let Type::Struct(sname) = elem_ty.strip_const() {
-                let item_args = list.get(i).map(|item| match item {
-                    Expr::InitializerList { elements, .. }
-                    | Expr::TypedInitList { elements, .. } => elements.as_slice(),
-                    _ => std::slice::from_ref(item),
-                });
-                self.compile_struct_field_init(sname, elem_offset as usize, item_args, ctx, code)?;
-            } else {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, 0); // this
-                if let Some(item) = list.get(i) {
-                    let item_ty = self.get_expr_type(item, ctx);
-                    self.compile_expr(item, ctx, code)?;
-                    self.emit_conversion(&item_ty, elem_ty, code);
-                } else {
-                    self.emit_zero_value(elem_ty, code);
-                }
-                self.emit_store(elem_ty, elem_offset, code);
-            }
-        }
-        Ok(())
-    }
-
-    fn compile_member_init_expr(
-        &mut self,
-        fld: &crate::sema::StructField,
-        args: &[Expr],
-        ctx: &mut FunctionContext,
-        code: &mut Vec<u8>,
-    ) -> Result<(), CompileError> {
-        if fld.ty.is_reference() {
-            code.push(OP_LOCAL_GET);
-            write_u32(code, 0); // this
-            self.compile_lvalue_addr(&args[0], ctx, code)?;
-            self.emit_store(&fld.ty, fld.offset as u32, code);
-        } else if let Type::Array(elem_ty, count) = fld.ty.strip_const() {
-            let init_list = match &args[0] {
-                Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } => {
-                    Some(elements.as_slice())
-                }
-                _ => None,
-            };
-            if let Some(list) = init_list {
-                self.compile_array_member_init((fld.offset, elem_ty, *count, list), ctx, code)?;
-            } else {
-                self.compile_expr(&args[0], ctx, code)?;
-                code.push(OP_LOCAL_SET);
-                write_u32(code, ctx.scratch1);
-                let size = fld.ty.size_of(&self.sema.struct_sizes);
-                crate::codegen::raii::emit_struct_byte_copy(
-                    size,
-                    fld.offset as u32,
-                    |code| {
-                        code.push(OP_LOCAL_GET);
-                        write_u32(code, 0);
-                    },
-                    |code| {
-                        code.push(OP_LOCAL_GET);
-                        write_u32(code, ctx.scratch1);
-                    },
-                    code,
-                );
-            }
-        } else {
-            code.push(OP_LOCAL_GET);
-            write_u32(code, 0); // this
-            let expr = construct::unpack_single_element_init(&args[0]);
-            let item_ty = self.get_expr_type(expr, ctx);
-            self.compile_expr(expr, ctx, code)?;
-            self.emit_conversion(&item_ty, &fld.ty, code);
-            self.emit_store(&fld.ty, fld.offset as u32, code);
-        }
-        Ok(())
-    }
-
     pub(super) fn emit_member_destructors(
         &mut self,
-        f: &FunctionDecl,
+        func_name: &str,
         cls: &str,
+        line: usize,
+        col: usize,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let short_cls = QualifiedName::new(cls).class_short_name();
-        if f.name != format!("~{}", cls) && f.name != format!("~{}", short_cls) {
+        if func_name != format!("~{}", cls) && func_name != format!("~{}", short_cls) {
             return Ok(());
         }
         let Some(layout) = self.sema.struct_layouts.get(cls) else {
@@ -404,15 +337,13 @@ impl<'a> Codegen<'a> {
                     continue;
                 };
                 let elem_size = u32::try_from(elem_ty.size_of(&self.sema.struct_sizes))
-                    .map_err(|_| crate::internal_error!(f.line, f.col, "member is too large"))?;
+                    .map_err(|_| crate::internal_error!(line, col, "member is too large"))?;
                 for i in (0..*count).rev() {
                     let member_offset = (fld.offset as u32)
                         .checked_add((i as u32).checked_mul(elem_size).ok_or_else(|| {
-                            crate::internal_error!(f.line, f.col, "member is too large")
+                            crate::internal_error!(line, col, "member is too large")
                         })?)
-                        .ok_or_else(|| {
-                            crate::internal_error!(f.line, f.col, "member is too large")
-                        })?;
+                        .ok_or_else(|| crate::internal_error!(line, col, "member is too large"))?;
                     code.push(OP_LOCAL_GET);
                     write_u32(code, 0); // this
                     code.push(OP_I32_CONST);
@@ -436,7 +367,7 @@ impl<'a> Codegen<'a> {
         let Some(layout) = self.sema.struct_layouts.get(cls) else {
             return;
         };
-        for (base_name, base_offset) in layout.base_offsets.iter().rev() {
+        for (base_name, base_offset) in layout.direct_base_offsets.iter().rev() {
             let base_dtor = format!("{}_~{}", base_name, base_name);
             if let Some(&b_idx) = self.func_indices.get(&base_dtor) {
                 code.push(OP_LOCAL_GET);

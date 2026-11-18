@@ -1,0 +1,1 @@
+tests/negative/pmd_private_member_address.cpp:7:12: error: 'priv' is a private member of 'C'

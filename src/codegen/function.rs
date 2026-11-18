@@ -9,6 +9,8 @@ impl<'a> Codegen<'a> {
     ) -> Result<FuncBody, CompileError> {
         let mut code = Vec::new();
         let (locals, mut ctx) = Self::function_context(f, class_name.as_deref());
+        self.current_scratch1.set(ctx.scratch1);
+        self.current_scratch_i64.set(ctx.scratch_i64);
 
         Self::emit_prologue(&mut ctx, &mut code);
 
@@ -29,7 +31,7 @@ impl<'a> Codegen<'a> {
         self.emit_dtor_for_scope(&root_objs, &ctx, &mut code);
 
         if let Some(ref cls) = class_name {
-            self.emit_member_destructors(f, cls, &mut code)?;
+            self.emit_member_destructors(&f.name, cls, f.line, f.col, &mut code)?;
             self.emit_base_destructors(&ctx, &mut code);
         }
 

@@ -1,0 +1,1 @@
+tests/negative/variadic_unexpanded_pack_in_class.cpp:2:1: error: data member type contains unexpanded parameter pack 'Ts'

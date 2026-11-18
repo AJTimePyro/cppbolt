@@ -8,6 +8,89 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fold Expressions (C++17)
+- Added unary and binary folds over all 32 fold operators, with standard empty-pack fallbacks (`&&` to `true`, `||` to `false`, `,` to a void expression) and evaluation in constexpr contexts, array bounds, and non-type template arguments.
+- Fixed folds over overloaded operators, assignment folds, folds whose pattern contains `new` or `sizeof...`, and chained results that need a converting constructor.
+- Fixed wrong results from overloaded binary-operator chains longer than 16 operators. The chain recompiles a prefix only when the left operand needs a user-defined conversion, which keeps long chains correct up to the expression-depth limit.
+
+### Compiler Audit Remediation
+- Typed `new` expressions as pointers to the allocated type so derived-to-base conversion applies after multiple inheritance.
+- Deduplicated vtables by physical vptr offset and kept null covariant returns null.
+- Rejected explicit template packs with too few call arguments and propagated invalid dependent array bounds instead of sizing zero.
+- Ranked variadic overloads by fixed parameter count and kept unbound member template packs during class instantiation.
+- Limited override checks to genuine virtual declarations and ran member destructors on explicit `return` in a destructor.
+- Restored the repository census check by splitting long functions and large files, and removed unused integer sequence helpers.
+
+### Alias and Specialization Identity
+- Resolved alias-named base mem-initializers to the canonical direct base, so `using Alias = Base<int>; struct D : Alias { D() : Alias(42) {} };` forwards its constructor arguments correctly. Covers namespace-qualified, enclosing-class, nested specialization, plain-struct, non-polymorphic, multiple-alias, multiple-inheritance, three-level, and covariant cases.
+- Canonicalized constructor argument collection and reachability so alias-named bases keep their constructor and destructor functions reachable; a genuinely unresolved mem-initializer is now a compile error instead of silently default-constructing the base.
+- Fixed missing destructors for direct template-specialization bases: early body analysis no longer drops a destructor before registration, and lifecycle synthesis seeds resource types before template instantiation so synthesized base destructors are emitted.
+- Resolved `new Alias(...)` and alias-typed variables/pointers to the canonical specialization type, fixing the pointer-type mismatch and destructor omission for `new`/`delete` through aliases.
+- Canonicalized `final` method and destructor propagation for alias-named bases, and removed a dead alias-layout cloning pass that never ran.
+- Added regression tests for every case plus negative tests for invalid mem-initializers and overriding a `final` method through an alias; refreshed golden hashes.
+
+### Virtual Lifecycle and Integration
+- Constructors and destructors now initialize/destroy only direct non-virtual bases, in declaration and reverse declaration order, so indirect bases are no longer processed repeatedly.
+- Fixed phantom primary vtables: classes without their own virtuals reuse the actual polymorphic base subobject's vptr, including when non-polymorphic bases are declared first.
+- Resolved covariant return types through template specializations and aliases, validated overrides against every base declaration, and rejected ambiguous or inaccessible covariant conversions.
+- Fixed member-function pointers to template-specialization methods by forcing deferred instantiation and resolving a real function-table index instead of silently using index zero.
+- Rejected derivation from classes whose virtual destructor is final, including implicit derived destructors.
+
+### Virtual Function Infrastructure
+- Canonicalized virtual function parameters before building VirtualKey: top-level cv is dropped, arrays and functions decay to pointers, and pointee/reference qualification is preserved.
+- Validated covariant pointer and reference returns with accessibility, ambiguity and cv rules, and added a per-vtable-entry return adjustment so overrides yield the correct base subobject through ordinary and member-pointer calls.
+- Instantiated template-specialization bases before derived layout, so vptrs, slots and override checks are correct for non-template derived classes.
+- Unified destructor resolution so explicit destructor calls and vtable entries use the same function index.
+- Applied base-subobject adjustments when binding references to secondary bases, and fixed ref-qualified dispatch on rvalue receivers.
+
+### Virtual Function Identity
+- Keyed virtual dispatch on the semantic function signature (name, parameters, cv/ref qualifiers) instead of the name alone, giving overloaded virtuals distinct vtable slots and correct final overriders across multiple inheritance.
+- Validated `override`/`final` against matching signatures, including return-type covariance and C++17 exception-specification compatibility; rejected static, non-virtual, and mismatched overrides, and enforced `final` on destructors.
+- Parsed class-level `final` and rejected deriving from final classes; rejected virtual member-function templates.
+- Added regression tests for overload identity, qualifier mismatches, covariant returns, noexcept compatibility, and class-level final.
+
+### Pointers to Members (C++17)
+- Added data-member (`T C::*`) and member-function (`R (C::*)()`) pointer types across AST, parser, semantic analysis, and WebAssembly codegen, with `.*`/`->*` application, overloaded member-function resolution by target type, base-to-derived conversions, virtual dispatch, multiple-inheritance subobject adjustments, and `noexcept` conversion rules.
+- Added fold expressions over the `.*` and `->*` operators, and documented the value representation and dispatch ABI in ADR 0015.
+
+### Pointer-to-Member Audit Remediation
+- Preserved and validated `override` and `final`: they now imply virtual, same-signature methods override without a keyword, and overriding a `final` method or using `override` with no base virtual is rejected.
+- Fixed invalid Wasm when synthesized constructors copied a base subobject containing 8-byte fields (`long long`/`double`); base subobjects are now copied bytewise.
+- Applied unambiguous, accessible-base checks and const-correctness at `.*`/`->*`, reusing the same inheritance path and access logic as base-to-derived member-pointer conversions.
+- Derived call result types from the callee type in codegen, so member-function pointers returning floating-point, pointers, references, `void`, and structures lower correctly.
+- Allowed converting `noexcept` member-function pointers to the potentially-throwing type, while rejecting the reverse.
+- Added regression tests for each finding and updated the pointer-to-member ABI documentation.
+
+### Variadic Templates, Parameter Packs & std::tuple (C++11)
+- Added parameter packs across AST and parser: template type packs (`typename... Ts`, `class... Ts`), non-type parameter packs (`int... Ns`), template-template parameter packs (`template <template <typename...> class... Containers>`), and function parameter packs (`Ts... args`, `Ts...`).
+- Added pack expansion expressions (`expr...`) and type pack expansions across function call arguments, initializer lists, base class specifiers (`struct S : Bases...`), constructor member initializers (`: Bases(args)...`), template argument lists (`Tuple<Tail...>`, `f<Ts...>(args...)`), lambda captures (`[args...]`, `[&args...]`), and alignment specifiers (`alignas(Ts...)`).
+- Implemented multiple inheritance and multiple base-class pack expansions (`struct S : Bases...`), laying out multiple base subobjects sequentially with offset adjustments, multi-base method and constructor/destructor dispatch, and rejection of duplicate direct base classes.
+- Added compile-time `sizeof...(pack)` query operator and `alignof(T)` in AST, parser, and semantic constant expression evaluation.
+- Implemented parameter pack substitution engine in `src/sema/pack_expansion.rs` supporting homogeneous and heterogeneous type and non-type packs, length validation across multiple packs expanded within the same pattern, unexpanded parameter pack detection, reserved `__pack_{name}_{i}` synthetic identifiers, and empty pack omission.
+- Implemented template argument deduction for variadic function templates and parameter packs, including empty trailing packs, deterministic deduction fallback, forwarding reference packs (`Args&&...`) with reference collapsing rules, and structural pack deduction in template instances (`f(Tuple<As...>, Tuple<Bs...>)`).
+- Implemented standard deduction-based function template partial ordering per ISO C++11 [temp.func.order] in `src/sema/template_partial_order.rs` using synthetic type deduction, correctly ranking more specialized overloads and maintaining ambiguity for ties.
+- Added nested member class templates containing parameter packs (`Outer<Ts...>::Inner<Us...>`), substituting outer arguments during enclosing template instantiation while preserving inner parameters.
+- Preserved dependent array bounds (`int a[sizeof...(Ts)];`) until template instantiation.
+- Extended dead-code elimination traversal in `src/codegen/analysis.rs` over `InitializerList`, `TypedInitList`, and `PackExpansion`, ensuring functions called in standard swallow idioms (`(f(args), 0)...`) remain reachable.
+- Removed non-standard `func(args)...;` statement extension, strictly enforcing standard C++11 pack expansion contexts.
+- Updated embedded `<memory>` with variadic `std::make_unique<T>(Args&&... args)`.
+- Added `<tuple>` header providing `std::tuple`, recursive base-indexed element storage, `std::make_tuple`, and `std::get<I>(tuple)` supporting up to 17 elements (indices 0..16).
+- Fixed explicit function-template argument pack deduction when explicit arguments are provided (`foo<int, int>(1, 2)`), preventing duplicate argument deduction and signature-arity mismatch in WebAssembly call emission.
+- Implemented alias template parameter pack expansion (`template <typename... Ts> using Alias = Target<Ts...>;`), grouping trailing arguments into `TemplateArg::TypePack`.
+- Enforced compile-time diagnostics rejecting unexpanded parameter packs in class template data members and method parameter types.
+- Supported parameter packs in function pointer declarations (`void (*fn)(Args...)`) across parsing, substitution, and indirect invocation.
+- Supported C++11 dynamic exception specifications `throw(Ts...)` and `throw()` on function templates.
+- Preserved lvalue reference value categories across nested call expressions returning references (`std::forward<T>`), preventing spurious WebAssembly scalar loads in forwarding call chains.
+- Supported `sizeof...(Ts)` expressions in non-type template arguments and dependent NTTP substitution (`IntConst<sizeof...(Ts)>`).
+- Implemented multiple-inheritance subobject offsets and pointer adjustments across layout, conversions, member access, method calls, and static casts, with null-pointer preservation.
+- Added function pointer template argument deduction for `R (*fn)(Args...)`, deducing return types and parameter packs directly without trailing call arguments.
+- Supported nested dependent type declarations (`Outer<Ts...>::Inner<Us...> var;`) in local scopes.
+- Supported local type alias declarations (`using Res = Target<Ts...>;`) and block-scoped alias resolution.
+- Supported `alignas` pack expansions with `alignof(Ts)...` expressions and non-type parameter packs (`alignas(Ns...)`).
+- Added `std::get<I>(tuple&&)` rvalue overload for extracting move-only types from rvalue tuples.
+- Added explicit error diagnostics in WebAssembly code generation rejecting unsupported or unlowered AST expressions.
+- Added positive, variant, and negative diagnostic test suites across `tests/templates_operators/`, `tests/mini_stl/`, and `tests/negative/`.
+
 ### Template Specialization, Non-Type Parameters & Alias Templates
 - Added class template explicit (full) specialization (`template <> struct S<int> { ... };`) replacing primary template definitions on exact argument matches.
 - Added class template partial specialization (`template <typename T> struct S<T*> { ... };`) with pattern matching and specificity scoring.

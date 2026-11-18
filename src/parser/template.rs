@@ -1,6 +1,23 @@
 //! Template declaration and argument parsing.
 
+use super::template_helpers::has_pack_in_expr;
 use super::*;
+
+pub(super) fn validate_trailing_pack(
+    params: &[TemplateParam],
+    kind: &str,
+) -> Result<(), CompileError> {
+    for (i, p) in params.iter().enumerate() {
+        if p.is_pack && i + 1 < params.len() {
+            return Err(CompileError::new(
+                format!("template parameter pack must be the last template parameter in a {kind}"),
+                p.line,
+                p.col,
+            ));
+        }
+    }
+    Ok(())
+}
 
 impl Parser {
     pub(super) fn parse_template_decl(
@@ -46,63 +63,7 @@ impl Parser {
     ) -> Result<(), CompileError> {
         let mut seen_default = false;
         while self.peek() != &TokenKind::Gt && self.peek() != &TokenKind::Shr {
-            let p_line = self.current().line;
-            let p_col = self.current().col;
-
-            if self.peek() == &TokenKind::KwTemplate {
-                return Err(CompileError::new(
-                    "template template parameters are not supported yet",
-                    p_line,
-                    p_col,
-                ));
-            }
-            let param_type =
-                if self.peek() == &TokenKind::KwTypename || self.peek() == &TokenKind::KwClass {
-                    self.advance();
-                    None
-                } else if self.is_type_start() {
-                    Some(self.parse_type()?)
-                } else {
-                    return Err(CompileError::new(
-                        "expected template parameter declaration",
-                        p_line,
-                        p_col,
-                    ));
-                };
-
-            if self.peek() == &TokenKind::Dot {
-                return Err(CompileError::new(
-                    "variadic template parameters are not supported yet",
-                    p_line,
-                    p_col,
-                ));
-            }
-
-            let name = match self.advance().kind.clone() {
-                TokenKind::Ident(id) => id,
-                _ => return Err(CompileError::new("expected identifier", p_line, p_col)),
-            };
-            if let Some(set) = self.active_type_params.last_mut() {
-                set.insert(name.clone());
-            }
-            let default_type = self.parse_template_param_default(param_type.as_ref())?;
-            if default_type.is_some() {
-                seen_default = true;
-            } else if seen_default {
-                return Err(CompileError::new(
-                    "template parameter without default follows parameter with default",
-                    p_line,
-                    p_col,
-                ));
-            }
-            params.push(TemplateParam {
-                name,
-                default_type,
-                param_type,
-                line: p_line,
-                col: p_col,
-            });
-
+            params.push(self.parse_single_template_param(&mut seen_default)?);
             if self.peek() == &TokenKind::Comma {
                 self.advance();
             } else {
@@ -110,6 +71,99 @@ impl Parser {
             }
         }
         self.consume_template_closing_gt()
+    }
+    fn parse_template_param_type(
+        &mut self,
+        line: usize,
+        col: usize,
+    ) -> Result<(Option<Type>, String), CompileError> {
+        if self.peek() == &TokenKind::KwTypename || self.peek() == &TokenKind::KwClass {
+            self.advance();
+            return Ok((None, String::new()));
+        }
+        if !self.is_type_start() {
+            return Err(CompileError::new(
+                "expected template parameter declaration",
+                line,
+                col,
+            ));
+        }
+        let specifiers = self.parse_specifier_type()?;
+        if self.is_function_pointer_declarator_ahead() {
+            let (ty, name) =
+                self.parse_function_pointer_declarator(specifiers, Some("expected identifier"))?;
+            Ok((Some(ty), name))
+        } else {
+            Ok((
+                Some(self.parse_declarator_prefix(&specifiers)?),
+                String::new(),
+            ))
+        }
+    }
+
+    fn parse_single_template_param(
+        &mut self,
+        seen_default: &mut bool,
+    ) -> Result<TemplateParam, CompileError> {
+        let p_line = self.current().line;
+        let p_col = self.current().col;
+
+        if self.peek() == &TokenKind::KwTemplate {
+            return self.parse_template_template_param(p_line, p_col, seen_default);
+        }
+        let (param_type, declarator_name) = self.parse_template_param_type(p_line, p_col)?;
+
+        let is_pack = if self.peek() == &TokenKind::Ellipsis {
+            self.advance();
+            true
+        } else {
+            false
+        };
+
+        let name = if !declarator_name.is_empty() {
+            declarator_name
+        } else if let TokenKind::Ident(id) = self.peek().clone() {
+            self.advance();
+            id
+        } else if is_pack
+            || self.peek() == &TokenKind::Comma
+            || self.peek() == &TokenKind::Gt
+            || self.peek() == &TokenKind::Shr
+        {
+            String::new()
+        } else {
+            return Err(CompileError::new("expected identifier", p_line, p_col));
+        };
+        if !name.is_empty()
+            && let Some(set) = self.active_type_params.last_mut()
+        {
+            set.insert(name.clone());
+        }
+        if is_pack && self.peek() == &TokenKind::Assign {
+            return Err(CompileError::new(
+                "template parameter pack cannot have a default argument",
+                self.current().line,
+                self.current().col,
+            ));
+        }
+        let default_type = self.parse_template_param_default(param_type.as_ref())?;
+        if default_type.is_some() {
+            *seen_default = true;
+        } else if *seen_default && !is_pack {
+            return Err(CompileError::new(
+                "template parameter without default follows parameter with default",
+                p_line,
+                p_col,
+            ));
+        }
+        Ok(TemplateParam {
+            name,
+            default_type,
+            param_type,
+            is_pack,
+            line: p_line,
+            col: p_col,
+        })
     }
 
     fn parse_template_param_default(
@@ -136,8 +190,35 @@ impl Parser {
         self.in_template_arg = saved_in_template;
         self.template_arg_paren_depth = saved_depth;
         let expr = expr_res?;
-        let val = crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None)?;
-        Ok(Type::NonType(val))
+        if matches!(&expr, Expr::IntLiteral(0, Type::Nullptr)) {
+            return Ok(Type::DependentNonType(
+                crate::sema::pack_expansion::NULL_ARG_PREFIX.to_string(),
+            ));
+        }
+        if let Expr::Unary {
+            op: UnaryOp::AddrOf,
+            expr: inner,
+            ..
+        } = &expr
+            && let Expr::Identifier(name) = &**inner
+        {
+            return Ok(Type::DependentNonType(format!(
+                "{}{}",
+                crate::sema::pack_expansion::ADDRESS_ARG_PREFIX,
+                name.trim_start_matches("::")
+            )));
+        }
+        match crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None) {
+            Ok(val) => Ok(Type::NonType(val)),
+            Err(err) => {
+                let is_dep = !self.active_type_params.is_empty() || has_pack_in_expr(&expr);
+                if is_dep && let Some(dep_str) = super::types_array::expr_to_dependent_str(&expr) {
+                    Ok(Type::DependentNonType(dep_str))
+                } else {
+                    Err(err)
+                }
+            }
+        }
     }
 
     pub(super) fn consume_template_closing_gt(&mut self) -> Result<(), CompileError> {
@@ -167,7 +248,10 @@ impl Parser {
     ) -> Result<(), CompileError> {
         let result = if self.peek() == &TokenKind::KwUsing {
             self.parse_template_alias(params, t_line, t_col)
-        } else if self.peek() == &TokenKind::KwStruct || self.peek() == &TokenKind::KwClass {
+        } else if self.peek() == &TokenKind::KwStruct
+            || self.peek() == &TokenKind::KwClass
+            || self.is_struct_after_alignas()
+        {
             self.parse_template_class(params, t_line, t_col)
         } else {
             self.parse_template_function(params, t_line, t_col)
@@ -189,28 +273,38 @@ impl Parser {
         let Decl::StructDecl {
             name,
             is_class,
+            is_final,
             base_classes,
+            base_access,
             fields,
             methods,
             static_fields,
             private_members,
             nested_structs,
+            alignment,
             ..
         } = decl
         else {
             return Ok(vec![decl]);
         };
 
+        if !name.contains('<') {
+            validate_trailing_pack(&params, "class template")?;
+        }
+
         self.register_template_name(&name);
         let template_class = TemplateClass {
             name,
             is_class,
+            is_final,
             base_classes,
+            base_access,
             fields,
             methods,
             static_fields,
             private_members,
             nested_structs,
+            alignment,
         };
         Ok(vec![Decl::Template(TemplateDecl {
             params,
@@ -226,6 +320,7 @@ impl Parser {
         t_line: usize,
         t_col: usize,
     ) -> Result<Vec<Decl>, CompileError> {
+        validate_trailing_pack(&params, "template alias")?;
         self.advance();
         let (id_line, id_col) = (self.current().line, self.current().col);
         let name = match self.advance().kind.clone() {
@@ -234,7 +329,7 @@ impl Parser {
         };
         self.register_template_name(&name);
         self.expect(TokenKind::Assign)?;
-        let ty = self.parse_type()?;
+        let ty = self.parse_type_id()?;
         self.expect(TokenKind::Semi)?;
         Ok(vec![Decl::Template(TemplateDecl {
             params,
@@ -299,10 +394,22 @@ impl Parser {
     }
 
     pub fn parse_template_arg_type(&mut self) -> Result<Type, CompileError> {
-        if self.is_type_start() {
+        let is_pack_ahead = matches!(self.peek(), TokenKind::Ident(_))
+            && self.peek_ahead(1) == &TokenKind::Ellipsis;
+        if self.is_type_start() || is_pack_ahead {
             let saved_pos = self.pos;
             let saved_splits = self.shr_splits.len();
-            if let Ok(ty) = self.parse_type() {
+            let saved_allow = self.allow_unknown_types;
+            if is_pack_ahead {
+                self.allow_unknown_types = true;
+            }
+            let res = self.parse_type();
+            self.allow_unknown_types = saved_allow;
+            if let Ok(mut ty) = res {
+                if self.peek() == &TokenKind::Ellipsis {
+                    self.advance();
+                    ty = Type::PackExpansion(Box::new(ty));
+                }
                 return Ok(ty);
             }
             self.rollback_pos(saved_pos, saved_splits);

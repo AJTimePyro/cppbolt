@@ -82,10 +82,27 @@ struct Point {
     }
 };
 
+struct Base {
+    virtual ~Base() {}
+    virtual int value() { return 1; }
+};
+struct Other {
+    virtual ~Other() {}
+    virtual int value() { return 2; }
+};
+struct Derived : Base, Other {
+    int value() override { return 9; }
+};
+
 int main() {
     Point p(3, 4);
     std::string text = "hello";
     std::printf("%s %d\n", text.c_str(), p.x + p.y);
+    Derived d{};
+    Base* b = &d;
+    Other* o = &d;
+    int (Other::* pm)() = &Other::value;
+    std::printf("virtual %d %d %d\n", b->value(), o->value(), (d.*pm)());
     return 0;
 }
 "#;
@@ -162,6 +179,6 @@ fn a_browser_host_compiles_and_runs_a_program() -> Result<(), Box<dyn std::error
         output.status.success(),
         "the browser flow failed\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
-    assert_eq!(stdout, "Point(3, 4)\nhello 7\n");
+    assert_eq!(stdout, "Point(3, 4)\nhello 7\nvirtual 9 9 9\n");
     Ok(())
 }

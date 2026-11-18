@@ -1,0 +1,1 @@
+tests/negative/covariance_ambiguous_diamond.cpp:6:16: error: 'Y::f' has an incompatible return type

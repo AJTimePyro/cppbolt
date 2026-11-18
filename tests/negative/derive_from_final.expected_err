@@ -1,0 +1,1 @@
+tests/negative/derive_from_final.cpp:3:1: error: cannot derive from final class 'D'

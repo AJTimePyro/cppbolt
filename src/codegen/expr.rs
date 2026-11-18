@@ -19,6 +19,7 @@ impl<'a> Codegen<'a> {
             | Expr::StringLiteral(..)
             | Expr::This
             | Expr::SizeofType(..)
+            | Expr::AlignofType(..)
             | Expr::SizeofExpr(..) => self.compile_literal(expr, ctx, code)?,
             Expr::Identifier { .. } => self.compile_identifier(expr, ctx, code)?,
             Expr::Binary {
@@ -29,27 +30,19 @@ impl<'a> Codegen<'a> {
                 op: BinaryOp::LogicalOr,
                 ..
             } => self.compile_logical_or(expr, ctx, code)?,
+            Expr::Binary {
+                op: BinaryOp::DotStar | BinaryOp::ArrowStar,
+                ..
+            }
+            | Expr::ArraySubscript { .. }
+            | Expr::MemberAccess { .. } => self.compile_expr_lvalue_load(expr, ctx, code)?,
             Expr::Binary { .. } => self.compile_binary(expr, ctx, code)?,
             Expr::Unary { .. } => self.compile_unary(expr, ctx, code)?,
             Expr::Assign { .. } => self.compile_assign(expr, ctx, code)?,
             Expr::CompoundAssign { .. } => self.compile_compound_assign(expr, ctx, code)?,
             Expr::New { .. } => self.compile_new(expr, ctx, code)?,
             Expr::Delete { .. } => self.compile_delete(expr, ctx, code)?,
-            Expr::Call { .. } => {
-                self.compile_call(expr, ctx, code)?;
-                let ty = self.get_expr_type_raw(expr, ctx);
-                let value_ty = ty.strip_const().strip_reference();
-                if ty.is_reference() && !matches!(value_ty, Type::Struct(_) | Type::Array(_, _)) {
-                    self.emit_load(value_ty, 0, code);
-                }
-            }
-            Expr::ArraySubscript { .. } | Expr::MemberAccess { .. } => {
-                let ty = self.get_expr_type(expr, ctx);
-                self.compile_lvalue_addr(expr, ctx, code)?;
-                if !matches!(ty.strip_const(), Type::Struct(_) | Type::Array(_, _)) {
-                    self.emit_load(&ty, 0, code);
-                }
-            }
+            Expr::Call { .. } => self.compile_expr_call(expr, ctx, code)?,
             Expr::Ternary { .. } => self.compile_ternary(expr, ctx, code)?,
             Expr::Cast {
                 kind,
@@ -71,7 +64,42 @@ impl<'a> Codegen<'a> {
                     self.compile_expr(&elements[0], ctx, code)?;
                 }
             }
-            _ => {}
+            _ => {
+                return Err(CompileError::new(
+                    format!("unsupported or unlowered expression in codegen: {expr:?}"),
+                    expr.pos().line,
+                    expr.pos().col,
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn compile_expr_lvalue_load(
+        &mut self,
+        expr: &Expr,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        let ty = self.get_expr_type(expr, ctx);
+        self.compile_lvalue_addr(expr, ctx, code)?;
+        if !matches!(ty.strip_const(), Type::Struct(_) | Type::Array(_, _)) {
+            self.emit_load(&ty, 0, code);
+        }
+        Ok(())
+    }
+
+    fn compile_expr_call(
+        &mut self,
+        expr: &Expr,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        self.compile_call(expr, ctx, code)?;
+        let ty = self.get_expr_type_raw(expr, ctx);
+        let value_ty = ty.strip_const().strip_reference();
+        if ty.is_reference() && !matches!(value_ty, Type::Struct(_) | Type::Array(_, _)) {
+            self.emit_load(value_ty, 0, code);
         }
         Ok(())
     }
@@ -87,6 +115,26 @@ impl<'a> Codegen<'a> {
         let src_ty = self.get_expr_type(expr, ctx);
         if target_type.is_reference() {
             self.compile_lvalue_addr(expr, ctx, code)?;
+            if let (Some(clean_target), Some(clean_src)) = (
+                target_type.deref_type(),
+                src_ty.deref_type().or(Some(&src_ty)),
+            ) && let (Type::Struct(s_target), Type::Struct(s_src)) =
+                (clean_target.strip_const(), clean_src.strip_const())
+            {
+                if let Some(offset) = self.sema.base_subobject_offset(s_src, s_target)
+                    && offset != 0
+                {
+                    code.push(OP_I32_CONST);
+                    write_i32(code, offset as i32);
+                    code.push(OP_I32_ADD);
+                } else if let Some(offset) = self.sema.base_subobject_offset(s_target, s_src)
+                    && offset != 0
+                {
+                    code.push(OP_I32_CONST);
+                    write_i32(code, offset as i32);
+                    code.push(OP_I32_SUB);
+                }
+            }
             let value_ty = target_type.strip_const().strip_reference();
             if !matches!(value_ty, Type::Struct(_) | Type::Array(_, _)) {
                 self.emit_load(value_ty, 0, code);
@@ -142,7 +190,9 @@ impl<'a> Codegen<'a> {
     ) -> Result<(), CompileError> {
         match expr {
             Expr::IntLiteral(val, ty) => {
-                if *ty == Type::LongLong || *ty == Type::UnsignedLongLong {
+                if *ty == Type::Void {
+                    // Empty void expression (e.g. empty fold over comma)
+                } else if *ty == Type::LongLong || *ty == Type::UnsignedLongLong {
                     code.push(OP_I64_CONST);
                     write_i64(code, *val);
                 } else {
@@ -180,6 +230,11 @@ impl<'a> Codegen<'a> {
                 let size = inner.size_of(&self.sema.struct_sizes) as i32;
                 code.push(OP_I32_CONST);
                 write_i32(code, size);
+            }
+            Expr::AlignofType(inner) => {
+                let align = inner.align_of(&self.sema.struct_aligns) as i32;
+                code.push(OP_I32_CONST);
+                write_i32(code, align);
             }
             Expr::SizeofExpr(inner) => {
                 let ty = self.get_expr_type(inner, ctx);

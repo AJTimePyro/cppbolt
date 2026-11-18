@@ -1,0 +1,1 @@
+tests/negative/variadic_stmt_pack_expansion.cpp:5:14: error: Expected ';', found '...'

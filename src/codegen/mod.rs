@@ -1,6 +1,7 @@
 //! Direct WebAssembly lowering of the typed AST (see mdBook internals/wasm-codegen.md).
 
 mod analysis;
+mod analysis_vars;
 mod call_args;
 mod call_types;
 mod cond;
@@ -12,6 +13,7 @@ mod expr_binary;
 mod expr_binary_operator;
 mod expr_call;
 mod expr_call_member;
+mod expr_call_member_support;
 mod expr_delete;
 mod expr_identifier;
 mod expr_new;
@@ -22,9 +24,14 @@ mod function;
 mod function_context;
 mod function_global_init;
 mod function_lifecycle;
+mod function_lifecycle_init;
 mod function_lookup;
 mod initializer_list;
 mod lvalue;
+mod member_pointer;
+mod member_pointer_call;
+mod member_pointer_receiver;
+mod member_pointer_types;
 mod memory;
 mod method_lookup;
 mod overload;
@@ -50,15 +57,22 @@ use crate::sema::{FunctionSig, Sema};
 use crate::wasm::*;
 use analysis::{
     FuncCandidate, FuncDeclRef, check_stmt_has_new_delete, collect_address_taken_expr,
-    collect_address_taken_stmt, collect_expr_calls, collect_static_vars, collect_stmt_calls,
-    collect_type_lifecycle,
+    collect_address_taken_stmt, collect_expr_calls, collect_stmt_calls, collect_type_lifecycle,
 };
+use analysis_vars::collect_static_vars;
 use emit_context::{
     ArrayLocal, ArrayLoop, ArraySlots, BinaryTypes, CallSite, CtorCall, GlobalInit, MemberAccess,
     NamedCall, ScalarAssign, SwitchSlots,
 };
+pub(super) use member_pointer_types::{MemberPointerCall, MemberPointerCmp};
 use program::Plan;
 use std::collections::{HashMap, HashSet};
+
+/// Decodes the `class@@mangled-name` marker sema writes onto the identifier of
+/// a resolved `&Class::member` method address.
+pub(crate) fn decode_member_pointer_name(name: &str) -> Option<(&str, &str)> {
+    name.split_once("@@")
+}
 
 /// Mutable state for one compilation: the Wasm module, symbol offsets, and
 /// the data/vtable/table bookkeeping shared by the lowering passes.
@@ -72,7 +86,9 @@ pub struct Codegen<'a> {
     pub func_printf: u32,
     pub loop_depths: Vec<(u32, u32, usize)>,
     pub current_block_depth: u32,
-    pub vtable_offsets: HashMap<String, u32>,
+    /// Per class: `(vptr_offset_in_object, vtable_data_address)` for every
+    /// polymorphic subobject of that class.
+    pub vtable_offsets: HashMap<String, Vec<(u32, u32)>>,
     pub vtable_func_indices: Vec<u32>,
     pub t_i32_v: u32,
     pub global_offsets: HashMap<String, u32>,
@@ -85,6 +101,8 @@ pub struct Codegen<'a> {
     /// so a diagnostic never points at a fabricated line and column.
     pub current_line: usize,
     pub current_col: usize,
+    pub current_scratch1: std::cell::Cell<u32>,
+    pub current_scratch_i64: std::cell::Cell<u32>,
     depth: crate::depth::DepthCounters,
 }
 
@@ -155,6 +173,8 @@ impl<'a> Codegen<'a> {
             func_table_indices: HashMap::new(),
             current_line: 1,
             current_col: 1,
+            current_scratch1: std::cell::Cell::new(0),
+            current_scratch_i64: std::cell::Cell::new(0),
             max_memory_mb: 256,
             depth: crate::depth::DepthCounters::new(),
         }
@@ -218,6 +238,40 @@ pub struct FunctionContext {
     pub is_dtor: bool,
     pub is_reference_return: bool,
     pub is_main: bool,
+}
+
+impl Default for FunctionContext {
+    fn default() -> Self {
+        FunctionContext {
+            fp_local: 0,
+            scratch1: 1,
+            scratch2: 2,
+            scratch_i64: 3,
+            scratch_f64: 4,
+            scratch_f32: 5,
+            ret_temp_i32: 6,
+            ret_temp_i64: 7,
+            ret_temp_f64: 8,
+            var_offsets: HashMap::new(),
+            var_types: HashMap::new(),
+            static_var_offsets: HashMap::new(),
+            next_local_offset: 16,
+            frame_size: 0,
+            frame_size_patches: Vec::new(),
+            var_scopes: vec![Vec::new()],
+            scope_objects: vec![Vec::new()],
+            temp_objects: Vec::new(),
+            initializer_list_temps: Vec::new(),
+            current_class: None,
+            current_func_name: String::new(),
+            line: 0,
+            col: 0,
+            return_type: Type::Void,
+            is_dtor: false,
+            is_reference_return: false,
+            is_main: false,
+        }
+    }
 }
 
 impl FunctionContext {

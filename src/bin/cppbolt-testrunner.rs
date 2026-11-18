@@ -5,14 +5,14 @@
 
 #[path = "cppbolt-testrunner/checks.rs"]
 mod checks;
-#[path = "cppbolt-testrunner/run.rs"]
-mod run;
 
 #[path = "cppbolt-testrunner/golden.rs"]
 mod golden;
 
 #[path = "cppbolt-testrunner/oracle.rs"]
 mod oracle;
+#[path = "cppbolt-testrunner/run.rs"]
+mod run;
 
 use cppbolt::corpus::{self, FEATURES};
 use std::collections::BTreeSet;
@@ -27,11 +27,11 @@ const bytes=fs.readFileSync(process.argv[1]);
 const input=process.argv[2]&&fs.existsSync(process.argv[2])?fs.readFileSync(process.argv[2],"utf8"):"";
 const host=createWasmHost({stdin:input,onExit:code=>{process.stdout.write(host.getStdout());process.exit(code)}});
 WebAssembly.instantiate(bytes,host.imports).then(({instance})=>{
-  let ret=0;
-  try { ret=instance.exports.main?instance.exports.main():instance.exports._start(); }
-  catch(e){ console.error("WASM_TRAP: "+e.message); process.exit(134); }
-  process.stdout.write(host.getStdout());
-  if(ret) process.exit(ret);
+let ret=0;
+try { ret=instance.exports.main?instance.exports.main():instance.exports._start(); }
+catch(e){ console.error("WASM_TRAP: "+e.message); process.exit(134); }
+process.stdout.write(host.getStdout());
+if(ret) process.exit(ret);
 }).catch(e=>{ console.error("WASM_TRAP: "+e.message); process.exit(134); });
 "#;
 

@@ -32,7 +32,7 @@ impl<'a> Codegen<'a> {
 
         if ty.is_reference() {
             if let Some(init_expr) = init {
-                self.compile_reference_local(init_expr, offset, ctx, code)?;
+                self.compile_reference_local(init_expr, ty, offset, ctx, code)?;
             }
         } else if let Type::Struct(sname) = ty.strip_const() {
             let Some(scope) = ctx.scope_objects.last_mut() else {
@@ -89,11 +89,19 @@ impl<'a> Codegen<'a> {
     fn compile_reference_local(
         &mut self,
         init_expr: &Expr,
+        declared_ty: &Type,
         offset: u32,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         self.compile_lvalue_addr(init_expr, ctx, code)?;
+        let src_ty = self.get_expr_type(init_expr, ctx);
+        if let (Some(target), Some(source)) = (
+            declared_ty.deref_type(),
+            src_ty.deref_type().or(Some(&src_ty)),
+        ) {
+            self.emit_base_adjustment(target, source, code);
+        }
         code.push(OP_LOCAL_SET);
         write_u32(code, ctx.scratch1);
 
@@ -243,13 +251,13 @@ impl<'a> Codegen<'a> {
         ctx: &FunctionContext,
         code: &mut Vec<u8>,
     ) {
-        if let Some(&v_off) = self.vtable_offsets.get(sname) {
+        for (vptr_offset, v_off) in self.vtable_installs(sname) {
             self.emit_local_address(offset, ctx, code);
             code.push(OP_I32_CONST);
             write_i32(code, v_off as i32);
             code.push(OP_I32_STORE);
             write_u32(code, 2);
-            write_u32(code, 0);
+            write_u32(code, vptr_offset);
         }
     }
 }

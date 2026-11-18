@@ -1,0 +1,1 @@
+tests/negative/variadic_invalid_array_bound.cpp:1:2: error: division by zero in constant expression

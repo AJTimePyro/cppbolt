@@ -1,0 +1,1 @@
+tests/negative/covariance_inaccessible_return.cpp:4:16: error: 'Y::f' has an incompatible return type

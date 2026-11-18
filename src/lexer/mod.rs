@@ -242,7 +242,15 @@ impl Lexer {
             '>' => self.scan_angle(true),
             ':' => self.one_of(&[(':', TokenKind::ColonColon)], TokenKind::Colon),
             '?' => TokenKind::Question,
-            '.' => TokenKind::Dot,
+            '.' => {
+                if self.peek() == Some('.') && self.peek_next() == Some('.') {
+                    self.advance();
+                    self.advance();
+                    TokenKind::Ellipsis
+                } else {
+                    TokenKind::Dot
+                }
+            }
             ',' => TokenKind::Comma,
             ';' => TokenKind::Semi,
             '(' => TokenKind::LParen,
@@ -313,6 +321,7 @@ fn classify_word(word: &str) -> TokenKind {
         "void" => TokenKind::KwVoid,
         "auto" => TokenKind::KwAuto,
         "const" => TokenKind::KwConst,
+        "static_assert" => TokenKind::KwStaticAssert,
         "static" => TokenKind::KwStatic,
         "if" => TokenKind::KwIf,
         "else" => TokenKind::KwElse,
@@ -326,6 +335,8 @@ fn classify_word(word: &str) -> TokenKind {
         "continue" => TokenKind::KwContinue,
         "return" => TokenKind::KwReturn,
         "sizeof" => TokenKind::KwSizeof,
+        "alignas" => TokenKind::KwAlignas,
+        "alignof" => TokenKind::KwAlignof,
         "enum" => TokenKind::KwEnum,
         "struct" => TokenKind::KwStruct,
         "class" => TokenKind::KwClass,
@@ -361,9 +372,7 @@ fn classify_word(word: &str) -> TokenKind {
 
 #[cfg(test)]
 mod tests {
-    use super::Lexer;
-    use crate::lexer::TokenKind;
-    use crate::source::FileId;
+    use super::*;
 
     #[test]
     fn tokens_carry_line_column_and_length() -> Result<(), Box<dyn std::error::Error>> {
@@ -387,6 +396,14 @@ mod tests {
         let mut lexer = Lexer::new("reinterpret_cast<int*>(ptr)");
         let tokens = lexer.tokenize()?;
         assert_eq!(tokens[0].kind, TokenKind::KwReinterpretCast);
+        Ok(())
+    }
+
+    #[test]
+    fn test_lex_ellipsis() -> Result<(), Box<dyn std::error::Error>> {
+        let mut lexer = Lexer::new("...");
+        let tokens = lexer.tokenize()?;
+        assert_eq!(tokens[0].kind, TokenKind::Ellipsis);
         Ok(())
     }
 }

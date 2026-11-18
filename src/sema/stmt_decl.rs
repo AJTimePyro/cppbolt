@@ -112,7 +112,9 @@ impl Sema {
             _ => {
                 let previous = self.in_initializer;
                 self.in_initializer = true;
-                let result = self.analyze_expr_keeping_reference(init_expr);
+                let expected: Option<&Type> = is_member_pointer_address(init_expr).then_some(&*ty);
+                let result = self
+                    .with_expected_type(expected, |s| s.analyze_expr_keeping_reference(init_expr));
                 self.in_initializer = previous;
                 Ok((result?, false))
             }
@@ -162,8 +164,8 @@ impl Sema {
         }
         if let Type::Struct(sname) = ty.strip_const() {
             let is_same_struct = matches!(
-                init_ty.strip_reference().strip_const(),
-                Type::Struct(init_s) if QualifiedName::new(init_s).matches(QualifiedName::new(sname))
+            init_ty.strip_reference().strip_const(),
+            Type::Struct(init_s) if QualifiedName::new(init_s).matches(QualifiedName::new(sname))
             );
             if let Some(sig) = self.find_constructor_for(
                 sname,

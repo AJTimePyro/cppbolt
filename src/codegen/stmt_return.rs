@@ -27,8 +27,14 @@ impl<'a> Codegen<'a> {
             self.emit_global_destructors(code);
         }
 
-        // If destructor of derived class, call base class destructors in
-        // reverse construction order.
+        // An explicit return still destroys members and bases, like falling
+        // off the end of a destructor body.
+        if ctx.is_dtor
+            && let Some(cls) = ctx.current_class.clone()
+        {
+            let func_name = ctx.current_func_name.clone();
+            self.emit_member_destructors(&func_name, &cls, ctx.line, ctx.col, code)?;
+        }
         self.emit_base_destructors(ctx, code);
 
         // Epilogue: restore stack pointer
@@ -184,6 +190,11 @@ pub(super) fn return_local(ty: &Type, ctx: &FunctionContext) -> Option<u32> {
     match ty.strip_const() {
         Type::Void => None,
         Type::LongLong | Type::UnsignedLongLong => Some(ctx.ret_temp_i64),
+        Type::MemberPointer { member_type, .. }
+            if matches!(member_type.strip_const(), Type::Function { .. }) =>
+        {
+            Some(ctx.ret_temp_i64)
+        }
         Type::Double => Some(ctx.ret_temp_f64),
         Type::Float => Some(ctx.scratch_f32),
         _ => Some(ctx.ret_temp_i32),

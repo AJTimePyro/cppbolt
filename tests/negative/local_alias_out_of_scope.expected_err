@@ -1,0 +1,1 @@
+tests/negative/local_alias_out_of_scope.cpp:6:5: error: cannot initialize variable 'y' of type Local with int

@@ -1,7 +1,8 @@
+use super::pack_expansion::TemplateArg;
 use super::template_subst::{substitute_function, substitute_type};
 use super::*;
-use crate::ast::decl::{Decl, FunctionDecl};
-use crate::ast::template::{TemplateClass, TemplateParam};
+use crate::ast::decl::{Decl, FunctionDecl, StructFieldDecl};
+use crate::ast::template::{TemplateClass, TemplateDecl, TemplateKind, TemplateParam};
 use crate::ast::types::Type;
 use crate::name::QualifiedName;
 use std::collections::HashMap;
@@ -14,8 +15,15 @@ struct NestedStructParams<'a> {
     fields: &'a [StructFieldDecl],
     methods: &'a [FunctionDecl],
     private_members: &'a [String],
-    mapping: &'a HashMap<String, Type>,
+    mapping: &'a HashMap<String, TemplateArg>,
     pos: (usize, usize),
+}
+
+struct NestedTemplateParams<'a> {
+    inner_tmpl: &'a TemplateClass,
+    inner_params: &'a [TemplateParam],
+    inst_name: &'a str,
+    mapping: &'a HashMap<String, TemplateArg>,
 }
 
 impl Sema {
@@ -23,19 +31,30 @@ impl Sema {
         &mut self,
         template_class: &TemplateClass,
         inst_name: &str,
-        mapping: &mut HashMap<String, Type>,
+        mapping: &mut HashMap<String, TemplateArg>,
         pos: (usize, usize),
     ) {
         let (line, col) = pos;
         for nested in &template_class.nested_structs {
-            if let Decl::StructDecl { name, .. } = nested {
+            let nested_name = match nested {
+                Decl::StructDecl { name, .. } => Some(name.as_str()),
+                Decl::Template(TemplateDecl {
+                    kind: TemplateKind::Class(inner_tmpl),
+                    ..
+                }) => Some(inner_tmpl.name.as_str()),
+                _ => None,
+            };
+            if let Some(name) = nested_name {
                 let short = name.rsplit_once("::").map(|(_, s)| s).unwrap_or(name);
                 let inst_nested = format!("{}::{}", inst_name, short);
                 let inst_ty = Type::Struct(inst_nested.clone());
-                mapping.insert(short.to_string(), inst_ty.clone());
-                mapping.insert(name.clone(), inst_ty.clone());
+                mapping.insert(short.to_string(), TemplateArg::Type(inst_ty.clone()));
+                mapping.insert(name.to_string(), TemplateArg::Type(inst_ty.clone()));
                 let plain_tmpl = QualifiedName::new(&template_class.name).plain();
-                mapping.insert(format!("{}::{}", plain_tmpl, short), inst_ty);
+                mapping.insert(
+                    format!("{}::{}", plain_tmpl, short),
+                    TemplateArg::Type(inst_ty),
+                );
             }
         }
 
@@ -49,11 +68,8 @@ impl Sema {
         args: &[Type],
         inst_name: &str,
         pos: (usize, usize),
-    ) -> HashMap<String, Type> {
-        let mut mapping = HashMap::new();
-        for (param, arg) in template_params.iter().zip(args.iter()) {
-            mapping.insert(param.name.clone(), arg.clone());
-        }
+    ) -> HashMap<String, TemplateArg> {
+        let mut mapping = super::template_deduce::build_template_arg_map(template_params, args);
         self.register_instantiation_nested_and_aliases(
             template_class,
             inst_name,
@@ -67,7 +83,7 @@ impl Sema {
         &mut self,
         template_class: &TemplateClass,
         inst_name: &str,
-        mapping: &mut HashMap<String, Type>,
+        mapping: &mut HashMap<String, TemplateArg>,
         line: usize,
         col: usize,
     ) {
@@ -90,11 +106,12 @@ impl Sema {
                 let Some((owner, member)) = alias_name.rsplit_once("::") else {
                     continue;
                 };
-                if QualifiedName::new(owner).plain() == plain_tmpl && !mapping.contains_key(member)
+                if QualifiedName::new(owner).plain() == plain_tmpl
+                    && !mapping.contains_key(member)
+                    && let Ok(mut subst_ty) = substitute_type(&ty, mapping, None)
                 {
-                    let mut subst_ty = substitute_type(&ty, mapping, None);
                     let _ = self.resolve_and_instantiate_type(&mut subst_ty, line, col);
-                    mapping.insert(member.to_string(), subst_ty.clone());
+                    mapping.insert(member.to_string(), TemplateArg::Type(subst_ty.clone()));
                     self.type_aliases
                         .insert(format!("{inst_name}::{member}"), subst_ty.clone());
                     if is_std {
@@ -115,43 +132,151 @@ impl Sema {
         &mut self,
         template_class: &TemplateClass,
         inst_name: &str,
-        mapping: &HashMap<String, Type>,
+        mapping: &HashMap<String, TemplateArg>,
         pos: (usize, usize),
     ) -> Result<(), CompileError> {
         let (line, col) = pos;
         for nested in &template_class.nested_structs {
-            let Decl::StructDecl {
-                name,
-                is_class,
-                base_classes,
-                fields,
-                methods,
-                private_members,
-                ..
-            } = nested
-            else {
-                continue;
-            };
+            match nested {
+                Decl::StructDecl {
+                    name,
+                    is_class,
+                    base_classes,
+                    fields,
+                    methods,
+                    private_members,
+                    ..
+                } => {
+                    let short_name = name.rsplit_once("::").map(|(_, s)| s).unwrap_or(name);
+                    let nested_inst_name = format!("{}::{}", inst_name, short_name);
+                    if self.struct_layouts.contains_key(&nested_inst_name) {
+                        continue;
+                    }
 
-            let short_name = name.rsplit_once("::").map(|(_, s)| s).unwrap_or(name);
-            let nested_inst_name = format!("{}::{}", inst_name, short_name);
-            if self.struct_layouts.contains_key(&nested_inst_name) {
-                continue;
+                    self.instantiate_single_nested_struct(NestedStructParams {
+                        name,
+                        nested_inst_name: &nested_inst_name,
+                        is_class: *is_class,
+                        base_classes,
+                        fields,
+                        methods,
+                        private_members,
+                        mapping,
+                        pos: (line, col),
+                    })?;
+                }
+                Decl::Template(TemplateDecl {
+                    params: inner_params,
+                    kind: TemplateKind::Class(inner_tmpl),
+                    ..
+                }) => {
+                    self.instantiate_single_nested_template(NestedTemplateParams {
+                        inner_tmpl,
+                        inner_params,
+                        inst_name,
+                        mapping,
+                    })?;
+                }
+                _ => {}
             }
-
-            self.instantiate_single_nested_struct(NestedStructParams {
-                name,
-                nested_inst_name: &nested_inst_name,
-                is_class: *is_class,
-                base_classes,
-                fields,
-                methods,
-                private_members,
-                mapping,
-                pos: (line, col),
-            })?;
         }
         Ok(())
+    }
+
+    fn instantiate_single_nested_template(
+        &mut self,
+        p: NestedTemplateParams<'_>,
+    ) -> Result<(), CompileError> {
+        let short_name = p
+            .inner_tmpl
+            .name
+            .rsplit_once("::")
+            .map(|(_, s)| s)
+            .unwrap_or(&p.inner_tmpl.name);
+        let nested_tmpl_name = format!("{}::{}", p.inst_name, short_name);
+        let target_ty = Type::Struct(nested_tmpl_name.clone());
+        let injected = Some((p.inner_tmpl.name.as_str(), &target_ty));
+
+        let mut subst_fields = Vec::new();
+        for (fname, fty, finit) in &p.inner_tmpl.fields {
+            let mut init = finit.clone();
+            if let Some((init_expr, _, _)) = &mut init {
+                template_subst::substitute_expr(init_expr, p.mapping, injected)?;
+            }
+            let subst_fty = substitute_type(fty, p.mapping, injected)?;
+            subst_fields.push((fname.clone(), subst_fty, init));
+        }
+
+        let mut subst_methods = Vec::new();
+        for m in &p.inner_tmpl.methods {
+            let sm = substitute_function(m, p.mapping, injected, None)?;
+            subst_methods.push(sm);
+        }
+
+        let mut subst_static_fields = Vec::new();
+        for (sname, sty, sinit) in &p.inner_tmpl.static_fields {
+            let mut init = sinit.clone();
+            if let Some(init_expr) = &mut init {
+                template_subst::substitute_expr(init_expr, p.mapping, injected)?;
+            }
+            let subst_sty = substitute_type(sty, p.mapping, injected)?;
+            subst_static_fields.push((sname.clone(), subst_sty, init));
+        }
+
+        let subst_inner_tmpl = TemplateClass {
+            name: nested_tmpl_name.clone(),
+            is_class: p.inner_tmpl.is_class,
+            is_final: p.inner_tmpl.is_final,
+            base_classes: p.inner_tmpl.base_classes.clone(),
+            base_access: p.inner_tmpl.base_access.clone(),
+            fields: subst_fields,
+            methods: subst_methods,
+            static_fields: subst_static_fields,
+            private_members: p.inner_tmpl.private_members.clone(),
+            nested_structs: p.inner_tmpl.nested_structs.clone(),
+            alignment: p.inner_tmpl.alignment.clone(),
+        };
+
+        self.class_templates.insert(
+            nested_tmpl_name.clone(),
+            (subst_inner_tmpl.clone(), p.inner_params.to_vec()),
+        );
+        let plain_nested = QualifiedName::new(&nested_tmpl_name).plain().to_string();
+        if plain_nested != nested_tmpl_name {
+            self.class_templates
+                .insert(plain_nested, (subst_inner_tmpl, p.inner_params.to_vec()));
+        }
+
+        Ok(())
+    }
+
+    pub(super) fn resolve_class_template(
+        &mut self,
+        name: &str,
+        line: usize,
+        col: usize,
+    ) -> Result<(TemplateClass, Vec<TemplateParam>), CompileError> {
+        if !self.class_templates.contains_key(name)
+            && let Some((owner, _)) = name.rsplit_once("::")
+        {
+            self.ensure_class_instantiated(owner, line, col);
+        }
+        if !self.class_templates.contains_key(name)
+            && let Some(cls) = &self.current_class
+        {
+            let scoped = format!("{}::{}", cls, name);
+            if let Some(res) = self.class_templates.get(&scoped).cloned() {
+                return Ok(res);
+            }
+        }
+        self.class_templates
+            .get(name)
+            .cloned()
+            .or_else(|| {
+                let plain = QualifiedName::new(name).plain();
+                self.class_templates.get(plain).cloned()
+            })
+            .ok_or_else(|| CompileError::new(format!("Template '{}' not found", name), line, col))
     }
 
     fn instantiate_single_nested_struct(
@@ -161,21 +286,22 @@ impl Sema {
         let (line, col) = p.pos;
         let target_ty = Type::Struct(p.nested_inst_name.to_string());
         let injected = Some((p.name, &target_ty));
+        let arg_map = p.mapping;
 
         let mut subst_fields = Vec::new();
         for (fname, fty, finit) in p.fields {
-            let mut ty = substitute_type(fty, p.mapping, injected);
+            let mut ty = substitute_type(fty, arg_map, injected)?;
             self.resolve_and_instantiate_type(&mut ty, line, col)?;
             let mut init = finit.clone();
             if let Some((init_expr, _, _)) = &mut init {
-                template_subst::substitute_expr(init_expr, p.mapping, injected);
+                template_subst::substitute_expr(init_expr, arg_map, injected)?;
             }
             subst_fields.push((fname.clone(), ty, init));
         }
 
         let mut subst_methods = Vec::new();
         for m in p.methods {
-            let mut sm = substitute_function(m, p.mapping, injected, None);
+            let mut sm = substitute_function(m, arg_map, injected, None)?;
             if sm.template_params.is_empty() {
                 self.resolve_and_instantiate_type(&mut sm.return_type, line, col)?;
                 for param in &mut sm.params {
@@ -197,24 +323,30 @@ impl Sema {
         self.compute_struct_layout(RecordLayout {
             name: p.nested_inst_name,
             is_class: p.is_class,
+            is_final: false,
             base_classes: p.base_classes,
+            base_access: &[],
             fields: &fields_for_layout,
             methods: &methods_for_layout,
             private_members: p.private_members,
             line,
             col,
+            alignment: None,
         })?;
 
         let all_methods = std::mem::take(&mut methods_for_layout);
         let subst_decl = Decl::StructDecl {
             name: p.nested_inst_name.to_string(),
             is_class: p.is_class,
+            is_final: false,
             base_classes: p.base_classes.to_vec(),
+            base_access: Vec::new(),
             fields: subst_fields,
             methods: subst_methods,
             static_fields: Vec::new(),
             private_members: p.private_members.to_vec(),
             nested_structs: Vec::new(),
+            alignment: None,
             line,
             col,
         };

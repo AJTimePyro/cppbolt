@@ -1,0 +1,1 @@
+tests/negative/n13_final_dtor_override.cpp:2:1: error: cannot derive from class 'B' with a final destructor

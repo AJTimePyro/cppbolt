@@ -1,0 +1,1 @@
+tests/negative/variadic_lambda_capture_non_pack.cpp:3:14: error: 'x' does not refer to the name of a parameter pack

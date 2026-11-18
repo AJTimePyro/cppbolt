@@ -20,6 +20,11 @@ impl Sema {
         if *op == BinaryOp::Comma {
             return rty.clone();
         }
+        if *op == BinaryOp::DotStar || *op == BinaryOp::ArrowStar {
+            return self
+                .check_member_pointer_binary(*op, lty, rty, ExprPos::default())
+                .unwrap_or(Type::Int);
+        }
 
         let (l_clean, r_clean) = (
             lty.strip_reference().strip_const(),
@@ -110,6 +115,10 @@ impl Sema {
         let mut lty = self.analyze_expr(&mut base)?;
         for (op, right, pos) in spine.iter_mut().rev() {
             let mut rty = self.analyze_expr(right)?;
+            if *op == BinaryOp::DotStar || *op == BinaryOp::ArrowStar {
+                lty = self.check_member_pointer_binary(*op, &lty, &rty, *pos)?;
+                continue;
+            }
             self.apply_binary_conversions(*op, (&mut base, &mut lty), (right, &mut rty), *pos);
             // Adding two pointers is not a C++ expression.
             if *op == BinaryOp::Add
@@ -190,23 +199,27 @@ impl Sema {
             ));
         };
 
+        if *op == UnaryOp::AddrOf
+            && let Expr::Identifier(name) = expr.as_ref()
+            && let Some(resolved) = self.try_resolve_member_pointer_address(name, *pos)?
+        {
+            if let Some(encoded_name) = resolved.encoded_name {
+                // Taking the address of a template-specialization method must
+                // force its deferred instantiation so codegen can emit it.
+                if let Some((_, mangled)) = encoded_name.split_once("@@") {
+                    self.instantiate_pending_method(mangled)?;
+                }
+                if let Expr::Identifier(name) = &mut **expr {
+                    *name = encoded_name;
+                }
+            }
+            return Ok(resolved.ty);
+        }
+
         let ty = self.analyze_expr(expr)?;
         match op {
             UnaryOp::Not => Ok(Type::Bool),
-            UnaryOp::Deref => {
-                if let Some(inner) = ty.deref_type() {
-                    Ok(inner.clone())
-                } else if let Some(sig) = self.find_unary_operator(UnaryOp::Deref, &ty) {
-                    self.instantiate_pending_method(&sig.mangled_name)?;
-                    Ok(sig.return_type)
-                } else {
-                    Err(CompileError::new(
-                        format!("Cannot dereference non-pointer type {}", ty.to_c_type()),
-                        pos.line,
-                        pos.col,
-                    ))
-                }
-            }
+            UnaryOp::Deref => self.analyze_deref(&ty, *pos),
             UnaryOp::AddrOf => {
                 if let Type::Pointer(inner) = &ty
                     && let Type::Function { .. } = &**inner
@@ -246,6 +259,21 @@ impl Sema {
             UnaryOp::PreInc | UnaryOp::PreDec | UnaryOp::PostInc | UnaryOp::PostDec => {
                 self.analyze_unary_incdec(op, &ty, *pos)
             }
+        }
+    }
+
+    fn analyze_deref(&mut self, ty: &Type, pos: ExprPos) -> Result<Type, CompileError> {
+        if let Some(inner) = ty.deref_type() {
+            Ok(inner.clone())
+        } else if let Some(sig) = self.find_unary_operator(UnaryOp::Deref, ty) {
+            self.instantiate_pending_method(&sig.mangled_name)?;
+            Ok(sig.return_type)
+        } else {
+            Err(CompileError::new(
+                format!("Cannot dereference non-pointer type {}", ty.to_c_type()),
+                pos.line,
+                pos.col,
+            ))
         }
     }
 
@@ -369,7 +397,8 @@ impl Sema {
             let ctx = InitContext::CopyListAssign;
             return self.resolve_list_init(&target_ty, elements, ctx, *pos);
         }
-        let mut value_ty = self.analyze_expr(value)?;
+        let expected = is_member_pointer_address(value).then_some(&target_ty);
+        let mut value_ty = self.with_expected_type(expected, |s| s.analyze_expr(value))?;
         if let Type::Struct(sname) = value_ty.strip_reference().strip_const() {
             let is_const = value_ty.strip_reference().is_const();
             if let Some(sig) = self.find_conversion_to(sname, &target_ty, is_const) {

@@ -1,0 +1,1 @@
+tests/negative/f6_final_dtor.cpp:2:1: error: cannot derive from class 'B' with a final destructor

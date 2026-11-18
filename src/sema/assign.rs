@@ -113,7 +113,9 @@ impl Sema {
             return true;
         }
         if matches!(value.strip_const(), Type::Nullptr) {
-            return target.strip_const().is_pointer() || matches!(target.strip_const(), Type::Bool);
+            return target.strip_const().is_pointer()
+                || matches!(target.strip_const(), Type::MemberPointer { .. })
+                || matches!(target.strip_const(), Type::Bool);
         }
         if let Type::Enum(ename) = value
             && self.scoped_enums.contains(ename)
@@ -144,6 +146,9 @@ impl Sema {
             return true;
         }
         if self.pointer_assignable(target, value, expr) {
+            return true;
+        }
+        if self.member_pointer_assignable(target, value, expr) {
             return true;
         }
         if let (Type::Reference(t_in), Type::Reference(v_in)) = (target, value)
@@ -332,6 +337,7 @@ impl Sema {
             && let Type::Function {
                 return_type,
                 param_types,
+                ..
             } = &**inner
             && let Some(sig) =
                 self.find_method_in_class_for_receiver(sname, "__to_fn_ptr", is_const)
@@ -339,6 +345,7 @@ impl Sema {
             && let Type::Function {
                 return_type: sig_ret,
                 param_types: sig_params,
+                ..
             } = &**sig_inner
             && return_type == sig_ret
             && param_types == sig_params

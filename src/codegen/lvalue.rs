@@ -42,6 +42,13 @@ impl<'a> Codegen<'a> {
         }
     }
 
+    pub(super) fn is_expr_lvalue(&self, expr: &Expr, ctx: &FunctionContext) -> bool {
+        match expr {
+            Expr::Call { .. } => self.get_expr_type_raw(expr, ctx).is_lvalue_reference(),
+            _ => expr.is_lvalue(),
+        }
+    }
+
     pub(super) fn is_expr_xvalue(&self, expr: &Expr, ctx: &FunctionContext) -> bool {
         match expr {
             Expr::Cast { target_type, .. } => target_type.is_rvalue_reference(),
@@ -51,6 +58,43 @@ impl<'a> Codegen<'a> {
             }
             _ => false,
         }
+    }
+    /// Adjusts an address already on the stack from `source` to `target`,
+    /// which must be one of its base subobjects.
+    pub(super) fn emit_base_adjustment(&self, target: &Type, source: &Type, code: &mut Vec<u8>) {
+        if let (Type::Struct(s_target), Type::Struct(s_src)) =
+            (target.strip_const(), source.strip_const())
+        {
+            if let Some(offset) = self.sema.base_subobject_offset(s_src, s_target)
+                && offset != 0
+            {
+                code.push(OP_I32_CONST);
+                write_i32(code, offset as i32);
+                code.push(OP_I32_ADD);
+            } else if let Some(offset) = self.sema.base_subobject_offset(s_target, s_src)
+                && offset != 0
+            {
+                code.push(OP_I32_CONST);
+                write_i32(code, offset as i32);
+                code.push(OP_I32_SUB);
+            }
+        }
+    }
+
+    fn emit_reference_cast_adjustment(
+        &self,
+        target_type: &Type,
+        expr: &Expr,
+        ctx: &FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        let aty = self.get_expr_type(expr, ctx);
+        if let (Some(clean_target), Some(clean_src)) =
+            (target_type.deref_type(), aty.deref_type().or(Some(&aty)))
+        {
+            self.emit_base_adjustment(clean_target, clean_src, code);
+        }
+        Ok(())
     }
 
     pub(super) fn compile_lvalue_addr(
@@ -92,28 +136,32 @@ impl<'a> Codegen<'a> {
                 is_arrow,
                 ..
             } => self.compile_lvalue_member(object, member, *is_arrow, ctx, code),
+            Expr::Binary {
+                op: op @ (BinaryOp::DotStar | BinaryOp::ArrowStar),
+                left,
+                right,
+                ..
+            } => self.compile_member_pointer_lvalue(
+                left,
+                right,
+                *op == BinaryOp::ArrowStar,
+                ctx,
+                code,
+            ),
+            Expr::Assign { target, .. } | Expr::CompoundAssign { target, .. } => {
+                self.compile_expr(expr, ctx, code)?;
+                code.push(OP_DROP);
+                self.compile_lvalue_addr(target, ctx, code)
+            }
             Expr::Call { .. }
             | Expr::TypedInitList { .. }
             | Expr::Binary { .. }
-            | Expr::Unary { .. }
-            | Expr::CompoundAssign { .. } => self.compile_lvalue_value(expr, ctx, code),
+            | Expr::Unary { .. } => self.compile_lvalue_value(expr, ctx, code),
             Expr::Cast {
                 target_type, expr, ..
             } if target_type.is_reference() => {
                 self.compile_lvalue_addr(expr, ctx, code)?;
-                let aty = self.get_expr_type(expr, ctx);
-                if let (Some(clean_target), Some(clean_src)) =
-                    (target_type.deref_type(), aty.deref_type().or(Some(&aty)))
-                    && let (Type::Struct(s_target), Type::Struct(s_src)) =
-                        (clean_target.strip_const(), clean_src.strip_const())
-                    && let Some(offset) = self.sema.base_subobject_offset(s_src, s_target)
-                    && offset != 0
-                {
-                    code.push(OP_I32_CONST);
-                    write_i32(code, offset as i32);
-                    code.push(OP_I32_ADD);
-                }
-                Ok(())
+                self.emit_reference_cast_adjustment(target_type, expr, ctx, code)
             }
             _ => self.compile_lvalue_temporary(expr, ctx, code),
         }

@@ -1,10 +1,5 @@
 use super::*;
 
-enum ArrayDim {
-    Fixed(usize),
-    Dependent(String),
-}
-
 impl Parser {
     pub(super) fn is_type_start(&self) -> bool {
         match self.peek() {
@@ -20,8 +15,10 @@ impl Parser {
             | TokenKind::KwVoid
             | TokenKind::KwAuto
             | TokenKind::KwConst
+            | TokenKind::KwConstexpr
             | TokenKind::KwDecltype
-            | TokenKind::KwTypename => true,
+            | TokenKind::KwTypename
+            | TokenKind::KwAlignas => true,
             TokenKind::ColonColon => {
                 if let TokenKind::Ident(sub) = self.peek_ahead(1) {
                     sub == "size_t"
@@ -50,6 +47,7 @@ impl Parser {
                             || self.known_templates.contains(&full)
                             || self.type_aliases.contains_key(sub)
                             || self.type_aliases.contains_key(&full)
+                            || self.is_active_type_param(id)
                     } else {
                         false
                     }
@@ -77,6 +75,16 @@ impl Parser {
         let base_type = self.parse_specifier_type_inner()?;
         self.parse_declarator_prefix(&base_type)
     }
+    /// Parses a complete type-id, including parenthesized function- and
+    /// member-function-pointer declarators (`int (S::*)(int) const`).
+    pub(super) fn parse_type_id(&mut self) -> Result<Type, CompileError> {
+        let _guard = self.enter_type()?;
+        let base_type = self.parse_specifier_type_inner()?;
+        if self.is_function_pointer_declarator_ahead() {
+            return Ok(self.parse_function_pointer_declarator(base_type, None)?.0);
+        }
+        self.parse_declarator_prefix(&base_type)
+    }
 
     /// Parses the type specifiers of a declaration: the builtin or named type
     /// with its `const` qualifiers.
@@ -92,13 +100,20 @@ impl Parser {
     fn parse_specifier_type_inner(&mut self) -> Result<Type, CompileError> {
         let mut is_const = false;
         let mut is_typename = false;
+        let mut alignas_specs = Vec::new();
         loop {
-            if self.peek() == &TokenKind::KwConst {
+            if self.peek() == &TokenKind::KwConst || self.peek() == &TokenKind::KwConstexpr {
                 self.advance();
                 is_const = true;
+            } else if matches!(self.peek(), TokenKind::Ident(id) if id == "volatile") {
+                // Volatile is not a distinct Wasm type; top-level cv is
+                // ignored in function parameter types per C++17.
+                self.advance();
             } else if self.peek() == &TokenKind::KwTypename {
                 self.advance();
                 is_typename = true;
+            } else if self.peek() == &TokenKind::KwAlignas {
+                alignas_specs.push(self.parse_alignas_spec()?);
             } else {
                 break;
             }
@@ -144,12 +159,15 @@ impl Parser {
         }
 
         loop {
-            if self.peek() == &TokenKind::KwConst {
+            if self.peek() == &TokenKind::KwConst || self.peek() == &TokenKind::KwConstexpr {
                 self.advance();
                 base_type = Type::Const(Box::new(base_type));
             } else {
                 break;
             }
+        }
+        for spec in alignas_specs {
+            base_type = spec.wrap_type(base_type);
         }
         Ok(base_type)
     }
@@ -165,7 +183,7 @@ impl Parser {
         name_error: &str,
     ) -> Result<(Type, String), CompileError> {
         let ty = self.parse_declarator_prefix(specifiers)?;
-        if self.peek() == &TokenKind::LParen && self.peek_ahead(1) == &TokenKind::Star {
+        if self.is_function_pointer_declarator_ahead() {
             return self.parse_function_pointer_declarator(ty, Some(name_error));
         }
         let tok = self.advance().clone();
@@ -185,6 +203,14 @@ impl Parser {
     ) -> Result<Type, CompileError> {
         let mut ty = specifiers.clone();
         loop {
+            if self.is_member_pointer_prefix_ahead_from(0) {
+                let class_name = self.parse_member_pointer_class_prefix()?;
+                ty = Type::MemberPointer {
+                    class_name,
+                    member_type: Box::new(ty),
+                };
+                continue;
+            }
             match self.peek() {
                 TokenKind::Star => {
                     self.advance();
@@ -324,20 +350,6 @@ impl Parser {
         Ok(ty)
     }
 
-    fn parse_decltype_specifier(&mut self) -> Result<Type, CompileError> {
-        self.advance();
-        self.expect(TokenKind::LParen)?;
-        let res = if self.peek() == &TokenKind::KwNullptr {
-            self.advance();
-            Type::Nullptr
-        } else {
-            let _ = self.parse_expr()?;
-            Type::Pointer(Box::new(Type::Void))
-        };
-        self.expect(TokenKind::RParen)?;
-        Ok(res)
-    }
-
     fn parse_named_type(&mut self, is_typename: bool) -> Result<Type, CompileError> {
         let ty = match self.peek() {
             TokenKind::KwDecltype => self.parse_decltype_specifier()?,
@@ -351,11 +363,17 @@ impl Parser {
                     ));
                 }
                 let id = self.resolve_namespace_alias(&raw_id);
-                if self.is_active_type_param(&id) {
-                    Type::TypeParam(id)
-                } else if self.is_known_template(&id) && self.peek() == &TokenKind::Lt {
+                if (self.is_active_type_param(&id)
+                    || self.is_known_template(&id)
+                    || self.is_template_member_type(&id)
+                    || is_typename
+                    || self.allow_unknown_types)
+                    && self.peek() == &TokenKind::Lt
+                {
                     let args = self.parse_template_args()?;
                     Type::TemplateInstance { name: id, args }
+                } else if self.is_active_type_param(&id) {
+                    Type::TypeParam(id)
                 } else if self.is_known_template(&id) {
                     Type::Struct(id)
                 } else if id == "size_t" {
@@ -364,7 +382,13 @@ impl Parser {
                     Type::Int
                 } else if let Some(scoped) = self.resolve_active_struct_scope_type(&id) {
                     scoped
-                } else if let Some(alias) = self.type_aliases.get(&id).cloned() {
+                } else if let Some(alias) = self
+                    .scoped_aliases
+                    .iter()
+                    .rev()
+                    .find_map(|scope| scope.get(&id).cloned())
+                    .or_else(|| self.type_aliases.get(&id).cloned())
+                {
                     alias
                 } else if self.known_enums.contains(&id) {
                     Type::Enum(id)
@@ -384,82 +408,17 @@ impl Parser {
                     Type::Struct(format!("{}::{}", ns, id))
                 } else if self.known_types.contains(&id) {
                     Type::Struct(id)
-                } else if QualifiedName::new(&id).in_std() {
-                    let plain = QualifiedName::new(&id).plain();
-                    if self.known_types.contains(plain) {
-                        Type::Struct(plain.to_string())
-                    } else {
-                        return Err(CompileError::new(
-                            format!("Unknown type '{}'", id),
-                            self.current().line,
-                            self.current().col,
-                        ));
-                    }
-                } else if self.allow_unknown_types
-                    || is_typename
-                    || self.known_types.contains(&format!("std::{}", id))
-                    || self.is_template_member_type(&id)
-                {
-                    Type::Struct(id)
                 } else {
-                    return Err(CompileError::new(
-                        format!("Unknown type '{}'", id),
-                        self.current().line,
-                        self.current().col,
-                    ));
+                    self.resolve_named_struct_fallback(
+                        &id,
+                        is_typename,
+                        (self.current().line, self.current().col),
+                    )?
                 }
             }
             _ => unreachable!(),
         };
         Ok(ty)
-    }
-
-    pub(super) fn parse_array_suffix(&mut self, elem_type: Type) -> Result<Type, CompileError> {
-        let mut dimensions = Vec::new();
-        while self.peek() == &TokenKind::LBracket {
-            let bracket_pos = self.current_pos();
-            self.advance();
-            let dim = if self.peek() != &TokenKind::RBracket {
-                let expr = self.parse_expr()?;
-                if let Expr::Identifier(ref id) = expr
-                    && self.is_active_type_param(id)
-                {
-                    ArrayDim::Dependent(id.clone())
-                } else {
-                    match crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None) {
-                        Ok(n) if n >= 0 => ArrayDim::Fixed(n as usize),
-                        Ok(_) => {
-                            return Err(CompileError::new(
-                                "Array dimension must be non-negative integer constant",
-                                bracket_pos.line,
-                                bracket_pos.col,
-                            ));
-                        }
-                        Err(mut err) => {
-                            err.line = bracket_pos.line;
-                            err.col = bracket_pos.col;
-                            return Err(err);
-                        }
-                    }
-                }
-            } else {
-                ArrayDim::Fixed(0)
-            };
-            self.expect(TokenKind::RBracket)?;
-            dimensions.push(dim);
-        }
-        // C declarators nest left to right, so `int m[2][3]` is two rows of
-        // three ints: wrap the element type from the innermost dimension out.
-        let mut cur_type = elem_type;
-        for dim in dimensions.into_iter().rev() {
-            match dim {
-                ArrayDim::Fixed(size) => cur_type = Type::Array(Box::new(cur_type), size),
-                ArrayDim::Dependent(param) => {
-                    cur_type = Type::DependentArray(Box::new(cur_type), param);
-                }
-            }
-        }
-        Ok(cur_type)
     }
 
     pub(super) fn is_template_member_type(&self, id: &str) -> bool {

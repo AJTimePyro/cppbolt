@@ -1,26 +1,22 @@
+use super::analyze_helpers::{collect_object_use_classes, method_matches_out_of_class};
+use super::constexpr_globals::collect_constexpr_globals;
 use super::*;
-
-fn method_matches_out_of_class(
-    m: &FunctionDecl,
-    short_method: &str,
-    params: &[Param],
-    is_const: bool,
-) -> bool {
-    (m.name == short_method || m.name == format!("~{}", short_method))
-        && m.params.len() == params.len()
-        && m.is_const == is_const
-        && m.body.is_none()
-        && m.params.iter().zip(params).all(|(p1, p2)| p1.ty == p2.ty)
-}
 
 impl Sema {
     pub fn analyze_program(&mut self, program: &mut Program) -> Result<(), CompileError> {
+        self.object_use_classes = collect_object_use_classes(program);
         self.attach_out_of_class_methods(program);
+        self.seed_lifecycle_types(program);
         self.register_types(program)?;
         self.synthesize_destructors(program);
         self.synthesize_constructors(program);
         self.register_declarations(program)?;
+        self.validate_virtual_returns(program)?;
         self.analyze_declarations(program)?;
+        // Bodies deferred during early template instantiation are retried now
+        // that globals and functions are registered. A permanent error here
+        // aborts before code generation.
+        self.retry_deferred_methods()?;
         program.declarations.append(&mut self.synthesized_decls);
         Ok(())
     }
@@ -89,27 +85,17 @@ impl Sema {
                     name,
                     is_scoped,
                     variants,
-                } => {
-                    if *is_scoped {
-                        self.scoped_enums.insert(name.clone());
-                    }
-                    for (vname, val) in variants {
-                        let scoped_name = format!("{}::{}", name, vname);
-                        self.enum_values.insert(scoped_name.clone(), *val);
-                        self.enum_types.insert(scoped_name, name.clone());
-                        if !*is_scoped {
-                            self.enum_values.insert(vname.clone(), *val);
-                            self.enum_types.insert(vname.clone(), name.clone());
-                        }
-                    }
-                }
+                } => self.register_enum_decl(name, *is_scoped, variants),
                 Decl::StructDecl {
                     name,
                     is_class,
+                    is_final,
                     base_classes,
+                    base_access,
                     fields,
                     methods,
                     private_members,
+                    alignment,
                     line,
                     col,
                     ..
@@ -120,43 +106,62 @@ impl Sema {
                             self.check_field_default_init(fname, fty, init_expr, (*fline, *fcol))?;
                         }
                     }
+                    // A base that is a template specialization must have a
+                    // layout before this class can inherit its vptr and slots.
+                    for base in base_classes.clone() {
+                        let canonical = self.canonical_class_name(&base, Some(name));
+                        self.ensure_class_instantiated(&canonical, *line, *col);
+                    }
                     self.compute_struct_layout(RecordLayout {
                         name: name.as_str(),
                         is_class: *is_class,
+                        is_final: *is_final,
                         base_classes,
+                        base_access,
                         fields,
                         methods,
                         private_members,
                         line: *line,
                         col: *col,
+                        alignment: alignment
+                            .as_ref()
+                            .map(|ty| ty.align_of(&self.struct_aligns)),
                     })?;
                 }
-                Decl::Template(t) => match &t.kind {
-                    TemplateKind::Class(c) => {
-                        if t.params.is_empty() && c.name.contains('<') {
-                            self.register_class_specialization(c.clone(), (t.line, t.col))?;
-                        } else if !t.params.is_empty() && c.name.contains('<') {
-                            self.register_partial_specialization(
-                                c.clone(),
-                                t.params.clone(),
-                                (t.line, t.col),
-                            )?;
-                        } else {
-                            self.register_class_template(c.clone(), t.params.clone());
-                        }
-                    }
-                    TemplateKind::Function(f) => {
-                        if f.name.contains("::") {
-                            self.attach_out_of_class_template_method((**f).clone(), &t.params);
-                        } else {
-                            self.register_function_template((**f).clone(), t.params.clone());
-                        }
-                    }
-                    TemplateKind::Alias(name, ty) => {
-                        self.register_alias_template(name.clone(), ty.clone(), t.params.clone());
-                    }
-                },
+                Decl::Template(t) => self.register_template_declaration(t)?,
                 _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    fn register_template_declaration(
+        &mut self,
+        t: &crate::ast::TemplateDecl,
+    ) -> Result<(), CompileError> {
+        match &t.kind {
+            TemplateKind::Class(c) => {
+                if t.params.is_empty() && c.name.contains('<') {
+                    self.register_class_specialization(c.clone(), (t.line, t.col))?;
+                } else if !t.params.is_empty() && c.name.contains('<') {
+                    self.register_partial_specialization(
+                        c.clone(),
+                        t.params.clone(),
+                        (t.line, t.col),
+                    )?;
+                } else {
+                    self.register_class_template(c.clone(), t.params.clone(), (t.line, t.col))?;
+                }
+            }
+            TemplateKind::Function(f) => {
+                if f.name.contains("::") {
+                    self.attach_out_of_class_template_method((**f).clone(), &t.params);
+                } else {
+                    self.register_function_template((**f).clone(), t.params.clone());
+                }
+            }
+            TemplateKind::Alias(name, ty) => {
+                self.register_alias_template(name.clone(), ty.clone(), t.params.clone());
             }
         }
         Ok(())
@@ -197,6 +202,7 @@ impl Sema {
                         ));
                     }
                     let sig = FunctionSig {
+                        qualifiers: FunctionQualifiers::default(),
                         name: f.name.clone(),
                         mangled_name: mangled,
                         return_type: f.return_type.clone(),
@@ -284,7 +290,10 @@ impl Sema {
             RefQualifier::RValue => mangled.push_str("_O"),
             RefQualifier::None => {}
         }
+        let mut quals = m.qualifiers;
+        quals.is_const = m.is_const;
         let sig = FunctionSig {
+            qualifiers: quals,
             name: m.name.clone(),
             mangled_name: mangled,
             return_type: m.return_type.clone(),
@@ -396,6 +405,7 @@ impl Sema {
     }
 
     fn analyze_declarations(&mut self, program: &mut Program) -> Result<(), CompileError> {
+        let constants = collect_constexpr_globals(&program.declarations, &self.struct_sizes);
         for decl in &mut program.declarations {
             match decl {
                 Decl::GlobalVar {
@@ -412,6 +422,33 @@ impl Sema {
                     self.current_col = func.col;
                     self.analyze_function(func)?;
                 }
+                Decl::StaticAssert {
+                    condition,
+                    message,
+                    line,
+                    col,
+                } => {
+                    let value = crate::sema::constexpr_eval::eval_constexpr_with_context(
+                        condition,
+                        Some(&self.struct_sizes),
+                        Some(&constants),
+                        None,
+                    );
+                    // Fail on a definite false. When the integral evaluator
+                    // cannot fold the condition (for example a comparison of
+                    // member pointers), leave it accepted as before.
+                    if matches!(value, Ok(0)) {
+                        let suffix = message
+                            .as_ref()
+                            .map(|m| format!(": {m}"))
+                            .unwrap_or_default();
+                        return Err(CompileError::new(
+                            format!("static assertion failed{suffix}"),
+                            *line,
+                            *col,
+                        ));
+                    }
+                }
                 Decl::StructDecl { name, methods, .. } => {
                     self.current_class = Some(name.to_string());
                     for m in methods {
@@ -425,52 +462,12 @@ impl Sema {
                         self.analyze_function(&mut func_decl)?;
                         m.body = func_decl.body;
                         m.return_type = func_decl.return_type;
+                        self.update_registered_method_return_type(name, m);
                     }
                     self.current_class = None;
                 }
                 _ => {}
             }
-        }
-        Ok(())
-    }
-
-    fn check_field_default_init(
-        &mut self,
-        fname: &str,
-        fty: &Type,
-        init_expr: &mut Expr,
-        pos: (usize, usize),
-    ) -> Result<(), CompileError> {
-        let (init_ty, is_list) = match init_expr {
-            Expr::InitializerList { elements, pos } => {
-                let context = if elements.is_empty() {
-                    InitContext::ValueInit
-                } else {
-                    InitContext::CopyListInitVar
-                };
-                (self.resolve_list_init(fty, elements, context, *pos)?, true)
-            }
-            Expr::TypedInitList {
-                ty: explicit_ty,
-                elements,
-                pos,
-            } => (
-                self.resolve_list_init(explicit_ty, elements, InitContext::DirectList, *pos)?,
-                true,
-            ),
-            _ => (self.analyze_expr_keeping_reference(init_expr)?, false),
-        };
-        if !is_list && !self.can_assign_expr(fty, &init_ty, Some(init_expr)) {
-            return Err(CompileError::new(
-                format!(
-                    "cannot initialize field '{}' of type '{}' with expression of type '{}'",
-                    fname,
-                    fty.to_c_type(),
-                    init_ty.to_c_type()
-                ),
-                pos.0,
-                pos.1,
-            ));
         }
         Ok(())
     }
@@ -487,5 +484,6 @@ pub(super) fn this_param(class: &str, is_const: bool) -> Param {
         name: "this".to_string(),
         ty: Type::Pointer(Box::new(inner)),
         default_val: None,
+        is_pack: false,
     }
 }

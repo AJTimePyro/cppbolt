@@ -46,6 +46,21 @@ impl<'a> Codegen<'a> {
                 ctx,
                 code,
             ),
+            Expr::Binary {
+                op: op @ (BinaryOp::DotStar | BinaryOp::ArrowStar),
+                left,
+                right,
+                ..
+            } => self.compile_member_pointer_call(
+                MemberPointerCall {
+                    left,
+                    right,
+                    is_arrow: *op == BinaryOp::ArrowStar,
+                    args,
+                },
+                ctx,
+                code,
+            ),
             _ => self.compile_indirect_call(callee, args, ctx, code),
         }
     }
@@ -251,7 +266,7 @@ impl<'a> Codegen<'a> {
         write_u32(code, 2);
         write_u32(code, temp_ptr_slot);
 
-        if let Some(&v_off) = self.vtable_offsets.get(name) {
+        for (vptr_offset, v_off) in self.vtable_installs(name) {
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.fp_local);
             code.push(OP_I32_LOAD);
@@ -261,7 +276,7 @@ impl<'a> Codegen<'a> {
             write_i32(code, v_off as i32);
             code.push(OP_I32_STORE);
             write_u32(code, 2);
-            write_u32(code, 0);
+            write_u32(code, vptr_offset);
         }
 
         self.compile_struct_value_ctor(name, temp_ptr_slot, args, ctx, code)?;
@@ -301,8 +316,8 @@ impl<'a> Codegen<'a> {
         let arg_types: Vec<Type> = args.iter().map(|a| self.get_expr_type(a, ctx)).collect();
         let is_same_struct = match arg_types.first() {
             Some(ty) => matches!(
-                ty.strip_const().strip_reference(),
-                Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(name))
+            ty.strip_const().strip_reference(),
+            Type::Struct(s) if QualifiedName::new(s).matches(QualifiedName::new(name))
             ),
             None => false,
         };
@@ -375,11 +390,9 @@ impl<'a> Codegen<'a> {
         };
         let mut field_idx = 0;
         let mut elem_idx = 0;
-        if let Some(base_name) = layout.base_classes.first()
-            && let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned()
-        {
-            let base_field_count = base_layout.fields.len();
-            if elem_idx < args.len()
+        for (base_name, base_off) in &layout.base_offsets {
+            if let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned()
+                && elem_idx < args.len()
                 && matches!(
                     &args[elem_idx],
                     Expr::InitializerList { .. } | Expr::TypedInitList { .. }
@@ -390,9 +403,10 @@ impl<'a> Codegen<'a> {
                     | Expr::TypedInitList { elements, .. } => elements.as_slice(),
                     _ => &[],
                 };
-                self.compile_struct_value_ctor(base_name, temp_ptr_slot, sub_elements, ctx, code)?;
+                let base_slot = self.compute_base_ptr_slot(temp_ptr_slot, *base_off, ctx, code)?;
+                self.compile_struct_value_ctor(base_name, base_slot, sub_elements, ctx, code)?;
                 elem_idx += 1;
-                field_idx += base_field_count;
+                field_idx += base_layout.fields.len();
             }
         }
         while elem_idx < args.len() {

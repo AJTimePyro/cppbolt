@@ -1,6 +1,5 @@
-use std::collections::HashSet;
-
 use super::*;
+use std::collections::HashSet;
 
 pub(crate) fn insert_type_aliases(set: &mut HashSet<String>, name: &str) {
     set.insert(name.to_string());
@@ -26,7 +25,10 @@ pub(crate) fn set_contains_type(set: &HashSet<String>, name: &str) -> bool {
 }
 
 impl Sema {
-    pub(super) fn synthesize_destructors(&mut self, program: &mut Program) {
+    /// Records which declared classes have user-provided lifecycle methods.
+    /// Called before template instantiation so a specialization containing a
+    /// resource member can get its own synthesized destructor.
+    pub(super) fn seed_lifecycle_types(&mut self, program: &Program) {
         for decl in &program.declarations {
             if let Decl::StructDecl { name, methods, .. } = decl {
                 if methods.iter().any(|m| m.name.starts_with('~')) {
@@ -42,6 +44,10 @@ impl Sema {
                 }
             }
         }
+    }
+
+    pub(super) fn synthesize_destructors(&mut self, program: &mut Program) {
+        self.seed_lifecycle_types(program);
 
         for decl in &mut program.declarations {
             if let Decl::StructDecl {
@@ -52,7 +58,13 @@ impl Sema {
                 ..
             } = decl
             {
-                self.synthesize_instantiation_lifecycle(name, base_classes, fields, methods);
+                // Alias-named bases must resolve to their canonical type before
+                // deciding whether this class needs a synthesized destructor.
+                let bases: Vec<String> = base_classes
+                    .iter()
+                    .map(|b| self.canonical_class_name(b, Some(name)))
+                    .collect();
+                self.synthesize_instantiation_lifecycle(name, &bases, fields, methods);
             }
         }
     }
@@ -78,6 +90,7 @@ impl Sema {
             let dtor_name = format!("~{}", inst_name);
             if !methods.iter().any(|m| m.name == dtor_name) {
                 methods.push(FunctionDecl {
+                    qualifiers: FunctionQualifiers::default(),
                     name: dtor_name,
                     return_type: Type::Void,
                     params: vec![],
@@ -102,6 +115,7 @@ impl Sema {
             .any(|m| m.name == inst_name || m.name == short);
         if !has_user_ctor {
             methods.push(FunctionDecl {
+                qualifiers: FunctionQualifiers::default(),
                 name: inst_name.to_string(),
                 return_type: Type::Void,
                 params: Vec::new(),
@@ -167,6 +181,7 @@ impl Sema {
                     .any(|(_, ty, _)| type_ctor_status(ty, &any_ctor, &default_ctor).1);
                 if !base_blocks && !field_blocks {
                     methods.push(FunctionDecl {
+                        qualifiers: FunctionQualifiers::default(),
                         name: name.clone(),
                         return_type: Type::Void,
                         params: vec![],

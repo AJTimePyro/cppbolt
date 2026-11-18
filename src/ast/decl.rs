@@ -1,7 +1,7 @@
 use super::expr::Expr;
 use super::stmt::Stmt;
 use super::template::{TemplateDecl, TemplateParam};
-use super::types::Type;
+use super::types::{FunctionQualifiers, Type};
 use std::collections::HashMap;
 
 pub type FieldInit = Option<(Expr, usize, usize)>;
@@ -12,6 +12,15 @@ pub struct Param {
     pub name: String,
     pub ty: Type,
     pub default_val: Option<Expr>,
+    pub is_pack: bool,
+}
+/// Access specifier of a base-class declaration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum BaseAccess {
+    #[default]
+    Public,
+    Protected,
+    Private,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -36,6 +45,7 @@ pub struct FunctionDecl {
     pub is_static: bool,
     pub ctor_initializers: Vec<(String, Vec<Expr>)>,
     pub template_params: Vec<TemplateParam>,
+    pub qualifiers: FunctionQualifiers,
     pub line: usize,
     pub col: usize,
 }
@@ -54,12 +64,15 @@ pub enum Decl {
     StructDecl {
         name: String,
         is_class: bool,
+        is_final: bool,
         base_classes: Vec<String>,
+        base_access: Vec<BaseAccess>,
         fields: Vec<StructFieldDecl>,
         methods: Vec<FunctionDecl>,
         static_fields: Vec<(String, Type, Option<Expr>)>,
         private_members: Vec<String>,
         nested_structs: Vec<Decl>,
+        alignment: Option<Type>,
         line: usize,
         col: usize,
     },
@@ -67,6 +80,12 @@ pub enum Decl {
         name: String,
         is_scoped: bool,
         variants: Vec<(String, i64)>,
+    },
+    StaticAssert {
+        condition: Expr,
+        message: Option<String>,
+        line: usize,
+        col: usize,
     },
     UsingNamespace(String),
     UsingDecl(String),

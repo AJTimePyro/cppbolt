@@ -160,6 +160,11 @@ impl<'a> Codegen<'a> {
             }
         }
         if let Expr::Identifier(name) = expr
+            && self.try_compile_member_pointer_addrof(name, code)?
+        {
+            return Ok(());
+        }
+        if let Expr::Identifier(name) = expr
             && let Some(&table_idx) = self.func_table_indices.get(name.as_str())
         {
             code.push(OP_I32_CONST);

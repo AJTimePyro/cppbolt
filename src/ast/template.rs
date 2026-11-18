@@ -7,6 +7,7 @@ pub struct TemplateParam {
     pub name: String,
     pub default_type: Option<Type>,
     pub param_type: Option<Type>,
+    pub is_pack: bool,
     pub line: usize,
     pub col: usize,
 }
@@ -15,12 +16,15 @@ pub struct TemplateParam {
 pub struct TemplateClass {
     pub name: String,
     pub is_class: bool,
+    pub is_final: bool,
     pub base_classes: Vec<String>,
+    pub base_access: Vec<crate::ast::BaseAccess>,
     pub fields: Vec<StructFieldDecl>,
     pub methods: Vec<FunctionDecl>,
     pub static_fields: Vec<(String, Type, Option<Expr>)>,
     pub private_members: Vec<String>,
     pub nested_structs: Vec<Decl>,
+    pub alignment: Option<Type>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -48,6 +52,7 @@ mod tests {
             name: "T".to_string(),
             default_type: None,
             param_type: None,
+            is_pack: false,
             line: 1,
             col: 10,
         };
@@ -55,9 +60,23 @@ mod tests {
             name: "T".to_string(),
             default_type: None,
             param_type: None,
+            is_pack: false,
             line: 1,
             col: 10,
         };
         assert_eq!(p1, p2);
+    }
+
+    #[test]
+    fn test_template_param_pack() {
+        let p = TemplateParam {
+            name: "Ts".to_string(),
+            default_type: None,
+            param_type: None,
+            is_pack: true,
+            line: 1,
+            col: 10,
+        };
+        assert!(p.is_pack);
     }
 }

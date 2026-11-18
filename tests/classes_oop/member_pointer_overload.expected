@@ -1,0 +1,6 @@
+same abi: 6
+int: 17
+double: 27
+arrow int: 11
+arrow double: 21
+multi inheritance: 105

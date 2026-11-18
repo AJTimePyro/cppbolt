@@ -1,1 +1,0 @@
-tests/negative/template_variadic.cpp:1:11: error: variadic template parameters are not supported yet

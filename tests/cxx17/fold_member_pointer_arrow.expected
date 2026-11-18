@@ -1,0 +1,4 @@
+traverse_arrow: 100
+traverse_unary_arrow: 100
+traverse_single: 100
+invoked_arrow: 42

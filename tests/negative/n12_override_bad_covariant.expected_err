@@ -1,0 +1,1 @@
+tests/negative/n12_override_bad_covariant.cpp:3:19: error: 'D::f' has an incompatible return type

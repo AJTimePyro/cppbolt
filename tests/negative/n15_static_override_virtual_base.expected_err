@@ -1,0 +1,1 @@
+tests/negative/n15_static_override_virtual_base.cpp:2:16: error: static member function 'D::f' cannot be override or final

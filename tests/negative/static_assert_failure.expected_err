@@ -1,0 +1,1 @@
+tests/negative/static_assert_failure.cpp:2:1: error: static assertion failed: deliberate failure

@@ -90,7 +90,17 @@ impl Parser {
                         ));
                     }
                 };
-                captures.push(LambdaCapture { name, is_reference });
+                let is_pack = if self.peek() == &TokenKind::Ellipsis {
+                    self.advance();
+                    true
+                } else {
+                    false
+                };
+                captures.push(LambdaCapture {
+                    name,
+                    is_reference,
+                    is_pack,
+                });
             }
             if self.peek() == &TokenKind::Comma {
                 self.advance();

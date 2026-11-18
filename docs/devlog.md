@@ -4,6 +4,160 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-16: Pointer-to-Member Operators, ABI Representation, and C++17 Fold Integration
+
+Implemented C++ pointer-to-member language support (ISO C++17 [dcl.mptr], [expr.mptr.oper], [conv.mem]), flat 64-bit Itanium ABI representation, and fold expression integration across the parser, semantic analyzer, WebAssembly code generator, and test suite:
+
+### Summary of Work
+
+1. Extended the type system and AST in `src/ast/types.rs`, `src/ast/expr.rs`, and `src/ast/fold_op.rs`: added `Type::MemberPointer { class_name, member_type }`, binary operators `BinaryOp::DotStar` (`.*`) and `BinaryOp::ArrowStar` (`->*`), and fold operators `FoldOp::DotStar` and `FoldOp::ArrowStar`.
+2. Implemented syntax parsing in `src/parser/decl_func.rs`, `src/parser/types.rs`, and `src/parser/expr.rs`: supported nested `Class::*` specifiers in simple and parenthesized member function declarators, and added precedence 14 Pratt parsing for `.*` and `->*` operators.
+3. Implemented semantic analysis in `src/sema/member_pointer.rs`, `src/sema/assign.rs`, and `src/sema/template_deduce_type.rs`: resolved member pointer addresses (`&Class::member`), validated receiver and member pointer compatibility, enforced const qualification propagation, supported base-to-derived conversions (`Base::*` to `Derived::*`), and added structural template argument deduction for `Type::MemberPointer`.
+4. Lowered pointer-to-member operations to WebAssembly in `src/codegen/member_pointer.rs` and `src/codegen/memory.rs`:
+   - Data-member pointers lower to WebAssembly `i32` byte offsets within struct layouts, using `-1` to encode null data-member pointers.
+   - Member-function pointers lower to WebAssembly `i64` packing `{ ptr: u32, adj: u32 }` with `0i64` as null. Bit 0 of `ptr` discriminates between non-virtual function table calls (bit 0 = 0) and virtual vtable calls (bit 0 = 1). The high 32 bits (`adj`) adjust the `this` pointer for multiple inheritance subobject navigation.
+   - Dispatch lowers to `call_indirect`, staging operands through local frame slots.
+   - Emitted guarded base-to-derived conversions adjusting member offsets and function `adj` fields for non-null pointers.
+5. Enabled C++17 fold expressions over `.*` and `->*` in `src/sema/fold_expansion.rs`, expanding parameter packs into left- or right-associative binary expression trees.
+6. Added positive test coverage in `tests/classes_oop/` and `tests/cxx17/` for data members, non-virtual methods, virtual methods, multiple inheritance adjustments, and fold expressions, along with negative diagnostic tests in `tests/negative/`.
+7. Documented the architecture and ABI in ADR 0015 (`docs/adr/0015-pointer-to-member.md`), updated ADR 0014 (`docs/adr/0014-cxx17-fold-expressions.md`), and updated compiler documentation in `docs/book/internals/parser-and-ast.md` and `docs/book/user/supported-cpp.md`.
+
+### Verification Results
+
+- Corpus test runner: 583/583 corpus tests passed on disk, 0 failures.
+- Unit tests: 134/134 unit tests passed in `src/lib.rs`, 0 failures.
+- Native oracle gate: all mini_stl tests match native Clang and GCC byte-for-byte.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings under `-D warnings` across all targets.
+- Book build: `mdbook build docs/book` succeeds with zero errors.
+
+---
+
+## 2026-11-16: C++17 Fold Expressions Implementation
+
+Implemented C++17 fold expressions ([expr.prim.fold]) across the AST, parser, semantic analyzer, template substitution pipeline, and constant evaluator:
+
+### Summary of Work
+
+1. Added `FoldOp` in `src/ast/fold_op.rs` representing all 32 C++17 fold operators (arithmetic, bitwise, relational, logical, comma, assignment, compound assignment, and pointer-to-member), and added `Expr::FoldExpr { op, left, right, pos }` in `src/ast/expr.rs`.
+2. Implemented fold expression parsing in `src/parser/expr_fold.rs` and `src/parser/prefix.rs`. The parser uses `has_depth1_ellipsis` lookahead to distinguish parenthesized folds without backtracking, parses all four shapes (unary left, unary right, binary left, binary right), and validates that binary folds use identical operator tokens.
+3. Implemented semantic fold expansion in `src/sema/fold_expansion.rs`. During template substitution, `expand_fold_expr` classifies fold shapes, validates that multi-pack expansions share identical pack lengths, slices parameter packs, and constructs concrete binary expression trees with standard left or right associativity.
+4. Implemented ISO C++17 [temp.variadic] empty pack rules: empty unary folds over `&&` evaluate to `true`, `||` to `false`, and `,` to a void expression (`Expr::IntLiteral(0, Type::Void)`), while other operators trigger compile errors when expanded over empty packs.
+5. Integrated fold expressions into non-type template arguments, dependent array bounds (`src/parser/types_array.rs`), and compile-time evaluation (`src/sema/constexpr_eval.rs`, `src/sema/template_subst_nontype.rs`), allowing constructs like `template <int... Ns> struct S { int arr[(... + Ns)]; };` to evaluate during template instantiation.
+6. Enforced diagnostics rejecting unexpanded fold expressions outside template bodies or fold expressions containing packs in both operands.
+7. Added positive end-to-end test cases in `tests/cxx17/` and negative diagnostic tests in `tests/negative/`, along with parser unit tests in `src/parser/tests_fold.rs` and semantic unit tests in `src/sema/fold_tests.rs`.
+8. Documented the architecture in ADR 0014 (`docs/adr/0014-cxx17-fold-expressions.md`) and updated compiler book internals (`docs/book/internals/parser-and-ast.md`, `docs/book/user/supported-cpp.md`).
+
+### Verification Results
+
+- Test runner: 576/576 corpus tests passed, 0 failures.
+- Unit tests: 131/131 unit tests passed, 0 failures.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Clippy: 0 warnings under `-D warnings` across all targets.
+- Book build: `mdbook build docs/book` succeeds with zero errors.
+
+---
+
+## 2026-11-16: C++11 Variadic Templates and Multiple-Inheritance Remediation
+
+Resolved the remaining C++11 variadic template and multiple-inheritance defects identified during independent compiler audits:
+
+### Summary of Work
+
+1. Non-type template argument substitution now resolves `sizeof...(Ts)` and arithmetic expressions containing pack lengths (`src/sema/template_subst_nontype.rs`, `src/sema/template_subst.rs`, `src/sema/template_name.rs`). The substitution engine evaluates dependent NTTP expressions with active pack mappings and simplifies canonical argument strings for template instance lookup.
+2. Implemented multiple-inheritance subobject offsets and pointer adjustments across the compiler (`src/sema/layout.rs`, `src/codegen/memory.rs`, `src/codegen/expr.rs`, `src/codegen/lvalue.rs`, `src/codegen/stmt_var_init.rs`, `src/codegen/function_global_init.rs`, `src/codegen/expr_call.rs`, `src/codegen/call_args.rs`). Derived-to-base and base-to-derived conversions adjust pointer and reference offsets, member access resolves secondary base field positions, and static casts validate inheritance relations.
+3. Added template argument deduction for function pointers (`src/sema/template_deduce_type.rs`), deducing return types and parameter packs directly from function types or pointers (`R (*)(Args...)`) without requiring trailing call arguments.
+4. Resolved nested dependent type declarations in local scopes (`src/parser/mod.rs`, `src/parser/types.rs`, `src/sema/template_subst.rs`). The parser recognizes member templates and qualified dependent types without misclassifying `<` tokens as comparison expressions, and template substitution replaces qualifier template instances.
+5. Added local type alias declarations (`using Res = Target<Ts...>;`) and block-scoped resolution (`src/ast/stmt.rs`, `src/parser/stmt.rs`, `src/sema/mod.rs`, `src/sema/stmt.rs`, `src/sema/template_subst_stmt.rs`). Local aliases resolve inside their enclosing blocks without leaking to outer scopes.
+6. Expanded `alignas` pack handling to support `alignof(Ts)...` expressions and non-type packs (`src/parser/struct_align.rs`, `src/sema/template_subst_align.rs`), computing maximum required alignments across all expanded elements.
+7. Guarded multiple-inheritance pointer conversions to preserve null pointer values (`(Base2*)(Derived*)nullptr == nullptr`) without applying subobject offsets to zero addresses (`src/codegen/memory.rs`).
+8. Propagated composite struct alignments into dependent `alignas` evaluation, and threaded caller coordinates into type substitution errors (`src/sema/template_subst_align.rs`, `src/sema/pack_expansion.rs`, `src/sema/template_subst.rs`).
+9. Added `std::get<I>(tuple&&)` rvalue overloads and enabled nested template argument parsing in type lists (`stdlib/tuple`, `src/parser/types.rs`), permitting move extraction of move-only types from tuples.
+
+### Verification Results
+
+- Test runner: 563/563 corpus tests passed, 0 failures.
+- Unit tests: 119/119 unit tests passed, 0 failures.
+- Diagnostic positions harness: passed with zero fabricated coordinates.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Differential verification: byte-for-byte output match against host native Clang in C++11 mode across positive test suites.
+- Clippy: 0 warnings under `-D warnings` across all targets.
+
+---
+
+## 2026-11-15: C++11 Variadic Templates Completion and Audit Remediation
+
+Completed C++11 variadic template support across the compiler and embedded standard library based on an independent Clang comparison audit:
+
+### Summary of Work
+
+1. Resolved base pack expansion length from the base pack in `mapping` in `src/sema/template_subst_func.rs`, fixing `: Bases(v)...` when `v` is a non-pack scalar.
+2. Extended call-graph reachability traversal in `src/codegen/analysis.rs` to visit `InitializerList`, `TypedInitList`, `PackExpansion`, and `SizeofExpr`. This preserves functions invoked through swallow idiom expressions (`int dummy[] = { (f(args), 0)... };`) during dead code elimination. Factored static local collection into `src/codegen/analysis_vars.rs`.
+3. Preserved dependent array bounds (`int a[sizeof...(Ts)];`) during parsing as `Type::DependentArray` in `src/parser/types_array.rs`, evaluating the bound at template instantiation in `src/sema/template_subst_array.rs`.
+4. Converted trailing non-type pack arguments to `TemplateArg::NonTypePack` in `src/sema/template_match.rs` for partial specializations like `Sum<First, Rest...>`.
+5. Replaced heuristic parameter-count tie-breaking in `src/sema/template_partial_order.rs` with deduction from synthetic types per ISO C++11 [temp.func.order] (`deduces_from_synthetic`). Ambiguous overloads remain ambiguous.
+6. Relaxed trailing pack validation for partial specializations in `src/parser/template.rs`, supporting multi-pack specializations such as `ZipCount<TypeList<As...>, TypeList<Bs...>>`.
+7. Added semantic diagnostics in `src/sema/expr.rs` for `sizeof...(non_pack)` and pack expansions without unexpanded parameter packs.
+8. Added parsing and substitution for template-template parameters and parameter packs (`template <template <typename...> class... Containers>`) in `src/parser/template_param.rs` and `src/sema/template_name.rs`.
+9. Removed single-base restrictions in `src/sema/layout.rs`, laying out multiple base subobjects sequentially with offset adjustments, multi-base method dispatch, and duplicate direct base class rejection.
+10. Supported `[args...]` and `[&args...]` in `src/parser/expr_lambda.rs` and expanded them into individual closure captures during substitution in `src/sema/template_subst_lambda.rs`. Factored free variable analysis into `src/sema/expr_lambda_free_vars.rs`.
+11. Implemented structural deduction in `src/sema/template_deduce_type.rs` for function template parameters containing pack expansions inside template instances, such as `f(Tuple<As...>, Tuple<Bs...>)` and `g(Tuple<First, Rest...>)`.
+12. Supported nested member class templates containing parameter packs (`Outer<Ts...>::Inner<Us...>`) in `src/parser/structs_nested.rs` and `src/sema/template_nested.rs`, substituting outer parameters while preserving inner parameters.
+13. Added `alignas(Ts...)` and `alignof(T)` in `src/parser/struct_align.rs`, evaluating maximum alignment across pack types in `src/sema/template_subst_align.rs` and `src/sema/layout.rs`.
+14. Removed the non-standard `f(args)...;` expression-statement extension from `src/parser/stmt.rs`.
+15. Fixed explicit function-template argument pack deduction in `src/sema/template_deduce.rs`, starting trailing argument deduction at `non_pack_count + explicit_pack.len()` so calls like `foo<int, int>(1, 2)` do not duplicate deduced parameters or produce mismatched WebAssembly call arity.
+16. Implemented alias template parameter pack expansion in `src/sema/template_alias.rs` by grouping trailing template arguments into `TemplateArg::TypePack` via `build_template_arg_map`.
+17. Enforced compile-time diagnostics in `src/sema/template_spec.rs` rejecting unexpanded parameter packs in class template data member types and method parameter types.
+18. Supported function pointer parameter packs (`void (*fn)(Args...)`) in `src/parser/decl_func.rs` and `src/sema/template_subst.rs`, expanding pack parameters in function pointer signatures.
+19. Supported C++11 dynamic exception specifications (`throw(Ts...)` and `throw()`) in `src/parser/decl_func.rs`.
+20. Preserved lvalue reference value categories in `src/codegen/lvalue.rs` and `src/codegen/overload.rs` for call expressions returning references (such as `std::forward<T>`), preventing spurious scalar loads during nested call argument conversion.
+
+### Verification Results
+
+- Test runner: 549/549 corpus tests passed, 0 failures.
+- Unit and integration tests: 119 unit tests passed, 0 failed.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Native oracle gate: 100% byte-for-byte output match against host native Clang in C++11 mode across all positive tests.
+- Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
+## 2026-11-15: C++11 Variadic Templates, Parameter Packs, and std::tuple
+
+Added C++11 variadic template support across the compiler and embedded standard library: parameter packs, pack expansion in expressions and types, `sizeof...`, argument deduction, forwarding references, function template partial ordering, and `<tuple>`.
+
+### Summary of Work
+
+1. Added `TokenKind::Ellipsis` (`...`) in `src/lexer/token.rs` and `src/lexer/mod.rs`, tokenizing triple dots as a single atomic token.
+2. Added AST representations for variadics in `src/ast/`: `TemplateParam::is_pack` for type and non-type template parameter packs, `Param::is_pack` for function parameter packs, `Type::PackExpansion` for type packs, `Expr::SizeofPack` for compile-time pack length queries, `Expr::PackExpansion` for expression patterns, and an AST placeholder `Expr::FoldExpr` for future C++17 fold expressions.
+3. Implemented parsing in `src/parser/`: template parameter packs (`typename... Ts`, `class... Ts`, `int... Ns`), function parameter packs (`Ts... args`, `Ts...`), `sizeof...(pack)` queries, and pack expansions across call argument lists, braced initializer lists, base class lists (`struct S : Bases...`), constructor member initializer lists (`: Bases(args)...`), and template argument lists (`Tuple<Tail...>`). Disallowed misplaced parameter packs in class templates and template aliases.
+4. Implemented parameter pack expansion in `src/sema/pack_expansion.rs` (`TemplateArg`, `expand_type_list`, `expand_expr_list`). The engine checks that co-expanded packs share identical lengths, rejects unexpanded parameter packs, isolates pack elements with reserved `__pack_{name}_{i}` synthetic identifiers, and handles empty expansions.
+5. Integrated compile-time `sizeof...(pack)` evaluation into `src/sema/constexpr_eval.rs` and `src/sema/expr.rs`, evaluating pack lengths directly from substitution mappings and context tables as `size_t` constants.
+6. Implemented variable-arity class template instantiation and trailing pack matching in `src/sema/template_deduce.rs`, `src/sema/template_registry.rs`, and `src/sema/template_match.rs`, enabling recursive template definitions such as `Tuple<Head, Tail...> : Tuple<Tail...>`. Made deduction fallback deterministic.
+7. Extended function template argument deduction in `src/sema/template_deduce.rs` to deduce parameter packs from trailing arguments, including empty packs and forwarding reference packs (`Args&&...`) with reference collapsing rules.
+8. Implemented function template partial ordering in `src/sema/template_partial_order.rs` per C++11 [temp.func.order]. Ranked non-pack parameters as strictly more specialized than parameter packs, and integrated partial ordering into function template resolution (`src/sema/template_func.rs`) and overload selection (`src/sema/expr_call.rs`).
+9. Enforced single inheritance on base class pack expansion in `src/sema/template_subst.rs`, diagnosing multiple base class expansions as unsupported to protect the WebAssembly record layout.
+10. Added explicit error handling in `src/codegen/expr.rs` to diagnose and reject unsupported or unlowered AST expressions that reach code generation.
+11. Updated the embedded standard library:
+   - Added variadic `std::make_unique<T>(Args&&... args)` to `stdlib/memory`.
+   - Added `std::integer_sequence`, `std::index_sequence`, and `std::make_index_sequence` to `stdlib/utility`.
+   - Added `stdlib/tuple` implementing `std::tuple`, recursive base-indexed element storage, `std::make_tuple`, and `std::get<I>(tuple)` supporting up to 17 elements (indices 0..16).
+12. Added test coverage:
+    - Positive tests: `tests/templates_operators/variadic_func_basic.cpp`, `variadic_class_tuple.cpp`, `variadic_forwarding.cpp`, `variadic_partial_ordering.cpp`, and mini-STL tests `tests/mini_stl/variadic_make_unique.cpp`, `std_tuple_basic.cpp`, `std_tuple_large.cpp`.
+    - Variant tests in `tests/templates_operators_variant/` and `tests/mini_stl_variant/`.
+    - Negative diagnostic tests in `tests/negative/variadic_ambiguous_call.cpp`, `variadic_unexpanded_pack.cpp`, `variadic_pack_mismatch.cpp`, `variadic_multiple_bases.cpp`.
+
+### Verification Results
+
+- Unit and integration tests: 119 unit tests passed, 0 failed.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
+- Oracle gate: 100% byte-for-byte stdout match against host native GCC 11 and Clang 11.
+- Corpus test runner: 528/528 tests passed, 0 failures.
+- Golden baseline: all 382 entries match `tests/golden.txt`.
+- Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
 ## 2026-11-12: Standard Library Correctness and Iterator Fixes
 
 Addressed review findings across the embedded standard library and the semantic analyzer, and completed the C++17 `<iterator>` and `<functional>` surface.

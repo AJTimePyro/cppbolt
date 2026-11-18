@@ -19,6 +19,10 @@ pub enum StmtKind {
     Compound(Vec<Stmt>),
     UsingNamespace(String),
     UsingDecl(String),
+    TypeAlias {
+        name: String,
+        ty: Type,
+    },
     NamespaceAlias {
         alias: String,
         target: String,
@@ -34,6 +38,10 @@ pub enum StmtKind {
     /// The declarators share one scope with their surroundings, so this is not
     /// a `Compound`: `int a, b; a = 1;` must still see `a` afterwards.
     VarDeclGroup(Vec<Stmt>),
+    StaticAssert {
+        condition: Expr,
+        message: Option<String>,
+    },
     Expr(Expr),
     If {
         /// The `if` arm followed by every `else if` arm, in source order.

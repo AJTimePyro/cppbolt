@@ -15,6 +15,7 @@ impl Parser {
 
         if self.is_type_start() {
             let saved_pos = self.pos;
+            let saved_splits = self.shr_splits.len();
             match self.parse_var_decl() {
                 Ok(decl) => {
                     let cond = self.parse_expr()?;
@@ -25,7 +26,7 @@ impl Parser {
                     if self.nesting_exceeded.get() {
                         return Err(error);
                     }
-                    self.pos = saved_pos;
+                    self.rollback_pos(saved_pos, saved_splits);
                 }
             }
         }

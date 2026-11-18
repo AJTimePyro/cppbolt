@@ -1,0 +1,1 @@
+tests/negative/member_pointer_overload_no_match.cpp:7:27: error: no overload of 'C::f' matches member pointer type 'int (C::*)(char)'

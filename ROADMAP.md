@@ -32,6 +32,7 @@ These features build naturally on existing language constructs without requiring
 - [x] **Comma Expressions**: Parse and lower sequence operator `(a, b)` at precedence 1 without conflicting with argument lists or declarators.
 - [x] **C++17 Selection Initializers**: Parse and desugar `if (init; cond)` and `switch (init; cond)` with scope isolated to the selection body.
 - [x] **Non-Static Data Member Initializers (NSDMI)**: Support in-class field defaults (`= expr`, `{ ... }`) in constructors and aggregate initialization.
+- [x] **Pointers to Members & Multiple Inheritance**: C++17 data-member and member-function pointers (`T C::*`, `R (C::*)()`), `.*`/`->*` application and fold expressions, virtual and multiple-inheritance subobject adjustments, base-to-derived conversions, and direct/indirect base layout.
 
 ---
 
@@ -44,8 +45,9 @@ Templates and standard containers implemented in cppbolt:
 - [x] **Initializer Lists**: `std::initializer_list<T>` constructors, brace initialization, and aggregate deduction.
 - [x] **Standard Containers**: Templated implementations of `<vector>`, `<map>`, `<set>`, `<array>`, and `<utility>` (`std::pair`).
 - [x] **Algorithms & Traits**: `<algorithm>` (`std::sort`, `std::find`, `std::min`, `std::max`, `std::copy`, `std::reverse`) and `<type_traits>` (`std::integral_constant`, `std::is_same`, `std::remove_reference`).
-- [ ] **Variadic Templates**: Parameter packs (`template <typename... Args>`) and pack expansions.
-- [ ] **Template Template Parameters**: Templated parameters (`template <template <typename> class C>`).
+- [x] **Variadic Templates**: Parameter packs (`template <typename... Args>`), pack expansions in call arguments, initializer lists, base classes, constructor initializers, and template arguments, `sizeof...`, forwarding reference packs, partial ordering of function templates with packs, `std::tuple`, and variadic `std::make_unique`.
+- [x] **Fold Expressions**: C++17 unary and binary fold expressions (`(... + args)`, `(args + ...)`) over parameter packs.
+- [x] **Template Template Parameters**: Templated parameters (`template <template <typename> class C>`).
 
 ---
 

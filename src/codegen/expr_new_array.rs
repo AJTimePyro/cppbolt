@@ -147,7 +147,7 @@ impl<'a> Codegen<'a> {
             write_u32(code, 2);
             write_u32(code, elem_slot);
 
-            if let Some(&v_off) = self.vtable_offsets.get(sname) {
+            for (vptr_offset, v_off) in self.vtable_installs(sname) {
                 code.push(OP_LOCAL_GET);
                 write_u32(code, ctx.fp_local);
                 code.push(OP_I32_LOAD);
@@ -157,20 +157,20 @@ impl<'a> Codegen<'a> {
                 write_i32(code, v_off as i32);
                 code.push(OP_I32_STORE);
                 write_u32(code, 2);
-                write_u32(code, 0);
+                write_u32(code, vptr_offset);
             }
 
             self.compile_struct_value_ctor(sname, elem_slot, std::slice::from_ref(arg), ctx, code)?;
         }
 
         let ctor_idx = self.find_constructor(sname, &[]);
-        let v_off = self.vtable_offsets.get(sname).copied();
+        let v_tables = self.vtable_installs(sname);
 
-        if ctor_idx.is_some() || v_off.is_some() || args.is_empty() {
+        if ctor_idx.is_some() || !v_tables.is_empty() || args.is_empty() {
             self.emit_array_element_loop(
                 ArrayLoop {
                     ctor_idx,
-                    v_off,
+                    v_tables,
                     slots: ArraySlots {
                         elem_size,
                         count_slot,
@@ -261,7 +261,7 @@ impl<'a> Codegen<'a> {
     ) {
         let ArrayLoop {
             ctor_idx,
-            v_off,
+            v_tables,
             slots,
             start_idx,
             user_slot,
@@ -288,13 +288,13 @@ impl<'a> Codegen<'a> {
         code.push(OP_BR_IF);
         write_u32(code, 1);
 
-        if let Some(vo) = v_off {
+        for (vptr_offset, vo) in v_tables {
             self.emit_array_elem_ptr(user_slot, elem_size, ctx, code);
             code.push(OP_I32_CONST);
             write_i32(code, vo as i32);
             code.push(OP_I32_STORE);
             write_u32(code, 2);
-            write_u32(code, 0);
+            write_u32(code, vptr_offset);
         }
 
         if let Some(ci) = ctor_idx {

@@ -1,0 +1,1 @@
+tests/negative/covariance_all_bases.cpp:4:19: error: 'C::f' has an incompatible return type

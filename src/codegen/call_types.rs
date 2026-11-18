@@ -31,16 +31,38 @@ pub(crate) fn wasm_params_from_types(params: &[Type]) -> Vec<u8> {
     params.iter().map(wasm_value_type).collect()
 }
 
-/// The return type of a function pointer value.
+/// Applies an overrider's covariant-return adjustment to a returned
+/// pointer/reference value on the stack.
+pub(crate) fn emit_return_adjustment(adjust_slot: u32, ctx: &FunctionContext, code: &mut Vec<u8>) {
+    // A null return must stay null: adding the base offset would turn it into
+    // a pointer to an object that was never constructed there.
+    code.push(OP_LOCAL_TEE);
+    write_u32(code, ctx.scratch1);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, ctx.fp_local);
+    code.push(OP_I32_LOAD);
+    write_u32(code, 2);
+    write_u32(code, adjust_slot);
+    code.push(OP_I32_ADD);
+    code.push(OP_I32_CONST);
+    write_i32(code, 0);
+    code.push(OP_LOCAL_GET);
+    write_u32(code, ctx.scratch1);
+    code.push(OP_SELECT);
+}
+
+/// The return type of a callable value: a function, a function pointer, a
+/// pointer to member function, or a bound member function.
 pub(crate) fn callee_return_type(callee_ty: &Type) -> Type {
-    if let Type::Pointer(inner) = callee_ty.strip_const() {
-        if let Type::Function { return_type, .. } = &**inner {
-            return (**return_type).clone();
+    match callee_ty.strip_const() {
+        Type::Pointer(inner) => match &**inner {
+            Type::Function { return_type, .. } => (**return_type).clone(),
+            _ => Type::Int,
+        },
+        Type::Function { return_type, .. } => (**return_type).clone(),
+        Type::MemberPointer { member_type, .. } | Type::BoundMemberFunction { member_type, .. } => {
+            callee_return_type(member_type)
         }
-        Type::Int
-    } else if let Type::Function { return_type, .. } = callee_ty.strip_const() {
-        (**return_type).clone()
-    } else {
-        Type::Int
+        _ => Type::Int,
     }
 }

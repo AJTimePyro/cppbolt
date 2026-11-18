@@ -1,0 +1,1 @@
+tests/negative/fold_empty_pack_invalid_op.cpp:3:12: error: unary fold expression has empty expansion for operator '+' with no fallback value

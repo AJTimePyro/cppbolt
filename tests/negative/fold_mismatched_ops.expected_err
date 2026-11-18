@@ -1,0 +1,1 @@
+tests/negative/fold_mismatched_ops.cpp:3:24: error: binary fold expression has mismatched operators ('+' and '-')

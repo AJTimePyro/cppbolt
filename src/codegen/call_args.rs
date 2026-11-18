@@ -304,4 +304,29 @@ impl<'a> Codegen<'a> {
         write_u32(code, temp_ptr_slot);
         Ok(())
     }
+
+    pub(super) fn compute_base_ptr_slot(
+        &mut self,
+        temp_ptr_slot: u32,
+        base_off: usize,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<u32, CompileError> {
+        if base_off == 0 {
+            return Ok(temp_ptr_slot);
+        }
+        let slot = ctx.alloc_frame(4, 4)?;
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, temp_ptr_slot);
+        code.push(OP_I32_CONST);
+        write_i32(code, base_off as i32);
+        code.push(OP_I32_ADD);
+        self.emit_store(&Type::Pointer(Box::new(Type::Void)), slot, code);
+        Ok(slot)
+    }
 }

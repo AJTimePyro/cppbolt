@@ -4,14 +4,20 @@
 
 pub mod decl;
 pub mod expr;
+pub mod fold_op;
 pub mod stmt;
 pub mod template;
+mod type_display;
 pub mod types;
 
-pub use decl::{Decl, FieldInit, FunctionDecl, Param, Program, RefQualifier, StructFieldDecl};
+pub use decl::{
+    BaseAccess, Decl, FieldInit, FunctionDecl, Param, Program, RefQualifier, StructFieldDecl,
+};
 pub use expr::{
     BinaryOp, CastKind, DefaultCapture, Expr, ExprPos, LambdaCapture, UnaryOp,
     zero_literal_for_type,
 };
+pub use fold_op::FoldOp;
 pub use stmt::{Stmt, StmtKind};
 pub use template::{TemplateClass, TemplateDecl, TemplateKind, TemplateParam};
+pub use types::FunctionQualifiers;

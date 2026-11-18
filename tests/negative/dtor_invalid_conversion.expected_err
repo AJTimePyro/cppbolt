@@ -1,0 +1,1 @@
+tests/negative/dtor_invalid_conversion.cpp:6:9: error: cannot initialize variable 'p' of type int * with int

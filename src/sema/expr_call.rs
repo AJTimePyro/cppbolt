@@ -1,11 +1,13 @@
+use super::call_arity::check_indirect_call_arity;
 use super::constructor::ConstructorCall;
+use super::overload::CandidateSelection;
 use super::*;
-
 /// The return type of a function pointer or of a function type.
 fn function_return_type(ty: &Type) -> Option<Type> {
     match ty.strip_const() {
         Type::Pointer(inner) => function_return_type(inner),
         Type::Function { return_type, .. } => Some((**return_type).clone()),
+        Type::BoundMemberFunction { member_type, .. } => function_return_type(member_type),
         _ => None,
     }
 }
@@ -44,6 +46,7 @@ impl Sema {
             let var_ty = self.lookup_var(&name).map(|v| v.ty.clone());
             if let Some(ty) = var_ty {
                 if let Some(return_type) = function_return_type(&ty) {
+                    check_indirect_call_arity(&ty, args.len(), *pos)?;
                     return Ok(return_type);
                 }
                 if let Type::Struct(sname) = ty.strip_const().strip_reference()
@@ -73,6 +76,7 @@ impl Sema {
         }
 
         let callee_ty = self.analyze_expr(callee)?;
+        check_indirect_call_arity(&callee_ty, args.len(), *pos)?;
         if let Type::Struct(sname) = callee_ty.strip_const().strip_reference()
             && let Some(ret) = self.try_functor_call(callee, sname, args, &arg_types, *pos)?
         {
@@ -145,12 +149,33 @@ impl Sema {
 
     /// Rewrites a call to a method of the current class into a member access.
     fn redirect_to_method(&self, callee: &mut Expr, name: &str, pos: ExprPos) {
-        if let Some(cls) = &self.current_class
-            && self.find_method_in_class(cls, name).is_some()
-        {
+        let Some(cls) = &self.current_class else {
+            return;
+        };
+        if self.find_method_in_class(cls, name).is_some() {
             *callee = Expr::MemberAccess {
                 object: Box::new(Expr::This),
                 member: name.to_string(),
+                is_arrow: true,
+                pos,
+            };
+        } else if let Some((target_class, method_name)) = name.rsplit_once("::")
+            && self.is_subclass(cls, target_class)
+            && let Some(sig) = self.find_method_in_class(target_class, method_name)
+            && !sig.is_static
+        {
+            let obj = if cls == target_class {
+                Expr::This
+            } else {
+                Expr::Cast {
+                    kind: CastKind::Functional,
+                    target_type: Type::Pointer(Box::new(Type::Struct(target_class.to_string()))),
+                    expr: Box::new(Expr::This),
+                }
+            };
+            *callee = Expr::MemberAccess {
+                object: Box::new(obj),
+                member: method_name.to_string(),
                 is_arrow: true,
                 pos,
             };
@@ -310,37 +335,83 @@ impl Sema {
             );
         }
 
-        if let Some(sig) = self.try_resolve_function_template_call(name, arg_types, args, pos)? {
+        let tmpl_res = self.try_resolve_function_template_call(name, arg_types, args, pos);
+        let tmpl_score = match &tmpl_res {
+            Ok(Some(sig)) => self.score_call_candidate(sig, arg_types, Some(args)).ok(),
+            _ => None,
+        };
+
+        if let Some(sel) = &selection
+            && !sel.ambiguous
+            && let Some((cand, full_args)) = &sel.best
+        {
+            if let Some(t_score) = tmpl_score
+                && t_score < sel.best_score
+                && let Ok(Some(sig)) = tmpl_res
+            {
+                let full = self.full_arguments(&sig, args);
+                return self.apply_call_candidate(&sig, full, args, arg_types, (callee, pos));
+            }
+            return self.apply_call_candidate(
+                cand,
+                full_args.clone(),
+                args,
+                arg_types,
+                (callee, pos),
+            );
+        }
+
+        if let Ok(Some(sig)) = tmpl_res {
             let full_args = self.full_arguments(&sig, args);
             return self.apply_call_candidate(&sig, full_args, args, arg_types, (callee, pos));
         }
 
-        let (Some(candidates), Some(selection)) = (&candidates, selection) else {
-            return Err(CompileError::new(
+        if let Err(e) = tmpl_res
+            && selection.as_ref().and_then(|s| s.best.as_ref()).is_none()
+        {
+            return Err(e);
+        }
+
+        Err(self.report_no_matching_call(
+            name,
+            arg_types,
+            args.len(),
+            (candidates.as_ref(), selection),
+            pos,
+        ))
+    }
+
+    fn report_no_matching_call(
+        &self,
+        name: &str,
+        arg_types: &[Type],
+        args_len: usize,
+        sel_cand: (Option<&Vec<FunctionSig>>, Option<CandidateSelection>),
+        pos: ExprPos,
+    ) -> CompileError {
+        let (Some(candidates), Some(selection)) = sel_cand else {
+            return CompileError::unresolved_name(
                 format!("Undefined function '{name}'"),
                 pos.line,
                 pos.col,
-            ));
+            );
         };
         if selection.ambiguous {
-            return Err(self.ambiguous_call(name, arg_types, pos));
-        }
-        if let Some((cand, full_args)) = selection.best {
-            return self.apply_call_candidate(cand, full_args, args, arg_types, (callee, pos));
+            return self.ambiguous_call(name, arg_types, pos);
         }
         if let Some(failure) = selection.conversion_failure {
-            return Err(self.no_matching_conversion(name, &failure, pos));
+            return self.no_matching_conversion(name, &failure, pos);
         }
         let cand = &candidates[0];
-        Err(CompileError::new(
+        CompileError::new(
             format!(
                 "No matching function call for '{name}': expected {} arguments, found {}",
                 cand.param_types.len(),
-                args.len()
+                args_len
             ),
             pos.line,
             pos.col,
-        ))
+        )
     }
 
     fn apply_call_candidate(

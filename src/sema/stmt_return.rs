@@ -64,7 +64,16 @@ impl Sema {
                 elements,
                 pos,
             } => self.resolve_list_init(explicit_ty, elements, InitContext::DirectList, *pos),
-            _ => self.analyze_expr_keeping_reference(expr),
+            _ => {
+                let expected = if is_member_pointer_address(expr) {
+                    self.current_func_return_type.clone()
+                } else {
+                    None
+                };
+                self.with_expected_type(expected.as_ref(), |s| {
+                    s.analyze_expr_keeping_reference(expr)
+                })
+            }
         }
     }
 

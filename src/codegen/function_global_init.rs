@@ -12,6 +12,8 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        self.current_scratch1.set(ctx.scratch1);
+        self.current_scratch_i64.set(ctx.scratch_i64);
         let inits = self.global_inits.clone();
         for (gname, gty, init_opt) in inits {
             let Some(&goffset) = self.global_offsets.get(&gname) else {
@@ -212,16 +214,24 @@ impl<'a> Codegen<'a> {
         };
         let mut field_idx = 0;
         let mut cursor = GlobalCursor { list, idx: 0 };
-        if let Some(base_name) = layout.base_classes.first()
-            && let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned()
-            && matches!(
-                cursor.peek(),
-                Some(Expr::InitializerList { .. } | Expr::TypedInitList { .. })
-            )
-        {
-            let base_ty = Type::Struct(base_name.clone());
-            self.compile_global_field_elided(&base_ty, &mut cursor, global.offset, ctx, code)?;
-            field_idx += base_layout.fields.len();
+        for (base_name, base_off) in &layout.base_offsets {
+            if let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned()
+                && matches!(
+                    cursor.peek(),
+                    Some(Expr::InitializerList { .. } | Expr::TypedInitList { .. })
+                )
+            {
+                let base_ty = Type::Struct(base_name.clone());
+                let base_global_offset = global.offset + *base_off as u32;
+                self.compile_global_field_elided(
+                    &base_ty,
+                    &mut cursor,
+                    base_global_offset,
+                    ctx,
+                    code,
+                )?;
+                field_idx += base_layout.fields.len();
+            }
         }
         while field_idx < layout.fields.len() {
             let fld = &layout.fields[field_idx];
@@ -299,16 +309,18 @@ impl<'a> Codegen<'a> {
             && let Some(layout) = self.sema.struct_layouts.get(sname).cloned()
         {
             let mut f_idx = 0;
-            if let Some(base_name) = layout.base_classes.first()
-                && let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned()
-                && matches!(
-                    sub.peek(),
-                    Some(Expr::InitializerList { .. } | Expr::TypedInitList { .. })
-                )
-            {
-                let base_ty = Type::Struct(base_name.clone());
-                self.compile_global_field_elided(&base_ty, &mut sub, offset, ctx, code)?;
-                f_idx += base_layout.fields.len();
+            for (base_name, base_off) in &layout.base_offsets {
+                if let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned()
+                    && matches!(
+                        sub.peek(),
+                        Some(Expr::InitializerList { .. } | Expr::TypedInitList { .. })
+                    )
+                {
+                    let base_ty = Type::Struct(base_name.clone());
+                    let base_offset = offset + *base_off as u32;
+                    self.compile_global_field_elided(&base_ty, &mut sub, base_offset, ctx, code)?;
+                    f_idx += base_layout.fields.len();
+                }
             }
             while f_idx < layout.fields.len() {
                 let fld = &layout.fields[f_idx];

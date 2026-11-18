@@ -93,6 +93,12 @@ pub fn run_oracle(groups: &[&str]) -> OracleReport {
 
 /// Replays one test through one compiler.
 fn run_one(compiler: &str, work: &Path, feature: &str, name: &str, cpp: &Path) -> OracleResult {
+    if feature == "templates_operators" && name == "variadic_throw_spec" {
+        // C++11 dynamic exception specifications throw(Ts...) were removed in C++17.
+        // The oracle runs compilers in -std=c++17 mode where they are an error.
+        return OracleResult::Skipped;
+    }
+
     let sanitized = name.replace('/', "_");
     let binary: PathBuf = work.join(format!("{compiler}_{feature}_{sanitized}"));
     let compiled = Command::new("timeout")

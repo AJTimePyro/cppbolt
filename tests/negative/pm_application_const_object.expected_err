@@ -1,0 +1,1 @@
+tests/negative/pm_application_const_object.cpp:7:13: error: cannot apply a non-const member function pointer to a const object

@@ -2,33 +2,18 @@
 
 use super::analyze::this_param;
 use super::template_deduce::{parse_types_list, split_template_call_name};
+pub(crate) use super::template_registry_helpers::insert_template_aliases;
 use super::template_subst::{substitute_struct, substitute_type};
 use super::*;
 use crate::ast::decl::{Decl, FunctionDecl};
 use crate::ast::expr::Expr;
 use crate::ast::template::{TemplateClass, TemplateParam};
 use crate::ast::types::Type;
+use crate::diagnostics::ErrorKind;
 use crate::name::QualifiedName;
 use std::collections::HashMap;
 
-fn insert_template_aliases<T: Clone>(map: &mut HashMap<String, T>, name: String, item: T) {
-    if let Some(short) = name.split("::").last() {
-        map.insert(short.to_string(), item.clone());
-    }
-    let qualified = QualifiedName::new(&name);
-    if qualified.is_global() {
-        map.insert(qualified.std_name().into_owned(), item.clone());
-    } else if qualified.in_std() {
-        map.insert(qualified.plain().to_string(), item.clone());
-    }
-    map.insert(name, item);
-}
-
 impl Sema {
-    pub fn register_class_template(&mut self, decl: TemplateClass, params: Vec<TemplateParam>) {
-        insert_template_aliases(&mut self.class_templates, decl.name.clone(), (decl, params));
-    }
-
     pub fn register_function_template(&mut self, decl: FunctionDecl, params: Vec<TemplateParam>) {
         let short = decl
             .name
@@ -88,6 +73,8 @@ impl Sema {
                     if resolved_name != &sname_clone {
                         self.check_nested_type_access(resolved_name, line, col)?;
                     }
+                } else {
+                    self.resolve_and_instantiate_type(ty, line, col)?;
                 }
             }
             Type::Pointer(inner)
@@ -106,6 +93,13 @@ impl Sema {
                 }
                 self.resolve_and_instantiate_type(inner, line, col)?;
             }
+            Type::MemberPointer {
+                class_name,
+                member_type,
+            } => {
+                *class_name = self.resolve_alias_in_qualified_name(class_name);
+                self.resolve_and_instantiate_type(member_type, line, col)?;
+            }
             _ => {}
         }
         Ok(())
@@ -118,13 +112,7 @@ impl Sema {
         line: usize,
         col: usize,
     ) -> Result<(), CompileError> {
-        let plain = QualifiedName::new(sname).plain();
-        if let Some(alias) = self
-            .type_aliases
-            .get(sname)
-            .cloned()
-            .or_else(|| self.type_aliases.get(plain).cloned())
-        {
+        if let Some(alias) = self.lookup_type_alias(sname) {
             *ty = alias;
             return Ok(());
         }
@@ -147,11 +135,8 @@ impl Sema {
                     let member = &sname[gt_pos + 3..];
                     let canon = format!("{inst}::{member}");
                     if let Some(alias) = self
-                        .type_aliases
-                        .get(&canon)
-                        .cloned()
-                        .or_else(|| self.type_aliases.get(sname).cloned())
-                        .or_else(|| self.type_aliases.get(plain).cloned())
+                        .lookup_type_alias(&canon)
+                        .or_else(|| self.lookup_type_alias(sname))
                     {
                         *ty = alias;
                     } else if self.struct_layouts.contains_key(&canon) {
@@ -177,17 +162,7 @@ impl Sema {
             return Ok(expanded.to_c_type());
         }
 
-        let (template_class, template_params) = self
-            .class_templates
-            .get(name)
-            .cloned()
-            .or_else(|| {
-                let plain = QualifiedName::new(name).plain();
-                self.class_templates.get(plain).cloned()
-            })
-            .ok_or_else(|| {
-                CompileError::new(format!("Template '{}' not found", name), line, col)
-            })?;
+        let (template_class, template_params) = self.resolve_class_template(name, line, col)?;
 
         let effective_args = super::template_deduce::fill_default_template_args(
             name,
@@ -242,21 +217,29 @@ impl Sema {
     fn execute_class_instantiation(
         &mut self,
         template_class: &TemplateClass,
-        mapping: HashMap<String, Type>,
+        mapping: HashMap<String, crate::sema::pack_expansion::TemplateArg>,
         inst_name: &str,
         pos: (usize, usize),
     ) -> Result<(), CompileError> {
         let (line, col) = pos;
         self.instantiate_nested_structs(template_class, inst_name, &mapping, pos)?;
 
-        let mut struct_decl = substitute_struct(template_class, &mapping, inst_name, line, col);
+        let mut struct_decl = substitute_struct(
+            template_class,
+            &mapping,
+            inst_name,
+            pos,
+            Some(&self.struct_aligns),
+        )?;
         let Decl::StructDecl {
             fields,
             methods,
             static_fields,
             base_classes,
+            base_access,
             is_class,
             private_members,
+            alignment,
             ..
         } = &mut struct_decl
         else {
@@ -265,6 +248,10 @@ impl Sema {
 
         for (_, fty, _) in fields.iter_mut() {
             self.resolve_and_instantiate_type(fty, line, col)?;
+        }
+
+        for base in base_classes.iter() {
+            self.ensure_class_instantiated(base, line, col);
         }
 
         for m in methods.iter_mut() {
@@ -281,12 +268,17 @@ impl Sema {
         self.compute_struct_layout(RecordLayout {
             name: inst_name,
             is_class: *is_class,
+            is_final: false,
             base_classes,
+            base_access,
             fields,
             methods,
             private_members,
             line,
             col,
+            alignment: alignment
+                .as_ref()
+                .map(|ty| ty.align_of(&self.struct_aligns)),
         })?;
 
         self.register_instantiated_static_fields(inst_name, static_fields, base_classes, line, col);
@@ -316,6 +308,10 @@ impl Sema {
                     stack_offset: 0,
                 },
             );
+            if let Some(init) = &sf.2 {
+                let mut init_clone = init.clone();
+                let _ = self.analyze_expr(&mut init_clone);
+            }
         }
         for base in base_classes {
             self.ensure_class_instantiated(base, line, col);
@@ -327,7 +323,7 @@ impl Sema {
         &mut self,
         tmpl_name: &str,
         inst_name: &str,
-        mapping: &HashMap<String, Type>,
+        mapping: &HashMap<String, crate::sema::pack_expansion::TemplateArg>,
     ) {
         let plain_tmpl = QualifiedName::new(tmpl_name).plain();
         let plain_inst = QualifiedName::new(inst_name).plain();
@@ -338,8 +334,9 @@ impl Sema {
             let Some((owner, member)) = alias_name.rsplit_once("::") else {
                 continue;
             };
-            if QualifiedName::new(owner).plain() == plain_tmpl {
-                let subst_ty = substitute_type(ty, mapping, None);
+            if QualifiedName::new(owner).plain() == plain_tmpl
+                && let Ok(subst_ty) = substitute_type(ty, mapping, None)
+            {
                 new_aliases.push((format!("{inst_name}::{member}"), subst_ty.clone()));
                 if is_std {
                     new_aliases.push((format!("std::{plain_inst}::{member}"), subst_ty.clone()));
@@ -354,71 +351,50 @@ impl Sema {
         }
     }
 
-    pub(super) fn setup_instantiated_methods(
-        &mut self,
-        inst_name: &str,
-        all_methods: Vec<FunctionDecl>,
-    ) -> Result<(), CompileError> {
-        for m in &all_methods {
-            if m.template_params.is_empty() {
-                self.register_struct_method(inst_name, m);
+    pub(super) fn retry_deferred_methods(&mut self) -> Result<(), CompileError> {
+        const MAX_PASSES: usize = 8;
+        for _ in 0..MAX_PASSES {
+            if self.deferred_methods.is_empty() {
+                return Ok(());
             }
-        }
-        for m in &all_methods {
-            if !m.template_params.is_empty() {
-                self.member_templates
-                    .entry(inst_name.to_string())
-                    .or_default()
-                    .push(m.clone());
-                let plain = QualifiedName::new(inst_name).plain();
-                if plain != inst_name {
-                    self.member_templates
-                        .entry(plain.to_string())
-                        .or_default()
-                        .push(m.clone());
-                }
-            } else if !m.is_virtual && !m.name.starts_with('~') {
-                let qual_name = format!("{}::{}", inst_name, m.name);
-                let mut params = m.params.clone();
-                if !m.is_static {
-                    params.insert(0, this_param(inst_name, m.is_const));
-                }
-                let mut mangled = self.mangle_name(&qual_name, &params);
-                match m.ref_qualifier {
-                    RefQualifier::LValue => mangled.push_str("_R"),
-                    RefQualifier::RValue => mangled.push_str("_O"),
-                    RefQualifier::None => {}
-                }
-                self.pending_template_methods
-                    .insert(mangled, (inst_name.to_string(), m.clone()));
-            }
-        }
-        for mut m in all_methods {
-            if m.template_params.is_empty() && (m.is_virtual || m.name.starts_with('~')) {
-                let prev_class = self.current_class.take();
-                self.current_class = Some(inst_name.to_string());
-                let mut vmethod = m.clone();
-                if !vmethod.is_static {
-                    vmethod
+            // Take the batch so retry-triggered instantiations can queue more.
+            let batch = std::mem::take(&mut self.deferred_methods);
+            for deferred in batch {
+                let DeferredMethod { class_name, method } = deferred;
+                let mut analyzed = method;
+                if !analyzed.is_static {
+                    analyzed
                         .params
-                        .insert(0, this_param(inst_name, vmethod.is_const));
+                        .insert(0, this_param(&class_name, analyzed.is_const));
                 }
-                let res = self.analyze_function(&mut vmethod);
+                let prev_class = self.current_class.take();
+                self.current_class = Some(class_name.clone());
+                let res = self.analyze_function(&mut analyzed);
                 self.current_class = prev_class;
-                res?;
-                m.body = vmethod.body;
-                m.ctor_initializers = vmethod.ctor_initializers;
-                for decl in &mut self.synthesized_decls {
-                    if let Decl::StructDecl { name, methods, .. } = decl
-                        && name == inst_name
+                if let Err(e) = res {
+                    if e.kind == ErrorKind::Internal
+                        || self.object_use_classes.contains(&class_name)
                     {
-                        methods.push(m);
-                        break;
+                        return Err(e);
                     }
+                    continue;
                 }
+                if !analyzed.is_static && !analyzed.params.is_empty() {
+                    analyzed.params.remove(0);
+                }
+                self.update_registered_method_return_type(&class_name, &analyzed);
+                self.add_synthesized_method(&class_name, analyzed);
             }
         }
-        Ok(())
+        if self.deferred_methods.is_empty() {
+            Ok(())
+        } else {
+            Err(crate::internal_error!(
+                1,
+                1,
+                "deferred method analysis did not converge"
+            ))
+        }
     }
 
     pub fn instantiate_pending_method(&mut self, mangled_name: &str) -> Result<(), CompileError> {
@@ -459,12 +435,15 @@ impl Sema {
                 self.synthesized_decls.push(Decl::StructDecl {
                     name: class_name,
                     is_class: false,
+                    is_final: false,
                     base_classes: vec![],
+                    base_access: vec![],
                     fields: vec![],
                     methods: vec![method_decl],
                     static_fields: vec![],
                     private_members: vec![],
                     nested_structs: vec![],
+                    alignment: None,
                     line: 0,
                     col: 0,
                 });

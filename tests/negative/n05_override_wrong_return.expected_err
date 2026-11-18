@@ -1,0 +1,1 @@
+tests/negative/n05_override_wrong_return.cpp:2:16: error: 'D::f' has an incompatible return type

@@ -72,29 +72,50 @@ impl<'a> Codegen<'a> {
         };
 
         // Walk the left-associative spine iteratively. The leftmost operand is
-        // compiled once; every later node consumes the previous result that is
-        // already on the stack, so a chain of `n` terms uses a constant number
-        // of Rust stack frames.
-        let mut spine: Vec<(&BinaryOp, &Expr)> = Vec::new();
+        // compiled once; later operands consume the previous result that is
+        // already on the stack. An overloaded step may need to convert its left
+        // operand to the declared parameter type. In that case the step compiles
+        // its left subtree as a call argument, and the previous step is skipped
+        // so no operator call runs twice.
+        let mut spine: Vec<(&BinaryOp, &Expr, &Expr)> = Vec::new();
         let mut cur = expr;
         while let Expr::Binary {
             op, left, right, ..
         } = cur
         {
-            if matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
+            if matches!(
+                op,
+                BinaryOp::LogicalAnd
+                    | BinaryOp::LogicalOr
+                    | BinaryOp::DotStar
+                    | BinaryOp::ArrowStar
+            ) {
                 break;
             }
-            spine.push((op, right));
+            spine.push((op, right, left));
             cur = left;
         }
         let base = cur;
+        // At most one step recompiles the prefix below it; the steps under it
+        // are skipped because the recompiled expression covers them.
+        let recompile_at = self.recompile_step(&spine, base, ctx);
 
         let mut lty = self.get_expr_type(base, ctx);
         for index in (0..spine.len()).rev() {
-            let (op, right) = spine[index];
+            let (op, right, whole_left) = spine[index];
             let rty = self.get_expr_type(right, ctx);
+            let next_result = self
+                .binary_result_type(op, &lty, &rty)
+                .strip_reference()
+                .clone();
+            if recompile_at.is_some_and(|step| index > step) {
+                lty = next_result;
+                continue;
+            }
             let left = if index + 1 == spine.len() {
                 Some(base)
+            } else if recompile_at == Some(index) {
+                Some(whole_left)
             } else {
                 None
             };
@@ -109,10 +130,7 @@ impl<'a> Codegen<'a> {
                 ctx,
                 code,
             )?;
-            lty = self
-                .binary_result_type(op, &lty, &rty)
-                .strip_reference()
-                .clone();
+            lty = next_result;
         }
 
         Ok(())
@@ -137,6 +155,22 @@ impl<'a> Codegen<'a> {
         }
         if *op == BinaryOp::Comma {
             return self.emit_comma_node(lty, left, right, ctx, code);
+        }
+        if matches!(op, BinaryOp::Eq | BinaryOp::Ne)
+            && (matches!(lty.strip_const(), Type::MemberPointer { .. })
+                || matches!(rty.strip_const(), Type::MemberPointer { .. }))
+        {
+            return self.compile_member_pointer_eq_ne(
+                MemberPointerCmp {
+                    op,
+                    lty,
+                    rty,
+                    left,
+                    right,
+                },
+                ctx,
+                code,
+            );
         }
         let lraw = lty.strip_const();
         let rraw = rty.strip_const();
@@ -444,6 +478,9 @@ impl<'a> Codegen<'a> {
                 code.push(OP_I32_OR);
             }
             BinaryOp::Comma => {}
+            BinaryOp::DotStar | BinaryOp::ArrowStar => {
+                unimplemented!("pointer-to-member operations are handled separately")
+            }
         }
     }
 }

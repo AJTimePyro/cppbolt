@@ -1,0 +1,4 @@
+and_empty: 1
+or_empty: 0
+comma_empty: ok
+bin_empty: 42

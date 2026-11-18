@@ -1,0 +1,1 @@
+tests/negative/variadic_unexpanded_pack.cpp:6:5: error: parameter pack 'args' used unexpanded

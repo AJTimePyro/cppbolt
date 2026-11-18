@@ -70,20 +70,35 @@ impl Sema {
                 expr,
             } => self.analyze_cast(*kind, target_type, expr),
             Expr::SizeofType(_) | Expr::SizeofExpr(_) => Ok(Type::UnsignedInt),
+            Expr::AlignofType(ty) => {
+                let _ = self.resolve_and_instantiate_type(ty, self.current_line, self.current_col);
+                Ok(Type::UnsignedLong)
+            }
+            Expr::SizeofPack { name, pos } => Err(CompileError::new(
+                format!("'{name}' does not refer to the name of a parameter pack"),
+                pos.line,
+                pos.col,
+            )),
             Expr::InitializerList { .. } | Expr::TypedInitList { .. } => {
                 self.analyze_initializer(expr)
             }
             Expr::Lambda { .. } => self.analyze_lambda(expr),
+            Expr::PackExpansion { pos, .. } | Expr::FoldExpr { pos, .. } => Err(CompileError::new(
+                "pack expansion does not contain any unexpanded parameter packs",
+                pos.line,
+                pos.col,
+            )),
         }
     }
 
     fn analyze_cast(
         &mut self,
         kind: CastKind,
-        target_type: &Type,
+        target_type: &mut Type,
         expr: &mut Expr,
     ) -> Result<Type, CompileError> {
-        let expr_ty = self.analyze_expr(expr)?;
+        self.resolve_and_instantiate_type(target_type, self.current_line, self.current_col)?;
+        let expr_ty = self.with_expected_type(Some(target_type), |s| s.analyze_expr(expr))?;
         if kind == CastKind::Reinterpret {
             if target_type.is_reference() && !expr.is_lvalue() {
                 return Err(CompileError::new(
@@ -130,7 +145,37 @@ impl Sema {
                 self.current_col,
             ));
         }
+        if kind == CastKind::Static {
+            self.validate_static_cast(&expr_ty, target_type)?;
+        }
         Ok(target_type.clone())
+    }
+
+    fn validate_static_cast(&self, src: &Type, target: &Type) -> Result<(), CompileError> {
+        let src_inner = src.deref_type().or(Some(src)).map(|t| t.strip_const());
+        let tgt_inner = target
+            .deref_type()
+            .or(Some(target))
+            .map(|t| t.strip_const());
+        if let (Some(Type::Struct(s_src)), Some(Type::Struct(s_tgt))) = (src_inner, tgt_inner)
+            && (target.is_pointer() && src.is_pointer()
+                || target.is_reference()
+                    && (src.is_reference() || matches!(src.strip_const(), Type::Struct(_))))
+            && s_src != s_tgt
+            && !self.is_subclass(s_src, s_tgt)
+            && !self.is_subclass(s_tgt, s_src)
+        {
+            return Err(CompileError::new(
+                format!(
+                    "static_cast from '{}' to '{}', which are not related by inheritance, is not allowed",
+                    src.to_c_type(),
+                    target.to_c_type()
+                ),
+                self.current_line,
+                self.current_col,
+            ));
+        }
+        Ok(())
     }
 
     fn validate_reinterpret_cast(&self, src: &Type, target: &Type) -> Result<(), CompileError> {
@@ -180,6 +225,11 @@ impl Sema {
         if let Some(p) = placement {
             self.analyze_expr(p)?;
         }
+        let pos = ExprPos::new(self.current_line, self.current_col);
+        // `new Alias(...)` carries the alias/template instance type from the
+        // parser; resolve it so constructor lookup and codegen see the
+        // canonical struct type, as variable declarations already do.
+        self.resolve_and_instantiate_type(ty, pos.line, pos.col)?;
         if let Type::Struct(sname) = ty.strip_const()
             && let Some(layout) = self.struct_layouts.get(sname)
             && layout.is_abstract
@@ -190,7 +240,6 @@ impl Sema {
                 self.current_col,
             ));
         }
-        let pos = ExprPos::new(self.current_line, self.current_col);
         if *is_array {
             if let Some(s) = array_size {
                 self.analyze_expr(s)?;
@@ -311,9 +360,10 @@ impl Sema {
                 Ok(Type::Function {
                     return_type: Box::new(Type::Int),
                     param_types: Vec::new(),
+                    qualifiers: FunctionQualifiers::default(),
                 })
             } else {
-                Err(CompileError::new(
+                Err(CompileError::unresolved_name(
                     format!("Undeclared variable or identifier '{}'", name),
                     self.current_line,
                     self.current_col,
@@ -323,9 +373,10 @@ impl Sema {
             Ok(Type::Pointer(Box::new(Type::Function {
                 return_type: Box::new(sigs[0].return_type.clone()),
                 param_types: sigs[0].param_types.clone(),
+                qualifiers: FunctionQualifiers::default(),
             })))
         } else {
-            Err(CompileError::new(
+            Err(CompileError::unresolved_name(
                 format!("Undeclared variable or identifier '{}'", name),
                 self.current_line,
                 self.current_col,
@@ -342,9 +393,10 @@ impl Sema {
             Ok(Type::Pointer(Box::new(Type::Function {
                 return_type: Box::new(sigs[0].return_type.clone()),
                 param_types: sigs[0].param_types.clone(),
+                qualifiers: FunctionQualifiers::default(),
             })))
         } else {
-            Err(CompileError::new(
+            Err(CompileError::unresolved_name(
                 format!("Undeclared variable or identifier '{}'", raw),
                 self.current_line,
                 self.current_col,
@@ -361,8 +413,9 @@ impl Sema {
                 Ok(Type::Void)
             }
             Expr::TypedInitList { ty, elements, pos } => {
-                let explicit_ty = ty.clone();
                 let p = *pos;
+                self.resolve_and_instantiate_type(ty, p.line, p.col)?;
+                let explicit_ty = ty.clone();
                 self.resolve_list_init(&explicit_ty, elements, InitContext::DirectList, p)
             }
             _ => Err(crate::internal_error!(

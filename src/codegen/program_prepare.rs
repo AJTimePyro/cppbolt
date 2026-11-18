@@ -129,7 +129,7 @@ impl<'a> Codegen<'a> {
                     if m.is_pure_virtual {
                         continue;
                     }
-                    if let Some(candidate) = self.build_method_candidate(name, m) {
+                    if let Some(candidate) = self.build_method_candidate(name, m, address_taken) {
                         candidates.push(candidate);
                     }
                 }
@@ -169,6 +169,7 @@ impl<'a> Codegen<'a> {
             decl: FuncDeclRef::Function(f),
             is_root,
             aliases,
+            mangled,
             calls,
         }
     }
@@ -178,12 +179,13 @@ impl<'a> Codegen<'a> {
         &mut self,
         name: &'p String,
         m: &'p FunctionDecl,
+        address_taken: &HashSet<String>,
     ) -> Option<FuncCandidate<'p>> {
         if !m.template_params.is_empty() {
             return None;
         }
         let short_name = QualifiedName::new(name).class_short_name();
-        let aliases = self.collect_method_aliases(name, m);
+        let (aliases, mangled) = self.collect_method_aliases(name, m);
         let mut calls = HashSet::new();
         if m.name == *name || m.name == short_name {
             calls.insert(format!("{}_~{}", name, name));
@@ -197,6 +199,13 @@ impl<'a> Codegen<'a> {
         for (c_name, c_args) in &m.ctor_initializers {
             calls.insert(c_name.clone());
             calls.insert(format!("{}_{}", name, c_name));
+            // An alias-named initializer still reaches the canonical base's
+            // lifecycle methods, which are registered under the resolved name.
+            let canonical = self.sema.canonical_class_name(c_name, Some(name));
+            if canonical != *c_name {
+                calls.insert(canonical.clone());
+                calls.insert(format!("{}_{}", name, canonical));
+            }
             for arg in c_args {
                 collect_expr_calls(arg, &mut calls);
             }
@@ -227,19 +236,23 @@ impl<'a> Codegen<'a> {
             .map(|l| {
                 l.vtable_slots
                     .iter()
-                    .any(|s| s == &m.name || (s.starts_with('~') && m.name.starts_with('~')))
+                    .any(|s| *s == crate::sema::VirtualKey::from_decl(m))
             })
             .unwrap_or(false);
 
+        let is_address_taken = aliases.iter().any(|a| address_taken.contains(a));
+        let is_root = is_vmethod || is_address_taken;
+
         Some(FuncCandidate {
             decl: FuncDeclRef::Method(name, m),
-            is_root: is_vmethod,
+            is_root,
             aliases,
+            mangled,
             calls,
         })
     }
 
-    fn collect_method_aliases(&self, name: &str, m: &FunctionDecl) -> Vec<String> {
+    fn collect_method_aliases(&self, name: &str, m: &FunctionDecl) -> (Vec<String>, String) {
         let short_name = QualifiedName::new(name).class_short_name();
         let qual_name = format!("{}::{}", name, m.name);
         let mut aliases = vec![
@@ -272,6 +285,7 @@ impl<'a> Codegen<'a> {
                     name: "this".to_string(),
                     ty: Type::Pointer(Box::new(this_inner)),
                     default_val: None,
+                    is_pack: false,
                 },
             );
         }
@@ -281,8 +295,8 @@ impl<'a> Codegen<'a> {
             RefQualifier::RValue => mangled.push_str("_O"),
             RefQualifier::None => {}
         }
-        aliases.push(mangled);
-        aliases
+        aliases.push(mangled.clone());
+        (aliases, mangled)
     }
 
     fn compute_reachable(candidates: &[FuncCandidate<'_>]) -> HashSet<usize> {
@@ -331,7 +345,11 @@ impl<'a> Codegen<'a> {
             self.sema
                 .struct_layouts
                 .get(name)
-                .map(|l| l.vtable_slots.iter().any(|s| s == "__deleting_dtor"))
+                .map(|l| {
+                    l.vtables
+                        .iter()
+                        .any(|t| t.slots.iter().any(|s| s.is_deleting_dtor))
+                })
                 .unwrap_or(false)
         })
     }
