@@ -1,5 +1,6 @@
 //! Function template partial ordering ([temp.func.order], [temp.deduct.partial]).
 
+use super::pack_expansion::TemplateArg;
 use crate::ast::decl::FunctionDecl;
 use crate::ast::template::TemplateParam;
 use crate::ast::types::Type;
@@ -45,6 +46,14 @@ fn get_param_type<'a>(cand: &'a FunctionTemplateCand<'a>, i: usize) -> Option<&'
     }
 }
 
+fn is_pack_param(cand: &FunctionTemplateCand, i: usize) -> bool {
+    if i < cand.decl.params.len() {
+        cand.decl.params[i].is_pack
+    } else {
+        cand.decl.params.last().is_some_and(|p| p.is_pack)
+    }
+}
+
 fn synth_subst_type(ty: &Type, synth_map: &std::collections::HashMap<String, Type>) -> Type {
     match ty {
         Type::TypeParam(name) => synth_map.get(name).cloned().unwrap_or_else(|| ty.clone()),
@@ -86,6 +95,19 @@ fn deduces_from_synthetic(
             return false;
         };
         let synth_arg = synth_subst_type(p_src, &synth_map);
+        // Deduction into a pack collects every synthetic argument instead of
+        // conflicting on the second one.
+        if is_pack_param(target_cand, i)
+            && let Type::TypeParam(name) = p_tgt
+        {
+            let entry = deduced
+                .entry(name.clone())
+                .or_insert_with(|| TemplateArg::TypePack(Vec::new()));
+            if let TemplateArg::TypePack(types) = entry {
+                types.push(synth_arg);
+            }
+            continue;
+        }
         let is_lvalue = matches!(p_src, Type::Reference(_));
         if super::template_deduce_type::deduce_type(
             p_tgt,
@@ -133,6 +155,12 @@ pub fn compare_function_templates(
         Some(Ordering::Less)
     } else if has_pack1 && !has_pack2 {
         Some(Ordering::Greater)
+    } else if has_pack1 && has_pack2 {
+        // When both candidates are variadic, the one with more fixed
+        // parameters is the more specialized overload.
+        let fixed1 = cand1.decl.params.iter().filter(|p| !p.is_pack).count();
+        let fixed2 = cand2.decl.params.iter().filter(|p| !p.is_pack).count();
+        Some(fixed2.cmp(&fixed1))
     } else {
         None
     }
