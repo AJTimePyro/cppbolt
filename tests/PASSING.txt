@@ -238,6 +238,7 @@ classes_oop_variant/structs/regress_struct_ref_assign
 classes_oop_variant/structs/regress_struct_ref_subscript
 classes_oop_variant/structs/struct_basic
 cxx17/covariant_diamond
+cxx17/covariant_null_return
 cxx17/covariant_pmf
 cxx17/covariant_ptr_mi
 cxx17/covariant_ptr_multi

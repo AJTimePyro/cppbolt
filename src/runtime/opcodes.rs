@@ -17,6 +17,7 @@ pub const OP_RETURN: u8 = 0x0F;
 pub const OP_CALL: u8 = 0x10;
 pub const OP_CALL_INDIRECT: u8 = 0x11;
 pub const OP_DROP: u8 = 0x1A;
+pub const OP_SELECT: u8 = 0x1B;
 
 pub const OP_LOCAL_GET: u8 = 0x20;
 pub const OP_LOCAL_SET: u8 = 0x21;
