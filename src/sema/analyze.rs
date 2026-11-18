@@ -273,13 +273,17 @@ impl Sema {
                     // Only the mangled spelling is reachable by ordinary
                     // lookup; the source name is reserved for ADL.
                     self.functions.entry(mangled).or_default().push(sig.clone());
-                    self.hidden_friends
-                        .entry(class_name.clone())
-                        .or_default()
-                        .push(sig.clone());
                     let plain = crate::QualifiedName::new(class_name).plain().to_string();
-                    if plain != *class_name {
-                        self.hidden_friends.entry(plain).or_default().push(sig);
+                    let keys = if plain == *class_name {
+                        vec![class_name.clone()]
+                    } else {
+                        vec![class_name.clone(), plain]
+                    };
+                    for key in keys {
+                        self.hidden_friends
+                            .entry(key)
+                            .or_default()
+                            .push(sig.clone());
                     }
                     *decl = Decl::Function(f);
                 }
@@ -289,6 +293,8 @@ impl Sema {
                     let identity = super::template_registry::function_template_identity(
                         &f.name, f.line, f.col,
                     );
+                    // A template can call itself, so it sees its own identity.
+                    visible_functions.insert(format!("T:{identity}"));
                     self.template_definition_functions
                         .insert(identity, visible_functions.clone());
                 }
@@ -298,6 +304,16 @@ impl Sema {
                     static_fields,
                     ..
                 } => {
+                    for method in methods.iter().filter(|m| !m.template_params.is_empty()) {
+                        let identity = super::template_registry::function_template_identity(
+                            &method.name,
+                            method.line,
+                            method.col,
+                        );
+                        visible_functions.insert(format!("T:{identity}"));
+                        self.template_definition_functions
+                            .insert(identity, visible_functions.clone());
+                    }
                     self.register_struct_declarations(name.as_str(), methods, static_fields)?;
                 }
                 _ => {}

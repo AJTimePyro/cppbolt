@@ -262,6 +262,7 @@ impl Parser {
         let return_type = self.parse_declarator_prefix(&specifiers)?;
         let name = match self.advance().kind.clone() {
             TokenKind::Ident(id) => id,
+            TokenKind::KwOperator => self.parse_operator_name()?,
             _ => {
                 return Err(CompileError::new(
                     "Expected friend function name",

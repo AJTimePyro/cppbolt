@@ -330,7 +330,9 @@ impl Sema {
         // limited to the overloads that existed at the template's definition.
         // ADL below is intentionally not filtered: it runs at instantiation.
         // A mangled callee is already a resolved binding from an earlier
-        // analysis pass, not an unqualified name to re-look up.
+        // analysis pass, so it must not be filtered by the definition-time set.
+        // It still goes through ADL below, which finds nothing for a mangled
+        // name but stays correct for builtin names such as `free`.
         let already_bound = self
             .functions
             .get(name)
@@ -350,7 +352,7 @@ impl Sema {
         }
         // ADL is for unqualified calls only, and its candidates are merged
         // with ordinary lookup rather than used as a fallback.
-        if !name.contains("::") && !already_bound {
+        if !name.contains("::") {
             let adl = self.adl_candidates(name, arg_types);
             if !adl.is_empty() {
                 let mut merged: Vec<FunctionSig> = Vec::new();

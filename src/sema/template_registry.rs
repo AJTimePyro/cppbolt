@@ -823,7 +823,14 @@ impl Sema {
                     .params
                     .insert(0, this_param(&class_name, method_decl.is_const));
             }
+            let saved_identity = self.current_template_identity.take();
+            self.current_template_identity = Some(function_template_identity(
+                &method_decl.name,
+                method_decl.line,
+                method_decl.col,
+            ));
             let res = self.analyze_function(&mut func_decl);
+            self.current_template_identity = saved_identity;
             self.current_class = prev_class;
             res?;
             method_decl.body = func_decl.body;

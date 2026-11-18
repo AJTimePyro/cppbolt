@@ -89,6 +89,23 @@ impl Sema {
             };
 
         if let Some(candidates) = self.function_templates.get(tmpl_name).cloned() {
+            let candidates = if let Some(identity) = &self.current_template_identity
+                && let Some(visible) = self.template_definition_functions.get(identity)
+            {
+                candidates
+                    .into_iter()
+                    .filter(|(decl, _)| {
+                        visible.contains(&format!(
+                            "T:{}",
+                            super::template_registry::function_template_identity(
+                                &decl.name, decl.line, decl.col,
+                            )
+                        ))
+                    })
+                    .collect()
+            } else {
+                candidates
+            };
             let mut viable = self.collect_viable_template_candidates(
                 &candidates,
                 &explicit_args,
