@@ -24,15 +24,9 @@ pub fn evaluate_dependent_array_size(
         return Ok(len);
     }
     let mut lexer = crate::lexer::Lexer::new(param_name);
-    let tokens = match lexer.tokenize() {
-        Ok(t) => t,
-        Err(_) => return Ok(0),
-    };
+    let tokens = lexer.tokenize()?;
     let mut parser = crate::parser::Parser::new(tokens);
-    let mut expr = match parser.parse_expr() {
-        Ok(e) => e,
-        Err(_) => return Ok(0),
-    };
+    let mut expr = parser.parse_expr()?;
     substitute_expr(&mut expr, mapping, injected_class)?;
     match crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None) {
         Ok(val) if val >= 0 => Ok(val as usize),
@@ -41,6 +35,6 @@ pub fn evaluate_dependent_array_size(
             0,
             0,
         )),
-        Err(_) => Ok(0),
+        Err(error) => Err(error),
     }
 }

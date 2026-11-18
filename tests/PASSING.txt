@@ -536,6 +536,7 @@ negative/variadic_alignas_non_pack
 negative/variadic_ambiguous_call
 negative/variadic_explicit_pack_too_many
 negative/variadic_fn_ptr_deduce_mismatch
+negative/variadic_invalid_array_bound
 negative/variadic_lambda_capture_non_pack
 negative/variadic_multiple_bases
 negative/variadic_nested_template_not_found
