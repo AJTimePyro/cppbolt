@@ -46,6 +46,7 @@ The parser transforms the flat token stream into a structured Abstract Syntax Tr
   - Compounds: `Pointer(Box<Type>)`, `MemberPointer { class_name, member_type }` (pointers to data members `T C::*` and member functions `R (C::*)(Args...)`), `Reference(Box<Type>)` (lvalue ref `T&`), `RvalueReference(Box<Type>)` (rvalue ref `T&&`), `Array(Box<Type>, usize)`, `DependentArray(Box<Type>, String)`.
   - Variadics: `PackExpansion(Box<Type>)` representing an expanded type pattern `Ts...`.
   - Aggregates and Generics: `Struct(String)`, `Enum(String)`, `TypeParam(String)`, `NonType(i128)`, `TemplateInstance { name, args }`, `Function { return_type, params }`.
+  - Dependent expressions: `Decltype { expr, parenthesized }` keeps the operand expression and whether it was parenthesized, so C++17 value-category rules can be applied after template substitution. `DependentNested(String)` records a qualified type such as `T::type` whose base was substituted.
 
 ---
 

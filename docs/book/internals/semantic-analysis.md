@@ -89,6 +89,9 @@ The compiler forms function and member template candidates by substituting templ
 
 `instantiate_class_template` (`src/sema/template_registry.rs`) distinguishes a *completed* specialization (`instantiated_classes`) from one still in progress (`instantiation_stack`). Recursive references to an in-progress specialization reuse it, so nested and self-referential types still resolve while fields and methods are being built. Only a successful instantiation enters the completed cache. When substitution, layout, or method setup fails, `InstantiationSnapshot` (`src/sema/template_state.rs`) restores the state written while the specialization is built: layouts, aliases, globals, functions, synthesized declarations, member registrations and counters. Side effects of alias-template expansion before the snapshot are not undone. The stack and depth counter are unwound on `?` paths too. A later request can then retry the specialization from a clean state. Function templates follow the same rule: `instantiate_function_template` keeps its in-progress marker during body analysis and removes it if analysis fails, so a failed body is never cached as a completed specialization.
 
+### Expression-SFINAE Checking
+`decltype` operands are resolved by `resolve_decltype_type` (`src/sema/decltype_resolve.rs`). It clones `Sema`, binds the formed signature's parameters in a scope on the clone, and analyzes a clone of the operand. The real `Sema` is untouched, so one rejected candidate cannot influence the next. A parenthesized lvalue operand yields `T&`; an unparenthesized id-expression or member access yields the declared type. An error from the expression itself is tagged `ErrorKind::Substitution` and discards only that candidate. An error from instantiating another template sets `speculative_hard` on the clone and stays a hard error.
+
 ---
 
 ## 4. Record Layout & Vtable Example
