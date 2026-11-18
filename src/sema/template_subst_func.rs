@@ -242,14 +242,15 @@ pub fn substitute_function_body(
     Ok(())
 }
 
-/// Signature-only substitution for overload candidate formation.
+/// Signature-only substitution for overload candidate formation. The returned
+/// mapping includes pack names introduced by the declaration and is needed when
+/// the chosen candidate's body is substituted later.
 pub fn substitute_function_signature(
     func: &FunctionDecl,
     mapping: &HashMap<String, TemplateArg>,
     new_name: Option<String>,
-) -> Result<FunctionDecl, SubstitutionFailure> {
-    let (decl, _) = substitute_signature(func, mapping, None, new_name)?;
-    Ok(decl)
+) -> Result<(FunctionDecl, HashMap<String, TemplateArg>), SubstitutionFailure> {
+    substitute_signature(func, mapping, None, new_name).map_err(Into::into)
 }
 
 pub fn substitute_function(

@@ -1,0 +1,1 @@
+tests/negative/sfinae_member_template_hard_body.cpp:3:49: error: Dot member access on non-struct

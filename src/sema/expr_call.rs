@@ -269,6 +269,25 @@ impl Sema {
             .find_method_overloads_in_class(&struct_name, member, false)
             .is_empty()
         {
+            let has_member_template = self
+                .member_templates
+                .get(&struct_name)
+                .or_else(|| {
+                    self.member_templates
+                        .get(&QualifiedName::new(&struct_name).plain().to_string())
+                })
+                .is_some_and(|templates| {
+                    templates
+                        .iter()
+                        .any(|t| QualifiedName::new(&t.name).plain() == member)
+                });
+            if has_member_template {
+                return Err(CompileError::new(
+                    format!("no matching member function for call to '{member}'"),
+                    pos.line,
+                    pos.col,
+                ));
+            }
             return Err(CompileError::new(
                 format!("No member named '{member}' in struct '{struct_name}'"),
                 pos.line,

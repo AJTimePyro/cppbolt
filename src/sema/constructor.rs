@@ -8,7 +8,7 @@ use super::layout_types::element_struct_name;
 use super::template_deduce::{
     deduce_template_arguments, parse_types_list, split_template_call_name,
 };
-use super::template_subst::substitute_function;
+use super::template_subst_func::{substitute_function_body, substitute_function_signature};
 use super::*;
 use crate::ast::decl::RefQualifier;
 
@@ -347,14 +347,15 @@ impl Sema {
                 } else {
                     None
                 };
-                let Ok(mut spec_func) = substitute_function(&cand, &mapping, None, new_name) else {
+                let Ok((mut spec_func, active_mapping)) =
+                    substitute_function_signature(&cand, &mapping, new_name)
+                else {
                     continue;
                 };
                 self.resolve_and_instantiate_type(&mut spec_func.return_type, pos.line, pos.col)?;
                 for p in &mut spec_func.params {
                     self.resolve_and_instantiate_type(&mut p.ty, pos.line, pos.col)?;
                 }
-                self.register_struct_method(class_name, &spec_func);
                 let qual_name = format!("{}::{}", class_name, spec_func.name);
                 let mut params = spec_func.params.clone();
                 if !spec_func.is_static {
@@ -366,14 +367,12 @@ impl Sema {
                 } else if spec_func.ref_qualifier == RefQualifier::RValue {
                     mangled.push_str("_O");
                 }
-                self.pending_template_methods
-                    .insert(mangled.clone(), (class_name.to_string(), spec_func.clone()));
 
                 let sig = FunctionSig {
                     qualifiers: FunctionQualifiers::default(),
-                    name: spec_func.name,
-                    mangled_name: mangled,
-                    return_type: spec_func.return_type,
+                    name: spec_func.name.clone(),
+                    mangled_name: mangled.clone(),
+                    return_type: spec_func.return_type.clone(),
                     param_types: params.iter().map(|p| p.ty.clone()).collect(),
                     default_args: params.into_iter().map(|p| p.default_val).collect(),
                     is_static: spec_func.is_static,
@@ -391,6 +390,13 @@ impl Sema {
                 {
                     continue;
                 }
+
+                // Only a selected candidate has its body instantiated; errors
+                // there are genuine semantic errors, not substitution failures.
+                substitute_function_body(&mut spec_func, &active_mapping, None)?;
+                self.register_struct_method(class_name, &spec_func);
+                self.pending_template_methods
+                    .insert(mangled, (class_name.to_string(), spec_func));
                 return Ok(Some(sig));
             }
         }

@@ -229,7 +229,8 @@ impl Sema {
     ) -> Result<FunctionSig, TemplateFailure> {
         let canonical_args = format_canonical_args(template_params, mapping);
         let inst_name = format!("{}<{}>", template_decl.name, canonical_args);
-        let mut func_decl = substitute_function_signature(template_decl, mapping, Some(inst_name))?;
+        let (mut func_decl, _) =
+            substitute_function_signature(template_decl, mapping, Some(inst_name))?;
 
         // Resolving a nested type can instantiate another template. Errors from
         // that side effect are outside the immediate context and stay hard.
