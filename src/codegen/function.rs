@@ -31,7 +31,7 @@ impl<'a> Codegen<'a> {
         self.emit_dtor_for_scope(&root_objs, &ctx, &mut code);
 
         if let Some(ref cls) = class_name {
-            self.emit_member_destructors(f, cls, &mut code)?;
+            self.emit_member_destructors(&f.name, cls, f.line, f.col, &mut code)?;
             self.emit_base_destructors(&ctx, &mut code);
         }
 

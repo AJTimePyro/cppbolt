@@ -452,12 +452,14 @@ impl<'a> Codegen<'a> {
 
     pub(super) fn emit_member_destructors(
         &mut self,
-        f: &FunctionDecl,
+        func_name: &str,
         cls: &str,
+        line: usize,
+        col: usize,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let short_cls = QualifiedName::new(cls).class_short_name();
-        if f.name != format!("~{}", cls) && f.name != format!("~{}", short_cls) {
+        if func_name != format!("~{}", cls) && func_name != format!("~{}", short_cls) {
             return Ok(());
         }
         let Some(layout) = self.sema.struct_layouts.get(cls) else {
@@ -482,14 +484,14 @@ impl<'a> Codegen<'a> {
                     continue;
                 };
                 let elem_size = u32::try_from(elem_ty.size_of(&self.sema.struct_sizes))
-                    .map_err(|_| crate::internal_error!(f.line, f.col, "member is too large"))?;
+                    .map_err(|_| crate::internal_error!(line, col, "member is too large"))?;
                 for i in (0..*count).rev() {
                     let member_offset = (fld.offset as u32)
                         .checked_add((i as u32).checked_mul(elem_size).ok_or_else(|| {
-                            crate::internal_error!(f.line, f.col, "member is too large")
+                            crate::internal_error!(line, col, "member is too large")
                         })?)
                         .ok_or_else(|| {
-                            crate::internal_error!(f.line, f.col, "member is too large")
+                            crate::internal_error!(line, col, "member is too large")
                         })?;
                     code.push(OP_LOCAL_GET);
                     write_u32(code, 0); // this

@@ -652,6 +652,7 @@ cxx17/dtor_deferred_nested
 cxx17/dtor_deferred_overloaded
 cxx17/dtor_deferred_template_function
 cxx17/dtor_delete_through_base
+cxx17/dtor_early_return
 cxx17/dtor_specialization_base
 cxx17/dtor_specialization_implicit
 cxx17/dtor_specialization_resource

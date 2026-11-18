@@ -27,8 +27,14 @@ impl<'a> Codegen<'a> {
             self.emit_global_destructors(code);
         }
 
-        // If destructor of derived class, call base class destructors in
-        // reverse construction order.
+        // An explicit return still destroys members and bases, like falling
+        // off the end of a destructor body.
+        if ctx.is_dtor
+            && let Some(cls) = ctx.current_class.clone()
+        {
+            let func_name = ctx.current_func_name.clone();
+            self.emit_member_destructors(&func_name, &cls, ctx.line, ctx.col, code)?;
+        }
         self.emit_base_destructors(ctx, code);
 
         // Epilogue: restore stack pointer
