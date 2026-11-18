@@ -175,7 +175,11 @@ impl Sema {
                 for arg in &mut args {
                     let _ = self.resolve_and_instantiate_type(arg, line, col);
                 }
-                self.instantiate_class_template(base, &args, line, col)?;
+                let inst = self.instantiate_class_template(base, &args, line, col)?;
+                // The canonical name can differ from the written one when
+                // default or folded non-type arguments are involved.
+                self.alias_static_fields(&inst, sname);
+                self.alias_static_fields(&inst, plain);
             }
         }
         Ok(())
@@ -191,15 +195,27 @@ impl Sema {
             .collect();
         for (fld, var) in matching {
             let qual = format!("{target}::{fld}");
-            self.global_vars.insert(
-                qual.clone(),
-                VarSymbol {
-                    name: var.name.clone(),
-                    ty: var.ty.clone(),
-                    is_global: true,
-                    stack_offset: 0,
-                },
-            );
+            // A member declared on the target shadows the inherited one.
+            self.global_vars.entry(qual).or_insert(VarSymbol {
+                name: var.name.clone(),
+                ty: var.ty.clone(),
+                is_global: true,
+                stack_offset: 0,
+            });
+        }
+        // Inherited constants must be visible through the alias too, so a
+        // derived trait's `value` can be used as a non-type argument. A member
+        // declared on the target takes precedence over the inherited value.
+        let constants: Vec<(String, i128)> = self
+            .static_const_values
+            .iter()
+            .filter(|(k, _)| k.starts_with(&prefix))
+            .map(|(k, v)| (k[prefix.len()..].to_string(), *v))
+            .collect();
+        for (fld, value) in constants {
+            self.static_const_values
+                .entry(format!("{target}::{fld}"))
+                .or_insert(value);
         }
     }
 }

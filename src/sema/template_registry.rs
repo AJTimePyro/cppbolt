@@ -56,6 +56,29 @@ impl Sema {
     ) -> Result<(), CompileError> {
         match ty {
             Type::TemplateInstance { name, args } => {
+                let plain = QualifiedName::new(name).plain();
+                if self.variable_templates.contains_key(name.as_str())
+                    || self.variable_templates.contains_key(plain)
+                {
+                    let rendered = format!(
+                        "{}<{}>",
+                        name,
+                        args.iter()
+                            .map(|a| a.to_c_type())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                    if self
+                        .instantiate_variable_template(&rendered, line, col)
+                        .ok()
+                        .flatten()
+                        .is_some()
+                        && let Some(value) = self.static_const_values.get(&rendered).copied()
+                    {
+                        *ty = Type::NonType(value);
+                        return Ok(());
+                    }
+                }
                 for arg in args.iter_mut() {
                     self.resolve_and_instantiate_type(arg, line, col)?;
                 }
@@ -75,6 +98,13 @@ impl Sema {
                 self.resolve_and_instantiate_type(ty, line, col)?;
             }
             Type::DependentNested(name) => {
+                // A dependent qualified name used as a non-type template
+                // argument can name a static const member (`Trait<T>::value`),
+                // which is a constant rather than a nested type.
+                if let Some(value) = self.resolve_static_const_nontype(name, line, col)? {
+                    *ty = Type::NonType(value);
+                    return Ok(());
+                }
                 let Some(resolved) = self.resolve_nested_type_name(name, line, col)? else {
                     let (base, member) = name.rsplit_once("::").unwrap_or(("", name.as_str()));
                     return Err(CompileError::new(
@@ -177,6 +207,170 @@ impl Sema {
 
     /// Resolves a qualified name to its type. Missing nested types yield
     /// `None`; instantiation errors stay hard.
+    /// Splits `Trait<Args...>::member` at the last `::` that is not nested
+    /// inside template argument brackets.
+    fn split_static_member_name(name: &str) -> Option<(&str, &str)> {
+        let bytes = name.as_bytes();
+        let mut depth = 0i32;
+        let mut i = bytes.len();
+        while i > 0 {
+            i -= 1;
+            match bytes[i] {
+                b'>' => depth += 1,
+                b'<' => depth -= 1,
+                b':' if i + 1 < bytes.len() && bytes[i + 1] == b':' && depth == 0 => {
+                    return Some((&name[..i], &name[i + 2..]));
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
+    /// Evaluates a dependent non-type argument expression (for example
+    /// `!is_integral<int>::value`) using the constants of instantiated static
+    /// const members that are in scope.
+    fn eval_dependent_nontype(&mut self, expr_str: &str) -> Option<i128> {
+        let wrapped = format!("({})", expr_str);
+        let tokens = crate::lexer::Lexer::new(&wrapped).tokenize().ok()?;
+        let mut parser = crate::parser::Parser::new(tokens);
+        parser.allow_unknown_types = true;
+        // A fresh parser has no template registry; seed it so qualified
+        // template-id operands such as `Trait<T>::value` parse correctly.
+        for name in self
+            .class_templates
+            .keys()
+            .chain(self.alias_templates.keys())
+            .chain(self.variable_templates.keys())
+        {
+            parser.register_template_name(name);
+        }
+        let expr = parser.parse_expr().ok()?;
+        self.instantiate_nontype_refs(&expr);
+        super::constexpr_eval::eval_constexpr_with_context(
+            &expr,
+            Some(&self.struct_sizes),
+            Some(&self.static_const_values),
+            None,
+        )
+        .ok()
+    }
+
+    /// Instantiates class templates named by qualified static members inside
+    /// a non-type argument expression so their constants become available.
+    fn instantiate_nontype_refs(&mut self, expr: &crate::ast::expr::Expr) {
+        use crate::ast::expr::Expr;
+        match expr {
+            Expr::Identifier(name) if name.contains('<') => {
+                let _ = self.instantiate_variable_template(name, 0, 0);
+                if name.contains("::") {
+                    let _ = self.resolve_static_const_nontype(name, 0, 0);
+                }
+            }
+            Expr::Unary { expr, .. } | Expr::Cast { expr, .. } | Expr::SizeofExpr(expr) => {
+                self.instantiate_nontype_refs(expr)
+            }
+            Expr::Binary { left, right, .. } => {
+                self.instantiate_nontype_refs(left);
+                self.instantiate_nontype_refs(right);
+            }
+            Expr::Ternary {
+                cond,
+                then_expr,
+                else_expr,
+            } => {
+                self.instantiate_nontype_refs(cond);
+                self.instantiate_nontype_refs(then_expr);
+                self.instantiate_nontype_refs(else_expr);
+            }
+            _ => {}
+        }
+    }
+
+    /// Folds a non-type template argument spelled as a static const member or
+    /// an expression over such members into a concrete constant.
+    pub(super) fn try_resolve_nontype_arg(
+        &mut self,
+        arg: &mut Type,
+        line: usize,
+        col: usize,
+    ) -> Result<(), CompileError> {
+        match arg {
+            Type::Struct(name) => {
+                if let Some(value) = self.resolve_static_const_nontype(name, line, col)? {
+                    *arg = Type::NonType(value);
+                } else if name.contains('<')
+                    && self
+                        .instantiate_variable_template(name, line, col)
+                        .ok()
+                        .flatten()
+                        .is_some()
+                    && let Some(value) = self.static_const_values.get(name).copied()
+                {
+                    *arg = Type::NonType(value);
+                }
+            }
+            Type::DependentNonType(expr) => {
+                if let Some(value) = self.eval_dependent_nontype(expr) {
+                    *arg = Type::NonType(value);
+                }
+            }
+            Type::TemplateInstance { .. } => {
+                // A variable template reference such as `is_integral_v<T>`
+                // parses as a TemplateInstance; fold it to its constant.
+                let rendered = arg.to_c_type();
+                if self
+                    .instantiate_variable_template(&rendered, line, col)
+                    .ok()
+                    .flatten()
+                    .is_some()
+                    && let Some(value) = self.static_const_values.get(&rendered).copied()
+                {
+                    *arg = Type::NonType(value);
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// Evaluates a static const data member used as a non-type template
+    /// argument, e.g. `std::is_integral<int>::value`. The owning class is
+    /// instantiated on demand so its constant is registered first.
+    fn resolve_static_const_nontype(
+        &mut self,
+        name: &str,
+        line: usize,
+        col: usize,
+    ) -> Result<Option<i128>, CompileError> {
+        let Some((class_part, member)) = Self::split_static_member_name(name) else {
+            return Ok(None);
+        };
+        let Some((base, args_str)) = super::template_deduce::split_template_call_name(class_part)
+        else {
+            return Ok(None);
+        };
+        let known: Vec<String> = self.class_templates.keys().cloned().collect();
+        let Ok(args) = super::template_deduce::parse_types_list(args_str, &known) else {
+            return Ok(None);
+        };
+        // If instantiating the owner fails, let the caller's normal nested
+        // type resolution report it with the right hard/soft classification.
+        let Ok(inst) = self.instantiate_class_template(base, &args, line, col) else {
+            return Ok(None);
+        };
+        let plain = QualifiedName::new(&inst).plain();
+        Ok(self
+            .static_const_values
+            .get(&format!("{}::{}", inst, member))
+            .copied()
+            .or_else(|| {
+                self.static_const_values
+                    .get(&format!("{}::{}", plain, member))
+                    .copied()
+            }))
+    }
+
     fn resolve_nested_type_name(
         &mut self,
         name: &str,
@@ -206,6 +400,9 @@ impl Sema {
             return Ok(None);
         };
         for arg in &mut args {
+            // A static const member used as a non-type argument (for example
+            // `is_integral<T>::value`) is a constant, not a nested type.
+            self.try_resolve_nontype_arg(arg, line, col)?;
             self.resolve_and_instantiate_type(arg, line, col)?;
         }
         // An error while instantiating the base template is outside the
@@ -229,6 +426,89 @@ impl Sema {
         Ok(None)
     }
 
+    /// Instantiates a variable template reference such as `is_integral_v<int>`
+    /// and registers the resulting global constant.
+    pub(super) fn instantiate_variable_template(
+        &mut self,
+        name: &str,
+        line: usize,
+        col: usize,
+    ) -> Result<Option<Type>, CompileError> {
+        let Some((base, args_str)) = super::template_deduce::split_template_call_name(name) else {
+            return Ok(None);
+        };
+        let Some((params, ty, init)) = self.variable_templates.get(base).cloned() else {
+            return Ok(None);
+        };
+        // Each specialization is registered once. Re-emit its constant under
+        // the spelling used at this site so differently qualified references
+        // (e.g. `std::v<int>` vs `v<int>`) see the same value.
+        if let Some((cached_ty, cached_const)) =
+            self.instantiated_variable_templates.get(name).cloned()
+        {
+            if let Some(value) = cached_const {
+                self.static_const_values.insert(name.to_string(), value);
+            }
+            return Ok(Some(cached_ty));
+        }
+        let known: Vec<String> = self
+            .class_templates
+            .keys()
+            .chain(self.alias_templates.keys())
+            .cloned()
+            .collect();
+        let args = super::template_deduce::parse_types_list(args_str, &known)?;
+        let effective =
+            super::template_deduce::fill_default_template_args(base, &params, &args, (line, col))?;
+        let mapping = super::template_deduce::build_template_arg_map(&params, &effective);
+        let mut inst_ty = super::template_subst::substitute_type(&ty, &mapping, None)?;
+        self.resolve_and_instantiate_type(&mut inst_ty, line, col)?;
+
+        let mut inst_init = None;
+        if let Some(initializer) = &init {
+            let mut expr = initializer.clone();
+            super::template_subst::substitute_expr(&mut expr, &mapping, None)?;
+            // A static const member operand (the common `Trait<T>::value` case)
+            // is folded to a literal so the global initializer is self-contained.
+            let mut folded = expr.clone();
+            if let crate::ast::expr::Expr::Identifier(member) = &expr
+                && let Some(value) = self.resolve_static_const_nontype(member, line, col)?
+            {
+                folded = crate::ast::expr::Expr::IntLiteral(value as i64, inst_ty.clone());
+            }
+            if let Ok(value) = super::constexpr_eval::eval_constexpr_with_context(
+                &folded,
+                Some(&self.struct_sizes),
+                Some(&self.static_const_values),
+                None,
+            ) {
+                self.static_const_values.insert(name.to_string(), value);
+            }
+            inst_init = Some(folded);
+        }
+
+        self.global_vars.insert(
+            name.to_string(),
+            VarSymbol {
+                name: name.to_string(),
+                ty: inst_ty.clone(),
+                is_global: true,
+                stack_offset: 0,
+            },
+        );
+        self.synthesized_decls.push(crate::ast::Decl::GlobalVar {
+            name: name.to_string(),
+            ty: inst_ty.clone(),
+            init: inst_init,
+            line,
+            col,
+        });
+        let recorded_const = self.static_const_values.get(name).copied();
+        self.instantiated_variable_templates
+            .insert(name.to_string(), (inst_ty.clone(), recorded_const));
+        Ok(Some(inst_ty))
+    }
+
     pub fn instantiate_class_template(
         &mut self,
         name: &str,
@@ -245,10 +525,20 @@ impl Sema {
 
         let (template_class, template_params) = self.resolve_class_template(name, line, col)?;
 
+        // A non-type argument spelled as a static const member of another
+        // class template (`Trait<T>::value`) must be folded to its constant
+        // value before argument-kind validation.
+        let mut resolved_args = args.to_vec();
+        for (param, arg) in template_params.iter().zip(resolved_args.iter_mut()) {
+            if param.param_type.is_some() {
+                self.try_resolve_nontype_arg(arg, line, col)?;
+            }
+        }
+
         let effective_args = super::template_deduce::fill_default_template_args(
             name,
             &template_params,
-            args,
+            &resolved_args,
             (line, col),
         )?;
 
@@ -402,7 +692,7 @@ impl Sema {
             self.global_vars.insert(
                 qual_name.clone(),
                 VarSymbol {
-                    name: qual_name,
+                    name: qual_name.clone(),
                     ty: sf.1.clone(),
                     is_global: true,
                     stack_offset: 0,
@@ -411,6 +701,17 @@ impl Sema {
             if let Some(init) = &sf.2 {
                 let mut init_clone = init.clone();
                 let _ = self.analyze_expr(&mut init_clone);
+                if sf.1.is_const() {
+                    let constants = self.static_const_values.clone();
+                    if let Ok(value) = super::constexpr_eval::eval_constexpr_with_context(
+                        &init_clone,
+                        Some(&self.struct_sizes),
+                        Some(&constants),
+                        None,
+                    ) {
+                        self.static_const_values.insert(qual_name, value);
+                    }
+                }
             }
         }
         for base in base_classes {

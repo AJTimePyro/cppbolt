@@ -107,6 +107,10 @@ pub struct Sema {
     pub struct_layouts: HashMap<String, StructLayout>,
     pub struct_order: Vec<String>,
     pub enum_values: HashMap<String, i64>,
+    /// Constant values of instantiated static const data members, keyed by
+    /// their fully qualified name. Used when such a member is a non-type
+    /// template argument (e.g. `is_integral<T>::value`).
+    pub static_const_values: HashMap<String, i128>,
     pub enum_types: HashMap<String, String>,
     pub scoped_enums: HashSet<String>,
     pub functions: HashMap<String, Vec<FunctionSig>>,
@@ -154,6 +158,11 @@ pub struct Sema {
     pub partial_specializations: HashMap<String, Vec<template_match::PartialSpec>>,
     pub function_templates: HashMap<String, Vec<(FunctionDecl, Vec<TemplateParam>)>>,
     pub alias_templates: HashMap<String, (Vec<TemplateParam>, Type)>,
+    /// Variable templates: name -> (params, type, initializer).
+    pub variable_templates: HashMap<String, (Vec<TemplateParam>, Type, Option<Expr>)>,
+    /// Instantiated variable template specializations: rendered name ->
+    /// (type, constant value). Registers each specialization once.
+    pub instantiated_variable_templates: HashMap<String, (Type, Option<i128>)>,
     pub instantiated_classes: HashSet<String>,
     pub instantiated_functions: HashSet<String>,
     pub pending_template_methods: HashMap<String, (String, FunctionDecl)>,
@@ -174,6 +183,7 @@ impl Sema {
             struct_layouts: HashMap::new(),
             struct_order: Vec::new(),
             enum_values: HashMap::new(),
+            static_const_values: HashMap::new(),
             enum_types: HashMap::new(),
             scoped_enums: HashSet::new(),
             functions: HashMap::new(),
@@ -196,6 +206,8 @@ impl Sema {
             partial_specializations: HashMap::new(),
             function_templates: HashMap::new(),
             alias_templates: HashMap::new(),
+            variable_templates: HashMap::new(),
+            instantiated_variable_templates: HashMap::new(),
             instantiated_classes: HashSet::new(),
             instantiated_functions: HashSet::new(),
             pending_template_methods: HashMap::new(),

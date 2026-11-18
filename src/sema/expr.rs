@@ -330,6 +330,12 @@ impl Sema {
         if let Some((class_part, _)) = name.rsplit_once("::") {
             self.ensure_class_instantiated(class_part, self.current_line, self.current_col)?;
         }
+        if name.contains('<')
+            && let Some(ty) =
+                self.instantiate_variable_template(name, self.current_line, self.current_col)?
+        {
+            return Ok(ty);
+        }
         if let Some(var) = self.lookup_var(name) {
             Ok(var.ty.clone())
         } else if let Some(&val) = self.enum_values.get(name) {

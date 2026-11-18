@@ -278,6 +278,12 @@ cxx17/pmd_base_offset
 cxx17/pmd_constexpr
 cxx17/pmd_null_zero
 cxx17/pmf_fields_and_functions
+cxx17/type_traits_declval
+cxx17/type_traits_enable_if
+cxx17/type_traits_integration
+cxx17/type_traits_is_integral
+cxx17/type_traits_shadowed_value
+cxx17/type_traits_void_t
 cxx17/pmf_multiple_inheritance
 cxx17/pmf_noexcept_conversion
 cxx17/pmf_nttp
@@ -509,6 +515,9 @@ negative/reference_temporary_bind
 negative/reinterpret_cast_rvalue_ref
 negative/rvalue_ref_bind_lvalue
 negative/scalar_excess_elements
+negative/type_traits_declval_evaluated
+negative/type_traits_enable_if_false
+negative/type_traits_tparam_sfinae
 negative/sfinae_all_candidates_rejected_reasons
 negative/sfinae_hard_body_error
 negative/sfinae_member_template_hard_body

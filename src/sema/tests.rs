@@ -637,3 +637,27 @@ fn speculative_decltype_check_leaves_state_unchanged() -> Result<(), Box<dyn std
     Ok(())
 }
 
+#[test]
+fn variable_template_specialization_is_registered_once() -> Result<(), Box<dyn std::error::Error>> {
+    let mut sema = Sema::new();
+    let param = crate::ast::template::TemplateParam {
+        name: "T".to_string(),
+        default_type: None,
+        param_type: None,
+        is_pack: false,
+        line: 1,
+        col: 1,
+    };
+    sema.variable_templates.insert(
+        "v".to_string(),
+        (vec![param], Type::Bool, Some(Expr::BoolLiteral(true))),
+    );
+
+    let first = sema.instantiate_variable_template("v<int>", 1, 1)?;
+    let second = sema.instantiate_variable_template("v<int>", 1, 1)?;
+    assert_eq!(first, second);
+    assert_eq!(sema.instantiated_variable_templates.len(), 1);
+    assert_eq!(sema.synthesized_decls.len(), 1);
+    assert_eq!(sema.static_const_values.get("v<int>"), Some(&1));
+    Ok(())
+}

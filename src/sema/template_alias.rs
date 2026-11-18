@@ -43,9 +43,26 @@ impl Sema {
         let Some((params, target_ty)) = self.lookup_alias_template(name) else {
             return Ok(None);
         };
-        let effective_args = fill_default_template_args(name, &params, args, (line, col))?;
+        let mut resolved_args = args.to_vec();
+        for (param, arg) in params.iter().zip(resolved_args.iter_mut()) {
+            if param.param_type.is_some() {
+                self.try_resolve_nontype_arg(arg, line, col)?;
+            }
+        }
+        let effective_args =
+            fill_default_template_args(name, &params, &resolved_args, (line, col))?;
         let mapping = super::template_deduce::build_template_arg_map(&params, &effective_args);
         let mut expanded = substitute_type(&target_ty, &mapping, None)?;
+        // A qualified result such as `enable_if<false, T>::type` is a nested
+        // type of the instantiated class. If it has no member alias, convert
+        // it to `DependentNested` so resolution reports a substitution failure
+        // instead of leaving an opaque struct that looks like a valid type.
+        if let Type::Struct(nested) = &expanded
+            && nested.contains("::")
+            && self.lookup_type_alias(nested).is_none()
+        {
+            expanded = Type::DependentNested(nested.clone());
+        }
         self.resolve_and_instantiate_type(&mut expanded, line, col)?;
         Ok(Some(expanded))
     }

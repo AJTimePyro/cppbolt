@@ -185,6 +185,12 @@ impl Sema {
             TemplateKind::Alias(name, ty) => {
                 self.register_alias_template(name.clone(), ty.clone(), t.params.clone());
             }
+            TemplateKind::Variable(name, ty, init) => {
+                let entry = (t.params.clone(), ty.clone(), init.clone());
+                let plain = crate::QualifiedName::new(name).plain().to_string();
+                self.variable_templates.insert(name.clone(), entry.clone());
+                self.variable_templates.insert(plain, entry);
+            }
         }
         Ok(())
     }

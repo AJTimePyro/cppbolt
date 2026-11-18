@@ -35,6 +35,8 @@ pub enum TemplateKind {
     Class(TemplateClass),
     Function(Box<FunctionDecl>),
     Alias(String, Type),
+    /// A variable template such as `template <class T> constexpr bool v = ...`.
+    Variable(String, Type, Option<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

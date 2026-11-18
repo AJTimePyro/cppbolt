@@ -40,7 +40,13 @@ pub fn evaluate_dependent_nontype(
     let mut parser = crate::parser::Parser::new(tokens);
     let mut expr = match parser.parse_expr() {
         Ok(e) => e,
-        Err(_) => return Ok(Type::DependentNonType(expr_str.to_string())),
+        Err(_) => {
+            // The dependent spelling may not re-parse (e.g. `!Trait<T>::v`).
+            // Substitute the parameters textually and let sema resolve it.
+            return Ok(Type::DependentNonType(
+                super::template_name::substitute_dependent_text(expr_str, mapping),
+            ));
+        }
     };
     substitute_expr(&mut expr, mapping, injected_class)?;
     match crate::sema::constexpr_eval::eval_constexpr_with_mapping(&expr, None, mapping) {

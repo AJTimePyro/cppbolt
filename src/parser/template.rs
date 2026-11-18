@@ -129,7 +129,10 @@ impl Parser {
             || self.peek() == &TokenKind::Comma
             || self.peek() == &TokenKind::Gt
             || self.peek() == &TokenKind::Shr
+            || self.peek() == &TokenKind::Assign
         {
+            // An unnamed template parameter such as `typename = void` is
+            // valid; the name is simply never referenced.
             String::new()
         } else {
             return Err(CompileError::new("expected identifier", p_line, p_col));
@@ -212,7 +215,12 @@ impl Parser {
             Ok(val) => Ok(Type::NonType(val)),
             Err(err) => {
                 let is_dep = !self.active_type_params.is_empty() || has_pack_in_expr(&expr);
-                if is_dep && let Some(dep_str) = super::types_array::expr_to_dependent_str(&expr) {
+                if let Some(dep_str) = super::types_array::expr_to_dependent_str(&expr)
+                    && (is_dep || dep_str.contains("::"))
+                {
+                    // A qualified name here is a static const member of some
+                    // class template; its value is only known after sema has
+                    // instantiated that class, so defer evaluation.
                     Ok(Type::DependentNonType(dep_str))
                 } else {
                     Err(err)
@@ -355,6 +363,14 @@ impl Parser {
                 template_decls.push(Decl::Template(TemplateDecl {
                     params: params.clone(),
                     kind: TemplateKind::Function(Box::new(func)),
+                    line: t_line,
+                    col: t_col,
+                }));
+            } else if let Decl::GlobalVar { name, ty, init, .. } = decl {
+                self.register_template_name(&name);
+                template_decls.push(Decl::Template(TemplateDecl {
+                    params: params.clone(),
+                    kind: TemplateKind::Variable(name, ty, init),
                     line: t_line,
                     col: t_col,
                 }));

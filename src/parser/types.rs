@@ -19,6 +19,7 @@ impl Parser {
             | TokenKind::KwDecltype
             | TokenKind::KwTypename
             | TokenKind::KwAlignas => true,
+            TokenKind::Ident(id) if id == "volatile" => true,
             TokenKind::ColonColon => {
                 if let TokenKind::Ident(sub) = self.peek_ahead(1) {
                     sub == "size_t"
