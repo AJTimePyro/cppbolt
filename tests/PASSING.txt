@@ -283,6 +283,7 @@ cxx17/type_traits_enable_if
 cxx17/type_traits_integration
 cxx17/type_traits_is_integral
 cxx17/type_traits_shadowed_value
+cxx17/two_phase_adl
 cxx17/two_phase_definition_binding
 cxx17/type_traits_void_t
 cxx17/pmf_multiple_inheritance
@@ -516,6 +517,7 @@ negative/reference_temporary_bind
 negative/reinterpret_cast_rvalue_ref
 negative/rvalue_ref_bind_lvalue
 negative/scalar_excess_elements
+negative/two_phase_adl_qualified
 negative/two_phase_late_ordinary
 negative/type_traits_declval_evaluated
 negative/type_traits_enable_if_false
