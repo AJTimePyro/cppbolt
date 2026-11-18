@@ -11,7 +11,7 @@ use crate::ast::FunctionQualifiers;
 use crate::ast::decl::{FunctionDecl, Param};
 use crate::ast::expr::Expr;
 use crate::ast::types::Type;
-use crate::diagnostics::CompileError;
+use crate::diagnostics::{CompileError, SubstitutionFailure};
 use std::collections::{HashMap, HashSet};
 
 fn substitute_func_name(func_name: &str, injected_class: Option<(&str, &Type)>) -> String {
@@ -167,12 +167,17 @@ fn substitute_ctor_initializers(
     Ok(result)
 }
 
-pub fn substitute_function(
+/// Substitutes only the parts of a declaration that form its signature.
+///
+/// This is the immediate context for SFINAE: failures here discard the
+/// enclosing template candidate. Bodies and constructor initializers are left
+/// untouched and are substituted later by `substitute_function_body`.
+fn substitute_signature(
     func: &FunctionDecl,
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
     new_name: Option<String>,
-) -> Result<FunctionDecl, CompileError> {
+) -> Result<(FunctionDecl, HashMap<String, TemplateArg>), CompileError> {
     let mut remaining_template_params = Vec::new();
     let mut active_mapping = mapping.clone();
     for p in &func.params {
@@ -201,32 +206,59 @@ pub fn substitute_function(
         .filter(|p| p.is_pack && !mapping.contains_key(&p.name))
         .map(|p| p.name.clone())
         .collect();
-    let name = new_name.unwrap_or_else(|| substitute_func_name(&func.name, injected_class));
-    let return_type = substitute_type(&func.return_type, mapping, injected_class)?;
-    let params = substitute_params(&func.params, &unbound_pack_names, mapping, injected_class)?;
-    let ctor_initializers =
-        substitute_ctor_initializers(&func.ctor_initializers, mapping, injected_class)?;
 
-    let mut body = func.body.clone();
-    if let Some(body_stmt) = &mut body {
-        substitute_stmt(body_stmt, mapping, injected_class)?;
-    }
-
-    Ok(FunctionDecl {
+    let decl = FunctionDecl {
         qualifiers: FunctionQualifiers::default(),
-        name,
-        return_type,
-        params,
-        body,
+        name: new_name.unwrap_or_else(|| substitute_func_name(&func.name, injected_class)),
+        return_type: substitute_type(&func.return_type, mapping, injected_class)?,
+        params: substitute_params(&func.params, &unbound_pack_names, mapping, injected_class)?,
+        body: func.body.clone(),
         is_virtual: func.is_virtual,
         is_pure_virtual: func.is_pure_virtual,
         is_const: func.is_const,
         is_explicit: func.is_explicit,
         ref_qualifier: func.ref_qualifier,
         is_static: func.is_static,
-        ctor_initializers,
+        ctor_initializers: func.ctor_initializers.clone(),
         template_params: remaining_template_params,
         line: func.line,
         col: func.col,
-    })
+    };
+    Ok((decl, active_mapping))
+}
+
+/// Substitutes a declaration's body and constructor initializers. Errors here
+/// are genuine semantic errors, not substitution failures.
+pub fn substitute_function_body(
+    func: &mut FunctionDecl,
+    mapping: &HashMap<String, TemplateArg>,
+    injected_class: Option<(&str, &Type)>,
+) -> Result<(), CompileError> {
+    func.ctor_initializers =
+        substitute_ctor_initializers(&func.ctor_initializers, mapping, injected_class)?;
+    if let Some(body_stmt) = &mut func.body {
+        substitute_stmt(body_stmt, mapping, injected_class)?;
+    }
+    Ok(())
+}
+
+/// Signature-only substitution for overload candidate formation.
+pub fn substitute_function_signature(
+    func: &FunctionDecl,
+    mapping: &HashMap<String, TemplateArg>,
+    new_name: Option<String>,
+) -> Result<FunctionDecl, SubstitutionFailure> {
+    let (decl, _) = substitute_signature(func, mapping, None, new_name)?;
+    Ok(decl)
+}
+
+pub fn substitute_function(
+    func: &FunctionDecl,
+    mapping: &HashMap<String, TemplateArg>,
+    injected_class: Option<(&str, &Type)>,
+    new_name: Option<String>,
+) -> Result<FunctionDecl, CompileError> {
+    let (mut decl, active_mapping) = substitute_signature(func, mapping, injected_class, new_name)?;
+    substitute_function_body(&mut decl, &active_mapping, injected_class)?;
+    Ok(decl)
 }

@@ -1,1 +1,1 @@
-tests/negative/variadic_pack_mismatch.cpp:6:41: error: pack expansion contains parameter packs of different lengths
+tests/negative/variadic_pack_mismatch.cpp:11:5: error: no matching conversion for argument 3 of 'test_fn': cannot convert 'char' to 'void'

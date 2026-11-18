@@ -3,8 +3,10 @@ use super::template_deduce::{
 };
 use super::template_partial_order::{self, FunctionTemplateCand};
 use super::template_subst::substitute_function;
+use super::template_subst_func::substitute_function_signature;
 use super::*;
 use crate::ast::decl::RefQualifier;
+use crate::diagnostics::{SubstitutionFailure, TemplateFailure};
 use crate::sema::pack_expansion::TemplateArg;
 
 pub(crate) fn format_canonical_args(
@@ -134,6 +136,7 @@ impl Sema {
     ) -> Result<Vec<ViableCandidate>, CompileError> {
         let (arg_types, args) = call_args;
         let mut last_err = None;
+        let mut last_substitution: Option<SubstitutionFailure> = None;
         let mut viable = Vec::new();
         for (template_decl, template_params) in candidates {
             let has_pack = template_decl.params.last().is_some_and(|p| p.is_pack)
@@ -160,12 +163,19 @@ impl Sema {
                 pos,
             ) {
                 Ok(mapping) => {
-                    let sig = self.substitute_template_function_sig(
+                    let sig = match self.substitute_template_function_sig(
                         &mapping,
                         template_params,
                         template_decl,
                         pos,
-                    )?;
+                    ) {
+                        Ok(sig) => sig,
+                        Err(TemplateFailure::Substitution(failure)) => {
+                            last_substitution = Some(failure.at_call(pos.line, pos.col));
+                            continue;
+                        }
+                        Err(TemplateFailure::Hard(error)) => return Err(error),
+                    };
                     match self.score_arguments(&sig.param_types, arg_types, Some(args)) {
                         Ok(score) => {
                             viable.push((
@@ -188,10 +198,24 @@ impl Sema {
                 Err(e) => last_err = Some(e),
             }
         }
-        if viable.is_empty()
-            && let Some(e) = last_err
-        {
-            return Err(e);
+        if viable.is_empty() {
+            if let Some(e) = last_err {
+                return Err(e);
+            }
+            if let Some(failure) = last_substitution {
+                let name = candidates
+                    .first()
+                    .map(|(decl, _)| decl.name.as_str())
+                    .unwrap_or("template function");
+                return Err(CompileError::new(
+                    format!(
+                        "no matching function for call to '{name}': substitution failure: {}",
+                        failure.message
+                    ),
+                    failure.line,
+                    failure.col,
+                ));
+            }
         }
         Ok(viable)
     }
@@ -202,11 +226,13 @@ impl Sema {
         template_params: &[TemplateParam],
         template_decl: &FunctionDecl,
         pos: ExprPos,
-    ) -> Result<FunctionSig, CompileError> {
+    ) -> Result<FunctionSig, TemplateFailure> {
         let canonical_args = format_canonical_args(template_params, mapping);
         let inst_name = format!("{}<{}>", template_decl.name, canonical_args);
-        let mut func_decl = substitute_function(template_decl, mapping, None, Some(inst_name))?;
+        let mut func_decl = substitute_function_signature(template_decl, mapping, Some(inst_name))?;
 
+        // Resolving a nested type can instantiate another template. Errors from
+        // that side effect are outside the immediate context and stay hard.
         self.resolve_and_instantiate_type(&mut func_decl.return_type, pos.line, pos.col)?;
         for p in &mut func_decl.params {
             self.resolve_and_instantiate_type(&mut p.ty, pos.line, pos.col)?;
