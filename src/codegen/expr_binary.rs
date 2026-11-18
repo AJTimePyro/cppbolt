@@ -106,8 +106,12 @@ impl<'a> Codegen<'a> {
         for index in (0..spine.len()).rev() {
             let (op, right, whole_left) = spine[index];
             let rty = self.get_expr_type(right, ctx);
-            let next_result = self.binary_result_type(op, &lty, &rty).strip_reference().clone();
-            let overloaded = recompile && op.op_name().is_some() && (is_class(&lty) || is_class(&rty));
+            let next_result = self
+                .binary_result_type(op, &lty, &rty)
+                .strip_reference()
+                .clone();
+            let overloaded =
+                recompile && op.op_name().is_some() && (is_class(&lty) || is_class(&rty));
             // The next step recompiles this whole subtree when it is overloaded.
             if index > 0 && recompile {
                 let (next_op, next_right, _) = spine[index - 1];

@@ -45,11 +45,7 @@ impl Sema {
         Ok(())
     }
 
-    fn collect_final_methods(
-        &self,
-        methods: &[FunctionDecl],
-        bases: &[String],
-    ) -> Vec<VirtualKey> {
+    fn collect_final_methods(&self, methods: &[FunctionDecl], bases: &[String]) -> Vec<VirtualKey> {
         methods
             .iter()
             .filter(|m| m.qualifiers.is_final)
@@ -142,8 +138,7 @@ impl Sema {
         let pure_virtuals = self.collect_pure_virtuals(&bases, input.methods);
         let is_abstract = !pure_virtuals.is_empty();
         let short = QualifiedName::new(input.name).class_short_name();
-        let has_user_declared_constructors =
-            Self::has_user_ctor(input.methods, input.name, short);
+        let has_user_declared_constructors = Self::has_user_ctor(input.methods, input.name, short);
 
         let layout = StructLayout {
             is_class: input.is_class,

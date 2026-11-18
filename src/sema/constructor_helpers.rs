@@ -2,7 +2,11 @@
 
 use super::*;
 
-pub(super) fn score_copy_init_param(param: &Type, arg_ty: &Type, arg_expr: Option<&Expr>) -> Option<usize> {
+pub(super) fn score_copy_init_param(
+    param: &Type,
+    arg_ty: &Type,
+    arg_expr: Option<&Expr>,
+) -> Option<usize> {
     let clean_param = param.deref_type()?.strip_all_const();
     let clean_arg = arg_ty.strip_reference().strip_all_const();
     let is_copy_param = match (clean_param, clean_arg) {
@@ -33,4 +37,3 @@ pub(super) fn score_copy_init_param(param: &Type, arg_ty: &Type, arg_expr: Optio
         None
     }
 }
-

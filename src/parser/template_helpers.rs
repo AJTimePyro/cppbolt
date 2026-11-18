@@ -1,6 +1,5 @@
 //! Helpers for template parsing.
 
-
 pub(super) fn has_pack_in_expr(expr: &crate::ast::expr::Expr) -> bool {
     use crate::ast::expr::Expr;
     match expr {

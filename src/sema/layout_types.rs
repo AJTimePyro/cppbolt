@@ -91,7 +91,6 @@ impl LayoutAccumulator {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub struct StructField {
     pub name: String,

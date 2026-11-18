@@ -3,8 +3,8 @@
 //! See the mdBook guide at `docs/book/internals/semantic-analysis.md`.
 
 mod analyze;
-mod analyze_helpers;
 mod analyze_field_init;
+mod analyze_helpers;
 mod assign;
 mod call_arity;
 pub mod constexpr_eval;
@@ -99,7 +99,6 @@ pub(crate) use receiver::{receiver_is_const_type, sig_receiver_is_const};
 pub(crate) use sema_types::{ConversionFailure, DeferredMethod};
 pub use sema_types::{Scope, VarSymbol};
 use std::collections::{HashMap, HashSet};
-
 
 pub struct Sema {
     pub struct_layouts: HashMap<String, StructLayout>,

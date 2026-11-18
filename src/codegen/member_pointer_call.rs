@@ -115,5 +115,4 @@ impl<'a> Codegen<'a> {
         write_u32(code, this_slot);
         Ok(())
     }
-
 }

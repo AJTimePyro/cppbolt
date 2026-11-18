@@ -2,9 +2,9 @@
 
 use super::analyze::this_param;
 use super::template_deduce::{parse_types_list, split_template_call_name};
+pub(crate) use super::template_registry_helpers::insert_template_aliases;
 use super::template_subst::{substitute_struct, substitute_type};
 use super::*;
-pub(crate) use super::template_registry_helpers::insert_template_aliases;
 use crate::ast::decl::{Decl, FunctionDecl};
 use crate::ast::expr::Expr;
 use crate::ast::template::{TemplateClass, TemplateParam};

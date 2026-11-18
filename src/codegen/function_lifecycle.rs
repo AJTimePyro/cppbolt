@@ -343,9 +343,7 @@ impl<'a> Codegen<'a> {
                         .checked_add((i as u32).checked_mul(elem_size).ok_or_else(|| {
                             crate::internal_error!(line, col, "member is too large")
                         })?)
-                        .ok_or_else(|| {
-                            crate::internal_error!(line, col, "member is too large")
-                        })?;
+                        .ok_or_else(|| crate::internal_error!(line, col, "member is too large"))?;
                     code.push(OP_LOCAL_GET);
                     write_u32(code, 0); // this
                     code.push(OP_I32_CONST);

@@ -269,7 +269,13 @@ pub fn deduce_template_arguments(
         &mut deduced,
         &mut explicit_pack,
     );
-    validate_explicit_pack_count(has_pack, non_pack_count, explicit_pack.len(), arg_types.len(), pos)?;
+    validate_explicit_pack_count(
+        has_pack,
+        non_pack_count,
+        explicit_pack.len(),
+        arg_types.len(),
+        pos,
+    )?;
 
     for (i, p) in non_pack_params.iter().enumerate() {
         if i >= arg_types.len() {

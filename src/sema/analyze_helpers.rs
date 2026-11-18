@@ -2,7 +2,6 @@
 
 use super::*;
 
-
 pub(super) fn method_matches_out_of_class(
     m: &FunctionDecl,
     short_method: &str,
@@ -115,4 +114,3 @@ pub(super) fn collect_object_use_classes(program: &Program) -> HashSet<String> {
     }
     out
 }
-

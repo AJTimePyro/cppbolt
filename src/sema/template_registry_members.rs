@@ -1,9 +1,9 @@
 //! Instantiated member method setup.
 
-use crate::diagnostics::ErrorKind;
 use super::analyze::this_param;
 use super::*;
 use crate::ast::decl::FunctionDecl;
+use crate::diagnostics::ErrorKind;
 use crate::name::QualifiedName;
 
 impl Sema {

@@ -22,4 +22,3 @@ pub(super) struct PmfSlots {
     pub(super) fn_slot: u32,
     pub(super) ret_adjust: u32,
 }
-

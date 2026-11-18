@@ -1,7 +1,7 @@
 //! Template declaration and argument parsing.
 
-use super::*;
 use super::template_helpers::has_pack_in_expr;
+use super::*;
 
 pub(super) fn validate_trailing_pack(
     params: &[TemplateParam],
@@ -491,4 +491,3 @@ impl Parser {
         }
     }
 }
-

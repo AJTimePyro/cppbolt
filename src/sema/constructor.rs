@@ -3,12 +3,12 @@
 //! of the class.
 
 use super::analyze::this_param;
+use super::constructor_helpers::score_copy_init_param;
 use super::layout_types::element_struct_name;
 use super::template_deduce::{
     deduce_template_arguments, parse_types_list, split_template_call_name,
 };
 use super::template_subst::substitute_function;
-use super::constructor_helpers::score_copy_init_param;
 use super::*;
 use crate::ast::decl::RefQualifier;
 

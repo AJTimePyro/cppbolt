@@ -34,4 +34,3 @@ pub(crate) struct DeferredMethod {
     pub(crate) class_name: String,
     pub(crate) method: FunctionDecl,
 }
-

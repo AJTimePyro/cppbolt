@@ -387,7 +387,12 @@ impl<'a> Codegen<'a> {
         write_u32(code, ctx.scratch2);
     }
 
-    fn emit_vtable_field_load(&mut self, field_offset: i32, ctx: &FunctionContext, code: &mut Vec<u8>) {
+    fn emit_vtable_field_load(
+        &mut self,
+        field_offset: i32,
+        ctx: &FunctionContext,
+        code: &mut Vec<u8>,
+    ) {
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.scratch2);
         code.push(OP_I32_CONST);

@@ -19,4 +19,3 @@ pub(crate) fn insert_template_aliases<T: Clone>(
     }
     map.insert(name, item);
 }
-
