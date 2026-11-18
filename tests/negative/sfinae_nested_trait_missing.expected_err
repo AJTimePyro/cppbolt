@@ -1,0 +1,1 @@
+tests/negative/sfinae_nested_trait_missing.cpp:5:21: error: no matching function for call to 'g': substitution failure: no type named 'type' in 'Traits<Bad>'
