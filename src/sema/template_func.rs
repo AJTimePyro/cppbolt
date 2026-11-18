@@ -2,8 +2,7 @@ use super::template_deduce::{
     deduce_template_arguments, parse_types_list, split_template_call_name,
 };
 use super::template_partial_order::{self, FunctionTemplateCand};
-use super::template_subst::substitute_function;
-use super::template_subst_func::substitute_function_signature;
+use super::template_subst_func::{substitute_function_body, substitute_function_signature};
 use super::*;
 use crate::ast::decl::RefQualifier;
 use crate::diagnostics::{SubstitutionFailure, TemplateFailure};
@@ -36,23 +35,24 @@ pub(crate) fn format_canonical_args(
     pieces.join(", ")
 }
 
-type ViableCandidate = (
-    FunctionDecl,
-    Vec<TemplateParam>,
-    HashMap<String, TemplateArg>,
-    FunctionSig,
-    usize,
-);
+struct ViableCandidate {
+    decl: FunctionDecl,
+    template_params: Vec<TemplateParam>,
+    mapping: HashMap<String, TemplateArg>,
+    prepared: FunctionDecl,
+    active_mapping: HashMap<String, TemplateArg>,
+    score: usize,
+}
 
 fn select_best_template_candidate(viable: &[ViableCandidate], num_args: usize) -> Option<usize> {
     let mut best_idx = None;
     for (i, v_i) in viable.iter().enumerate() {
-        let cand_i = FunctionTemplateCand::new(&v_i.0, &v_i.1);
+        let cand_i = FunctionTemplateCand::new(&v_i.decl, &v_i.template_params);
         let strictly_better = viable.iter().enumerate().all(|(j, v_j)| {
             if i == j {
                 return true;
             }
-            let cand_j = FunctionTemplateCand::new(&v_j.0, &v_j.1);
+            let cand_j = FunctionTemplateCand::new(&v_j.decl, &v_j.template_params);
             template_partial_order::compare_function_templates(&cand_i, &cand_j, num_args)
                 == Some(std::cmp::Ordering::Less)
         });
@@ -105,21 +105,21 @@ impl Sema {
 
             let mut min_score = usize::MAX;
             for v in &viable {
-                if v.4 < min_score {
-                    min_score = v.4;
+                if v.score < min_score {
+                    min_score = v.score;
                 }
             }
-            viable.retain(|v| v.4 == min_score);
+            viable.retain(|v| v.score == min_score);
 
             if viable.len() == 1 {
                 let v = viable.remove(0);
-                let sig = self.instantiate_function_template(&v.2, &v.1, &v.0, pos)?;
+                let sig = self.instantiate_function_template(&v, pos)?;
                 return Ok(Some(sig));
             }
 
             if let Some(idx) = select_best_template_candidate(&viable, num_args) {
                 let v = viable.remove(idx);
-                let sig = self.instantiate_function_template(&v.2, &v.1, &v.0, pos)?;
+                let sig = self.instantiate_function_template(&v, pos)?;
                 return Ok(Some(sig));
             }
             return Err(self.ambiguous_call(tmpl_name, arg_types, pos));
@@ -164,13 +164,14 @@ impl Sema {
                 pos,
             ) {
                 Ok(mapping) => {
-                    let sig = match self.substitute_template_function_sig(
-                        &mapping,
-                        template_params,
-                        template_decl,
-                        pos,
-                    ) {
-                        Ok(sig) => sig,
+                    let (sig, prepared, active_mapping) = match self
+                        .substitute_template_function_sig(
+                            &mapping,
+                            template_params,
+                            template_decl,
+                            pos,
+                        ) {
+                        Ok(formed) => formed,
                         Err(TemplateFailure::Substitution(failure)) => {
                             let failure = failure.at_call(pos.line, pos.col);
                             rejections.push(format!("substitution failure: {}", failure.message));
@@ -181,13 +182,14 @@ impl Sema {
                     };
                     match self.score_arguments(&sig.param_types, arg_types, Some(args)) {
                         Ok(score) => {
-                            viable.push((
-                                template_decl.clone(),
-                                template_params.clone(),
+                            viable.push(ViableCandidate {
+                                decl: template_decl.clone(),
+                                template_params: template_params.clone(),
                                 mapping,
-                                sig,
+                                prepared,
+                                active_mapping,
                                 score,
-                            ));
+                            });
                         }
                         Err(failure) => {
                             let error =
@@ -246,10 +248,10 @@ impl Sema {
         template_params: &[TemplateParam],
         template_decl: &FunctionDecl,
         pos: ExprPos,
-    ) -> Result<FunctionSig, TemplateFailure> {
+    ) -> Result<(FunctionSig, FunctionDecl, HashMap<String, TemplateArg>), TemplateFailure> {
         let canonical_args = format_canonical_args(template_params, mapping);
         let inst_name = format!("{}<{}>", template_decl.name, canonical_args);
-        let (mut func_decl, _) =
+        let (mut func_decl, active_mapping) =
             substitute_function_signature(template_decl, mapping, Some(inst_name))?;
 
         // Resolving a nested type can instantiate another template. Errors from
@@ -260,11 +262,11 @@ impl Sema {
         }
 
         let mangled = self.mangle_name(&func_decl.name, &func_decl.params);
-        Ok(FunctionSig {
+        let sig = FunctionSig {
             qualifiers: FunctionQualifiers::default(),
-            name: func_decl.name,
+            name: func_decl.name.clone(),
             mangled_name: mangled,
-            return_type: func_decl.return_type,
+            return_type: func_decl.return_type.clone(),
             param_types: func_decl.params.iter().map(|p| p.ty.clone()).collect(),
             default_args: func_decl
                 .params
@@ -274,7 +276,8 @@ impl Sema {
             is_static: false,
             is_explicit: false,
             ref_qualifier: RefQualifier::None,
-        })
+        };
+        Ok((sig, func_decl, active_mapping))
     }
 
     pub fn attach_out_of_class_template_method(
@@ -320,11 +323,9 @@ impl Sema {
         }
     }
 
-    pub fn instantiate_function_template(
+    fn instantiate_function_template(
         &mut self,
-        mapping: &HashMap<String, TemplateArg>,
-        template_params: &[TemplateParam],
-        template_decl: &FunctionDecl,
+        cand: &ViableCandidate,
         pos: ExprPos,
     ) -> Result<FunctionSig, CompileError> {
         if self.instantiation_depth >= 500 {
@@ -335,15 +336,10 @@ impl Sema {
             ));
         }
 
-        let canonical_args = format_canonical_args(template_params, mapping);
-        let inst_name = format!("{}<{}>", template_decl.name, canonical_args);
-        let mut func_decl =
-            substitute_function(template_decl, mapping, None, Some(inst_name.clone()))?;
-
-        self.resolve_and_instantiate_type(&mut func_decl.return_type, pos.line, pos.col)?;
-        for p in &mut func_decl.params {
-            self.resolve_and_instantiate_type(&mut p.ty, pos.line, pos.col)?;
-        }
+        let canonical_args = format_canonical_args(&cand.template_params, &cand.mapping);
+        let inst_name = format!("{}<{}>", cand.decl.name, canonical_args);
+        let mut func_decl = cand.prepared.clone();
+        substitute_function_body(&mut func_decl, &cand.active_mapping, None)?;
 
         let mangled = self.mangle_name(&func_decl.name, &func_decl.params);
         let sig = FunctionSig {
@@ -375,10 +371,10 @@ impl Sema {
                 .or_default()
                 .push(sig.clone());
             self.functions
-                .entry(template_decl.name.clone())
+                .entry(cand.decl.name.clone())
                 .or_default()
                 .push(sig.clone());
-            if let Some(alias) = QualifiedName::new(&template_decl.name).implicit_alias() {
+            if let Some(alias) = QualifiedName::new(&cand.decl.name).implicit_alias() {
                 self.functions
                     .entry(alias.into_owned())
                     .or_default()
