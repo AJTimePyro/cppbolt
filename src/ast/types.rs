@@ -61,6 +61,10 @@ pub enum Type {
     DependentNonType(String),
     Struct(String),
     Enum(String),
+    /// A dependent qualified type such as `T::type` or `Traits<T>::type`
+    /// whose base was substituted. It must resolve to a concrete type; an
+    /// unresolved name is a substitution failure in the immediate context.
+    DependentNested(String),
     TypeParam(String),
     TemplateInstance {
         name: String,
@@ -357,6 +361,7 @@ impl Type {
                 .or_else(|| struct_sizes.get(QualifiedName::new(name).plain()))
                 .unwrap_or(&4),
             Type::TypeParam(_)
+            | Type::DependentNested(_)
             | Type::NonType(_)
             | Type::DependentNonType(_)
             | Type::DependentArray(_, _) => 4,
@@ -404,6 +409,7 @@ impl Type {
                     .or_else(|| struct_aligns.get(QualifiedName::new(name).plain()))
                     .unwrap_or(&4),
                 Type::TypeParam(_)
+                | Type::DependentNested(_)
                 | Type::NonType(_)
                 | Type::DependentNonType(_)
                 | Type::DependentArray(_, _) => 4,
@@ -454,6 +460,7 @@ impl Type {
             | Type::Struct(_)
             | Type::TemplateInstance { .. }
             | Type::TypeParam(_)
+            | Type::DependentNested(_)
             | Type::NonType(_)
             | Type::DependentNonType(_)
             | Type::DependentArray(_, _)

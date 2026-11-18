@@ -65,6 +65,21 @@ impl Sema {
                 let inst_name = self.instantiate_class_template(name, args, line, col)?;
                 *ty = Type::Struct(inst_name);
             }
+            Type::DependentNested(name) => {
+                let Some(resolved) = self.resolve_nested_type_name(name, line, col)? else {
+                    let (base, member) = name
+                        .rsplit_once("::")
+                        .unwrap_or_else(|| ("", name.as_str()));
+                    return Err(CompileError::new(
+                        format!("no type named '{}' in '{}'", member, base),
+                        line,
+                        col,
+                    )
+                    .with_kind(ErrorKind::Substitution));
+                };
+                *ty = resolved;
+                self.resolve_and_instantiate_type(ty, line, col)?;
+            }
             Type::Struct(sname) => {
                 let sname_clone = sname.clone();
                 self.resolve_struct_type_alias(ty, &sname_clone, line, col)?;
@@ -112,40 +127,54 @@ impl Sema {
         line: usize,
         col: usize,
     ) -> Result<(), CompileError> {
-        if let Some(alias) = self.lookup_type_alias(sname) {
+        if let Some(alias) = self.resolve_nested_type_name(sname, line, col)? {
             *ty = alias;
-            return Ok(());
-        }
-        if let Some(gt_pos) = sname.rfind('>')
-            && sname[gt_pos..].starts_with(">::")
-        {
-            let inst_part = &sname[..gt_pos + 1];
-            if let Some((tmpl_name, args_str)) = split_template_call_name(inst_part) {
-                let known: Vec<String> = self
-                    .class_templates
-                    .keys()
-                    .chain(self.alias_templates.keys())
-                    .cloned()
-                    .collect();
-                if let Ok(mut args) = parse_types_list(args_str, &known) {
-                    for arg in &mut args {
-                        self.resolve_and_instantiate_type(arg, line, col)?;
-                    }
-                    let inst = self.instantiate_class_template(tmpl_name, &args, line, col)?;
-                    let member = &sname[gt_pos + 3..];
-                    let canon = format!("{inst}::{member}");
-                    if let Some(alias) = self
-                        .lookup_type_alias(&canon)
-                        .or_else(|| self.lookup_type_alias(sname))
-                    {
-                        *ty = alias;
-                    } else if self.struct_layouts.contains_key(&canon) {
-                        *ty = Type::Struct(canon);
-                    }
-                }
-            }
         }
         Ok(())
+    }
+
+    /// Resolves a qualified name to its type. Missing nested types yield
+    /// `None`; instantiation errors stay hard.
+    fn resolve_nested_type_name(
+        &mut self,
+        name: &str,
+        line: usize,
+        col: usize,
+    ) -> Result<Option<Type>, CompileError> {
+        if let Some(alias) = self.lookup_type_alias(name) {
+            return Ok(Some(alias));
+        }
+        let Some(gt_pos) = name.rfind('>') else {
+            return Ok(None);
+        };
+        if !name[gt_pos..].starts_with(">::") {
+            return Ok(None);
+        }
+        let inst_part = &name[..gt_pos + 1];
+        let Some((tmpl_name, args_str)) = split_template_call_name(inst_part) else {
+            return Ok(None);
+        };
+        let known: Vec<String> = self
+            .class_templates
+            .keys()
+            .chain(self.alias_templates.keys())
+            .cloned()
+            .collect();
+        let Ok(mut args) = parse_types_list(args_str, &known) else {
+            return Ok(None);
+        };
+        for arg in &mut args {
+            self.resolve_and_instantiate_type(arg, line, col)?;
+        }
+        let inst = self.instantiate_class_template(tmpl_name, &args, line, col)?;
+        let canon = format!("{}::{}", inst, &name[gt_pos + 3..]);
+        if let Some(alias) = self.lookup_type_alias(&canon) {
+            return Ok(Some(alias));
+        }
+        if self.struct_layouts.contains_key(&canon) {
+            return Ok(Some(Type::Struct(canon)));
+        }
+        Ok(None)
     }
 
     pub fn instantiate_class_template(

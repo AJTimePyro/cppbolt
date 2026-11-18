@@ -31,11 +31,76 @@ fn substitute_func_name(func_name: &str, injected_class: Option<(&str, &Type)>) 
     func_name.to_string()
 }
 
+/// A qualified type whose base mentions a template parameter is dependent:
+/// resolving it may fail in the immediate context and discard the candidate.
+fn is_dependent_qualified_name(name: &str, mapping: &HashMap<String, TemplateArg>) -> bool {
+    let Some((base, _)) = name.rsplit_once("::") else {
+        return false;
+    };
+    if mapping.contains_key(base) {
+        return true;
+    }
+    let Some(open) = base.find('<') else {
+        return false;
+    };
+    let args = &base[open + 1..base.rfind('>').unwrap_or(base.len())];
+    args.split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+        .any(|part| mapping.contains_key(part))
+}
+
+/// Records dependent qualified names formed by substitution so type resolution
+/// can reject a missing nested type as a substitution failure.
+fn mark_dependent_nested(
+    original: &Type,
+    substituted: &mut Type,
+    mapping: &HashMap<String, TemplateArg>,
+) {
+    let dependent_name = match (&*original, &*substituted) {
+        (Type::Struct(orig), Type::Struct(name)) if is_dependent_qualified_name(orig, mapping) => {
+            Some(name.clone())
+        }
+        _ => None,
+    };
+    if let Some(name) = dependent_name {
+        *substituted = Type::DependentNested(name);
+        return;
+    }
+    match (original, substituted) {
+        (Type::Const(a), Type::Const(b))
+        | (Type::Pointer(a), Type::Pointer(b))
+        | (Type::Reference(a), Type::Reference(b))
+        | (Type::RvalueReference(a), Type::RvalueReference(b))
+        | (Type::PackExpansion(a), Type::PackExpansion(b))
+        | (Type::DependentArray(a, _), Type::DependentArray(b, _))
+        | (Type::Array(a, _), Type::Array(b, _)) => mark_dependent_nested(a, b, mapping),
+        (Type::TemplateInstance { args: a, .. }, Type::TemplateInstance { args: b, .. }) => {
+            for (orig, subst) in a.iter().zip(b.iter_mut()) {
+                mark_dependent_nested(orig, subst, mapping);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn substitute_param_type(
+    original: &Type,
+    mapping: &HashMap<String, TemplateArg>,
+    injected_class: Option<(&str, &Type)>,
+    mark_dependent: bool,
+) -> Result<Type, CompileError> {
+    let mut ty = substitute_type(original, mapping, injected_class)?;
+    if mark_dependent {
+        mark_dependent_nested(original, &mut ty, mapping);
+    }
+    Ok(ty)
+}
+
 fn substitute_params(
     params: &[Param],
     unbound_pack_names: &HashSet<String>,
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
+    mark_dependent: bool,
 ) -> Result<Vec<Param>, CompileError> {
     let mut result = Vec::new();
     for p in params {
@@ -45,7 +110,7 @@ fn substitute_params(
             if !still_free.is_empty() {
                 result.push(Param {
                     name: p.name.clone(),
-                    ty: substitute_type(&p.ty, mapping, injected_class)?,
+                    ty: substitute_param_type(&p.ty, mapping, injected_class, mark_dependent)?,
                     default_val: None,
                     is_pack: true,
                 });
@@ -59,7 +124,7 @@ fn substitute_params(
                 .unwrap_or(0);
             for i in 0..pack_len {
                 let subst_map = build_slice_mapping(mapping, &known, i);
-                let ty = substitute_type(&p.ty, &subst_map, injected_class)?;
+                let ty = substitute_param_type(&p.ty, &subst_map, injected_class, mark_dependent)?;
                 let stripped = match ty {
                     Type::PackExpansion(inner) => *inner,
                     other => other,
@@ -78,7 +143,7 @@ fn substitute_params(
             }
             result.push(Param {
                 name: p.name.clone(),
-                ty: substitute_type(&p.ty, mapping, injected_class)?,
+                ty: substitute_param_type(&p.ty, mapping, injected_class, mark_dependent)?,
                 default_val,
                 is_pack: false,
             });
@@ -177,6 +242,7 @@ fn substitute_signature(
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
     new_name: Option<String>,
+    mark_dependent: bool,
 ) -> Result<(FunctionDecl, HashMap<String, TemplateArg>), CompileError> {
     let mut remaining_template_params = Vec::new();
     let mut active_mapping = mapping.clone();
@@ -210,8 +276,19 @@ fn substitute_signature(
     let decl = FunctionDecl {
         qualifiers: FunctionQualifiers::default(),
         name: new_name.unwrap_or_else(|| substitute_func_name(&func.name, injected_class)),
-        return_type: substitute_type(&func.return_type, mapping, injected_class)?,
-        params: substitute_params(&func.params, &unbound_pack_names, mapping, injected_class)?,
+        return_type: substitute_param_type(
+            &func.return_type,
+            mapping,
+            injected_class,
+            mark_dependent,
+        )?,
+        params: substitute_params(
+            &func.params,
+            &unbound_pack_names,
+            mapping,
+            injected_class,
+            mark_dependent,
+        )?,
         body: func.body.clone(),
         is_virtual: func.is_virtual,
         is_pure_virtual: func.is_pure_virtual,
@@ -250,7 +327,7 @@ pub fn substitute_function_signature(
     mapping: &HashMap<String, TemplateArg>,
     new_name: Option<String>,
 ) -> Result<(FunctionDecl, HashMap<String, TemplateArg>), SubstitutionFailure> {
-    substitute_signature(func, mapping, None, new_name).map_err(Into::into)
+    substitute_signature(func, mapping, None, new_name, true).map_err(Into::into)
 }
 
 pub fn substitute_function(
@@ -259,7 +336,8 @@ pub fn substitute_function(
     injected_class: Option<(&str, &Type)>,
     new_name: Option<String>,
 ) -> Result<FunctionDecl, CompileError> {
-    let (mut decl, active_mapping) = substitute_signature(func, mapping, injected_class, new_name)?;
+    let (mut decl, active_mapping) =
+        substitute_signature(func, mapping, injected_class, new_name, false)?;
     substitute_function_body(&mut decl, &active_mapping, injected_class)?;
     Ok(decl)
 }

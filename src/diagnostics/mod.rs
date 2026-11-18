@@ -14,6 +14,9 @@ pub enum ErrorKind {
     /// A name whose declaration may appear later in the translation unit.
     /// Only these errors may be deferred and retried after registration.
     UnresolvedName,
+    /// An invalid type formed in the immediate context of template signature
+    /// substitution. It discards the candidate instead of aborting the build.
+    Substitution,
     /// Feature outside the supported C++ subset.
     Unsupported,
     /// Internal invariant failure or resource limit reached.
