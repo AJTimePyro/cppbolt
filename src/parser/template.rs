@@ -277,7 +277,14 @@ impl Parser {
         t_line: usize,
         t_col: usize,
     ) -> Result<Vec<Decl>, CompileError> {
-        let decl = self.parse_struct()?;
+        let mut struct_decls = self.parse_struct()?;
+        let Some(decl) = struct_decls.pop() else {
+            return Err(CompileError::new(
+                "expected struct declaration",
+                t_line,
+                t_col,
+            ));
+        };
         let Decl::StructDecl {
             name,
             is_class,
@@ -316,12 +323,13 @@ impl Parser {
             nested_structs,
             alignment,
         };
-        Ok(vec![Decl::Template(TemplateDecl {
+        struct_decls.push(Decl::Template(TemplateDecl {
             params,
             kind: TemplateKind::Class(template_class),
             line: t_line,
             col: t_col,
-        })])
+        }));
+        Ok(struct_decls)
     }
 
     fn parse_template_alias(

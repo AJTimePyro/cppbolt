@@ -238,9 +238,18 @@ impl Parser {
         Ok(false)
     }
 
-    pub(super) fn parse_struct_friend(&mut self) -> Result<bool, CompileError> {
-        if self.peek() == &TokenKind::KwFriend {
-            self.advance();
+    pub(super) fn parse_struct_friend(
+        &mut self,
+        body: &mut StructBody,
+    ) -> Result<bool, CompileError> {
+        if self.peek() != &TokenKind::KwFriend {
+            return Ok(false);
+        }
+        let start = self.current().clone();
+        self.advance();
+        if !self.is_type_start() {
+            // `friend class X;` and other non-function friends have no
+            // function body to emit.
             while self.peek() != &TokenKind::Semi && self.peek() != &TokenKind::Eof {
                 self.advance();
             }
@@ -249,6 +258,20 @@ impl Parser {
             }
             return Ok(true);
         }
-        Ok(false)
+        let specifiers = self.parse_specifier_type()?;
+        let return_type = self.parse_declarator_prefix(&specifiers)?;
+        let name = match self.advance().kind.clone() {
+            TokenKind::Ident(id) => id,
+            _ => {
+                return Err(CompileError::new(
+                    "Expected friend function name",
+                    self.current().line,
+                    self.current().col,
+                ));
+            }
+        };
+        body.friends
+            .push(self.parse_function_tail(name, return_type, start.line, start.col)?);
+        Ok(true)
     }
 }

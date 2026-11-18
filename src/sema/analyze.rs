@@ -252,6 +252,37 @@ impl Sema {
                     visible_functions.insert(sig.mangled_name.clone());
                     self.register_function(sig);
                 }
+                Decl::FriendFunction { class_name, func } => {
+                    let mut f = func.clone();
+                    self.resolve_and_instantiate_type(&mut f.return_type, f.line, f.col)?;
+                    for p in &mut f.params {
+                        self.resolve_and_instantiate_type(&mut p.ty, f.line, f.col)?;
+                    }
+                    let mangled = self.mangle_name(&f.name, &f.params);
+                    let sig = FunctionSig {
+                        qualifiers: FunctionQualifiers::default(),
+                        name: f.name.clone(),
+                        mangled_name: mangled.clone(),
+                        return_type: f.return_type.clone(),
+                        param_types: f.params.iter().map(|p| p.ty.clone()).collect(),
+                        default_args: f.params.iter().map(|p| p.default_val.clone()).collect(),
+                        is_static: false,
+                        is_explicit: false,
+                        ref_qualifier: f.ref_qualifier,
+                    };
+                    // Only the mangled spelling is reachable by ordinary
+                    // lookup; the source name is reserved for ADL.
+                    self.functions.entry(mangled).or_default().push(sig.clone());
+                    self.hidden_friends
+                        .entry(class_name.clone())
+                        .or_default()
+                        .push(sig.clone());
+                    let plain = crate::QualifiedName::new(class_name).plain().to_string();
+                    if plain != *class_name {
+                        self.hidden_friends.entry(plain).or_default().push(sig);
+                    }
+                    *decl = Decl::Function(f);
+                }
                 Decl::Template(t)
                     if let crate::ast::template::TemplateKind::Function(f) = &t.kind =>
                 {

@@ -114,6 +114,9 @@ pub struct Sema {
     pub enum_types: HashMap<String, String>,
     pub scoped_enums: HashSet<String>,
     pub functions: HashMap<String, Vec<FunctionSig>>,
+    /// Friend functions defined in a class, keyed by that class's name.
+    /// Found only through ADL, never through ordinary lookup.
+    pub hidden_friends: HashMap<String, Vec<FunctionSig>>,
     pub global_vars: HashMap<String, VarSymbol>,
     pub scopes: Vec<Scope>,
     pub current_func_return_type: Option<Type>,
@@ -194,6 +197,7 @@ impl Sema {
             enum_types: HashMap::new(),
             scoped_enums: HashSet::new(),
             functions: HashMap::new(),
+            hidden_friends: HashMap::new(),
             global_vars: HashMap::new(),
             scopes: Vec::new(),
             current_func_return_type: None,

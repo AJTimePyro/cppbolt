@@ -4,11 +4,12 @@
 use super::*;
 use std::collections::HashSet;
 
-/// Associated namespaces of one argument type, as defined by
+/// Associated entities of one argument type, as defined by
 /// [basic.lookup.argdep]. Names and namespaces are de-duplicated.
 #[derive(Default)]
 struct AssociatedEntities {
     namespaces: Vec<String>,
+    classes: Vec<String>,
     seen: HashSet<String>,
 }
 
@@ -43,6 +44,11 @@ impl Sema {
             && !out.namespaces.iter().any(|ns| ns == namespace)
         {
             out.namespaces.push(namespace.to_string());
+        }
+        out.classes.push(key.clone());
+        let plain = QualifiedName::new(&key).plain().to_string();
+        if plain != key && !out.classes.contains(&plain) {
+            out.classes.push(plain.clone());
         }
         if let Some(layout) = self.struct_layouts.get(&key).cloned() {
             for base in layout.base_classes {
@@ -101,6 +107,11 @@ impl Sema {
             let qualified = format!("{}::{}", namespace, name);
             if let Some(sigs) = self.functions.get(&qualified).cloned() {
                 found.extend(sigs);
+            }
+        }
+        for class_name in out.classes {
+            if let Some(friends) = self.hidden_friends.get(&class_name).cloned() {
+                found.extend(friends.into_iter().filter(|sig| sig.name == name));
             }
         }
         found

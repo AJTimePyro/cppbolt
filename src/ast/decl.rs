@@ -54,6 +54,12 @@ pub struct FunctionDecl {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Decl {
     Function(FunctionDecl),
+    /// A friend function defined in a class. Registered for ADL through the
+    /// class, never through ordinary unqualified lookup.
+    FriendFunction {
+        class_name: String,
+        func: FunctionDecl,
+    },
     GlobalVar {
         name: String,
         ty: Type,

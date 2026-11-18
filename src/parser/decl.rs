@@ -48,8 +48,9 @@ impl Parser {
             || self.peek() == &TokenKind::KwClass
             || self.is_struct_after_alignas()
         {
-            let decl = self.parse_struct()?;
-            flatten_struct_decl(decl, declarations);
+            for decl in self.parse_struct()? {
+                flatten_struct_decl(decl, declarations);
+            }
             return Ok(());
         }
 
