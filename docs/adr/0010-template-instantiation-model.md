@@ -16,7 +16,7 @@ Compiling templated standard library headers like `<vector>`, `<utility>`, and `
 
 ## Decision
 1. Two-phase name lookup (`src/ast/template.rs`, `src/sema/analyze.rs`, `src/sema/overload.rs`).
-   `Program` stores template declarations as `TemplateDecl` nodes. When we register declarations, we record the overloads visible at each function template's definition, keyed by name, line and column. While we re-analyze a substituted template body or signature, ordinary unqualified lookup only sees that recorded set. A declaration that appears later in the file cannot rebind the name. Dependent calls also collect ADL candidates from the instantiated argument types and merge them with the ordinary set. We resolve types when a concrete specialization is requested (`src/sema/template_registry.rs`).
+   `Program` stores template declarations as `TemplateDecl` nodes. When we register declarations, we record the overloads and template identities visible at each function template's definition, keyed by name, line and column. While we re-analyze a substituted template body or signature, ordinary unqualified lookup and function-template candidate collection only see that recorded set. A declaration that appears later in the file cannot rebind the name. Member templates use the same snapshot when a pending method body is analyzed. Dependent calls also collect ADL candidates from the instantiated argument types and merge them with the ordinary set. We resolve types when a concrete specialization is requested (`src/sema/template_registry.rs`).
 
 2. Canonical specialization identity (`src/sema/template_registry.rs`).
    We name each specialization using its template name and canonical argument types (such as `Holder<int>` or `std::vector<int>`). We cache instantiated struct and function declarations in `Sema` so identical specializations reuse the same generated definitions. Only completed specializations enter the cache: a specialization still being built lives on the instantiation stack, and a failed one restores the state it wrote so a later request can retry it (`src/sema/template_state.rs`).
@@ -58,5 +58,6 @@ Compiling templated standard library headers like `<vector>`, `<utility>`, and `
 
 ### Negative / Trade-offs
 - Ill-formed non-dependent expressions in uninstantiated template bodies do not trigger compile errors unless an instantiation requests them.
-- The definition-time snapshot tracks overloads but not friend declarations introduced after a template definition.
+- The definition-time snapshot tracks overloads and template identities but not friend declarations introduced after a template definition.
+- Class-template member bodies are analyzed without a definition-time identity, so a later declaration can still bind inside them.
 - Hidden friends declared in a class template are not associated with a concrete specialization, so ADL does not find them.
