@@ -94,6 +94,20 @@ fn for_each_child_expr<'a, F: FnMut(&'a Expr)>(expr: &'a Expr, mut f: F) {
         | Expr::SizeofExpr(expr)
         | Expr::Delete { expr, .. }
         | Expr::Cast { expr, .. } => f(expr),
+        Expr::New {
+            args,
+            array_size,
+            placement,
+            ..
+        } => {
+            args.iter().for_each(&mut f);
+            if let Some(size) = array_size {
+                f(size);
+            }
+            if let Some(place) = placement {
+                f(place);
+            }
+        }
         Expr::ArraySubscript { array, index, .. } => {
             f(array);
             f(index);
@@ -141,6 +155,11 @@ pub fn rename_pack_identifiers(
     index: usize,
 ) {
     match expr {
+        Expr::SizeofPack { .. } => {
+            // Resolve the pack count before the slice mapping replaces the
+            // pack with a single element.
+            let _ = crate::sema::template_subst_expr_helpers::substitute_sizeof_pack(expr, mapping);
+        }
         Expr::Identifier(name)
             if packs.contains(name)
                 && matches!(mapping.get(name), Some(TemplateArg::TypePack(_))) =>
@@ -158,6 +177,21 @@ pub fn rename_pack_identifiers(
         }
         Expr::Unary { expr, .. } | Expr::Cast { expr, .. } => {
             rename_pack_identifiers(expr, packs, mapping, index)
+        }
+        Expr::New {
+            args,
+            array_size,
+            placement,
+            ..
+        } => {
+            args.iter_mut()
+                .for_each(|a| rename_pack_identifiers(a, packs, mapping, index));
+            if let Some(size) = array_size {
+                rename_pack_identifiers(size, packs, mapping, index);
+            }
+            if let Some(place) = placement {
+                rename_pack_identifiers(place, packs, mapping, index);
+            }
         }
         Expr::Assign { target, value, .. } | Expr::CompoundAssign { target, value, .. } => {
             rename_pack_identifiers(target, packs, mapping, index);

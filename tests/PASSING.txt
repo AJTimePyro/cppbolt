@@ -254,9 +254,11 @@ cxx17/fold_empty_pack
 cxx17/fold_member_pointer_arrow
 cxx17/fold_member_pointer_dot
 cxx17/fold_nested
+cxx17/fold_new_pack
 cxx17/fold_nttp
-cxx17/fold_overloaded_result
 cxx17/fold_overloaded_op
+cxx17/fold_overloaded_result
+cxx17/fold_sizeof_pack
 cxx17/fold_unary_left
 cxx17/fold_unary_right
 cxx17/inheritance_eight_byte_fields
