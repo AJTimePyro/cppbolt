@@ -115,7 +115,7 @@ impl Sema {
                 target.effective_args,
                 target.inst_name,
                 target.pos,
-            );
+            )?;
             Ok((spec, m))
         } else if let Some((spec, mut m)) =
             self.select_partial_specialization(target.name, target.effective_args, target.pos)?
@@ -125,7 +125,7 @@ impl Sema {
                 target.inst_name,
                 &mut m,
                 target.pos,
-            );
+            )?;
             Ok((spec, m))
         } else {
             let m = self.prepare_instantiation_mapping(
@@ -134,7 +134,7 @@ impl Sema {
                 target.effective_args,
                 target.inst_name,
                 target.pos,
-            );
+            )?;
             Ok((template_class, m))
         }
     }

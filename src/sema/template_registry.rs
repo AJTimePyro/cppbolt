@@ -113,6 +113,19 @@ impl Sema {
                 *class_name = self.resolve_alias_in_qualified_name(class_name);
                 self.resolve_and_instantiate_type(member_type, line, col)?;
             }
+            Type::Function {
+                return_type,
+                param_types,
+                ..
+            } => {
+                self.resolve_and_instantiate_type(return_type, line, col)?;
+                for p in param_types.iter_mut() {
+                    self.resolve_and_instantiate_type(p, line, col)?;
+                }
+            }
+            Type::BoundMemberFunction { member_type, .. } => {
+                self.resolve_and_instantiate_type(member_type, line, col)?;
+            }
             _ => {}
         }
         Ok(())

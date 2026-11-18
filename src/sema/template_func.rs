@@ -2,7 +2,9 @@ use super::template_deduce::{
     deduce_template_arguments, parse_types_list, split_template_call_name,
 };
 use super::template_partial_order::{self, FunctionTemplateCand};
-use super::template_subst_func::{substitute_function_body, substitute_function_signature};
+use super::template_subst_func::{
+    mark_dependent_nested, substitute_function_body, substitute_function_signature,
+};
 use super::*;
 use crate::ast::decl::RefQualifier;
 use crate::diagnostics::{SubstitutionFailure, TemplateFailure};
@@ -253,6 +255,18 @@ impl Sema {
         let inst_name = format!("{}<{}>", template_decl.name, canonical_args);
         let (mut func_decl, active_mapping) =
             substitute_function_signature(template_decl, mapping, Some(inst_name))?;
+
+        // A default template argument is part of the signature. Its dependent
+        // nested types must resolve even when the argument is unused in it.
+        for param in template_params {
+            if let Some(def) = &param.default_type
+                && let Some(TemplateArg::Type(arg)) = mapping.get(&param.name)
+            {
+                let mut resolved = arg.clone();
+                mark_dependent_nested(def, &mut resolved, mapping);
+                self.resolve_signature_type(&mut resolved, pos.line, pos.col)?;
+            }
+        }
 
         // Resolving a nested type can instantiate another template. Errors from
         // that side effect are outside the immediate context and stay hard.

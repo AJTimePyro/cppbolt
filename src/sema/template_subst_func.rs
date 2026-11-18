@@ -50,7 +50,7 @@ fn is_dependent_qualified_name(name: &str, mapping: &HashMap<String, TemplateArg
 
 /// Records dependent qualified names formed by substitution so type resolution
 /// can reject a missing nested type as a substitution failure.
-fn mark_dependent_nested(
+pub(super) fn mark_dependent_nested(
     original: &Type,
     substituted: &mut Type,
     mapping: &HashMap<String, TemplateArg>,
@@ -73,6 +73,35 @@ fn mark_dependent_nested(
         | (Type::PackExpansion(a), Type::PackExpansion(b))
         | (Type::DependentArray(a, _), Type::DependentArray(b, _))
         | (Type::Array(a, _), Type::Array(b, _)) => mark_dependent_nested(a, b, mapping),
+        (
+            Type::Function {
+                return_type: a,
+                param_types: ap,
+                ..
+            },
+            Type::Function {
+                return_type: b,
+                param_types: bp,
+                ..
+            },
+        ) => {
+            mark_dependent_nested(a, b, mapping);
+            for (orig, subst) in ap.iter().zip(bp.iter_mut()) {
+                mark_dependent_nested(orig, subst, mapping);
+            }
+        }
+        (
+            Type::MemberPointer { member_type: a, .. },
+            Type::MemberPointer { member_type: b, .. },
+        )
+        | (
+            Type::BoundMemberFunction { member_type: a, .. },
+            Type::BoundMemberFunction { member_type: b, .. },
+        )
+        | (Type::Aligned(a, _), Type::Aligned(b, _))
+        | (Type::DependentAlignas(a, _), Type::DependentAlignas(b, _)) => {
+            mark_dependent_nested(a, b, mapping);
+        }
         (Type::TemplateInstance { args: a, .. }, Type::TemplateInstance { args: b, .. }) => {
             for (orig, subst) in a.iter().zip(b.iter_mut()) {
                 mark_dependent_nested(orig, subst, mapping);
@@ -82,19 +111,6 @@ fn mark_dependent_nested(
     }
 }
 
-fn substitute_param_type(
-    original: &Type,
-    mapping: &HashMap<String, TemplateArg>,
-    injected_class: Option<(&str, &Type)>,
-    mark_dependent: bool,
-) -> Result<Type, CompileError> {
-    let mut ty = substitute_type(original, mapping, injected_class)?;
-    if mark_dependent {
-        mark_dependent_nested(original, &mut ty, mapping);
-    }
-    Ok(ty)
-}
-
 fn substitute_params(
     params: &[Param],
     unbound_pack_names: &HashSet<String>,
@@ -102,6 +118,13 @@ fn substitute_params(
     injected_class: Option<(&str, &Type)>,
     mark_dependent: bool,
 ) -> Result<Vec<Param>, CompileError> {
+    let subst_ty = |ty: &Type, map: &HashMap<String, TemplateArg>| {
+        let mut subst = substitute_type(ty, map, injected_class)?;
+        if mark_dependent {
+            mark_dependent_nested(ty, &mut subst, map);
+        }
+        Ok(subst)
+    };
     let mut result = Vec::new();
     for p in params {
         if p.is_pack {
@@ -110,7 +133,7 @@ fn substitute_params(
             if !still_free.is_empty() {
                 result.push(Param {
                     name: p.name.clone(),
-                    ty: substitute_param_type(&p.ty, mapping, injected_class, mark_dependent)?,
+                    ty: subst_ty(&p.ty, mapping)?,
                     default_val: None,
                     is_pack: true,
                 });
@@ -124,7 +147,7 @@ fn substitute_params(
                 .unwrap_or(0);
             for i in 0..pack_len {
                 let subst_map = build_slice_mapping(mapping, &known, i);
-                let ty = substitute_param_type(&p.ty, &subst_map, injected_class, mark_dependent)?;
+                let ty = subst_ty(&p.ty, &subst_map)?;
                 let stripped = match ty {
                     Type::PackExpansion(inner) => *inner,
                     other => other,
@@ -143,7 +166,7 @@ fn substitute_params(
             }
             result.push(Param {
                 name: p.name.clone(),
-                ty: substitute_param_type(&p.ty, mapping, injected_class, mark_dependent)?,
+                ty: subst_ty(&p.ty, mapping)?,
                 default_val,
                 is_pack: false,
             });
@@ -273,15 +296,14 @@ fn substitute_signature(
         .map(|p| p.name.clone())
         .collect();
 
+    let mut return_type = substitute_type(&func.return_type, mapping, injected_class)?;
+    if mark_dependent {
+        mark_dependent_nested(&func.return_type, &mut return_type, mapping);
+    }
     let decl = FunctionDecl {
         qualifiers: FunctionQualifiers::default(),
         name: new_name.unwrap_or_else(|| substitute_func_name(&func.name, injected_class)),
-        return_type: substitute_param_type(
-            &func.return_type,
-            mapping,
-            injected_class,
-            mark_dependent,
-        )?,
+        return_type,
         params: substitute_params(
             &func.params,
             &unbound_pack_names,
