@@ -256,9 +256,9 @@ impl Sema {
 
         // Resolving a nested type can instantiate another template. Errors from
         // that side effect are outside the immediate context and stay hard.
-        self.resolve_and_instantiate_type(&mut func_decl.return_type, pos.line, pos.col)?;
+        self.resolve_signature_type(&mut func_decl.return_type, pos.line, pos.col)?;
         for p in &mut func_decl.params {
-            self.resolve_and_instantiate_type(&mut p.ty, pos.line, pos.col)?;
+            self.resolve_signature_type(&mut p.ty, pos.line, pos.col)?;
         }
 
         let mangled = self.mangle_name(&func_decl.name, &func_decl.params);

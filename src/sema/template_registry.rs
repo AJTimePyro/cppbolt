@@ -9,7 +9,7 @@ use crate::ast::decl::{Decl, FunctionDecl};
 use crate::ast::expr::Expr;
 use crate::ast::template::{TemplateClass, TemplateParam};
 use crate::ast::types::Type;
-use crate::diagnostics::ErrorKind;
+use crate::diagnostics::{ErrorKind, SubstitutionFailure, TemplateFailure};
 use crate::name::QualifiedName;
 use std::collections::HashMap;
 
@@ -67,9 +67,7 @@ impl Sema {
             }
             Type::DependentNested(name) => {
                 let Some(resolved) = self.resolve_nested_type_name(name, line, col)? else {
-                    let (base, member) = name
-                        .rsplit_once("::")
-                        .unwrap_or_else(|| ("", name.as_str()));
+                    let (base, member) = name.rsplit_once("::").unwrap_or(("", name.as_str()));
                     return Err(CompileError::new(
                         format!("no type named '{}' in '{}'", member, base),
                         line,
@@ -120,6 +118,28 @@ impl Sema {
         Ok(())
     }
 
+    /// Resolves a signature type: a missing nested type discards the template
+    /// candidate, while an error from instantiating another template stays hard.
+    pub(super) fn resolve_signature_type(
+        &mut self,
+        ty: &mut Type,
+        line: usize,
+        col: usize,
+    ) -> Result<(), TemplateFailure> {
+        self.resolve_and_instantiate_type(ty, line, col)
+            .map_err(|error| {
+                if error.kind == ErrorKind::Substitution {
+                    TemplateFailure::Substitution(SubstitutionFailure::new(
+                        error.message,
+                        error.line,
+                        error.col,
+                    ))
+                } else {
+                    TemplateFailure::Hard(error)
+                }
+            })
+    }
+
     fn resolve_struct_type_alias(
         &mut self,
         ty: &mut Type,
@@ -166,7 +186,17 @@ impl Sema {
         for arg in &mut args {
             self.resolve_and_instantiate_type(arg, line, col)?;
         }
-        let inst = self.instantiate_class_template(tmpl_name, &args, line, col)?;
+        // An error while instantiating the base template is outside the
+        // signature's immediate context, even if it names a dependent type.
+        let inst = self
+            .instantiate_class_template(tmpl_name, &args, line, col)
+            .map_err(|error| {
+                if error.kind == ErrorKind::Substitution {
+                    error.with_kind(ErrorKind::Semantic)
+                } else {
+                    error
+                }
+            })?;
         let canon = format!("{}::{}", inst, &name[gt_pos + 3..]);
         if let Some(alias) = self.lookup_type_alias(&canon) {
             return Ok(Some(alias));

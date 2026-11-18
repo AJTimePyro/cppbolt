@@ -11,6 +11,7 @@ use super::template_deduce::{
 use super::template_subst_func::{substitute_function_body, substitute_function_signature};
 use super::*;
 use crate::ast::decl::RefQualifier;
+use crate::diagnostics::TemplateFailure;
 
 /// The outcome of a call that names a class.
 pub(super) enum ConstructorCall {
@@ -349,15 +350,28 @@ impl Sema {
                 } else {
                     None
                 };
-                let Ok((mut spec_func, active_mapping)) =
-                    substitute_function_signature(&cand, &mapping, new_name)
-                else {
-                    continue;
+                let signature = substitute_function_signature(&cand, &mapping, new_name)
+                    .map_err(TemplateFailure::from)
+                    .and_then(|(mut func, active_mapping)| {
+                        self.resolve_signature_type(&mut func.return_type, pos.line, pos.col)?;
+                        for p in &mut func.params {
+                            self.resolve_signature_type(&mut p.ty, pos.line, pos.col)?;
+                        }
+                        Ok((func, active_mapping))
+                    });
+                let (mut spec_func, active_mapping) = match signature {
+                    Ok(formed) => formed,
+                    Err(TemplateFailure::Substitution(failure)) => {
+                        let failure = failure.at_call(pos.line, pos.col);
+                        last_rejection = Some(CompileError::new(
+                            format!("substitution failure: {}", failure.message),
+                            failure.line,
+                            failure.col,
+                        ));
+                        continue;
+                    }
+                    Err(TemplateFailure::Hard(error)) => return Err(error),
                 };
-                self.resolve_and_instantiate_type(&mut spec_func.return_type, pos.line, pos.col)?;
-                for p in &mut spec_func.params {
-                    self.resolve_and_instantiate_type(&mut p.ty, pos.line, pos.col)?;
-                }
                 let qual_name = format!("{}::{}", class_name, spec_func.name);
                 let mut params = spec_func.params.clone();
                 if !spec_func.is_static {

@@ -55,7 +55,7 @@ fn mark_dependent_nested(
     substituted: &mut Type,
     mapping: &HashMap<String, TemplateArg>,
 ) {
-    let dependent_name = match (&*original, &*substituted) {
+    let dependent_name = match (original, &*substituted) {
         (Type::Struct(orig), Type::Struct(name)) if is_dependent_qualified_name(orig, mapping) => {
             Some(name.clone())
         }
