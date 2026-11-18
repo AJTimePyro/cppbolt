@@ -366,7 +366,7 @@ impl Sema {
             return Ok(None);
         };
         let plain = QualifiedName::new(&inst).plain();
-        Ok(self
+        let value = self
             .static_const_values
             .get(&format!("{}::{}", inst, member))
             .copied()
@@ -374,7 +374,14 @@ impl Sema {
                 self.static_const_values
                     .get(&format!("{}::{}", plain, member))
                     .copied()
-            }))
+            });
+        // The canonical name can include filled default arguments. Keep the
+        // value under the spelling used at the call site as well, so an
+        // enclosing constant expression can read it.
+        if let Some(value) = value {
+            self.static_const_values.insert(name.to_string(), value);
+        }
+        Ok(value)
     }
 
     fn resolve_nested_type_name(

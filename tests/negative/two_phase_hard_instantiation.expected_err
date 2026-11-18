@@ -1,0 +1,1 @@
+tests/negative/two_phase_hard_instantiation.cpp:4:61: error: no type named 'type' in 'Bad'
