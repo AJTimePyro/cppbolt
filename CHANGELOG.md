@@ -48,6 +48,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Parsed class-level `final` and rejected deriving from final classes; rejected virtual member-function templates.
 - Added regression tests for overload identity, qualifier mismatches, covariant returns, noexcept compatibility, and class-level final.
 
+### Pointers to Members (C++17)
+- Added data-member (`T C::*`) and member-function (`R (C::*)()`) pointer types across AST, parser, semantic analysis, and WebAssembly codegen, with `.*`/`->*` application, overloaded member-function resolution by target type, base-to-derived conversions, virtual dispatch, multiple-inheritance subobject adjustments, and `noexcept` conversion rules.
+- Added fold expressions over the `.*` and `->*` operators, and documented the value representation and dispatch ABI in ADR 0015.
+
 ### Pointer-to-Member Audit Remediation
 - Preserved and validated `override` and `final`: they now imply virtual, same-signature methods override without a keyword, and overriding a `final` method or using `override` with no base virtual is rejected.
 - Fixed invalid Wasm when synthesized constructors copied a base subobject containing 8-byte fields (`long long`/`double`); base subobjects are now copied bytewise.

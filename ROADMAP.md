@@ -32,6 +32,7 @@ These features build naturally on existing language constructs without requiring
 - [x] **Comma Expressions**: Parse and lower sequence operator `(a, b)` at precedence 1 without conflicting with argument lists or declarators.
 - [x] **C++17 Selection Initializers**: Parse and desugar `if (init; cond)` and `switch (init; cond)` with scope isolated to the selection body.
 - [x] **Non-Static Data Member Initializers (NSDMI)**: Support in-class field defaults (`= expr`, `{ ... }`) in constructors and aggregate initialization.
+- [x] **Pointers to Members & Multiple Inheritance**: C++17 data-member and member-function pointers (`T C::*`, `R (C::*)()`), `.*`/`->*` application and fold expressions, virtual and multiple-inheritance subobject adjustments, base-to-derived conversions, and direct/indirect base layout.
 
 ---
 
