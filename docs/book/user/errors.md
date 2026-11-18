@@ -44,15 +44,6 @@ The following catalog lists diagnostics emitted by the compiler, paired with rea
 
 ### Unsupported C++ Features (`ErrorKind::Unsupported`)
 
-#### `multiple inheritance is not supported`
-- **Cause**: A class declaration attempts to inherit from more than one base class.
-- **Trigger** (`tests/negative/multiple_inheritance.cpp`):
-  ```cpp
-  struct A {};
-  struct B {};
-  struct C : public A, public B {}; // error: multiple inheritance is not supported
-  ```
-
 #### `virtual inheritance is not supported`
 - **Cause**: A base class specifier includes the `virtual` keyword.
 - **Trigger** (`tests/negative/virtual_inheritance.cpp`):

@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fold Expressions (C++17)
+- Added unary and binary folds over all 32 fold operators, with standard empty-pack fallbacks (`&&` to `true`, `||` to `false`, `,` to a void expression) and evaluation in constexpr contexts, array bounds, and non-type template arguments.
+- Fixed folds over overloaded operators, assignment folds, folds whose pattern contains `new` or `sizeof...`, and chained results that need a converting constructor.
+
+### Compiler Audit Remediation
+- Typed `new` expressions as pointers to the allocated type so derived-to-base conversion applies after multiple inheritance.
+- Deduplicated vtables by physical vptr offset and kept null covariant returns null.
+- Rejected explicit template packs with too few call arguments and propagated invalid dependent array bounds instead of sizing zero.
+- Ranked variadic overloads by fixed parameter count and kept unbound member template packs during class instantiation.
+- Limited override checks to genuine virtual declarations and ran member destructors on explicit `return` in a destructor.
+- Restored the repository census check by splitting long functions and large files, and removed unused integer sequence helpers.
+
 ### Alias and Specialization Identity
 - Resolved alias-named base mem-initializers to the canonical direct base, so `using Alias = Base<int>; struct D : Alias { D() : Alias(42) {} };` forwards its constructor arguments correctly. Covers namespace-qualified, enclosing-class, nested specialization, plain-struct, non-polymorphic, multiple-alias, multiple-inheritance, three-level, and covariant cases.
 - Canonicalized constructor argument collection and reachability so alias-named bases keep their constructor and destructor functions reachable; a genuinely unresolved mem-initializer is now a compile error instead of silently default-constructing the base.

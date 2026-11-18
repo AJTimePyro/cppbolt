@@ -55,5 +55,4 @@ Standard containers and utilities such as `std::tuple`, variadic `std::make_uniq
 - Overload resolution disambiguates variadic and non-variadic overloads per ISO C++11 partial ordering rules.
 
 ### Negative / Trade-offs
-- C++17 fold expressions (`(... + args)`) are deferred to a subsequent implementation phase.
 - `std::tuple` element access via `std::get` and `std::tuple_element` supports up to 17 elements (indices 0..16).
