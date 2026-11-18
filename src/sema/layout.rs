@@ -412,9 +412,6 @@ impl Sema {
             });
         }
         for (base_name, base_offset) in &acc.base_offsets {
-            if tables.iter().any(|t| t.owner_offset == *base_offset) {
-                continue;
-            }
             let Some(bl) = self.struct_layouts.get(base_name) else {
                 continue;
             };
@@ -424,9 +421,15 @@ impl Sema {
             let Some(first) = bl.vtables.first() else {
                 continue;
             };
+            // Several subobjects can share one physical vptr. Installing two
+            // tables there would overwrite the first one's slots.
+            let vptr_offset = *base_offset + first.vptr_offset;
+            if tables.iter().any(|t| t.vptr_offset == vptr_offset) {
+                continue;
+            }
             tables.push(VTableInfo {
                 owner: base_name.clone(),
-                vptr_offset: *base_offset,
+                vptr_offset,
                 owner_offset: *base_offset,
                 slots: first.slots.clone(),
             });

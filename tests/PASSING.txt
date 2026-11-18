@@ -281,6 +281,7 @@ cxx17/pmf_specialized_member
 cxx17/pmf_virtual_override_isolation
 cxx17/ref_qualified_dispatch
 cxx17/secondary_base_reference
+cxx17/shared_vptr
 cxx17/template_base_specialization
 cxx17/virtual_overload_identity
 cxx17/virtual_override_keyword
