@@ -78,11 +78,14 @@ fn deduce_pack_arguments(
         Type::PackExpansion(inner) => &**inner,
         other => other,
     };
-    let pack_name = template_params
-        .iter()
-        .find(|p| p.is_pack)
-        .map(|p| p.name.clone())
-        .unwrap_or_else(|| pack_param.name.clone());
+    let pack_name = match pattern_ty {
+        Type::TypeParam(name) => name.clone(),
+        _ => template_params
+            .iter()
+            .find(|p| p.is_pack)
+            .map(|p| p.name.clone())
+            .unwrap_or_else(|| pack_param.name.clone()),
+    };
 
     let mut pack_types = Vec::new();
     for (i, arg_ty) in arg_types.iter().enumerate().skip(start) {
@@ -130,7 +133,7 @@ fn deduce_pack_arguments(
 
 fn validate_arg_counts(
     has_pack: bool,
-    non_pack_params: &[crate::ast::decl::Param],
+    fixed_params: &[&crate::ast::decl::Param],
     total_params: usize,
     arg_count: usize,
     pos: ExprPos,
@@ -145,7 +148,7 @@ fn validate_arg_counts(
             pos.col,
         ));
     }
-    let min_args = non_pack_params
+    let min_args = fixed_params
         .iter()
         .take_while(|p| p.default_val.is_none())
         .count();
@@ -251,10 +254,16 @@ pub fn deduce_template_arguments(
     } else {
         func_decl.params.len()
     };
-    let non_pack_params = &func_decl.params[..non_pack_count];
+    // A function parameter pack before the deduced pack is a non-deduced
+    // context: it contributes no arguments, so only fixed parameters consume
+    // positions in the call.
+    let fixed_params: Vec<_> = func_decl.params[..non_pack_count]
+        .iter()
+        .filter(|p| !p.is_pack)
+        .collect();
     validate_arg_counts(
         has_pack,
-        non_pack_params,
+        &fixed_params,
         func_decl.params.len(),
         arg_types.len(),
         pos,
@@ -271,13 +280,13 @@ pub fn deduce_template_arguments(
     );
     validate_explicit_pack_count(
         has_pack,
-        non_pack_count,
+        fixed_params.len(),
         explicit_pack.len(),
         arg_types.len(),
         pos,
     )?;
 
-    for (i, p) in non_pack_params.iter().enumerate() {
+    for (i, p) in fixed_params.iter().enumerate() {
         if i >= arg_types.len() {
             break;
         }
@@ -300,7 +309,7 @@ pub fn deduce_template_arguments(
             &func_decl.params[non_pack_count],
             template_params,
             call_args,
-            non_pack_count + explicit_pack.len(),
+            fixed_params.len() + explicit_pack.len(),
             pos,
         )?;
         let mut pack_types = explicit_pack;
