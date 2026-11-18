@@ -17,12 +17,17 @@ impl Sema {
         line: usize,
         col: usize,
     ) -> Result<(), TemplateFailure> {
-        let saved = std::mem::replace(&mut self.signature_params, func.params.clone());
+        let saved = std::mem::take(&mut self.signature_params);
         let result = (|| {
-            self.resolve_signature_type(&mut func.return_type, line, col)?;
+            // A parameter's own type cannot name the parameters being bound,
+            // so complete those with no parameters in scope first. Otherwise
+            // a `Decltype` parameter type would re-enter this resolver with
+            // the same parameter list and recurse forever.
             for p in &mut func.params {
                 self.resolve_signature_type(&mut p.ty, line, col)?;
             }
+            self.signature_params = func.params.clone();
+            self.resolve_signature_type(&mut func.return_type, line, col)?;
             Ok(())
         })();
         self.signature_params = saved;
@@ -40,17 +45,13 @@ impl Sema {
         probe.speculating = true;
         probe.speculative_hard = false;
         probe.enter_scope();
-        let mut params = self.signature_params.clone();
-        for param in &mut params {
-            probe.resolve_and_instantiate_type(&mut param.ty, line, col)?;
-        }
         if let Some(scope) = probe.scopes.last_mut() {
-            for param in params {
+            for param in &self.signature_params {
                 scope.vars.insert(
                     param.name.clone(),
                     VarSymbol {
                         name: param.name.clone(),
-                        ty: param.ty,
+                        ty: param.ty.clone(),
                         is_global: false,
                         stack_offset: 0,
                     },
@@ -61,13 +62,37 @@ impl Sema {
         let result = probe.analyze_expr_keeping_reference(&mut operand);
         match result {
             Ok(ty) => {
-                if !parenthesized
-                    && matches!(operand, Expr::Identifier(_) | Expr::MemberAccess { .. })
-                {
-                    // Unparenthesized id-expression or member access names the
-                    // declared type, without a reference.
-                    Ok(ty.strip_reference().clone())
-                } else if parenthesized && operand.is_lvalue() && !ty.is_reference() {
+                if !parenthesized {
+                    // C++17 names the declared type of the entity, not the
+                    // type the analyzer gave the expression: a reference
+                    // member stays a reference and a const receiver adds no
+                    // const to the member's declared type.
+                    match &operand {
+                        Expr::Identifier(name) => {
+                            if let Some(var) = probe.lookup_var(name) {
+                                Ok(var.ty.clone())
+                            } else {
+                                Ok(ty)
+                            }
+                        }
+                        Expr::MemberAccess {
+                            object,
+                            member,
+                            is_arrow,
+                            pos,
+                        } => {
+                            let mut obj = (**object).clone();
+                            let obj_ty = probe.analyze_expr(&mut obj)?;
+                            let (class, _) = probe.member_struct_name(&obj_ty, *is_arrow, *pos)?;
+                            if let Some(fld) = probe.find_field_in_class(&class, member) {
+                                Ok(fld.ty.clone())
+                            } else {
+                                Ok(ty)
+                            }
+                        }
+                        _ => Ok(ty),
+                    }
+                } else if operand.is_lvalue() && !ty.is_reference() {
                     Ok(Type::Reference(Box::new(ty)))
                 } else {
                     Ok(ty)
