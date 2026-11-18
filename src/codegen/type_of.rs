@@ -63,6 +63,7 @@ impl<'a> Codegen<'a> {
             Expr::Cast { target_type, .. } => target_type.clone(),
             Expr::TypedInitList { ty, .. } => ty.clone(),
             Expr::InitializerList { .. } => Type::Void,
+            Expr::New { ty, .. } => Type::Pointer(Box::new(ty.clone())),
             Expr::Delete { .. } => Type::Void,
             _ => Type::Int,
         }

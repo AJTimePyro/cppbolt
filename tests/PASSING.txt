@@ -147,6 +147,7 @@ classes_oop/move_semantics_types
 classes_oop/move_suppression_rules
 classes_oop/multiple_inheritance_offsets
 classes_oop/named_rvalue_ref_is_lvalue
+classes_oop/new_secondary_base
 classes_oop/operators/chained_compound_assign
 classes_oop/operators/const_subscript
 classes_oop/operators/contextual_bool_comprehensive
