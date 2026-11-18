@@ -166,7 +166,8 @@ cargo run --bin cppbolt-testrunner -- target/release/cppbolt-cli
   - Nested class type specifiers (`Outer::Inner`) enforce access control during type resolution. Private nested types can only be referenced from within the enclosing class, its member methods, or template specializations parameterized with the nested type. Referencing private nested types externally triggers a compile diagnostic (`tests/negative/nested_type_private_access.cpp`). Nested class short names remain scoped to the outer struct and do not pollute the global namespace (`tests/negative/nested_class_unqualified_leak.cpp`).
   - Chained dependent type aliases resolve iteratively to a fixed point during template specialization, supporting arbitrary alias chains without fixed loop bounds (`tests/templates_operators/template_nested_alias_chain.cpp`). Member type aliases in the `std` namespace are restricted to templates actually defined within `std`.
   - Dependent member type specifiers require the `typename` prefix (`typename Container<T>::iterator`). Unqualified `typename` or non-type usage is rejected at parse time.
-  - Instantiation recursion is limited to 500 levels (`template instantiation depth exceeded (limit: 500)`).
+  - Instantiation recursion is limited to 500 levels (`template instantiation depth exceeded (limit: 500)`). The depth counter and instantiation stack are restored on every exit path, including errors.
+  - Instantiation caches record only completed specializations. A specialization still being built stays on the instantiation stack for recursive references. A failed instantiation restores the layouts, aliases, globals, methods and synthesized declarations it wrote, letting a later request retry it. Function templates drop their in-progress marker when body analysis fails; a failed body is never reused as a successful specialization.
 
 ### 2. Nesting Limits per Construct
 

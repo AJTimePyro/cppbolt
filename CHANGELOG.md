@@ -15,6 +15,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The compiler reuses the signature formed during candidate selection when instantiating the winner, substituting only its body. Deduction of two trailing function parameter packs now assigns trailing call arguments to the last pack, matching clang and GCC.
 - Dependent nested types in template signatures (`typename T::type`, `typename Traits<T>::type`) resolve through aliases registered when the base class is instantiated. A missing nested type discards the candidate; an error from instantiating the base template stays hard. Nested aliases resolve in parameter and return types, including aliases of aliases, default template arguments, and function-pointer parameters. An invalid nested type inside a class template's own alias now fails that instantiation instead of being stored as an opaque type.
 
+### Template Instantiation State
+- Class template instantiation caches only completed specializations. A specialization still being built stays on the instantiation stack and satisfies recursive references, but is not treated as finished. A failed instantiation restores the layouts, aliases, globals, methods, synthesized declarations and counters it wrote, so a later request can retry it from a clean state.
+- The instantiation stack and depth counter are now unwound on every exit path, including errors from specialization selection and nested-type resolution. Function templates drop their in-progress marker when body analysis fails, so a failed specialization is never reused as a successful one.
+- Added regression tests for failed class and function instantiations, recursive and nested instantiation, repeated and distinct specializations, substitution failures followed by valid overloads, and member-template rejection without leaked registrations.
+
 ### Fold Expressions (C++17)
 - Added unary and binary folds over all 32 fold operators, with standard empty-pack fallbacks (`&&` to `true`, `||` to `false`, `,` to a void expression) and evaluation in constexpr contexts, array bounds, and non-type template arguments.
 - Fixed folds over overloaded operators, assignment folds, folds whose pattern contains `new` or `sizeof...`, and chained results that need a converting constructor.

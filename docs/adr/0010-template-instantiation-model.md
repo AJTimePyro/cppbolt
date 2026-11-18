@@ -19,7 +19,7 @@ Compiling templated standard library headers like `<vector>`, `<utility>`, and `
    We store template declarations directly in `Program` as `TemplateDecl` nodes without early name binding (`src/ast/template.rs`). We validate and resolve types only when a concrete specialization is requested (`src/sema/template_registry.rs`).
 
 2. Canonical specialization identity (`src/sema/template_registry.rs`).
-   We name each specialization using its template name and canonical argument types (such as `Holder<int>` or `std::vector<int>`). We cache instantiated struct and function declarations in `Sema` so identical specializations reuse the same generated definitions.
+   We name each specialization using its template name and canonical argument types (such as `Holder<int>` or `std::vector<int>`). We cache instantiated struct and function declarations in `Sema` so identical specializations reuse the same generated definitions. Only completed specializations enter the cache: a specialization still being built lives on the instantiation stack, and a failed one restores the state it wrote so a later request can retry it (`src/sema/template_state.rs`).
 
 3. Lazy member function instantiation (`src/sema/template_registry.rs`, `src/sema/expr_ops.rs`).
    We lay out fields and register member function signatures when instantiating a class template. We defer member function body analysis and emission until called or referenced, permitting template arguments that do not support unused member methods. Non-virtual destructors instantiate eagerly alongside virtual methods so synthesized cleanup logic can drop values on scope exit.
@@ -37,7 +37,7 @@ Compiling templated standard library headers like `<vector>`, `<utility>`, and `
    Function template registration maintains a candidate vector for each identifier. Overload resolution filters candidates by parameter count and default arguments before argument deduction, allowing overloads like `sort(first, last)` and `sort(first, last, comp)` to coexist.
 
 8. Recursion depth budget (`src/sema/template_registry.rs`).
-   We cap recursion depth at 500 levels, rejecting recursive template expansions with an explicit diagnostic before exhausting the WebAssembly call stack.
+   We cap recursion depth at 500 levels, rejecting recursive template expansions with an explicit diagnostic before exhausting the WebAssembly call stack. The stack and depth counter are unwound on every exit path, including errors, so a rejected expansion cannot leave later instantiations artificially deep.
 
 9. Nested class instantiation in class templates (`src/sema/template_nested.rs`).
    When instantiating a class template containing member struct declarations (such as `AVLTree<T>::Node`), we capture nested AST declarations in `TemplateClass` and clone them with outer type arguments substituted. Each nested struct receives its qualified canonical name (such as `std::detail::AVLTree<int, int>::Node`), computes its record layout, and registers synthesized lifecycle hooks and member methods.
