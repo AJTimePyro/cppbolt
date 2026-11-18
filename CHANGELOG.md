@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Standard Library (C++17)
+- Added C++17 SFINAE library traits: `std::enable_if`/`enable_if_t`, `std::void_t`, `std::declval`, and `std::is_integral`/`is_integral_v` in `<type_traits>` and `<utility>`. They reuse the compiler's substitution-failure machinery instead of special-casing names. Supporting changes fold static const data members and variable template specializations into non-type arguments, expand alias templates when checking partial-specialization patterns, parse unnamed template parameters and variable templates, treat `volatile` as a type-start qualifier, and keep both constant maps in instantiation snapshots so rejected candidates leave no state behind. Fixed base-class constant aliasing so a derived trait's own value shadows the inherited one.
+
+### Partial Specialization (C++17)
+- Partial-specialization matching is now SFINAE-safe. An invalid type in a specialization's pattern, including a `decltype` operand or a dependent nested type, discards that specialization and lets the compiler try the next candidate instead of aborting; errors from instantiating another template stay hard. Added tests for ambiguous `decltype` and hard instantiation, and for empty, nested and mismatched packs, pack fallback, repeat after failure, pointer patterns, ordering, and SFINAE alternatives.
+
 ### Substitution Failure (C++17)
 - Added a typed `SubstitutionFailure` distinct from ordinary semantic errors. The compiler now discards only the candidate whose function or member template signature forms an invalid type, then continues with the remaining candidates.
 - Signature substitution no longer rewrites bodies or constructor initializers. The compiler substitutes member template bodies after selecting a candidate, so rejected candidates register no method or pending instantiation.
