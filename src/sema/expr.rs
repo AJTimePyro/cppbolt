@@ -75,7 +75,7 @@ impl Sema {
             }
             Expr::SizeofExpr(_) => Ok(Type::UnsignedInt),
             Expr::AlignofType(ty) => {
-                let _ = self.resolve_and_instantiate_type(ty, self.current_line, self.current_col);
+                self.resolve_and_instantiate_type(ty, self.current_line, self.current_col)?;
                 Ok(Type::UnsignedLong)
             }
             Expr::SizeofPack { name, pos } => Err(CompileError::new(

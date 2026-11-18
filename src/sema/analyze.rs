@@ -7,6 +7,7 @@ impl Sema {
         self.object_use_classes = collect_object_use_classes(program);
         self.attach_out_of_class_methods(program);
         self.seed_lifecycle_types(program);
+        self.seed_global_symbols(program);
         self.register_types(program)?;
         self.synthesize_destructors(program);
         self.synthesize_constructors(program);
@@ -75,6 +76,27 @@ impl Sema {
             Decl::Function(f) => !f.name.is_empty(),
             _ => true,
         });
+    }
+
+    /// Registers global symbols before type expressions are resolved, so a
+    /// `decltype` operand can name a global in a field or parameter type. The
+    /// declared type is refined later by `analyze_global_var`.
+    fn seed_global_symbols(&mut self, program: &Program) {
+        for decl in &program.declarations {
+            let Decl::GlobalVar { name, ty, .. } = decl else {
+                continue;
+            };
+            let symbol = VarSymbol {
+                name: name.clone(),
+                ty: ty.clone(),
+                is_global: true,
+                stack_offset: 0,
+            };
+            self.global_vars.insert(name.clone(), symbol.clone());
+            if let Some(alias) = QualifiedName::new(name).implicit_alias() {
+                self.global_vars.insert(alias.into_owned(), symbol);
+            }
+        }
     }
 
     fn register_types(&mut self, program: &mut Program) -> Result<(), CompileError> {
