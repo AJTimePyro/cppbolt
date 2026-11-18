@@ -246,6 +246,7 @@ cxx17/covariant_ref_mi
 cxx17/covariant_templates
 cxx17/explicit_dtor_call
 cxx17/final_class
+cxx17/fold_assign
 cxx17/fold_binary_left
 cxx17/fold_binary_right
 cxx17/fold_constexpr

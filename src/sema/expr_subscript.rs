@@ -84,7 +84,9 @@ impl Sema {
                 let mut e = (**inner).clone();
                 !matches!(self.analyze_expr(&mut e), Ok(t) if matches!(t.strip_reference().strip_const(), Type::Struct(_)))
             }
-            Expr::CompoundAssign { target, .. } => self.is_assignable_target(target, ty),
+            Expr::Assign { target, .. } | Expr::CompoundAssign { target, .. } => {
+                self.is_assignable_target(target, ty)
+            }
             _ => false,
         }
     }

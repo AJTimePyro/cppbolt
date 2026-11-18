@@ -148,11 +148,15 @@ impl<'a> Codegen<'a> {
                 ctx,
                 code,
             ),
+            Expr::Assign { target, .. } | Expr::CompoundAssign { target, .. } => {
+                self.compile_expr(expr, ctx, code)?;
+                code.push(OP_DROP);
+                self.compile_lvalue_addr(target, ctx, code)
+            }
             Expr::Call { .. }
             | Expr::TypedInitList { .. }
             | Expr::Binary { .. }
-            | Expr::Unary { .. }
-            | Expr::CompoundAssign { .. } => self.compile_lvalue_value(expr, ctx, code),
+            | Expr::Unary { .. } => self.compile_lvalue_value(expr, ctx, code),
             Expr::Cast {
                 target_type, expr, ..
             } if target_type.is_reference() => {
