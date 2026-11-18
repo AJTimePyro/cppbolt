@@ -265,6 +265,8 @@ cxx17/hide_nonvirtual_return
 cxx17/inheritance_eight_byte_fields
 cxx17/lifecycle_direct_bases
 cxx17/lifecycle_four_levels
+cxx17/overloaded_chain_conversion
+cxx17/overloaded_chain_mixed
 cxx17/param_alias_cv
 cxx17/param_array_adjust
 cxx17/param_top_level_cv

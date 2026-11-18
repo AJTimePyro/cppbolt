@@ -96,11 +96,9 @@ impl<'a> Codegen<'a> {
             cur = left;
         }
         let base = cur;
-        let is_class = |ty: &Type| matches!(ty.strip_const(), Type::Struct(_) | Type::Enum(_));
-        // shortcut: recompiling a chain prefix is quadratic; beyond this many
-        // terms keep the iterative path so long expressions still compile.
-        const RECOMPILE_LIMIT: usize = 16;
-        let recompile = spine.len() <= RECOMPILE_LIMIT;
+        // At most one step recompiles the prefix below it; the steps under it
+        // are skipped because the recompiled expression covers them.
+        let recompile_at = self.recompile_step(&spine, base, ctx);
 
         let mut lty = self.get_expr_type(base, ctx);
         for index in (0..spine.len()).rev() {
@@ -110,20 +108,13 @@ impl<'a> Codegen<'a> {
                 .binary_result_type(op, &lty, &rty)
                 .strip_reference()
                 .clone();
-            let overloaded =
-                recompile && op.op_name().is_some() && (is_class(&lty) || is_class(&rty));
-            // The next step recompiles this whole subtree when it is overloaded.
-            if index > 0 && recompile {
-                let (next_op, next_right, _) = spine[index - 1];
-                let next_rty = self.get_expr_type(next_right, ctx);
-                if next_op.op_name().is_some() && (is_class(&next_result) || is_class(&next_rty)) {
-                    lty = next_result;
-                    continue;
-                }
+            if recompile_at.is_some_and(|step| index > step) {
+                lty = next_result;
+                continue;
             }
             let left = if index + 1 == spine.len() {
                 Some(base)
-            } else if overloaded {
+            } else if recompile_at == Some(index) {
                 Some(whole_left)
             } else {
                 None

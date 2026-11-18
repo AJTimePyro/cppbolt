@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fold Expressions (C++17)
 - Added unary and binary folds over all 32 fold operators, with standard empty-pack fallbacks (`&&` to `true`, `||` to `false`, `,` to a void expression) and evaluation in constexpr contexts, array bounds, and non-type template arguments.
 - Fixed folds over overloaded operators, assignment folds, folds whose pattern contains `new` or `sizeof...`, and chained results that need a converting constructor.
+- Fixed wrong results from overloaded binary-operator chains longer than 16 operators. The chain recompiles a prefix only when the left operand needs a user-defined conversion, which keeps long chains correct up to the expression-depth limit.
 
 ### Compiler Audit Remediation
 - Typed `new` expressions as pointers to the allocated type so derived-to-base conversion applies after multiple inheritance.

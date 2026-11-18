@@ -184,7 +184,7 @@ To protect WebAssembly engine shadow stacks from exhaustion when compiling deep 
 
 These limits are verified by `tests/nesting.rs` and `tests/wasm_stack_safety.rs`.
 
-Wide left-associative expressions (sums of 20,000 terms), string concatenations (4,000 terms), and `else-if` chains (5,000 branches) are flattened iteratively and do not consume recursion depth.
+Wide left-associative expressions (sums of 20,000 terms), string concatenations (4,000 terms), and `else-if` chains (5,000 branches) are flattened iteratively and do not consume recursion depth. A step in an overloaded chain that needs a user-defined conversion recompiles its prefix as a call argument, so those chains consume expression depth. The compiler rejects them past 4,000 levels.
 
 ### 3. Printf Runtime Specifications
 The embedded `printf` engine (`src/runtime/format.rs`) supports:

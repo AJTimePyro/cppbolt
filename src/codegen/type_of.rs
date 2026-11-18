@@ -145,21 +145,9 @@ impl<'a> Codegen<'a> {
         if (matches!(lty.strip_const(), Type::Struct(_) | Type::Enum(_))
             || matches!(rty.strip_const(), Type::Struct(_) | Type::Enum(_)))
             && let Some(op_name) = op.op_name()
+            && let Some((_, sig)) = self.binary_operator_sig(op_name, lty, rty)
         {
-            let clean_lty = lty.strip_const();
-            if let Type::Struct(sname) = clean_lty
-                && let Some((_, sig)) = self.find_method(sname, op_name, std::slice::from_ref(rty))
-            {
-                return sig.return_type.clone();
-            }
-            if let Some((_, sig)) = self
-                .find_function(op_name, &[lty.clone(), rty.clone()])
-                .or_else(|| {
-                    self.find_function(&format!("std::{}", op_name), &[lty.clone(), rty.clone()])
-                })
-            {
-                return sig.return_type.clone();
-            }
+            return sig.return_type.clone();
         }
         if *op == BinaryOp::DotStar || *op == BinaryOp::ArrowStar {
             if let Type::MemberPointer { member_type, .. } = rty.strip_reference().strip_const() {

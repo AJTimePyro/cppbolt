@@ -35,3 +35,23 @@ pub(super) struct VTableDispatch {
     pub(super) fn_slot: u32,
     pub(super) ret_adjust_slot: u32,
 }
+
+impl<'a> Codegen<'a> {
+    /// Loads a field of the vtable pointer that `emit_vptr_of_this` stashed in
+    /// `scratch2`.
+    pub(super) fn emit_vtable_field_load(
+        &mut self,
+        field_offset: i32,
+        ctx: &FunctionContext,
+        code: &mut Vec<u8>,
+    ) {
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch2);
+        code.push(OP_I32_CONST);
+        write_i32(code, field_offset);
+        code.push(OP_I32_ADD);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, 0);
+    }
+}

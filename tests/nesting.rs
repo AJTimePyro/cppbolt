@@ -1,7 +1,9 @@
 //! Native stack-safety tests for the per-construct nesting limits.
 //!
-//! Wide left-associative chains must compile; deeply nested constructs must
-//! produce a normal diagnostic instead of aborting.  Every nesting construct
+//! Wide chains of built-in operators must compile. An overloaded chain with a
+//! converting step counts against expression depth, so long ones reach that
+//! limit. Deeply nested constructs must produce a normal diagnostic instead of
+//! aborting.  Every nesting construct
 //! has its own limit, pinned in the table below and in
 //! `docs/known-limitations.md`, and the tests check the last accepted depth
 //! and the first rejected one.  Programs run on an explicitly sized thread so
