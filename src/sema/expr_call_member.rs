@@ -23,7 +23,7 @@ impl Sema {
                 return Ok(Some(sig));
             }
         }
-        self.try_instantiate_member_template(struct_name, Some(member), arg_types, args, pos)
+        self.try_instantiate_member_template(struct_name, Some(member), arg_types, args, pos, true)
     }
 
     fn check_ref_qualifier_compatibility(

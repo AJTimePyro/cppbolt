@@ -325,11 +325,13 @@ impl Sema {
         arg_types: &[Type],
         args: &[Expr],
         pos: ExprPos,
+        report_rejection: bool,
     ) -> Result<Option<FunctionSig>, CompileError> {
         let Some((templates, short)) = self.resolve_member_template_target(class_name) else {
             return Ok(None);
         };
         let plain = QualifiedName::new(class_name).plain();
+        let mut last_rejection: Option<CompileError> = None;
 
         for cand in templates {
             let matches_name = match method_name {
@@ -384,10 +386,9 @@ impl Sema {
                 } else {
                     &sig.param_types[..]
                 };
-                if self
-                    .score_arguments(call_params, arg_types, Some(args))
-                    .is_err()
-                {
+                if let Err(failure) = self.score_arguments(call_params, arg_types, Some(args)) {
+                    last_rejection =
+                        Some(self.no_matching_conversion(&spec_func.name, &failure, pos));
                     continue;
                 }
 
@@ -400,6 +401,9 @@ impl Sema {
                 return Ok(Some(sig));
             }
         }
+        if report_rejection && let Some(error) = last_rejection {
+            return Err(error);
+        }
         Ok(None)
     }
 
@@ -410,7 +414,7 @@ impl Sema {
         args: &[Expr],
         pos: ExprPos,
     ) -> Result<Option<FunctionSig>, CompileError> {
-        self.try_instantiate_member_template(class_name, None, arg_types, args, pos)
+        self.try_instantiate_member_template(class_name, None, arg_types, args, pos, false)
     }
 
     pub(super) fn instantiate_constructor_dependencies(
