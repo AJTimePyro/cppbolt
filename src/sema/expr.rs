@@ -69,7 +69,11 @@ impl Sema {
                 target_type,
                 expr,
             } => self.analyze_cast(*kind, target_type, expr),
-            Expr::SizeofType(_) | Expr::SizeofExpr(_) => Ok(Type::UnsignedInt),
+            Expr::SizeofType(ty) => {
+                self.resolve_and_instantiate_type(ty, self.current_line, self.current_col)?;
+                Ok(Type::UnsignedInt)
+            }
+            Expr::SizeofExpr(_) => Ok(Type::UnsignedInt),
             Expr::AlignofType(ty) => {
                 let _ = self.resolve_and_instantiate_type(ty, self.current_line, self.current_col);
                 Ok(Type::UnsignedLong)

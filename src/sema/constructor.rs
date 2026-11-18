@@ -353,10 +353,7 @@ impl Sema {
                 let signature = substitute_function_signature(&cand, &mapping, new_name)
                     .map_err(TemplateFailure::from)
                     .and_then(|(mut func, active_mapping)| {
-                        self.resolve_signature_type(&mut func.return_type, pos.line, pos.col)?;
-                        for p in &mut func.params {
-                            self.resolve_signature_type(&mut p.ty, pos.line, pos.col)?;
-                        }
+                        self.resolve_signature_types(&mut func, pos.line, pos.col)?;
                         Ok((func, active_mapping))
                     });
                 let (mut spec_func, active_mapping) = match signature {

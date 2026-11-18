@@ -86,6 +86,7 @@ impl Type {
                 format!("{}<{}>", name, formatted)
             }
             Type::DependentNested(name) => name.clone(),
+            Type::Decltype { expr, .. } => format!("decltype({:?})", expr),
             Type::Struct(name) | Type::Enum(name) => match name.as_str() {
                 "istream" | "ostream" | "ios_base" | "string" => format!("std::{}", name),
                 _ => name.clone(),

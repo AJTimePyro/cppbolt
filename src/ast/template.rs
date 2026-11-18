@@ -2,7 +2,7 @@ use super::decl::{Decl, FunctionDecl, StructFieldDecl};
 use super::expr::Expr;
 use super::types::Type;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TemplateParam {
     pub name: String,
     pub default_type: Option<Type>,

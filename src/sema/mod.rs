@@ -11,6 +11,7 @@ pub mod constexpr_eval;
 mod constexpr_globals;
 mod constructor;
 mod constructor_helpers;
+mod decltype_resolve;
 mod expected_type;
 mod expr;
 mod expr_call;
@@ -101,6 +102,7 @@ pub(crate) use sema_types::{ConversionFailure, DeferredMethod};
 pub use sema_types::{Scope, VarSymbol};
 use std::collections::{HashMap, HashSet};
 
+#[derive(Clone)]
 pub struct Sema {
     pub struct_layouts: HashMap<String, StructLayout>,
     pub struct_order: Vec<String>,
@@ -130,6 +132,15 @@ pub struct Sema {
     /// diagnostic, while a constructor call in an expression reports a call
     /// diagnostic.
     pub in_initializer: bool,
+    /// True while an expression is being analyzed on a disposable clone to
+    /// decide a template candidate's viability.
+    pub speculating: bool,
+    /// Set when a nested instantiation fails during speculative analysis, so
+    /// the failure stays hard instead of rejecting the candidate.
+    pub speculative_hard: bool,
+    /// Parameters of the signature being formed, bound when resolving a
+    /// `decltype` operand that names one of them.
+    pub signature_params: Vec<Param>,
     /// Target type available at the current expression site (initializer,
     /// assignment, return, cast). Used to disambiguate overloaded
     /// `&Class::member` addresses.
@@ -202,6 +213,9 @@ impl Sema {
             namespace_aliases: HashMap::new(),
             type_aliases: HashMap::new(),
             in_initializer: false,
+            speculating: false,
+            speculative_hard: false,
+            signature_params: Vec::new(),
             expected_type: None,
             depth: crate::depth::DepthCounters::new(),
         };

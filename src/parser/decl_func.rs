@@ -13,6 +13,12 @@ impl Parser {
         self.expect(TokenKind::LParen)?;
         let params = self.parse_function_params()?;
         let quals = self.parse_function_qualifiers()?;
+        let return_type = if self.peek() == &TokenKind::Arrow {
+            self.advance();
+            self.parse_type()?
+        } else {
+            return_type
+        };
         let (is_const, ref_qualifier) = (quals.is_const, quals.ref_qualifier);
         let is_virtual = quals.is_override;
         let ctor_initializers = self.parse_ctor_initializers()?;

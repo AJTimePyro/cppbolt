@@ -57,6 +57,17 @@ pub fn substitute_type_full(
         Type::TemplateInstance { name, args } => {
             substitute_template_instance(name, args, mapping, pos)
         }
+        Type::Decltype {
+            expr,
+            parenthesized,
+        } => {
+            let mut substituted = (**expr).clone();
+            substitute_expr(&mut substituted, mapping, injected_class)?;
+            Ok(Type::Decltype {
+                expr: Box::new(substituted),
+                parenthesized: *parenthesized,
+            })
+        }
         Type::DependentArray(inner, param_name) => {
             let subst_inner =
                 substitute_type_full(inner, mapping, injected_class, pos, struct_aligns)?;

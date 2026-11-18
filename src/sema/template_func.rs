@@ -267,13 +267,7 @@ impl Sema {
                 self.resolve_signature_type(&mut resolved, pos.line, pos.col)?;
             }
         }
-
-        // Resolving a nested type can instantiate another template. Errors from
-        // that side effect are outside the immediate context and stay hard.
-        self.resolve_signature_type(&mut func_decl.return_type, pos.line, pos.col)?;
-        for p in &mut func_decl.params {
-            self.resolve_signature_type(&mut p.ty, pos.line, pos.col)?;
-        }
+        self.resolve_signature_types(&mut func_decl, pos.line, pos.col)?;
 
         let mangled = self.mangle_name(&func_decl.name, &func_decl.params);
         let sig = FunctionSig {
@@ -381,6 +375,9 @@ impl Sema {
             let res = self.analyze_function(&mut func_decl);
             self.instantiation_depth -= 1;
             if let Err(error) = res {
+                if self.speculating {
+                    self.speculative_hard = true;
+                }
                 self.instantiated_functions.remove(&mangled);
                 return Err(error);
             }

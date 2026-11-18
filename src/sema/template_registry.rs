@@ -33,6 +33,7 @@ impl Sema {
             let list = self.function_templates.entry(key).or_default();
             if let Some((existing_decl, _)) = list.iter_mut().find(|(d, _)| {
                 d.params.len() == item.0.params.len()
+                    && d.return_type == item.0.return_type
                     && d.params
                         .iter()
                         .zip(&item.0.params)
@@ -64,6 +65,14 @@ impl Sema {
                 }
                 let inst_name = self.instantiate_class_template(name, args, line, col)?;
                 *ty = Type::Struct(inst_name);
+            }
+            Type::Decltype {
+                expr,
+                parenthesized,
+            } => {
+                let resolved = self.resolve_decltype_type(expr, *parenthesized, line, col)?;
+                *ty = resolved;
+                self.resolve_and_instantiate_type(ty, line, col)?;
             }
             Type::DependentNested(name) => {
                 let Some(resolved) = self.resolve_nested_type_name(name, line, col)? else {
@@ -296,6 +305,9 @@ impl Sema {
                 Ok(inst_name)
             }
             Err(error) => {
+                if self.speculating {
+                    self.speculative_hard = true;
+                }
                 snapshot.restore(self);
                 Err(error)
             }

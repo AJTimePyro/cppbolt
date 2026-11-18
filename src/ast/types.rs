@@ -1,3 +1,4 @@
+use crate::ast::expr::Expr;
 use crate::name::QualifiedName;
 use std::collections::HashMap;
 
@@ -32,7 +33,7 @@ impl PartialEq for FunctionQualifiers {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Void,
     Nullptr,
@@ -65,6 +66,13 @@ pub enum Type {
     /// whose base was substituted. It must resolve to a concrete type; an
     /// unresolved name is a substitution failure in the immediate context.
     DependentNested(String),
+    /// A `decltype(expr)` type. The operand is kept in the AST and resolved
+    /// after substitution, when the concrete types of names are known.
+    /// `parenthesized` records the C++17 rule for the operand form.
+    Decltype {
+        expr: Box<Expr>,
+        parenthesized: bool,
+    },
     TypeParam(String),
     TemplateInstance {
         name: String,
@@ -362,6 +370,7 @@ impl Type {
                 .unwrap_or(&4),
             Type::TypeParam(_)
             | Type::DependentNested(_)
+            | Type::Decltype { .. }
             | Type::NonType(_)
             | Type::DependentNonType(_)
             | Type::DependentArray(_, _) => 4,
@@ -410,6 +419,7 @@ impl Type {
                     .unwrap_or(&4),
                 Type::TypeParam(_)
                 | Type::DependentNested(_)
+                | Type::Decltype { .. }
                 | Type::NonType(_)
                 | Type::DependentNonType(_)
                 | Type::DependentArray(_, _) => 4,
@@ -461,6 +471,7 @@ impl Type {
             | Type::TemplateInstance { .. }
             | Type::TypeParam(_)
             | Type::DependentNested(_)
+            | Type::Decltype { .. }
             | Type::NonType(_)
             | Type::DependentNonType(_)
             | Type::DependentArray(_, _)

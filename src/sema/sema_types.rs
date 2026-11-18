@@ -22,6 +22,7 @@ pub struct VarSymbol {
     pub stack_offset: i32,
 }
 
+#[derive(Clone)]
 pub struct Scope {
     pub vars: HashMap<String, VarSymbol>,
     pub namespace_aliases: HashMap<String, String>,
@@ -30,6 +31,7 @@ pub struct Scope {
 
 /// A virtual or destructor body whose early analysis hit a name that may be
 /// declared later in the translation unit. Retried once registration is complete.
+#[derive(Clone)]
 pub(crate) struct DeferredMethod {
     pub(crate) class_name: String,
     pub(crate) method: FunctionDecl,
