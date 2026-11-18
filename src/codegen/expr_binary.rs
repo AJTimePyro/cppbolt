@@ -97,15 +97,19 @@ impl<'a> Codegen<'a> {
         }
         let base = cur;
         let is_class = |ty: &Type| matches!(ty.strip_const(), Type::Struct(_) | Type::Enum(_));
+        // shortcut: recompiling a chain prefix is quadratic; beyond this many
+        // terms keep the iterative path so long expressions still compile.
+        const RECOMPILE_LIMIT: usize = 16;
+        let recompile = spine.len() <= RECOMPILE_LIMIT;
 
         let mut lty = self.get_expr_type(base, ctx);
         for index in (0..spine.len()).rev() {
             let (op, right, whole_left) = spine[index];
             let rty = self.get_expr_type(right, ctx);
             let next_result = self.binary_result_type(op, &lty, &rty).strip_reference().clone();
-            let overloaded = op.op_name().is_some() && (is_class(&lty) || is_class(&rty));
+            let overloaded = recompile && op.op_name().is_some() && (is_class(&lty) || is_class(&rty));
             // The next step recompiles this whole subtree when it is overloaded.
-            if index > 0 {
+            if index > 0 && recompile {
                 let (next_op, next_right, _) = spine[index - 1];
                 let next_rty = self.get_expr_type(next_right, ctx);
                 if next_op.op_name().is_some() && (is_class(&next_result) || is_class(&next_rty)) {

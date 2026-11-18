@@ -3,12 +3,14 @@
 //! See the mdBook guide at `docs/book/internals/semantic-analysis.md`.
 
 mod analyze;
+mod analyze_helpers;
 mod analyze_field_init;
 mod assign;
 mod call_arity;
 pub mod constexpr_eval;
 mod constexpr_globals;
 mod constructor;
+mod constructor_helpers;
 mod expected_type;
 mod expr;
 mod expr_call;
@@ -27,6 +29,8 @@ mod init_aggregate;
 mod init_list;
 mod layout;
 mod layout_dump;
+mod layout_types;
+mod layout_vtables;
 mod lookup;
 mod method_return_type;
 mod virtual_key;
@@ -43,6 +47,7 @@ pub mod pack_expansion;
 #[cfg(test)]
 mod pack_expansion_tests;
 mod receiver;
+mod sema_types;
 mod stmt;
 mod stmt_decl;
 mod stmt_range_for;
@@ -60,6 +65,8 @@ mod template_name;
 mod template_nested;
 pub mod template_partial_order;
 mod template_registry;
+mod template_registry_helpers;
+mod template_registry_members;
 mod template_spec;
 pub mod template_subst;
 mod template_subst_align;
@@ -76,7 +83,7 @@ mod tests_pack;
 
 pub(crate) use expected_type::is_member_pointer_address;
 pub use init::InitContext;
-pub(crate) use layout::RecordLayout;
+pub(crate) use layout_types::RecordLayout;
 #[cfg(test)]
 pub use pack_expansion::TemplateArg;
 pub(crate) use stmt_decl::VarDecl;
@@ -86,78 +93,13 @@ use crate::ast::*;
 use crate::diagnostics::CompileError;
 use crate::name::QualifiedName;
 pub(crate) use function_sig::FunctionSig;
-pub(crate) use layout::{VTableInfo, VTableSlotInfo};
+pub(crate) use layout_types::VTableSlotInfo;
+pub use layout_types::{StructField, StructLayout};
 pub(crate) use receiver::{receiver_is_const_type, sig_receiver_is_const};
+pub(crate) use sema_types::{ConversionFailure, DeferredMethod};
+pub use sema_types::{Scope, VarSymbol};
 use std::collections::{HashMap, HashSet};
 
-#[derive(Debug, Clone)]
-pub struct StructField {
-    pub name: String,
-    pub ty: Type,
-    pub offset: usize,
-    pub default_init: Option<Expr>,
-}
-
-/// Physical layout of one record.
-///
-/// `fields` includes inherited fields flattened into the object, while
-/// `base_offsets` records where each base subobject starts. `vtable_slots` is
-/// in slot order and includes the virtual destructor's special slots.
-#[derive(Debug, Clone)]
-pub struct StructLayout {
-    pub is_class: bool,
-    pub is_final: bool,
-    pub has_user_declared_constructors: bool,
-    pub base_classes: Vec<String>,
-    pub base_access: Vec<crate::ast::BaseAccess>,
-    pub base_offsets: Vec<(String, usize)>,
-    /// Direct non-virtual bases in declaration order (virtual bases are
-    /// unsupported), with their offsets in this class.
-    pub direct_base_offsets: Vec<(String, usize)>,
-    pub fields: Vec<StructField>,
-    pub size: usize,
-    pub align: usize,
-    pub has_vtable: bool,
-    pub vtable_slots: Vec<VirtualKey>,
-    pub vtables: Vec<VTableInfo>,
-    pub private_members: std::collections::HashSet<String>,
-    pub is_abstract: bool,
-    pub pure_virtuals: std::collections::HashSet<String>,
-    pub final_methods: Vec<VirtualKey>,
-}
-
-/// The first argument of a call that does not convert to its parameter.
-#[derive(Debug, Clone)]
-pub(crate) struct ConversionFailure {
-    /// The index of the argument, counted from zero.
-    pub index: usize,
-    /// The type of the argument.
-    pub from: Type,
-    /// The type of the parameter.
-    pub to: Type,
-}
-
-#[derive(Debug, Clone)]
-pub struct VarSymbol {
-    pub name: String,
-    pub ty: Type,
-    pub is_global: bool,
-    /// Offset from the local frame pointer for locals; unused for globals.
-    pub stack_offset: i32,
-}
-
-pub struct Scope {
-    pub vars: HashMap<String, VarSymbol>,
-    pub namespace_aliases: HashMap<String, String>,
-    pub type_aliases: HashMap<String, Type>,
-}
-
-/// A virtual or destructor body whose early analysis hit a name that may be
-/// declared later in the translation unit. Retried once registration is complete.
-pub(crate) struct DeferredMethod {
-    pub(crate) class_name: String,
-    pub(crate) method: FunctionDecl,
-}
 
 pub struct Sema {
     pub struct_layouts: HashMap<String, StructLayout>,

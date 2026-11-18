@@ -13,6 +13,7 @@ mod expr_binary;
 mod expr_binary_operator;
 mod expr_call;
 mod expr_call_member;
+mod expr_call_member_support;
 mod expr_delete;
 mod expr_identifier;
 mod expr_new;
@@ -23,10 +24,13 @@ mod function;
 mod function_context;
 mod function_global_init;
 mod function_lifecycle;
+mod function_lifecycle_init;
 mod function_lookup;
 mod initializer_list;
 mod lvalue;
 mod member_pointer;
+mod member_pointer_call;
+mod member_pointer_types;
 mod member_pointer_receiver;
 mod memory;
 mod method_lookup;
@@ -60,7 +64,7 @@ use emit_context::{
     ArrayLocal, ArrayLoop, ArraySlots, BinaryTypes, CallSite, CtorCall, GlobalInit, MemberAccess,
     NamedCall, ScalarAssign, SwitchSlots,
 };
-pub(super) use member_pointer::{MemberPointerCall, MemberPointerCmp};
+pub(super) use member_pointer_types::{MemberPointerCall, MemberPointerCmp};
 use program::Plan;
 use std::collections::{HashMap, HashSet};
 

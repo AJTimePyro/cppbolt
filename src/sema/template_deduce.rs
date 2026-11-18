@@ -215,6 +215,27 @@ fn insert_explicit_template_args(
     }
 }
 
+fn validate_explicit_pack_count(
+    has_pack: bool,
+    fixed_params: usize,
+    explicit_pack: usize,
+    args: usize,
+    pos: ExprPos,
+) -> Result<(), CompileError> {
+    if has_pack && args < fixed_params + explicit_pack {
+        return Err(CompileError::new(
+            format!(
+                "too few arguments for function template: expected at least {}, found {}",
+                fixed_params + explicit_pack,
+                args
+            ),
+            pos.line,
+            pos.col,
+        ));
+    }
+    Ok(())
+}
+
 /// Deduces template arguments for a function template call.
 pub fn deduce_template_arguments(
     template_params: &[TemplateParam],
@@ -248,17 +269,7 @@ pub fn deduce_template_arguments(
         &mut deduced,
         &mut explicit_pack,
     );
-    if has_pack && arg_types.len() < non_pack_count + explicit_pack.len() {
-        return Err(CompileError::new(
-            format!(
-                "too few arguments for function template: expected at least {}, found {}",
-                non_pack_count + explicit_pack.len(),
-                arg_types.len()
-            ),
-            pos.line,
-            pos.col,
-        ));
-    }
+    validate_explicit_pack_count(has_pack, non_pack_count, explicit_pack.len(), arg_types.len(), pos)?;
 
     for (i, p) in non_pack_params.iter().enumerate() {
         if i >= arg_types.len() {

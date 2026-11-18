@@ -148,6 +148,30 @@ fn expr_target_type(expr: &Expr) -> Option<&Type> {
     }
 }
 
+fn rename_in_new(
+    expr: &mut Expr,
+    packs: &HashSet<String>,
+    mapping: &HashMap<String, TemplateArg>,
+    index: usize,
+) {
+    if let Expr::New {
+        args,
+        array_size,
+        placement,
+        ..
+    } = expr
+    {
+        args.iter_mut()
+            .for_each(|a| rename_pack_identifiers(a, packs, mapping, index));
+        if let Some(size) = array_size {
+            rename_pack_identifiers(size, packs, mapping, index);
+        }
+        if let Some(place) = placement {
+            rename_pack_identifiers(place, packs, mapping, index);
+        }
+    }
+}
+
 pub fn rename_pack_identifiers(
     expr: &mut Expr,
     packs: &HashSet<String>,
@@ -178,21 +202,7 @@ pub fn rename_pack_identifiers(
         Expr::Unary { expr, .. } | Expr::Cast { expr, .. } => {
             rename_pack_identifiers(expr, packs, mapping, index)
         }
-        Expr::New {
-            args,
-            array_size,
-            placement,
-            ..
-        } => {
-            args.iter_mut()
-                .for_each(|a| rename_pack_identifiers(a, packs, mapping, index));
-            if let Some(size) = array_size {
-                rename_pack_identifiers(size, packs, mapping, index);
-            }
-            if let Some(place) = placement {
-                rename_pack_identifiers(place, packs, mapping, index);
-            }
-        }
+        Expr::New { .. } => rename_in_new(expr, packs, mapping, index),
         Expr::Assign { target, value, .. } | Expr::CompoundAssign { target, value, .. } => {
             rename_pack_identifiers(target, packs, mapping, index);
             rename_pack_identifiers(value, packs, mapping, index);

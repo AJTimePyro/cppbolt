@@ -219,20 +219,7 @@ impl Sema {
         let ty = self.analyze_expr(expr)?;
         match op {
             UnaryOp::Not => Ok(Type::Bool),
-            UnaryOp::Deref => {
-                if let Some(inner) = ty.deref_type() {
-                    Ok(inner.clone())
-                } else if let Some(sig) = self.find_unary_operator(UnaryOp::Deref, &ty) {
-                    self.instantiate_pending_method(&sig.mangled_name)?;
-                    Ok(sig.return_type)
-                } else {
-                    Err(CompileError::new(
-                        format!("Cannot dereference non-pointer type {}", ty.to_c_type()),
-                        pos.line,
-                        pos.col,
-                    ))
-                }
-            }
+            UnaryOp::Deref => self.analyze_deref(&ty, *pos),
             UnaryOp::AddrOf => {
                 if let Type::Pointer(inner) = &ty
                     && let Type::Function { .. } = &**inner
@@ -272,6 +259,21 @@ impl Sema {
             UnaryOp::PreInc | UnaryOp::PreDec | UnaryOp::PostInc | UnaryOp::PostDec => {
                 self.analyze_unary_incdec(op, &ty, *pos)
             }
+        }
+    }
+
+    fn analyze_deref(&mut self, ty: &Type, pos: ExprPos) -> Result<Type, CompileError> {
+        if let Some(inner) = ty.deref_type() {
+            Ok(inner.clone())
+        } else if let Some(sig) = self.find_unary_operator(UnaryOp::Deref, ty) {
+            self.instantiate_pending_method(&sig.mangled_name)?;
+            Ok(sig.return_type)
+        } else {
+            Err(CompileError::new(
+                format!("Cannot dereference non-pointer type {}", ty.to_c_type()),
+                pos.line,
+                pos.col,
+            ))
         }
     }
 

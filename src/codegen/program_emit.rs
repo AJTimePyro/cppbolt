@@ -1,6 +1,13 @@
 use super::call_types::{wasm_result_types, wasm_value_type};
 use super::*;
 
+struct VTableEntryTarget<'a> {
+    class_name: &'a str,
+    owner: &'a str,
+    owner_offset: usize,
+    vptr_offset: usize,
+}
+
 impl<'a> Codegen<'a> {
     pub(super) fn emit(&mut self, plan: &Plan) -> Result<(), CompileError> {
         self.declare_functions(plan);
@@ -178,13 +185,16 @@ impl<'a> Codegen<'a> {
     /// final overrider expects.
     fn vtable_entry(
         &mut self,
-        class_name: &str,
-        owner: &str,
-        owner_offset: usize,
-        vptr_offset: usize,
+        target: VTableEntryTarget<'_>,
         slot: &crate::sema::VTableSlotInfo,
         plan: &Plan,
     ) -> (u32, i32, i32) {
+        let VTableEntryTarget {
+            class_name,
+            owner,
+            owner_offset,
+            vptr_offset,
+        } = target;
         let trap_idx = plan.trap_func_idx.unwrap_or(0);
         if slot.is_deleting_dtor {
             let idx = self
@@ -243,10 +253,12 @@ impl<'a> Codegen<'a> {
                 let mut vtable_bytes = Vec::new();
                 for slot in &table.slots {
                     let (func_idx, adjustment, ret_adjust) = self.vtable_entry(
-                        name,
-                        &table.owner,
-                        table.owner_offset,
-                        table.vptr_offset,
+                        VTableEntryTarget {
+                            class_name: name,
+                            owner: &table.owner,
+                            owner_offset: table.owner_offset,
+                            vptr_offset: table.vptr_offset,
+                        },
                         slot,
                         plan,
                     );

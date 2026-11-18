@@ -91,7 +91,7 @@ impl Parser {
                         }
                     }
                 }
-                TokenKind::Eof => {
+                TokenKind::Semi | TokenKind::Eof => {
                     break;
                 }
                 _ => {}

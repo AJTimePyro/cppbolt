@@ -251,32 +251,14 @@ impl Sema {
         }
     }
 
-    pub(super) fn check_member_pointer_binary(
+    fn check_member_pointer_application_base(
         &self,
-        op: BinaryOp,
-        lty: &Type,
+        obj_class: &str,
+        target_class: &str,
         rty: &Type,
         pos: ExprPos,
-    ) -> Result<Type, CompileError> {
-        let (obj_class, is_const_obj) = self.resolve_member_pointer_receiver(op, lty, pos)?;
-
-        let Type::MemberPointer {
-            class_name: target_class,
-            member_type,
-        } = rty.strip_reference().strip_const()
-        else {
-            return Err(CompileError::new(
-                format!(
-                    "right operand of '{}' must be a pointer-to-member, found '{}'",
-                    if op == BinaryOp::DotStar { ".*" } else { "->*" },
-                    rty.to_c_type()
-                ),
-                pos.line,
-                pos.col,
-            ));
-        };
-
-        let obj_class_canonical = self.resolve_alias_in_qualified_name(&obj_class);
+    ) -> Result<(), CompileError> {
+        let obj_class_canonical = self.resolve_alias_in_qualified_name(obj_class);
         let target_class_canonical = self.resolve_alias_in_qualified_name(target_class);
         // Application converts the receiver to the member's class, so the same
         // unambiguous/accessible base rules as Base::* -> Derived::* apply.
@@ -316,6 +298,35 @@ impl Sema {
                 ));
             }
         }
+        Ok(())
+    }
+
+    pub(super) fn check_member_pointer_binary(
+        &self,
+        op: BinaryOp,
+        lty: &Type,
+        rty: &Type,
+        pos: ExprPos,
+    ) -> Result<Type, CompileError> {
+        let (obj_class, is_const_obj) = self.resolve_member_pointer_receiver(op, lty, pos)?;
+
+        let Type::MemberPointer {
+            class_name: target_class,
+            member_type,
+        } = rty.strip_reference().strip_const()
+        else {
+            return Err(CompileError::new(
+                format!(
+                    "right operand of '{}' must be a pointer-to-member, found '{}'",
+                    if op == BinaryOp::DotStar { ".*" } else { "->*" },
+                    rty.to_c_type()
+                ),
+                pos.line,
+                pos.col,
+            ));
+        };
+
+        self.check_member_pointer_application_base(&obj_class, target_class, rty, pos)?;
 
         if let Type::Function { qualifiers, .. } = member_type.strip_const() {
             if is_const_obj && !qualifiers.is_const {

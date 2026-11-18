@@ -26,6 +26,7 @@ mod struct_align;
 mod structs;
 mod structs_nested;
 mod template;
+mod template_helpers;
 mod template_param;
 mod types;
 pub(crate) mod types_array;
