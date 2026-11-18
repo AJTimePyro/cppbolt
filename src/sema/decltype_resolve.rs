@@ -77,12 +77,10 @@ impl Sema {
                 if probe.speculative_hard || error.kind == ErrorKind::Internal {
                     Err(error)
                 } else {
-                    Err(CompileError::new(
-                        format!("substitution failure: {}", error.message),
-                        error.line.max(line),
-                        error.col.max(col),
+                    Err(
+                        CompileError::new(error.message, error.line.max(line), error.col.max(col))
+                            .with_kind(ErrorKind::Substitution),
                     )
-                    .with_kind(ErrorKind::Substitution))
                 }
             }
         }

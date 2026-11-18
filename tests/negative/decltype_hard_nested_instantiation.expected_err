@@ -1,0 +1,1 @@
+tests/negative/decltype_hard_nested_instantiation.cpp:5:21: error: no type named 'type' in 'Bad'

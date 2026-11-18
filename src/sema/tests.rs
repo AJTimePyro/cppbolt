@@ -561,3 +561,77 @@ fn late_class_instantiation_failure_restores_published_state()
     assert!(sema.instantiation_stack.is_empty());
     Ok(())
 }
+
+#[test]
+fn speculative_decltype_check_leaves_state_unchanged() -> Result<(), Box<dyn std::error::Error>> {
+    let code = r#"
+        struct S { int v; };
+        int g;
+        int f(S s) { return s.v; }
+    "#;
+    let tokens = Lexer::new(code).tokenize()?;
+    let mut parser = Parser::new(tokens);
+    let mut program = parser.parse_program()?;
+    let mut sema = Sema::new();
+    sema.analyze_program(&mut program)?;
+    let before = sema.clone();
+
+    let bad = Expr::Identifier("missing_decltype_name".to_string());
+    assert!(sema.resolve_decltype_type(&bad, false, 1, 1).is_err());
+    assert_eq!(
+        sema.struct_layouts
+            .keys()
+            .collect::<std::collections::HashSet<_>>(),
+        before
+            .struct_layouts
+            .keys()
+            .collect::<std::collections::HashSet<_>>()
+    );
+    assert_eq!(
+        sema.global_vars
+            .keys()
+            .collect::<std::collections::HashSet<_>>(),
+        before
+            .global_vars
+            .keys()
+            .collect::<std::collections::HashSet<_>>()
+    );
+    assert_eq!(
+        sema.functions
+            .keys()
+            .collect::<std::collections::HashSet<_>>(),
+        before
+            .functions
+            .keys()
+            .collect::<std::collections::HashSet<_>>()
+    );
+    assert_eq!(sema.synthesized_decls.len(), before.synthesized_decls.len());
+    assert_eq!(sema.instantiated_classes, before.instantiated_classes);
+    assert_eq!(sema.instantiated_functions, before.instantiated_functions);
+    assert_eq!(sema.instantiation_depth, before.instantiation_depth);
+    assert!(sema.instantiation_stack.is_empty());
+
+    let good = Expr::Identifier("g".to_string());
+    let ty = sema.resolve_decltype_type(&good, false, 1, 1)?;
+    assert_eq!(ty, Type::Int);
+    assert_eq!(
+        sema.struct_layouts
+            .keys()
+            .collect::<std::collections::HashSet<_>>(),
+        before
+            .struct_layouts
+            .keys()
+            .collect::<std::collections::HashSet<_>>()
+    );
+    assert_eq!(
+        sema.functions
+            .keys()
+            .collect::<std::collections::HashSet<_>>(),
+        before
+            .functions
+            .keys()
+            .collect::<std::collections::HashSet<_>>()
+    );
+    assert_eq!(sema.instantiated_classes, before.instantiated_classes);
+    Ok(())
+}
