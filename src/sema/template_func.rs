@@ -373,11 +373,17 @@ impl Sema {
         };
 
         if !self.instantiated_functions.contains(&mangled) {
+            // The marker is visible to recursive calls while the body is
+            // analyzed; it is removed again if analysis fails so a later
+            // call can retry the specialization.
             self.instantiated_functions.insert(mangled.clone());
             self.instantiation_depth += 1;
             let res = self.analyze_function(&mut func_decl);
             self.instantiation_depth -= 1;
-            res?;
+            if let Err(error) = res {
+                self.instantiated_functions.remove(&mangled);
+                return Err(error);
+            }
             self.synthesized_decls.push(Decl::Function(func_decl));
             self.register_function(sig.clone());
             self.functions

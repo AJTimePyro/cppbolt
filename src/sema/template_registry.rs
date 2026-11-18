@@ -259,31 +259,47 @@ impl Sema {
         let plain_name = QualifiedName::new(name).plain();
         let inst_name = format!("{}<{}>", plain_name, canonical_args);
 
-        if self.instantiated_classes.contains(&inst_name) {
+        // A completed specialization is cached. An in-progress one is still
+        // on the stack and must satisfy recursive references without being
+        // treated as finished.
+        if self.instantiated_classes.contains(&inst_name)
+            || self.instantiation_stack.iter().any(|s| s == &inst_name)
+        {
             return Ok(inst_name);
         }
 
-        self.instantiated_classes.insert(inst_name.clone());
         self.instantiation_stack.push(inst_name.clone());
         self.instantiation_depth += 1;
+        let snapshot = super::template_state::InstantiationSnapshot::capture(self);
 
-        let (target_class, mapping) = self.resolve_instantiation_target(
-            super::template_spec::InstantiationTarget {
-                name,
-                inst_name: &inst_name,
-                template_params: &template_params,
-                effective_args: &effective_args,
-                pos: (line, col),
-            },
-            template_class,
-        )?;
-
-        let result =
-            self.execute_class_instantiation(&target_class, mapping, &inst_name, (line, col));
+        let result = self
+            .resolve_instantiation_target(
+                super::template_spec::InstantiationTarget {
+                    name,
+                    inst_name: &inst_name,
+                    template_params: &template_params,
+                    effective_args: &effective_args,
+                    pos: (line, col),
+                },
+                template_class,
+            )
+            .and_then(|(target_class, mapping)| {
+                self.execute_class_instantiation(&target_class, mapping, &inst_name, (line, col))
+            });
 
         self.instantiation_stack.pop();
         self.instantiation_depth -= 1;
-        result.map(|_| inst_name)
+
+        match result {
+            Ok(()) => {
+                self.instantiated_classes.insert(inst_name.clone());
+                Ok(inst_name)
+            }
+            Err(error) => {
+                snapshot.restore(self);
+                Err(error)
+            }
+        }
     }
 
     fn execute_class_instantiation(

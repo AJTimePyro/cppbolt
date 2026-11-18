@@ -480,3 +480,55 @@ fn test_non_const_reference_rejects_temporary() {
     let const_ref_ty = Type::Reference(Box::new(Type::Const(Box::new(Type::Int))));
     assert!(sema.can_assign_expr(&const_ref_ty, &val_ty, Some(&literal)));
 }
+
+#[test]
+fn failed_class_instantiation_restores_state_and_allows_retry()
+-> Result<(), Box<dyn std::error::Error>> {
+    let code = r#"
+        struct Bad {};
+        struct Good { using type = int; };
+        template <typename T> struct Traits { using type = typename T::type; };
+        template <typename T> struct Box { using X = typename Traits<T>::type; int v; };
+    "#;
+    let tokens = Lexer::new(code).tokenize()?;
+    let mut parser = Parser::new(tokens);
+    let mut program = parser.parse_program()?;
+    let mut sema = Sema::new();
+    sema.analyze_program(&mut program)?;
+
+    assert!(
+        sema.instantiate_class_template("Box", &[Type::Struct("Bad".into())], 1, 1)
+            .is_err_and(|e| e.message == "no type named 'type' in 'Bad'")
+    );
+    assert_eq!(sema.instantiation_depth, 0);
+    assert!(sema.instantiation_stack.is_empty());
+    assert!(!sema.instantiated_classes.contains("Box<Bad>"));
+    assert!(!sema.instantiated_classes.contains("Traits<Bad>"));
+    assert!(!sema.struct_layouts.contains_key("Box<Bad>"));
+    assert!(!sema.type_aliases.contains_key("Box<Bad>::X"));
+
+    let ok = sema.instantiate_class_template("Box", &[Type::Struct("Good".into())], 1, 1)?;
+    assert_eq!(ok, "Box<Good>");
+    assert!(sema.instantiated_classes.contains("Box<Good>"));
+    assert!(sema.struct_layouts.contains_key("Box<Good>"));
+    Ok(())
+}
+
+#[test]
+fn failed_function_instantiation_does_not_cache_specialization()
+-> Result<(), Box<dyn std::error::Error>> {
+    let code = r#"
+        template <typename T> int f(T x) { return missing_function(x); }
+        int main() { return f(1); }
+    "#;
+    let tokens = Lexer::new(code).tokenize()?;
+    let mut parser = Parser::new(tokens);
+    let mut program = parser.parse_program()?;
+    let mut sema = Sema::new();
+    assert!(sema.analyze_program(&mut program).is_err());
+    assert_eq!(sema.instantiation_depth, 0);
+    assert!(sema.instantiation_stack.is_empty());
+    assert!(sema.instantiated_functions.is_empty());
+    assert!(sema.synthesized_decls.is_empty());
+    Ok(())
+}

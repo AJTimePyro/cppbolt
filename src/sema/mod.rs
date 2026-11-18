@@ -68,6 +68,7 @@ mod template_registry;
 mod template_registry_helpers;
 mod template_registry_members;
 mod template_spec;
+mod template_state;
 pub mod template_subst;
 mod template_subst_align;
 mod template_subst_array;
