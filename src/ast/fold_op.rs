@@ -60,14 +60,4 @@ impl FoldOp {
             FoldOp::ArrowStar => "->*",
         }
     }
-
-    #[allow(dead_code)]
-    pub fn to_binary_op(self) -> Option<BinaryOp> {
-        match self {
-            FoldOp::Binary(op) => Some(op),
-            FoldOp::DotStar => Some(BinaryOp::DotStar),
-            FoldOp::ArrowStar => Some(BinaryOp::ArrowStar),
-            _ => None,
-        }
-    }
 }

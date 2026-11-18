@@ -1,7 +1,5 @@
 //! Support types for member call lowering.
 
-//! Lowering of member calls: `object.member(...)` and `ptr->member(...)`.
-
 use super::*;
 
 pub(super) fn default_sig_from_class(class_name: &str) -> FunctionSig {

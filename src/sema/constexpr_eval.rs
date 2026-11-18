@@ -27,7 +27,6 @@ pub fn eval_integral_constexpr(
 }
 
 /// Evaluates a constant expression with optional struct sizes, constants, and pack lengths.
-#[allow(dead_code)]
 pub fn eval_constexpr_with_context(
     expr: &Expr,
     struct_sizes: Option<&HashMap<String, usize>>,
@@ -44,7 +43,6 @@ pub fn eval_constexpr_with_context(
 }
 
 /// Evaluates a constant expression with a template argument mapping.
-#[allow(dead_code)]
 pub fn eval_constexpr_with_mapping(
     expr: &Expr,
     struct_sizes: Option<&HashMap<String, usize>>,
