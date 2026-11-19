@@ -104,6 +104,8 @@ The six SFINAE milestones (typed substitution failure, dependent nested types, i
 
 A `decltype` nested in a qualified partial-specialization pattern (for example `typename Box<decltype(T())>::type`) is a non-deduced context. The compiler binds parameters from the other arguments, then renders the operand as source, substitutes and resolves it for confirmation. Cast, ternary, shift, array-subscript and `declval` operands are supported; an operand that cannot be rendered is a hard error.
 
+`sizeof(expr)` type-checks its operand even though it is unevaluated: an invalid expression in a `decltype` trailing return type rejects the candidate, and an error from instantiating another template inside the operand stays hard. The parser reads a `sizeof` operand that starts with a template name as `sizeof(type)`; wrap such expressions in another pair of parentheses.
+
 ### 1. Language Semantics & Edge Cases
 - **Copy Elision & Return Semantics**: Prvalue initialization is elided as guaranteed by C++17 (`T x = T(1);`). Returning local automatic variables by value applies C++11 implicit move semantics: overload resolution selects the move constructor before falling back to copy construction. Returning non-local or unmovable lvalues of move-only types (`std::unique_ptr`) is rejected at compile time.
 - **Move Semantics & Value Categories**:
