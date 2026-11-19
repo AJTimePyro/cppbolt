@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Substitution Failure (C++17)
+- A qualified type that names a missing member of a concrete class-template specialization is now a hard error outside substitution, so `enable_if<false, T>::type` in a namespace-scope alias or function signature is rejected. Nested structs declared by a template remain valid, and dependent member accesses still reject only the candidate during substitution.
+
 ### Constant Expressions (C++17)
 - A `static const` integral member of a non-template class now folds to its constant value during non-type template argument resolution, so `Box<C::n>` works with a qualified class name and in constant expressions such as `C::n + 1`. The member's own initializer must still be a valid integral constant expression; mutable members, members without an initializer, and non-integral or unresolved values remain invalid template arguments. Added positive and negative regression tests.
 
