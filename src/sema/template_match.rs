@@ -10,7 +10,7 @@ use crate::ast::template::{TemplateClass, TemplateParam};
 use crate::ast::types::Type;
 use crate::diagnostics::{CompileError, ErrorKind};
 use crate::name::QualifiedName;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 type MatchedPartial = (TemplateClass, HashMap<String, TemplateArg>);
 type AliasMap = HashMap<String, (Vec<TemplateParam>, Type)>;
@@ -72,6 +72,76 @@ fn expand_alias_pattern(pattern: &Type, aliases: &AliasMap) -> Option<Type> {
     let mut expanded = super::template_subst::substitute_type(target, &mapping, None).ok()?;
     super::template_subst_func::mark_dependent_nested(target, &mut expanded, &mapping);
     Some(expanded)
+}
+
+/// Collects template parameters that appear in a deduced context of a
+/// partial-specialization pattern. This mirrors `match_pattern_arg`: a plain
+/// parameter, a wrapper around one, template arguments, and a bare non-type
+/// parameter deduce; qualified names (`typename T::type`), `decltype`, and
+/// dependent expressions do not. Alias templates are expanded first so `Ptr<T>`
+/// deduces `T` even though `void_t<typename T::type>` does not.
+fn collect_deducible_params(
+    ty: &Type,
+    aliases: &AliasMap,
+    param_names: &HashSet<String>,
+    out: &mut HashSet<String>,
+) {
+    match ty {
+        Type::TypeParam(name) => {
+            out.insert(name.clone());
+        }
+        Type::Const(inner)
+        | Type::Pointer(inner)
+        | Type::Reference(inner)
+        | Type::RvalueReference(inner)
+        | Type::PackExpansion(inner)
+        | Type::Aligned(inner, _)
+        | Type::Array(inner, _)
+        | Type::DependentArray(inner, _) => {
+            collect_deducible_params(inner, aliases, param_names, out);
+        }
+        Type::TemplateInstance { .. } => {
+            if let Some(expanded) = expand_alias_pattern(ty, aliases) {
+                collect_deducible_params(&expanded, aliases, param_names, out);
+            } else if let Type::TemplateInstance { args, .. } = ty {
+                for arg in args {
+                    collect_deducible_params(arg, aliases, param_names, out);
+                }
+            }
+        }
+        // A bare non-type parameter is deduced; an expression that only
+        // mentions parameters (for example `N + 1`) is not.
+        Type::DependentNonType(text) if param_names.contains(text.as_str()) => {
+            out.insert(text.clone());
+        }
+        Type::Function {
+            return_type,
+            param_types,
+            ..
+        } => {
+            collect_deducible_params(return_type, aliases, param_names, out);
+            for param in param_types {
+                collect_deducible_params(param, aliases, param_names, out);
+            }
+        }
+        Type::MemberPointer {
+            class_name,
+            member_type,
+        }
+        | Type::BoundMemberFunction {
+            class_name,
+            member_type,
+        } => {
+            // The class of a pointer to member is a deduced context.
+            if param_names.contains(class_name.as_str()) {
+                out.insert(class_name.clone());
+            }
+            collect_deducible_params(member_type, aliases, param_names, out);
+        }
+        // `Struct`/`Enum` names, `DependentNested`, `Decltype`, constants and
+        // other dependent leaves cannot deduce a parameter by structure.
+        _ => {}
+    }
 }
 
 /// Confirms a pattern against a concrete argument after deduction. Only
@@ -492,6 +562,29 @@ impl Sema {
             Some(args) => args,
             None => parse_types_list_with_params(&args_str, &known, &param_names)?,
         };
+        // Every parameter of a partial specialization must be deducible from
+        // the argument list, otherwise the specialization can never be used.
+        // Look across all arguments so a parameter deduced in one position is
+        // allowed to appear in a non-deduced context elsewhere.
+        let names: HashSet<String> = param_names.iter().cloned().collect();
+        let mut deducible = HashSet::new();
+        for arg in &pattern_args {
+            collect_deducible_params(arg, &self.alias_templates, &names, &mut deducible);
+        }
+        if let Some(name) = params
+            .iter()
+            .map(|p| &p.name)
+            .find(|name| !deducible.contains(*name))
+        {
+            return Err(CompileError::new(
+                format!(
+                    "template parameter '{}' cannot be deduced from the partial specialization argument list",
+                    name
+                ),
+                pos.0,
+                pos.1,
+            ));
+        }
         let plain_primary = QualifiedName::new(&primary).plain().to_string();
         let spec = PartialSpec {
             pattern_args,
