@@ -1,5 +1,4 @@
 use super::analyze_helpers::{collect_object_use_classes, method_matches_out_of_class};
-use super::constexpr_globals::collect_constexpr_globals;
 use super::*;
 
 impl Sema {
@@ -591,8 +590,13 @@ impl Sema {
     }
 
     fn analyze_declarations(&mut self, program: &mut Program) -> Result<(), CompileError> {
-        let constants = collect_constexpr_globals(&program.declarations, &self.struct_sizes);
+        // static_assert folds against every constexpr in the program; NTTP
+        // folding below stays declaration-ordered via register_constexpr_global.
+        let all_constants = self.collect_constexpr_globals(&program.declarations);
         for decl in &mut program.declarations {
+            // A namespace-scope constant is visible only after its declaration
+            // is reached; earlier constants are available to later initializers.
+            self.register_constexpr_global(decl);
             match decl {
                 Decl::GlobalVar {
                     name,
@@ -617,7 +621,7 @@ impl Sema {
                     let value = crate::sema::constexpr_eval::eval_constexpr_with_context(
                         condition,
                         Some(&self.struct_sizes),
-                        Some(&constants),
+                        Some(&all_constants),
                         None,
                     );
                     // Fail on a definite false. When the integral evaluator

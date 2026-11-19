@@ -236,7 +236,7 @@ impl Sema {
     /// Evaluates a dependent non-type argument expression (for example
     /// `!is_integral<int>::value`) using the constants of instantiated static
     /// const members that are in scope.
-    fn eval_dependent_nontype(&mut self, expr_str: &str) -> Option<i128> {
+    pub(super) fn eval_dependent_nontype(&mut self, expr_str: &str) -> Option<i128> {
         let wrapped = format!("({})", expr_str);
         let tokens = crate::lexer::Lexer::new(&wrapped).tokenize().ok()?;
         let mut parser = crate::parser::Parser::new(tokens);
@@ -304,6 +304,11 @@ impl Sema {
         match arg {
             Type::Struct(name) => {
                 if let Some(value) = self.resolve_static_const_nontype(name, line, col)? {
+                    *arg = Type::NonType(value);
+                } else if let Some(value) = self.static_const_values.get(name).copied() {
+                    // A namespace-scope constexpr variable used as a non-type
+                    // argument parses as an opaque name; its folded value was
+                    // collected with the other compile-time constants.
                     *arg = Type::NonType(value);
                 } else if name.contains('<')
                     && self

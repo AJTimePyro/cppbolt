@@ -224,7 +224,9 @@ impl Parser {
             Err(err) => {
                 let is_dep = !self.active_type_params.is_empty() || has_pack_in_expr(&expr);
                 if let Some(dep_str) = super::types_array::expr_to_dependent_str(&expr)
-                    && (is_dep || dep_str.contains("::"))
+                    && (is_dep
+                        || dep_str.contains("::")
+                        || super::template_helpers::has_identifier_in_expr(&expr))
                 {
                     // A qualified name here is a static const member of some
                     // class template; its value is only known after sema has
