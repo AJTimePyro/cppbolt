@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Partial Specialization Matching (C++17)
 - A `decltype` nested inside a qualified dependent type in a partial-specialization pattern is now substituted and resolved during confirmation, so patterns like `H<T, typename Box<decltype(T())>::type>` select the specialization. Parameters are still deduced from the other pattern arguments, and an invalid operand rejects the candidate instead of becoming a hard error. Added a regression covering matching, non-matching, substitution failure, and alias interaction.
+- Nested `decltype` operands are rendered as re-parsable C++ source when the qualified pattern is stringified. Cast, ternary, shift, array-subscript and `declval` operands now select the specialization instead of falling back to the primary. An operand that cannot be rendered is a hard error. Added matching and non-matching regressions for each operand form and a negative test for the unrenderable case.
 
 ### Substitution Failure (C++17)
 - A qualified type that names a missing member of a concrete class-template specialization is now a hard error outside substitution, so `enable_if<false, T>::type` in a namespace-scope alias or function signature is rejected. Nested structs declared by a template remain valid, and dependent member accesses still reject only the candidate during substitution.

@@ -98,8 +98,11 @@ The six SFINAE milestones (typed substitution failure, dependent nested types, i
 - `decltype(auto)` return types (`template<class T> decltype(auto) f(T&&)`) are not parsed; use an explicit trailing return type instead.
 - Bit-fields (`struct S { int x : 3; };`) are not part of the type/parser model, so `decltype(s.x)` on a bit-field cannot be expressed.
 - Wide character types (`wchar_t`, `char16_t`, `char32_t`) have no distinct type representation. They parse as opaque names: `std::is_integral<char16_t>::value` yields `false` and `sizeof(char16_t)` is 4 rather than 2.
+- `decltype` treats a pointer subscript as a value: `decltype(std::declval<T*>()[0])` yields `T`, where Clang and GCC yield `T&`. Use a subscript whose `operator[]` returns by value, or unary `+`, when the result feeds a dependent pattern.
 
 `decltype` on an overload-set operand, bare function-name decay, non-dependent `enable_if` fallback, and `void_t` detection are covered and match Clang/GCC.
+
+A `decltype` nested in a qualified partial-specialization pattern (for example `typename Box<decltype(T())>::type`) is a non-deduced context. The compiler binds parameters from the other arguments, then renders the operand as source, substitutes and resolves it for confirmation. Cast, ternary, shift, array-subscript and `declval` operands are supported; an operand that cannot be rendered is a hard error.
 
 ### 1. Language Semantics & Edge Cases
 - **Copy Elision & Return Semantics**: Prvalue initialization is elided as guaranteed by C++17 (`T x = T(1);`). Returning local automatic variables by value applies C++11 implicit move semantics: overload resolution selects the move constructor before falling back to copy construction. Returning non-local or unmovable lvalues of move-only types (`std::unique_ptr`) is rejected at compile time.
