@@ -2,7 +2,7 @@ use super::expr::Expr;
 use super::stmt::Stmt;
 use super::template::{TemplateDecl, TemplateParam};
 use super::types::{FunctionQualifiers, Type};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub type FieldInit = Option<(Expr, usize, usize)>;
 pub type StructFieldDecl = (String, Type, FieldInit);
@@ -108,6 +108,9 @@ pub enum Decl {
 pub struct Program {
     pub declarations: Vec<Decl>,
     pub type_aliases: HashMap<String, Type>,
+    /// Names of type aliases declared at namespace scope, as opposed to member
+    /// aliases whose names are qualified by their owning class.
+    pub namespace_type_aliases: HashSet<String>,
 }
 
 #[cfg(test)]
