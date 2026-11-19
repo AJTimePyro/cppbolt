@@ -27,6 +27,7 @@ pub struct PartialSpec {
 
 fn pattern_needs_confirmation(ty: &Type, aliases: &AliasMap) -> bool {
     match ty {
+        Type::Struct(name) if name.contains("decltype") => true,
         Type::Decltype { .. } => true,
         Type::Const(inner)
         | Type::Pointer(inner)
@@ -190,6 +191,21 @@ fn confirm_resolved_pattern(
                         Err(error)
                     }
                 }
+            }
+        }
+        Type::Struct(name) if name.contains("decltype") => {
+            // The qualified name was built by stringifying its template
+            // arguments, including the `decltype` operand. Substitute the
+            // deduced bindings into that spelling, then resolve the concrete
+            // member type in the disposable probe so a missing nested type is
+            // a substitution failure rather than a hard error.
+            let substituted = super::template_name::substitute_template_name(name, bindings);
+            let mut resolved = Type::Struct(substituted);
+            let probe = probe.get_or_insert_with(|| sema.clone());
+            match probe.resolve_and_instantiate_type(&mut resolved, pos.0, pos.1) {
+                Ok(()) => Ok(&resolved == concrete),
+                Err(error) if error.kind == ErrorKind::Substitution => Ok(false),
+                Err(error) => Err(error),
             }
         }
         Type::TemplateInstance {
@@ -385,11 +401,13 @@ pub fn match_pattern_arg(
             }
             _ => false,
         },
-        // A `decltype` operand or a qualified type that still mentions a
-        // template parameter is a non-deduced context. It cannot bind
+        // A `decltype` operand, a qualified type that still mentions a
+        // template parameter, or a qualified type whose template arguments
+        // contain a `decltype` is a non-deduced context. It cannot bind
         // parameters by structure; `select_partial_specialization` resolves it
         // after the other arguments have been deduced.
         Type::Decltype { .. } | Type::DependentNested(_) => true,
+        Type::Struct(name) if name.contains("decltype") => true,
         _ => pattern == concrete,
     }
 }

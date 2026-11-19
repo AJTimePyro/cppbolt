@@ -1,0 +1,4 @@
+H<int,int>=1 H<int,double>=0
+G<HasGet,int>=2 G<NoGet,int>=0
+L<int,int>=4 L<int,double>=0
+M<int,int>=5 N<WithGet*,int>=6
