@@ -800,3 +800,6 @@ cxx17/two_phase_friend_function_template
 negative/two_phase_friend_function_template_ordinary
 cxx17/two_phase_friend_visibility
 negative/two_phase_friend_late
+cxx17/two_phase_dependence_nested
+cxx17/two_phase_dependence_members
+negative/two_phase_dependence_sameline
