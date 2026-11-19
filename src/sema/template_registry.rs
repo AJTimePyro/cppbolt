@@ -322,7 +322,13 @@ impl Sema {
                 }
             }
             Type::DependentNonType(expr) => {
-                if let Some(value) = self.eval_dependent_nontype(expr) {
+                // A fully qualified spelling like `::C::n` is parsed as a
+                // dependent expression, but it names a folded constant. Try
+                // the plain spelling before evaluating it as an expression.
+                let plain = expr.strip_prefix("::").unwrap_or(expr);
+                if let Some(value) = self.static_const_values.get(plain).copied() {
+                    *arg = Type::NonType(value);
+                } else if let Some(value) = self.eval_dependent_nontype(expr) {
                     *arg = Type::NonType(value);
                 }
             }
@@ -751,20 +757,8 @@ impl Sema {
                     stack_offset: 0,
                 },
             );
-            if let Some(init) = &sf.2 {
-                let mut init_clone = init.clone();
-                let _ = self.analyze_expr(&mut init_clone);
-                if sf.1.is_const() {
-                    let constants = self.static_const_values.clone();
-                    if let Ok(value) = super::constexpr_eval::eval_constexpr_with_context(
-                        &init_clone,
-                        Some(&self.struct_sizes),
-                        Some(&constants),
-                        None,
-                    ) {
-                        self.static_const_values.insert(qual_name, value);
-                    }
-                }
+            if sf.2.is_some() {
+                self.fold_static_const_member(inst_name, sf);
             }
         }
         for base in base_classes {

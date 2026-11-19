@@ -1,0 +1,1 @@
+tests/negative/static_const_member_nttp_no_init.cpp:3:1: error: template argument for non-type parameter must be a constant expression

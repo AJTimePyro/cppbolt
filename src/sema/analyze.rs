@@ -639,8 +639,25 @@ impl Sema {
                         ));
                     }
                 }
-                Decl::StructDecl { name, methods, .. } => {
+                Decl::StructDecl {
+                    name,
+                    methods,
+                    static_fields,
+                    base_classes,
+                    ..
+                } => {
                     self.current_class = Some(name.to_string());
+                    // A static const integral member of a plain class can be
+                    // used as a non-type template argument. Fold it here, once
+                    // earlier namespace constants are in scope.
+                    for sf in static_fields {
+                        self.fold_static_const_member(name, sf);
+                    }
+                    // Inherited constants are reachable through the derived
+                    // class name, as for class-template specializations.
+                    for base in base_classes {
+                        self.alias_static_fields(base, name);
+                    }
                     for m in methods {
                         if !m.template_params.is_empty() {
                             continue;
@@ -660,6 +677,34 @@ impl Sema {
             }
         }
         Ok(())
+    }
+
+    /// Folds one const static data member into `static_const_values` under
+    /// `Owner::member` when its initializer is a valid integral constant
+    /// expression. Shared by plain classes and class-template specializations.
+    pub(super) fn fold_static_const_member(
+        &mut self,
+        owner: &str,
+        sf: &(String, Type, Option<Expr>),
+    ) {
+        if !sf.1.is_const() {
+            return;
+        }
+        let Some(init) = &sf.2 else {
+            return;
+        };
+        let mut init_clone = init.clone();
+        let _ = self.analyze_expr(&mut init_clone);
+        let constants = self.static_const_values.clone();
+        if let Ok(value) = super::constexpr_eval::eval_constexpr_with_context(
+            &init_clone,
+            Some(&self.struct_sizes),
+            Some(&constants),
+            None,
+        ) {
+            self.static_const_values
+                .insert(format!("{}::{}", owner, sf.0), value);
+        }
     }
 }
 
