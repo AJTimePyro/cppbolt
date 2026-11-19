@@ -38,6 +38,16 @@ pub fn evaluate_dependent_nontype(
         Err(_) => return Ok(Type::DependentNonType(expr_str.to_string())),
     };
     let mut parser = crate::parser::Parser::new(tokens);
+    // The spelling is re-parsed without the declaration's template scope, so
+    // seed the type parameters the mapping knows about. Otherwise `sizeof(T)`
+    // is read as `sizeof` of an expression and keeps the unresolved name.
+    parser.active_type_params.push(
+        mapping
+            .iter()
+            .filter(|(_, arg)| matches!(arg, TemplateArg::Type(_)))
+            .map(|(name, _)| name.clone())
+            .collect(),
+    );
     let mut expr = match parser.parse_expr() {
         Ok(e) => e,
         Err(_) => {

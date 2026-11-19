@@ -21,6 +21,8 @@ pub(super) struct InstantiationSnapshot {
     struct_aligns: HashMap<String, usize>,
     global_vars: HashMap<String, VarSymbol>,
     functions: HashMap<String, Vec<FunctionSig>>,
+    hidden_friends: HashMap<String, Vec<FunctionSig>>,
+    hidden_friend_templates: HashMap<String, Vec<(FunctionDecl, Vec<TemplateParam>)>>,
     type_aliases: HashMap<String, Type>,
     synthesized_decls: Vec<Decl>,
     class_templates: HashMap<String, (TemplateClass, Vec<TemplateParam>)>,
@@ -54,6 +56,8 @@ impl InstantiationSnapshot {
             struct_aligns: sema.struct_aligns.clone(),
             global_vars: sema.global_vars.clone(),
             functions: sema.functions.clone(),
+            hidden_friends: sema.hidden_friends.clone(),
+            hidden_friend_templates: sema.hidden_friend_templates.clone(),
             type_aliases: sema.type_aliases.clone(),
             synthesized_decls: sema.synthesized_decls.clone(),
             class_templates: sema.class_templates.clone(),
@@ -79,6 +83,8 @@ impl InstantiationSnapshot {
         sema.struct_aligns = self.struct_aligns;
         sema.global_vars = self.global_vars;
         sema.functions = self.functions;
+        sema.hidden_friends = self.hidden_friends;
+        sema.hidden_friend_templates = self.hidden_friend_templates;
         sema.type_aliases = self.type_aliases;
         sema.synthesized_decls = self.synthesized_decls;
         sema.class_templates = self.class_templates;

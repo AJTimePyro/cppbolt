@@ -44,9 +44,27 @@ pub(crate) fn expr_to_dependent_str(expr: &Expr) -> Option<String> {
                 BinaryOp::BitXor => "^",
                 BinaryOp::Shl => "<<",
                 BinaryOp::Shr => ">>",
+                BinaryOp::Eq => "==",
+                BinaryOp::Ne => "!=",
+                BinaryOp::Lt => "<",
+                BinaryOp::Le => "<=",
+                BinaryOp::Gt => ">",
+                BinaryOp::Ge => ">=",
+                BinaryOp::LogicalAnd => "&&",
+                BinaryOp::LogicalOr => "||",
                 _ => return None,
             };
             Some(format!("({l} {sym} {r})"))
+        }
+        Expr::Ternary {
+            cond,
+            then_expr,
+            else_expr,
+        } => {
+            let c = expr_to_dependent_str(cond)?;
+            let t = expr_to_dependent_str(then_expr)?;
+            let e = expr_to_dependent_str(else_expr)?;
+            Some(format!("({c} ? {t} : {e})"))
         }
         Expr::FoldExpr {
             op, left, right, ..

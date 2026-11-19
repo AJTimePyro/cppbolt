@@ -211,6 +211,14 @@ impl Parser {
                 name.trim_start_matches("::")
             )));
         }
+        // An expression naming an active template parameter stays dependent:
+        // evaluating it here would use a placeholder size for the parameter
+        // (e.g. `sizeof(T) > 1` would always be true).
+        if let Some(text) = super::types_array::expr_to_dependent_str(&expr)
+            && super::template_helpers::text_mentions_active(&text, &self.active_type_params)
+        {
+            return Ok(Type::DependentNonType(text));
+        }
         match crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None) {
             Ok(val) => Ok(Type::NonType(val)),
             Err(err) => {
@@ -462,16 +470,21 @@ impl Parser {
 
     fn skip_template_angles(&self, mut idx: usize) -> Option<usize> {
         let mut depth = 0;
+        let mut paren = 0usize;
+        let mut bracket = 0usize;
+        let mut brace = 0usize;
         while let Some(tok) = self.tokens.get(self.pos + idx) {
             match tok.kind {
-                TokenKind::Lt => depth += 1,
-                TokenKind::Gt => {
+                // A `>` inside a parenthesized or braced subexpression is a
+                // comparison, not the end of the argument list.
+                TokenKind::Lt if paren == 0 && bracket == 0 && brace == 0 => depth += 1,
+                TokenKind::Gt if paren == 0 && bracket == 0 && brace == 0 => {
                     depth -= 1;
                     if depth == 0 {
                         return Some(idx + 1);
                     }
                 }
-                TokenKind::Shr => {
+                TokenKind::Shr if paren == 0 && bracket == 0 && brace == 0 => {
                     if depth == 2 {
                         return Some(idx + 1);
                     } else if depth > 2 {
@@ -480,9 +493,18 @@ impl Parser {
                         return None;
                     }
                 }
-                TokenKind::Semi | TokenKind::LBrace | TokenKind::RBrace | TokenKind::Eof => {
-                    return None;
+                TokenKind::LParen => paren += 1,
+                TokenKind::RParen => paren = paren.saturating_sub(1),
+                TokenKind::LBracket => bracket += 1,
+                TokenKind::RBracket => bracket = bracket.saturating_sub(1),
+                TokenKind::LBrace => {
+                    if depth == 0 {
+                        return None;
+                    }
+                    brace += 1;
                 }
+                TokenKind::RBrace => brace = brace.saturating_sub(1),
+                TokenKind::Semi | TokenKind::Eof if depth == 0 => return None,
                 _ => {}
             }
             idx += 1;
