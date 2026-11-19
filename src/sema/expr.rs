@@ -73,7 +73,13 @@ impl Sema {
                 self.resolve_and_instantiate_type(ty, self.current_line, self.current_col)?;
                 Ok(Type::UnsignedInt)
             }
-            Expr::SizeofExpr(_) => Ok(Type::UnsignedInt),
+            Expr::SizeofExpr(expr) => {
+                // The operand is unevaluated but still type-checked, so an
+                // invalid expression must surface here and propagate through
+                // speculative analysis instead of being silently ignored.
+                self.analyze_expr(expr)?;
+                Ok(Type::UnsignedInt)
+            }
             Expr::AlignofType(ty) => {
                 self.resolve_and_instantiate_type(ty, self.current_line, self.current_col)?;
                 Ok(Type::UnsignedInt)
