@@ -1,10 +1,13 @@
-//! Classifies calls in an uninstantiated template as dependent or not.
+//! Classifies calls and operator expressions in an uninstantiated template as
+//! dependent or not.
 //!
 //! Substitution erases template parameter names before a body is analyzed, so
 //! the decision is made here, on the original AST, and kept by source position.
+//! Substitution preserves each node's position, so the classification survives
+//! body rewriting and nested instantiations.
 
 use crate::ast::decl::FunctionDecl;
-use crate::ast::expr::Expr;
+use crate::ast::expr::{Expr, UnaryOp};
 use crate::ast::stmt::{Stmt, StmtKind};
 use crate::ast::template::TemplateParam;
 use crate::ast::types::Type;
@@ -12,7 +15,7 @@ use std::collections::HashSet;
 
 struct CallScan {
     names: HashSet<String>,
-    call_positions: HashSet<(usize, usize)>,
+    dependent_positions: HashSet<(usize, usize)>,
 }
 
 impl CallScan {
@@ -37,14 +40,44 @@ impl CallScan {
         }
     }
 
-    /// Returns whether the expression mentions a dependent name. Any call in
-    /// it is recorded when one of its arguments or its callee does.
+    /// Unary operators that may resolve to an overloaded operator function.
+    fn has_overloaded_form(op: UnaryOp) -> bool {
+        matches!(
+            op,
+            UnaryOp::Neg
+                | UnaryOp::Plus
+                | UnaryOp::Not
+                | UnaryOp::BitNot
+                | UnaryOp::Deref
+                | UnaryOp::AddrOf
+        )
+    }
+
+    /// Returns whether the expression mentions a dependent name. Calls and
+    /// operator expressions are recorded when an operand or the callee does.
     fn expr(&mut self, expr: &Expr) -> bool {
         match expr {
             Expr::Identifier(name) => self.names.contains(name),
-            Expr::Binary { left, right, .. } => self.expr(left) | self.expr(right),
-            Expr::Unary { expr, .. }
-            | Expr::SizeofExpr(expr)
+            Expr::Binary {
+                op,
+                left,
+                right,
+                pos,
+            } => {
+                let dependent = self.expr(left) | self.expr(right);
+                if dependent && op.op_name().is_some() {
+                    self.dependent_positions.insert((pos.line, pos.col));
+                }
+                dependent
+            }
+            Expr::Unary { op, expr, pos } => {
+                let dependent = self.expr(expr);
+                if dependent && Self::has_overloaded_form(*op) {
+                    self.dependent_positions.insert((pos.line, pos.col));
+                }
+                dependent
+            }
+            Expr::SizeofExpr(expr)
             | Expr::Delete { expr, .. }
             | Expr::Cast { expr, .. }
             | Expr::MemberAccess { object: expr, .. } => self.expr(expr),
@@ -57,7 +90,7 @@ impl CallScan {
                 let dependent =
                     self.expr(callee) | args.iter().map(|a| self.expr(a)).fold(false, |a, b| a | b);
                 if dependent {
-                    self.call_positions.insert((pos.line, pos.col));
+                    self.dependent_positions.insert((pos.line, pos.col));
                 }
                 dependent
             }
@@ -192,9 +225,9 @@ impl CallScan {
     }
 }
 
-/// Positions of calls whose arguments mention a template parameter, the
-/// injected class name of the enclosing template, or a local whose type does.
-/// Those calls get instantiation-time ADL.
+/// Positions of calls and operator expressions whose operands mention a
+/// template parameter, the injected class name of the enclosing template, or a
+/// local whose type does. Those expressions get instantiation-time ADL.
 pub(crate) fn dependent_call_positions(
     decl: &FunctionDecl,
     template_params: &[TemplateParam],
@@ -209,7 +242,7 @@ pub(crate) fn dependent_call_positions(
     }
     let mut scan = CallScan {
         names,
-        call_positions: HashSet::new(),
+        dependent_positions: HashSet::new(),
     };
     let dependent_params: Vec<String> = decl
         .params
@@ -236,5 +269,5 @@ pub(crate) fn dependent_call_positions(
             scan.expr(expr);
         }
     }
-    scan.call_positions
+    scan.dependent_positions
 }

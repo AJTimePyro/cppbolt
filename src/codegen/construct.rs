@@ -188,36 +188,46 @@ impl<'a> Codegen<'a> {
     }
 
     /// Finds a free operator function whose first parameter binds `operand`.
+    /// Candidate names include the operand's associated namespace so a
+    /// dependent unary operator can bind to a namespace-scope overload.
     pub fn find_free_operator(&self, name: &str, operand: &Type) -> Option<(u32, FunctionSig)> {
-        let sigs = self.sema.functions.get(name)?;
-        let mut best: Option<FunctionSig> = None;
-        let mut best_score = usize::MAX;
-        for sig in sigs {
-            let Some(param) = sig.param_types.first() else {
+        for qualified in
+            super::function_lookup::candidate_function_names(name, std::slice::from_ref(operand))
+        {
+            let Some(sigs) = self.sema.functions.get(&qualified) else {
                 continue;
             };
-            let score = if param.strip_all_const() == operand.strip_all_const() {
-                0
-            } else if param.is_reference()
-                && param.deref_type().map(|d| d.strip_all_const())
-                    == Some(operand.strip_all_const())
-            {
-                1
-            } else {
-                continue;
-            };
-            if score < best_score {
-                best_score = score;
-                best = Some(sig.clone());
+            let mut best: Option<FunctionSig> = None;
+            let mut best_score = usize::MAX;
+            for sig in sigs {
+                let Some(param) = sig.param_types.first() else {
+                    continue;
+                };
+                let score = if param.strip_all_const() == operand.strip_all_const() {
+                    0
+                } else if param.is_reference()
+                    && param.deref_type().map(|d| d.strip_all_const())
+                        == Some(operand.strip_all_const())
+                {
+                    1
+                } else {
+                    continue;
+                };
+                if score < best_score {
+                    best_score = score;
+                    best = Some(sig.clone());
+                }
+            }
+            if let Some(sig) = best {
+                let index = self
+                    .func_indices
+                    .get(&sig.mangled_name)
+                    .copied()
+                    .or_else(|| self.func_indices.get(&qualified).copied())?;
+                return Some((index, sig));
             }
         }
-        let sig = best?;
-        let index = self
-            .func_indices
-            .get(&sig.mangled_name)
-            .copied()
-            .or_else(|| self.func_indices.get(name).copied())?;
-        Some((index, sig))
+        None
     }
 
     /// The arguments of a constructor call with the default arguments filled

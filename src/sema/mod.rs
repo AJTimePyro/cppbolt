@@ -165,7 +165,9 @@ pub struct Sema {
     /// keyed by `name@line:col`. Ordinary lookup inside an instantiated body
     /// only sees these, so a later declaration cannot rebind a template name.
     pub template_definition_functions: HashMap<String, HashSet<String>>,
-    /// Dependent call sites inside each template, by source position.
+    /// Dependent call and operator expression sites inside each template, by
+    /// source position. Substitution preserves positions, so classification
+    /// made on the definition AST still applies to rewritten bodies.
     pub dependent_calls: HashMap<String, HashSet<(usize, usize)>>,
     /// Using-declaration names visible at each template's definition.
     pub template_definition_usings: HashMap<String, HashSet<String>>,

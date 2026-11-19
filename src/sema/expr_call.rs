@@ -78,15 +78,7 @@ impl Sema {
                     return Ok(ret);
                 }
             }
-            let dependent = *dependent
-                || self
-                    .current_template_identity
-                    .as_ref()
-                    .is_some_and(|identity| {
-                        self.dependent_calls
-                            .get(identity)
-                            .is_some_and(|positions| positions.contains(&(pos.line, pos.col)))
-                    });
+            let dependent = *dependent || self.expression_is_dependent(*pos);
             return self.resolve_named_call(&name, args, &arg_types, callee, *pos, dependent);
         }
 

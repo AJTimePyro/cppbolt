@@ -304,6 +304,19 @@ impl Sema {
         }
     }
 
+    /// Whether an expression at `pos` was dependent in the template definition
+    /// whose body is currently being analyzed. Positions are preserved by
+    /// substitution, so this also holds for rewritten and nested expressions.
+    pub(super) fn expression_is_dependent(&self, pos: ExprPos) -> bool {
+        self.current_template_identity
+            .as_ref()
+            .is_some_and(|identity| {
+                self.dependent_calls
+                    .get(identity)
+                    .is_some_and(|positions| positions.contains(&(pos.line, pos.col)))
+            })
+    }
+
     pub(super) fn find_call_candidates(
         &mut self,
         name: &str,
