@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### SFINAE Completion Audit (C++17)
+- Namespace-scope `constexpr` values now fold into non-type template arguments, including negated and trait-derived values and chains between constants (`constexpr bool b = !a;`). A constexpr global used as an NTTP no longer fails as a non-constant expression, and a constant is visible only after its declaration is reached, matching Clang and GCC. `static_assert` keeps folding against all program constants so a forward reference cannot silently pass.
+- Explicit template arguments now bind a parameter pack that is not the last template parameter; remaining explicit arguments go to the pack and trailing parameters are deduced from the call. Pack arguments carry their arity in the specialization identity, so an empty pack cannot collide with a one-element `int` pack, and a plain call re-runs deduction instead of binding to an earlier cached specialization.
+- Removed stray debug output that polluted negative-test diagnostics, and extended instantiation snapshots to cover hidden-friend tables. Added regression tests for constexpr NTTP globals, non-trailing packs, and undefined NTTP rejection; documented the remaining out-of-subset SFINAE cases in `supported-cpp.md`.
+
 ### Two-Phase Lookup and ADL (C++17)
 - Ordinary lookup inside a function template now uses the overloads visible at the template's definition. A function declared later in the file can no longer rebind a name in that template.
 - Dependent unqualified calls collect ADL candidates from the associated namespaces and classes of the instantiated arguments, and merge them with ordinary candidates. Associated entities include base classes, template type arguments, pointers, references and arrays. Qualified calls do not use ADL.

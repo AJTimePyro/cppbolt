@@ -92,6 +92,19 @@ cargo run --bin cppbolt-testrunner -- target/release/cppbolt-cli
 
 ## Known Limitations & Design Rules
 
+### SFINAE Audit (2026-11-19) — Supported Subset and Remaining Gaps
+The six SFINAE milestones (typed substitution failure, dependent nested types, instantiation rollback, expression SFINAE, partial-specialization/pack SFINAE, standard traits) are implemented. The following cases remain outside that subset and are **not** accepted the way Clang/GCC accept them:
+
+- `decltype(auto)` return types (`template<class T> decltype(auto) f(T&&)`) are not parsed; use an explicit trailing return type instead.
+- Bit-fields (`struct S { int x : 3; };`) are not part of the type/parser model, so `decltype(s.x)` on a bit-field cannot be expressed.
+- Wide character types (`wchar_t`, `char16_t`, `char32_t`) have no distinct type representation. They parse as opaque names: `std::is_integral<char16_t>::value` yields `false` and `sizeof(char16_t)` is 4 rather than 2.
+- A dependent nested type in a partial-specialization pattern (`H<T, typename Box<decltype(T())>::type>`) does not match structurally against the concrete argument, so that specialization is discarded and the primary template is selected. Patterns with a direct `decltype`/`Box<decltype(...)>` operand work.
+- An alias template directly in a partial-specialization pattern (`S<Ptr<T>>` with `Ptr<T> = T*`) is not deduced; the primary template is selected. Direct pointer patterns (`S<T*>`) work.
+- A `static const` member of a **non-template** class used as a non-type argument (`Box<C::n>`) is rejected as a non-constant; class-template constants (`Trait<T>::value`) and namespace-scope `constexpr` values work.
+- `enable_if<false, T>::type` used outside a substitution context is accepted as an opaque type instead of producing a hard error. Inside a template signature it correctly rejects the candidate.
+
+`decltype` on an overload-set operand, bare function-name decay, non-dependent `enable_if` fallback, and `void_t` detection are covered and match Clang/GCC.
+
 ### 1. Language Semantics & Edge Cases
 - **Copy Elision & Return Semantics**: Prvalue initialization is elided as guaranteed by C++17 (`T x = T(1);`). Returning local automatic variables by value applies C++11 implicit move semantics: overload resolution selects the move constructor before falling back to copy construction. Returning non-local or unmovable lvalues of move-only types (`std::unique_ptr`) is rejected at compile time.
 - **Move Semantics & Value Categories**:
