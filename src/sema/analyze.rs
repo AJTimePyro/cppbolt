@@ -153,6 +153,18 @@ impl Sema {
                 _ => {}
             }
         }
+        // Namespace-scope aliases are parsed straight into `type_aliases` and
+        // never pass through signature analysis. Resolve them now that class
+        // templates are registered so an invalid qualified member access is a
+        // hard error here, while dependent forms stay for substitution.
+        let aliases: Vec<Type> = program
+            .namespace_type_aliases
+            .iter()
+            .filter_map(|name| self.type_aliases.get(name).cloned())
+            .collect();
+        for mut ty in aliases {
+            self.resolve_and_instantiate_type(&mut ty, 0, 0)?;
+        }
         Ok(())
     }
 

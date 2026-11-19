@@ -19,6 +19,80 @@ pub(crate) fn function_template_identity(name: &str, line: usize, col: usize) ->
     format!("{name}@{line}:{col}")
 }
 
+/// True when a class template or one of its partial specializations declares
+/// a nested member with the given name. Such members are valid types even
+/// without a registered type alias.
+fn template_declares_nested_member(sema: &Sema, base: &str, member: &str) -> bool {
+    use crate::ast::Decl;
+    let primary = sema.class_templates.values().map(|(class, _)| class);
+    let partials = sema
+        .partial_specializations
+        .values()
+        .flatten()
+        .map(|spec| &spec.template_class);
+    let classes: Vec<_> = primary.chain(partials).collect();
+
+    // A member may come from the class itself or from one of its bases.
+    let mut visited: Vec<String> = Vec::new();
+    let mut queue = vec![QualifiedName::new(base).plain().to_string()];
+    while let Some(name) = queue.pop() {
+        if visited.contains(&name) {
+            continue;
+        }
+        visited.push(name.clone());
+        for class in classes
+            .iter()
+            .filter(|c| QualifiedName::new(&c.name).plain() == name)
+        {
+            if class.nested_structs.iter().any(|nested| {
+                matches!(nested, Decl::StructDecl { name, .. }
+                    if name.rsplit("::").next().is_some_and(|short| short == member))
+            }) {
+                return true;
+            }
+            for base in &class.base_classes {
+                queue.push(QualifiedName::new(base).plain().to_string());
+            }
+        }
+    }
+    // Members of plain (non-template) bases live in the layout and alias maps.
+    visited.iter().any(|name| {
+        let qualified = format!("{}::{}", name, member);
+        sema.struct_layouts.contains_key(&qualified) || sema.lookup_type_alias(&qualified).is_some()
+    })
+}
+
+/// True when a type still mentions template parameters or other dependent
+/// nodes. Used to keep dependent member accesses out of the hard-error path
+/// for concrete specializations.
+fn type_is_dependent(ty: &Type) -> bool {
+    match ty {
+        Type::TypeParam(_)
+        | Type::DependentNested(_)
+        | Type::DependentNonType(_)
+        | Type::DependentArray(..)
+        | Type::DependentAlignas(..)
+        | Type::Decltype { .. } => true,
+        Type::Const(inner)
+        | Type::Pointer(inner)
+        | Type::Reference(inner)
+        | Type::RvalueReference(inner)
+        | Type::Array(inner, _)
+        | Type::PackExpansion(inner)
+        | Type::Aligned(inner, _) => type_is_dependent(inner),
+        Type::TemplateInstance { args, .. } => args.iter().any(type_is_dependent),
+        Type::Function {
+            return_type,
+            param_types,
+            ..
+        } => type_is_dependent(return_type) || param_types.iter().any(type_is_dependent),
+        Type::MemberPointer { member_type, .. } | Type::BoundMemberFunction { member_type, .. } => {
+            type_is_dependent(member_type)
+        }
+        _ => false,
+    }
+}
+
 impl Sema {
     pub fn register_function_template(&mut self, decl: FunctionDecl, params: Vec<TemplateParam>) {
         let short = decl
@@ -207,8 +281,55 @@ impl Sema {
     ) -> Result<(), CompileError> {
         if let Some(alias) = self.resolve_nested_type_name(sname, line, col)? {
             *ty = alias;
+            return Ok(());
         }
-        Ok(())
+        // A member of a concrete class-template specialization must exist:
+        // `enable_if<false, T>::type` has no `type` member and is a hard error
+        // outside substitution. Dependent arguments are left for the existing
+        // substitution machinery to resolve or reject at instantiation.
+        let Some(gt_pos) = sname.rfind('>') else {
+            return Ok(());
+        };
+        if !sname[gt_pos..].starts_with(">::") {
+            return Ok(());
+        }
+        let inst_part = &sname[..gt_pos + 1];
+        let Some((base, args_str)) = super::template_deduce::split_template_call_name(inst_part)
+        else {
+            return Ok(());
+        };
+        // A nested-qualified base such as `Outer<int>::Inner` needs its own
+        // member-template resolution; leave those types opaque here.
+        if base.contains("::") {
+            return Ok(());
+        }
+        let known: Vec<String> = self
+            .class_templates
+            .keys()
+            .chain(self.alias_templates.keys())
+            .cloned()
+            .collect();
+        let Ok(args) = super::template_deduce::parse_types_list(args_str, &known) else {
+            return Ok(());
+        };
+        if args.iter().any(type_is_dependent) {
+            return Ok(());
+        }
+        // A nested struct declared by the template is a valid type even when
+        // no member alias was registered for it. Only report a hard error when
+        // no template definition declares a nested member of that name.
+        if template_declares_nested_member(self, base, &sname[gt_pos + 3..]) {
+            return Ok(());
+        }
+        Err(CompileError::new(
+            format!(
+                "no type named '{}' in '{}'",
+                &sname[gt_pos + 3..],
+                inst_part
+            ),
+            line,
+            col,
+        ))
     }
 
     /// Resolves a qualified name to its type. Missing nested types yield

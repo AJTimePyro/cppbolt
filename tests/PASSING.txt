@@ -829,3 +829,9 @@ negative/static_const_member_nttp_no_init
 negative/static_const_member_nttp_unknown
 negative/static_const_member_nttp_wrong_type
 cxx17/static_const_member_nttp
+cxx17/enable_if_ordinary_valid
+negative/enable_if_false_alias
+negative/enable_if_false_param
+negative/enable_if_false_return
+negative/enable_if_nested_hard_error
+negative/enable_if_false_ns_alias
