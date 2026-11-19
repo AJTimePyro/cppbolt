@@ -58,6 +58,6 @@ Compiling templated standard library headers like `<vector>`, `<utility>`, and `
 
 ### Negative / Trade-offs
 - Ill-formed non-dependent expressions in uninstantiated template bodies do not trigger compile errors unless an instantiation requests them.
-- The definition-time snapshot tracks overloads and template identities but not friend declarations introduced after a template definition.
-- Class-template member bodies are analyzed without a definition-time identity, so a later declaration can still bind inside them.
-- Hidden friends declared in a class template are not associated with a concrete specialization, so ADL does not find them.
+- The definition-time snapshot tracks overloads, template identities and using declarations but not friend declarations introduced after a template definition.
+- Friend function templates inside a class are not parsed. The parser accepts plain friend functions and friend operators only.
+- Operator calls inside templates use instantiation-time ADL, even when their arguments are non-dependent.
