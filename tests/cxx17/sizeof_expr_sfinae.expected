@@ -1,0 +1,2 @@
+size_of_value(Has)=1 size_of_value(No)=2
+sizeof(expr)=4 sizeof(type)=4 alignof(type)=4

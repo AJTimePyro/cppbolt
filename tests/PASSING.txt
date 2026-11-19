@@ -841,3 +841,6 @@ negative/nested_member_template_missing_member
 cxx17/partial_spec_nested_decltype
 cxx17/partial_spec_nested_decltype_invalid
 negative/partial_spec_unrenderable_decltype
+cxx17/sizeof_expr_sfinae
+negative/sizeof_expr_sfinae_no_fallback
+negative/sizeof_expr_nested_instantiation_hard
