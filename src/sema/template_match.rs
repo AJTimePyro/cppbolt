@@ -1,7 +1,10 @@
 //! Partial specialization pattern matching and ranking.
 
 use super::pack_expansion::TemplateArg;
-use super::template_deduce::{parse_types_list_with_params, split_template_call_name};
+use super::template_deduce::{
+    build_template_arg_map, fill_default_template_args, parse_types_list_with_params,
+    split_template_call_name,
+};
 use super::*;
 use crate::ast::template::{TemplateClass, TemplateParam};
 use crate::ast::types::Type;
@@ -10,6 +13,7 @@ use crate::name::QualifiedName;
 use std::collections::HashMap;
 
 type MatchedPartial = (TemplateClass, HashMap<String, TemplateArg>);
+type AliasMap = HashMap<String, (Vec<TemplateParam>, Type)>;
 
 #[derive(Debug, Clone)]
 pub struct PartialSpec {
@@ -21,7 +25,7 @@ pub struct PartialSpec {
     pub params: Vec<TemplateParam>,
 }
 
-fn pattern_needs_confirmation(ty: &Type, aliases: &std::collections::HashSet<String>) -> bool {
+fn pattern_needs_confirmation(ty: &Type, aliases: &AliasMap) -> bool {
     match ty {
         Type::Decltype { .. } => true,
         Type::Const(inner)
@@ -30,10 +34,64 @@ fn pattern_needs_confirmation(ty: &Type, aliases: &std::collections::HashSet<Str
         | Type::RvalueReference(inner)
         | Type::PackExpansion(inner) => pattern_needs_confirmation(inner, aliases),
         Type::TemplateInstance { name, args } => {
-            aliases.contains(QualifiedName::new(name).plain())
+            alias_definition(name, aliases).is_some()
                 || args.iter().any(|a| pattern_needs_confirmation(a, aliases))
         }
         _ => false,
+    }
+}
+
+/// Looks up an alias template by the spelling used in a pattern, accepting both
+/// the qualified and unqualified forms.
+fn alias_definition<'a>(
+    name: &str,
+    aliases: &'a AliasMap,
+) -> Option<&'a (Vec<TemplateParam>, Type)> {
+    aliases
+        .get(name)
+        .or_else(|| aliases.get(QualifiedName::new(name).plain()))
+}
+
+/// True when a type is purely structural for deduction. Dependent nodes are
+/// non-deduced contexts whose validity is checked later by
+/// `confirm_resolved_pattern`, so alias expansions containing them defer to
+/// that confirmation rather than binding parameters here.
+fn is_deducible_pattern(ty: &Type) -> bool {
+    match ty {
+        Type::DependentNested(_)
+        | Type::DependentNonType(_)
+        | Type::DependentArray(..)
+        | Type::DependentAlignas(..)
+        | Type::Decltype { .. } => false,
+        Type::Const(inner)
+        | Type::Pointer(inner)
+        | Type::Reference(inner)
+        | Type::RvalueReference(inner)
+        | Type::PackExpansion(inner)
+        | Type::Aligned(inner, _) => is_deducible_pattern(inner),
+        Type::TemplateInstance { args, .. } => args.iter().all(is_deducible_pattern),
+        _ => true,
+    }
+}
+
+/// Expands a top-level alias template in a pattern into its target type with
+/// the pattern arguments substituted in. C++ treats alias templates as
+/// transparent, so `S<Ptr<T>>` deduces `T` from the expansion `T*` instead of
+/// treating the alias as a non-deduced context. Returns `None` when the pattern
+/// is not an alias or the expansion is not structurally deducible, in which
+/// case confirmation still validates it after the other arguments are bound.
+fn expand_alias_pattern(pattern: &Type, aliases: &AliasMap) -> Option<Type> {
+    let Type::TemplateInstance { name, args } = pattern else {
+        return None;
+    };
+    let (params, target) = alias_definition(name, aliases)?;
+    let effective = fill_default_template_args(name, params, args, (0, 0)).ok()?;
+    let mapping = build_template_arg_map(params, &effective);
+    let expanded = super::template_subst::substitute_type(target, &mapping, None).ok()?;
+    if is_deducible_pattern(&expanded) {
+        Some(expanded)
+    } else {
+        None
     }
 }
 
@@ -98,18 +156,34 @@ fn confirm_resolved_pattern(
                 let probe = probe.get_or_insert_with(|| sema.clone());
                 let mut resolved_args = Vec::new();
                 for arg in p_args {
-                    let mut resolved = super::template_subst::substitute_type(arg, bindings, None)?;
-                    super::template_subst_func::mark_dependent_nested(arg, &mut resolved, bindings);
-                    if let Err(error) =
-                        probe.resolve_and_instantiate_type(&mut resolved, pos.0, pos.1)
-                    {
-                        return if error.kind == ErrorKind::Substitution {
-                            Ok(false)
-                        } else {
-                            Err(error)
-                        };
+                    // Expand pack arguments before resolving so a `Ts...` in
+                    // the alias pattern becomes one argument per element.
+                    let expanded = match super::pack_expansion::expand_type_list(
+                        std::slice::from_ref(arg),
+                        bindings,
+                        pos,
+                    ) {
+                        Ok(expanded) => expanded,
+                        Err(error) if error.kind == ErrorKind::Substitution => return Ok(false),
+                        Err(error) => return Err(error),
+                    };
+                    for mut resolved in expanded {
+                        super::template_subst_func::mark_dependent_nested(
+                            arg,
+                            &mut resolved,
+                            bindings,
+                        );
+                        if let Err(error) =
+                            probe.resolve_and_instantiate_type(&mut resolved, pos.0, pos.1)
+                        {
+                            return if error.kind == ErrorKind::Substitution {
+                                Ok(false)
+                            } else {
+                                Err(error)
+                            };
+                        }
+                        resolved_args.push(resolved);
                     }
-                    resolved_args.push(resolved);
                 }
                 return match probe.expand_alias_template(p_name, &resolved_args, pos.0, pos.1) {
                     Ok(Some(expanded)) => Ok(&expanded == concrete),
@@ -179,13 +253,16 @@ pub fn match_pattern_arg(
     pattern: &Type,
     concrete: &Type,
     bindings: &mut HashMap<String, TemplateArg>,
-    alias_names: &std::collections::HashSet<String>,
+    aliases: &AliasMap,
 ) -> bool {
-    // An alias template in a pattern is a non-deduced context: expand it after
-    // deduction in `confirm_resolved_pattern`, where it can be resolved with
-    // the concrete types substituted.
+    // Expand alias templates so their arguments are deducible. A dependent
+    // expansion is left as a non-deduced context and confirmed after deduction
+    // in `confirm_resolved_pattern`.
+    if let Some(expanded) = expand_alias_pattern(pattern, aliases) {
+        return match_pattern_arg(&expanded, concrete, bindings, aliases);
+    }
     if let Type::TemplateInstance { name, .. } = pattern
-        && alias_names.contains(QualifiedName::new(name).plain())
+        && alias_definition(name, aliases).is_some()
     {
         return true;
     }
@@ -200,20 +277,20 @@ pub fn match_pattern_arg(
             }
         }
         Type::Const(p_inner) => match concrete {
-            Type::Const(c_inner) => match_pattern_arg(p_inner, c_inner, bindings, alias_names),
+            Type::Const(c_inner) => match_pattern_arg(p_inner, c_inner, bindings, aliases),
             _ => false,
         },
         Type::Pointer(p_inner) => match concrete {
-            Type::Pointer(c_inner) => match_pattern_arg(p_inner, c_inner, bindings, alias_names),
+            Type::Pointer(c_inner) => match_pattern_arg(p_inner, c_inner, bindings, aliases),
             _ => false,
         },
         Type::Reference(p_inner) => match concrete {
-            Type::Reference(c_inner) => match_pattern_arg(p_inner, c_inner, bindings, alias_names),
+            Type::Reference(c_inner) => match_pattern_arg(p_inner, c_inner, bindings, aliases),
             _ => false,
         },
         Type::RvalueReference(p_inner) => match concrete {
             Type::RvalueReference(c_inner) => {
-                match_pattern_arg(p_inner, c_inner, bindings, alias_names)
+                match_pattern_arg(p_inner, c_inner, bindings, aliases)
             }
             _ => false,
         },
@@ -228,7 +305,7 @@ pub fn match_pattern_arg(
                 if !QualifiedName::new(p_name).matches(QualifiedName::new(c_name)) {
                     return false;
                 }
-                match_pattern_args(p_args, c_args, bindings, alias_names)
+                match_pattern_args(p_args, c_args, bindings, aliases)
             }
             Type::Struct(sname) => {
                 if let Some((s_base, s_args_str)) = split_template_call_name(sname)
@@ -238,7 +315,7 @@ pub fn match_pattern_arg(
                         std::slice::from_ref(p_name),
                     )
                 {
-                    match_pattern_args(p_args, &s_args, bindings, alias_names)
+                    match_pattern_args(p_args, &s_args, bindings, aliases)
                 } else {
                     false
                 }
@@ -257,7 +334,7 @@ pub fn match_pattern_args(
     patterns: &[Type],
     concrete_args: &[Type],
     bindings: &mut HashMap<String, TemplateArg>,
-    alias_names: &std::collections::HashSet<String>,
+    aliases: &AliasMap,
 ) -> bool {
     let has_pack = patterns
         .last()
@@ -269,14 +346,14 @@ pub fn match_pattern_args(
         return patterns
             .iter()
             .zip(concrete_args.iter())
-            .all(|(p, c)| match_pattern_arg(p, c, bindings, alias_names));
+            .all(|(p, c)| match_pattern_arg(p, c, bindings, aliases));
     }
     let num_fixed = patterns.len().saturating_sub(1);
     if concrete_args.len() < num_fixed {
         return false;
     }
     for i in 0..num_fixed {
-        if !match_pattern_arg(&patterns[i], &concrete_args[i], bindings, alias_names) {
+        if !match_pattern_arg(&patterns[i], &concrete_args[i], bindings, aliases) {
             return false;
         }
     }
@@ -284,14 +361,14 @@ pub fn match_pattern_args(
         return false;
     };
     let trailing = &concrete_args[num_fixed..];
-    match_trailing_pack(inner, trailing, bindings, alias_names)
+    match_trailing_pack(inner, trailing, bindings, aliases)
 }
 
 fn match_trailing_pack(
     inner_pattern: &Type,
     trailing: &[Type],
     bindings: &mut HashMap<String, TemplateArg>,
-    alias_names: &std::collections::HashSet<String>,
+    aliases: &AliasMap,
 ) -> bool {
     if let Type::TypeParam(p) = inner_pattern {
         let is_nontype = trailing.iter().any(|t| matches!(t, Type::NonType(_)));
@@ -321,7 +398,7 @@ fn match_trailing_pack(
     let mut collected: HashMap<String, Vec<Type>> = HashMap::new();
     for arg in trailing {
         let mut elem_bindings = HashMap::new();
-        if !match_pattern_arg(inner_pattern, arg, &mut elem_bindings, alias_names) {
+        if !match_pattern_arg(inner_pattern, arg, &mut elem_bindings, aliases) {
             return false;
         }
         for (k, v) in elem_bindings {
@@ -370,8 +447,17 @@ pub fn calculate_specificity(pattern: &Type) -> usize {
 }
 
 impl PartialSpec {
-    pub fn score(&self) -> usize {
-        let mut score: usize = self.pattern_args.iter().map(calculate_specificity).sum();
+    pub fn score(&self, aliases: &AliasMap) -> usize {
+        // Rank aliases by the type they expand to, not by the `TemplateInstance`
+        // wrapper, so `Ptr<T>` scores like `T*` during partial ordering.
+        let mut score: usize = self
+            .pattern_args
+            .iter()
+            .map(|arg| {
+                let expanded = expand_alias_pattern(arg, aliases);
+                calculate_specificity(expanded.as_ref().unwrap_or(arg))
+            })
+            .sum();
         let fixed_count = self
             .pattern_args
             .iter()
@@ -440,12 +526,15 @@ impl Sema {
         let Some(specs) = self.partial_specializations.get(name).cloned() else {
             return Ok(None);
         };
-        let alias_names: std::collections::HashSet<String> =
-            self.alias_templates.keys().cloned().collect();
         let mut matches = Vec::new();
         'candidate: for spec in specs {
             let mut bindings = HashMap::new();
-            if !match_pattern_args(&spec.pattern_args, args, &mut bindings, &alias_names) {
+            if !match_pattern_args(
+                &spec.pattern_args,
+                args,
+                &mut bindings,
+                &self.alias_templates,
+            ) {
                 continue;
             }
             // A param reachable only through a non-deduced context is never
@@ -459,7 +548,7 @@ impl Sema {
             if spec
                 .pattern_args
                 .iter()
-                .any(|p| pattern_needs_confirmation(p, &alias_names))
+                .any(|p| pattern_needs_confirmation(p, &self.alias_templates))
             {
                 // One disposable clone per candidate, shared by all its alias
                 // patterns, so rejected candidates cannot leak state and a
@@ -473,7 +562,7 @@ impl Sema {
                     }
                 }
             }
-            let score = spec.score();
+            let score = spec.score(&self.alias_templates);
             matches.push((spec, bindings, score));
         }
         if matches.is_empty() {

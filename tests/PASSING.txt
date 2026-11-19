@@ -815,3 +815,4 @@ cxx17/constexpr_nttp_declaration_order
 negative/constexpr_nttp_forward_declaration
 negative/constexpr_nttp_forward_trait
 negative/static_assert_forward_constexpr
+cxx17/template_alias_partial_specialization
