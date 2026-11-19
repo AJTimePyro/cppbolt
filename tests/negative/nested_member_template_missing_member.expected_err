@@ -1,0 +1,1 @@
+0:0: error: no type named 'type' in 'A::Outer<int>::Inner<double>'

@@ -835,3 +835,6 @@ negative/enable_if_false_param
 negative/enable_if_false_return
 negative/enable_if_nested_hard_error
 negative/enable_if_false_ns_alias
+cxx17/qualified_namespace_aliases
+negative/qualified_alias_missing_member
+negative/nested_member_template_missing_member

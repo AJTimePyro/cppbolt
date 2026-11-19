@@ -50,15 +50,36 @@ fn template_declares_nested_member(sema: &Sema, base: &str, member: &str) -> boo
             }) {
                 return true;
             }
+            // A base written without qualification lives in the template's
+            // namespace, so search both its raw and namespace-qualified names.
+            let namespace = class.name.rsplit_once("::").map(|(n, _)| n).unwrap_or("");
             for base in &class.base_classes {
+                queue.push(base.clone());
                 queue.push(QualifiedName::new(base).plain().to_string());
+                if !namespace.is_empty() && !base.contains("::") {
+                    queue.push(format!("{}::{}", namespace, base));
+                }
             }
         }
     }
     // Members of plain (non-template) bases live in the layout and alias maps.
     visited.iter().any(|name| {
         let qualified = format!("{}::{}", name, member);
-        sema.struct_layouts.contains_key(&qualified) || sema.lookup_type_alias(&qualified).is_some()
+        if sema.struct_layouts.contains_key(&qualified)
+            || sema.lookup_type_alias(&qualified).is_some()
+        {
+            return true;
+        }
+        // Member aliases of nested member templates are registered under the
+        // uninstantiated spelling, without template argument lists.
+        let plain: String = name
+            .split("::")
+            .map(|part| part.split('<').next().unwrap_or(part))
+            .collect::<Vec<_>>()
+            .join("::");
+        let plain_qualified = format!("{}::{}", plain, member);
+        sema.struct_layouts.contains_key(&plain_qualified)
+            || sema.lookup_type_alias(&plain_qualified).is_some()
     })
 }
 
@@ -298,11 +319,6 @@ impl Sema {
         else {
             return Ok(());
         };
-        // A nested-qualified base such as `Outer<int>::Inner` needs its own
-        // member-template resolution; leave those types opaque here.
-        if base.contains("::") {
-            return Ok(());
-        }
         let known: Vec<String> = self
             .class_templates
             .keys()
