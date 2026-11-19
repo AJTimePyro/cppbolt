@@ -338,6 +338,74 @@ impl Expr {
         }
     }
 
+    /// Renders the expression as source-like text. Used when an expression is
+    /// embedded in a type name (for example `decltype(T())`) that may need to
+    /// be re-parsed after template substitution. Unhandled forms fall back to
+    /// the debug rendering, which is not re-parsable but is stable.
+    pub fn to_source(&self) -> String {
+        match self {
+            Expr::Identifier(id) => id.clone(),
+            Expr::IntLiteral(value, _) => value.to_string(),
+            Expr::Call { callee, args, .. } => {
+                let rendered = args
+                    .iter()
+                    .map(|arg| arg.to_source())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{}({})", callee.to_source(), rendered)
+            }
+            Expr::MemberAccess {
+                object,
+                member,
+                is_arrow,
+                ..
+            } => {
+                let sep = if *is_arrow { "->" } else { "." };
+                format!("{}{}{}", object.to_source(), sep, member)
+            }
+            Expr::SizeofType(ty) => format!("sizeof({})", ty.to_c_type()),
+            Expr::AlignofType(ty) => format!("alignof({})", ty.to_c_type()),
+            Expr::SizeofExpr(expr) => format!("sizeof({})", expr.to_source()),
+            Expr::Unary { op, expr, .. } => {
+                let sym = match op {
+                    UnaryOp::Neg => "-",
+                    UnaryOp::Plus => "+",
+                    UnaryOp::Not => "!",
+                    UnaryOp::BitNot => "~",
+                    UnaryOp::Deref => "*",
+                    UnaryOp::AddrOf => "&",
+                    _ => return format!("{:?}", self),
+                };
+                format!("{}{}", sym, expr.to_source())
+            }
+            Expr::Binary {
+                op, left, right, ..
+            } => {
+                let sym = match op {
+                    BinaryOp::Add => "+",
+                    BinaryOp::Sub => "-",
+                    BinaryOp::Mul => "*",
+                    BinaryOp::Div => "/",
+                    BinaryOp::Rem => "%",
+                    BinaryOp::Eq => "==",
+                    BinaryOp::Ne => "!=",
+                    BinaryOp::Lt => "<",
+                    BinaryOp::Le => "<=",
+                    BinaryOp::Gt => ">",
+                    BinaryOp::Ge => ">=",
+                    BinaryOp::LogicalAnd => "&&",
+                    BinaryOp::LogicalOr => "||",
+                    BinaryOp::BitAnd => "&",
+                    BinaryOp::BitOr => "|",
+                    BinaryOp::BitXor => "^",
+                    _ => return format!("{:?}", self),
+                };
+                format!("({} {} {})", left.to_source(), sym, right.to_source())
+            }
+            _ => format!("{:?}", self),
+        }
+    }
+
     pub fn is_lvalue(&self) -> bool {
         match self {
             Expr::Identifier(_) | Expr::ArraySubscript { .. } => true,

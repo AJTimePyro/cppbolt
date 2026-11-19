@@ -16,16 +16,23 @@ pub fn split_template_call_name(name: &str) -> Option<(&str, &str)> {
         return None;
     }
     let mut depth = 0;
+    let mut paren = 0i32;
     let mut open = None;
     for (i, &b) in name.as_bytes().iter().enumerate().rev() {
-        if b == b'>' {
-            depth += 1;
-        } else if b == b'<' {
-            depth -= 1;
-            if depth == 0 {
-                open = Some(i);
-                break;
+        // Angle brackets inside a parenthesized expression (a comparison or
+        // an `->`) are not template delimiters.
+        match b {
+            b')' => paren += 1,
+            b'(' => paren -= 1,
+            b'>' if paren == 0 => depth += 1,
+            b'<' if paren == 0 => {
+                depth -= 1;
+                if depth == 0 {
+                    open = Some(i);
+                    break;
+                }
             }
+            _ => {}
         }
     }
     let open = open?;
