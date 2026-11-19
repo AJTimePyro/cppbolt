@@ -1,0 +1,1 @@
+tests/negative/partial_spec_unrenderable_decltype.cpp:15:5: error: unsupported expression in dependent decltype pattern

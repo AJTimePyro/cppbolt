@@ -840,3 +840,4 @@ negative/qualified_alias_missing_member
 negative/nested_member_template_missing_member
 cxx17/partial_spec_nested_decltype
 cxx17/partial_spec_nested_decltype_invalid
+negative/partial_spec_unrenderable_decltype

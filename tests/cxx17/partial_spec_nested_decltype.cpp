@@ -43,10 +43,66 @@ struct L { static constexpr int value = 0; };
 template<class T>
 struct L<Id<T>, typename Box<decltype(T())>::type> { static constexpr int value = 4; };
 
+// Other operand forms. Each is rendered as source when the qualified pattern
+// is stringified, then reparsed during confirmation. A non-matching second
+// argument makes sure none of them over-match.
+template<class T, class U>
+struct CS { static constexpr int value = 0; };
+template<class T>
+struct CS<T, typename Box<decltype(static_cast<T>(0))>::type> {
+    static constexpr int value = 1;
+};
+
+template<class T, class U>
+struct TS { static constexpr int value = 0; };
+template<class T>
+struct TS<T, typename Box<decltype(true ? T() : T())>::type> {
+    static constexpr int value = 1;
+};
+
+template<class T, class U>
+struct SS { static constexpr int value = 0; };
+template<class T>
+struct SS<T, typename Box<decltype(T() << 1)>::type> {
+    static constexpr int value = 1;
+};
+
+template<class T, class U>
+struct RS { static constexpr int value = 0; };
+template<class T>
+struct RS<T, typename Box<decltype(+((T*)0)[0])>::type> {
+    static constexpr int value = 1;
+};
+
+// A value-returning subscript keeps declval<T>()[0] a prvalue, so the result
+// agrees with native C++ (a pointer subscript would yield a reference, which
+// cppbolt's decltype does not model).
+struct ArrayLike { int operator[](int) const { return 0; } };
+template<class T, class U>
+struct DS { static constexpr int value = 0; };
+template<class T>
+struct DS<T, typename Box<decltype(std::declval<T>()[0])>::type> {
+    static constexpr int value = 1;
+};
+
+template<class T, class U>
+struct VS { static constexpr int value = 0; };
+template<class T>
+struct VS<T, typename Box<decltype(std::declval<T>() << 1)>::type> {
+    static constexpr int value = 1;
+};
+
 int main() {
     std::printf("H<int,int>=%d H<int,double>=%d\n", H<int,int>::value, H<int,double>::value);
     std::printf("G<HasGet,int>=%d G<NoGet,int>=%d\n", G<HasGet,int>::value, G<NoGet,int>::value);
     std::printf("L<int,int>=%d L<int,double>=%d\n", L<int,int>::value, L<int,double>::value);
     std::printf("M<int,int>=%d N<WithGet*,int>=%d\n", M<int,int>::value, N<WithGet*,int>::value);
+    std::printf("CS<int,int>=%d CS<int,double>=%d\n", CS<int,int>::value, CS<int,double>::value);
+    std::printf("TS<int,int>=%d TS<int,double>=%d\n", TS<int,int>::value, TS<int,double>::value);
+    std::printf("SS<int,int>=%d SS<int,double>=%d\n", SS<int,int>::value, SS<int,double>::value);
+    std::printf("RS<int,int>=%d RS<int,double>=%d\n", RS<int,int>::value, RS<int,double>::value);
+    std::printf("DS<ArrayLike,int>=%d DS<ArrayLike,double>=%d\n",
+                DS<ArrayLike,int>::value, DS<ArrayLike,double>::value);
+    std::printf("VS<int,int>=%d VS<int,double>=%d\n", VS<int,int>::value, VS<int,double>::value);
     return 0;
 }
