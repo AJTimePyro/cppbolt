@@ -796,3 +796,5 @@ negative/virtual_member_template
 cxx17/two_phase_operator_dependent
 negative/two_phase_operator_late
 negative/two_phase_unary_operator_late
+cxx17/two_phase_friend_function_template
+negative/two_phase_friend_function_template_ordinary

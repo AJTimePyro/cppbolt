@@ -118,6 +118,10 @@ pub struct Sema {
     /// Friend functions defined in a class, keyed by that class's name.
     /// Found only through ADL, never through ordinary lookup.
     pub hidden_friends: HashMap<String, Vec<FunctionSig>>,
+    /// Friend function templates of concrete class-template specializations,
+    /// keyed by the specialization they are associated with. Found only
+    /// through ADL, never by ordinary unqualified lookup.
+    pub hidden_friend_templates: HashMap<String, Vec<(FunctionDecl, Vec<TemplateParam>)>>,
     pub global_vars: HashMap<String, VarSymbol>,
     pub scopes: Vec<Scope>,
     pub current_func_return_type: Option<Type>,
@@ -207,6 +211,7 @@ impl Sema {
             scoped_enums: HashSet::new(),
             functions: HashMap::new(),
             hidden_friends: HashMap::new(),
+            hidden_friend_templates: HashMap::new(),
             global_vars: HashMap::new(),
             scopes: Vec::new(),
             current_func_return_type: None,

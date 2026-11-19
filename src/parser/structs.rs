@@ -117,7 +117,28 @@ impl Parser {
         if self.parse_struct_access(body)? {
             return Ok(());
         }
-        if self.parse_struct_friend(body)? {
+
+        // `template<...> friend f(...)` declares a friend function template.
+        // Parse the header tentatively and hand it to the friend parser when
+        // `friend` follows; otherwise restore the cursor for the other paths.
+        if self.peek() == &TokenKind::KwTemplate {
+            let saved_pos = self.pos;
+            let saved_splits = self.shr_splits.len();
+            self.advance();
+            self.expect(TokenKind::Lt)?;
+            let params = self.parse_template_params()?;
+            let is_friend = self.peek() == &TokenKind::KwFriend;
+            if is_friend {
+                let result = self.parse_struct_friend(body, Some(&params));
+                self.active_type_params.pop();
+                result?;
+                return Ok(());
+            }
+            self.active_type_params.pop();
+            self.rollback_pos(saved_pos, saved_splits);
+        }
+
+        if self.parse_struct_friend(body, None)? {
             return Ok(());
         }
         if self.parse_nested_struct_member(body)? {

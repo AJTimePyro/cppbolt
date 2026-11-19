@@ -1,5 +1,6 @@
 use super::structs::StructBody;
 use super::*;
+use crate::ast::template::TemplateParam;
 
 impl Parser {
     pub(super) fn parse_nested_struct_member(
@@ -242,6 +243,7 @@ impl Parser {
     pub(super) fn parse_struct_friend(
         &mut self,
         body: &mut StructBody,
+        template_params: Option<&[TemplateParam]>,
     ) -> Result<bool, CompileError> {
         if self.peek() != &TokenKind::KwFriend {
             return Ok(false);
@@ -272,8 +274,11 @@ impl Parser {
                 ));
             }
         };
-        body.friends
-            .push(self.parse_function_tail(name, return_type, start.line, start.col)?);
+        let mut func = self.parse_function_tail(name, return_type, start.line, start.col)?;
+        if let Some(params) = template_params {
+            func.template_params = params.to_vec();
+        }
+        body.friends.push(func);
         Ok(true)
     }
 }

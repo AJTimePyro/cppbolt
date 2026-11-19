@@ -2,6 +2,8 @@
 //! diagnostics of a call that no candidate matches.
 
 use super::*;
+use crate::ast::decl::FunctionDecl;
+use crate::ast::template::TemplateParam;
 use std::collections::HashSet;
 
 /// Associated entities of one argument type, as defined by
@@ -112,6 +114,36 @@ impl Sema {
         for class_name in out.classes {
             if let Some(friends) = self.hidden_friends.get(&class_name).cloned() {
                 found.extend(friends.into_iter().filter(|sig| sig.name == name));
+            }
+        }
+        found
+    }
+
+    /// Friend function templates associated with the argument types, found
+    /// only through ADL. Each specialisation registers its own signature.
+    pub(super) fn adl_friend_templates(
+        &mut self,
+        name: &str,
+        arg_types: &[Type],
+    ) -> Vec<(FunctionDecl, Vec<TemplateParam>)> {
+        let mut entities = AssociatedEntities::default();
+        for arg in arg_types {
+            self.associate_type(arg, &mut entities);
+        }
+        let mut found: Vec<(FunctionDecl, Vec<TemplateParam>)> = Vec::new();
+        for class in entities.classes {
+            let Some(list) = self.hidden_friend_templates.get(&class).cloned() else {
+                continue;
+            };
+            for item in list {
+                let plain = QualifiedName::new(&item.0.name).plain();
+                if (item.0.name == name || plain == name)
+                    && !found.iter().any(|(decl, _)| {
+                        decl.params == item.0.params && decl.return_type == item.0.return_type
+                    })
+                {
+                    found.push(item);
+                }
             }
         }
         found

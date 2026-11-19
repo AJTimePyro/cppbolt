@@ -702,6 +702,22 @@ impl Sema {
                 Some((template_class.name.as_str(), &inst_ty)),
                 None,
             )?;
+            if !friend.template_params.is_empty() {
+                // A friend function template keeps its own template parameters
+                // after the enclosing class parameters are substituted. It
+                // stays hidden until ADL finds it for a call.
+                let plain = QualifiedName::new(inst_name).plain().to_string();
+                for key in [inst_name.to_string(), plain] {
+                    let list = self.hidden_friend_templates.entry(key).or_default();
+                    if !list.iter().any(|(decl, _)| {
+                        decl.params == instantiated.params
+                            && decl.return_type == instantiated.return_type
+                    }) {
+                        list.push((instantiated.clone(), friend.template_params.clone()));
+                    }
+                }
+                continue;
+            }
             self.register_friend_function(inst_name, instantiated.clone())?;
             let prev_class = self.current_class.take();
             self.current_class = Some(inst_name.to_string());

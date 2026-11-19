@@ -88,24 +88,27 @@ impl Sema {
                 (name, Vec::new())
             };
 
-        if let Some(candidates) = self.function_templates.get(tmpl_name).cloned() {
-            let candidates = if let Some(identity) = &self.current_template_identity
-                && let Some(visible) = self.template_definition_functions.get(identity)
-            {
-                candidates
-                    .into_iter()
-                    .filter(|(decl, _)| {
-                        visible.contains(&format!(
-                            "T:{}",
-                            super::template_registry::function_template_identity(
-                                &decl.name, decl.line, decl.col,
-                            )
-                        ))
-                    })
-                    .collect()
-            } else {
-                candidates
-            };
+        let mut candidates = self
+            .function_templates
+            .get(tmpl_name)
+            .cloned()
+            .unwrap_or_default();
+        if let Some(identity) = &self.current_template_identity
+            && let Some(visible) = self.template_definition_functions.get(identity)
+        {
+            candidates.retain(|(decl, _)| {
+                visible.contains(&format!(
+                    "T:{}",
+                    super::template_registry::function_template_identity(
+                        &decl.name, decl.line, decl.col,
+                    )
+                ))
+            });
+        }
+        // Hidden friend templates are reached through ADL on the argument
+        // types, never through the ordinary lookup set above.
+        candidates.extend(self.adl_friend_templates(tmpl_name, arg_types));
+        if !candidates.is_empty() {
             let mut viable = self.collect_viable_template_candidates(
                 &candidates,
                 &explicit_args,
