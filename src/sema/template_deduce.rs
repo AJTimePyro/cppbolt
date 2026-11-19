@@ -195,12 +195,12 @@ fn insert_explicit_template_args(
     deduced: &mut HashMap<String, TemplateArg>,
     explicit_pack: &mut Vec<Type>,
 ) {
-    let has_t_pack = template_params.last().is_some_and(|p| p.is_pack);
-    let non_pack_t_count = if has_t_pack {
-        template_params.len().saturating_sub(1)
-    } else {
-        template_params.len()
-    };
+    // A parameter pack need not be the last template parameter. Explicit
+    // arguments fill the non-pack parameters before the pack, and every
+    // remaining explicit argument is absorbed by the pack; parameters after
+    // the pack are left for deduction from the call.
+    let pack_index = template_params.iter().position(|p| p.is_pack);
+    let non_pack_t_count = pack_index.unwrap_or(template_params.len());
     for (i, explicit_arg) in explicit_args.iter().enumerate() {
         if i < non_pack_t_count {
             let mut arg = TemplateArg::from(explicit_arg.clone());
@@ -212,7 +212,7 @@ fn insert_explicit_template_args(
                 *ty = template_params[i].param_type.clone();
             }
             deduced.insert(template_params[i].name.clone(), arg);
-        } else if has_t_pack {
+        } else if pack_index.is_some() {
             explicit_pack.push(explicit_arg.clone());
         }
     }
@@ -269,7 +269,7 @@ pub fn deduce_template_arguments(
         pos,
     )?;
 
-    let has_t_pack = template_params.last().is_some_and(|p| p.is_pack);
+    let pack_index = template_params.iter().position(|p| p.is_pack);
     let mut deduced: HashMap<String, TemplateArg> = HashMap::new();
     let mut explicit_pack = Vec::new();
     insert_explicit_template_args(
@@ -315,11 +315,13 @@ pub fn deduce_template_arguments(
         let mut pack_types = explicit_pack;
         pack_types.extend(deduced_pack);
         result.insert(pack_name, TemplateArg::TypePack(pack_types));
-    } else if has_t_pack
+    } else if let Some(index) = pack_index
         && !explicit_pack.is_empty()
-        && let Some(last_p) = template_params.last()
     {
-        result.insert(last_p.name.clone(), TemplateArg::TypePack(explicit_pack));
+        result.insert(
+            template_params[index].name.clone(),
+            TemplateArg::TypePack(explicit_pack),
+        );
     }
 
     fill_missing_deduced(template_params, &mut result, pos)?;

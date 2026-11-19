@@ -1,6 +1,7 @@
 use super::call_arity::check_indirect_call_arity;
 use super::constructor::ConstructorCall;
 use super::overload::CandidateSelection;
+use super::template_deduce::split_template_call_name;
 use super::*;
 /// The return type of a function pointer or of a function type.
 fn function_return_type(ty: &Type) -> Option<Type> {
@@ -334,6 +335,21 @@ impl Sema {
         Ok(())
     }
 
+    /// Whether the best non-template candidate is an instantiated function
+    /// template specialization shadowing a template of the same base name.
+    fn cached_specialization_shadows(
+        &self,
+        name: &str,
+        selection: &Option<CandidateSelection>,
+    ) -> bool {
+        let base = split_template_call_name(name).map_or(name, |(base, _)| base);
+        self.function_templates.contains_key(base)
+            && selection
+                .as_ref()
+                .and_then(|s| s.best.as_ref())
+                .is_some_and(|(cand, _)| self.instantiated_functions.contains(&cand.mangled_name))
+    }
+
     fn resolve_named_call(
         &mut self,
         name: &str,
@@ -348,7 +364,14 @@ impl Sema {
             .as_ref()
             .map(|c| self.select_candidate(c, args, arg_types));
 
-        if let Some(sel) = &selection
+        // An instantiated specialization is registered under the template's
+        // base name for operator lookup, so a plain named call must re-run
+        // deduction instead of binding to an earlier specialization that
+        // happens to share the substituted parameter types.
+        let shadowed = self.cached_specialization_shadows(name, &selection);
+
+        if !shadowed
+            && let Some(sel) = &selection
             && !sel.ambiguous
             && let Some((cand, full_args)) = &sel.best
             && cand.param_types == arg_types
@@ -373,11 +396,11 @@ impl Sema {
             && let Some((cand, full_args)) = &sel.best
         {
             if let Some(t_score) = tmpl_score
-                && t_score < sel.best_score
-                && let Ok(Some(sig)) = tmpl_res
+                && (t_score < sel.best_score || (t_score == sel.best_score && shadowed))
+                && let Ok(Some(sig)) = &tmpl_res
             {
-                let full = self.full_arguments(&sig, args);
-                return self.apply_call_candidate(&sig, full, args, arg_types, (callee, pos));
+                let full = self.full_arguments(sig, args);
+                return self.apply_call_candidate(sig, full, args, arg_types, (callee, pos));
             }
             return self.apply_call_candidate(
                 cand,

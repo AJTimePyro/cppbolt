@@ -22,15 +22,25 @@ pub(crate) fn format_canonical_args(
             Some(TemplateArg::NonTypeAddress(addr)) => pieces.push(format!("&{addr}")),
             Some(TemplateArg::NonTypeNull(_)) => pieces.push("nullptr".to_string()),
             Some(TemplateArg::TypePack(types)) => {
-                for t in types {
-                    pieces.push(t.to_c_type());
-                }
+                // Packs need arity in their identity. Flattening their elements
+                // made an empty pack collide with a single `int` argument and
+                // let a later `f<int>` call bind to `f<>`'s cached signature.
+                let inner = types
+                    .iter()
+                    .map(|t| t.to_c_type())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                pieces.push(format!("pack[{inner}]"));
             }
             Some(TemplateArg::NonTypePack(vals)) => {
-                for v in vals {
-                    pieces.push(v.to_string());
-                }
+                let inner = vals
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                pieces.push(format!("npack[{inner}]"));
             }
+            None if p.is_pack => pieces.push("pack[]".to_string()),
             None => pieces.push("int".to_string()),
         }
     }

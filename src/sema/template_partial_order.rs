@@ -341,6 +341,6 @@ mod tests {
         mapping.insert("Rest".to_string(), TemplateArg::TypePack(Vec::new()));
 
         let s = crate::sema::template_func::format_canonical_args(&params, &mapping);
-        assert_eq!(s, "int");
+        assert_eq!(s, "int, pack[]");
     }
 }
