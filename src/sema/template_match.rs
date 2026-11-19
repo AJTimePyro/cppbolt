@@ -52,34 +52,16 @@ fn alias_definition<'a>(
         .or_else(|| aliases.get(QualifiedName::new(name).plain()))
 }
 
-/// True when a type is purely structural for deduction. Dependent nodes are
-/// non-deduced contexts whose validity is checked later by
-/// `confirm_resolved_pattern`, so alias expansions containing them defer to
-/// that confirmation rather than binding parameters here.
-fn is_deducible_pattern(ty: &Type) -> bool {
-    match ty {
-        Type::DependentNested(_)
-        | Type::DependentNonType(_)
-        | Type::DependentArray(..)
-        | Type::DependentAlignas(..)
-        | Type::Decltype { .. } => false,
-        Type::Const(inner)
-        | Type::Pointer(inner)
-        | Type::Reference(inner)
-        | Type::RvalueReference(inner)
-        | Type::PackExpansion(inner)
-        | Type::Aligned(inner, _) => is_deducible_pattern(inner),
-        Type::TemplateInstance { args, .. } => args.iter().all(is_deducible_pattern),
-        _ => true,
-    }
-}
-
 /// Expands a top-level alias template in a pattern into its target type with
 /// the pattern arguments substituted in. C++ treats alias templates as
 /// transparent, so `S<Ptr<T>>` deduces `T` from the expansion `T*` instead of
-/// treating the alias as a non-deduced context. Returns `None` when the pattern
-/// is not an alias or the expansion is not structurally deducible, in which
-/// case confirmation still validates it after the other arguments are bound.
+/// treating the alias as a non-deduced context.
+///
+/// Qualified names that still mention a pattern parameter (for example
+/// `typename T::type`) are marked `DependentNested`. Deduction skips those
+/// nodes, while confirmation resolves them after the other parameters are
+/// bound, so a dependent component does not block deduction from the rest of
+/// the pattern. Returns `None` only when the alias cannot be expanded.
 fn expand_alias_pattern(pattern: &Type, aliases: &AliasMap) -> Option<Type> {
     let Type::TemplateInstance { name, args } = pattern else {
         return None;
@@ -87,12 +69,9 @@ fn expand_alias_pattern(pattern: &Type, aliases: &AliasMap) -> Option<Type> {
     let (params, target) = alias_definition(name, aliases)?;
     let effective = fill_default_template_args(name, params, args, (0, 0)).ok()?;
     let mapping = build_template_arg_map(params, &effective);
-    let expanded = super::template_subst::substitute_type(target, &mapping, None).ok()?;
-    if is_deducible_pattern(&expanded) {
-        Some(expanded)
-    } else {
-        None
-    }
+    let mut expanded = super::template_subst::substitute_type(target, &mapping, None).ok()?;
+    super::template_subst_func::mark_dependent_nested(target, &mut expanded, &mapping);
+    Some(expanded)
 }
 
 /// Confirms a pattern against a concrete argument after deduction. Only
@@ -186,7 +165,21 @@ fn confirm_resolved_pattern(
                     }
                 }
                 return match probe.expand_alias_template(p_name, &resolved_args, pos.0, pos.1) {
-                    Ok(Some(expanded)) => Ok(&expanded == concrete),
+                    Ok(Some(expanded)) => {
+                        // A concrete argument recovered from a template-id string
+                        // can be a `TemplateInstance` while the expansion is an
+                        // instantiated `Struct`. Normalize it the same way the
+                        // alias result was before comparing the two.
+                        let mut canonical = concrete.clone();
+                        if probe
+                            .resolve_and_instantiate_type(&mut canonical, pos.0, pos.1)
+                            .is_ok()
+                        {
+                            Ok(expanded == canonical)
+                        } else {
+                            Ok(&expanded == concrete)
+                        }
+                    }
                     Ok(None) => Ok(false),
                     Err(error) if error.kind == ErrorKind::Substitution => Ok(false),
                     Err(error) => Err(error),
@@ -322,10 +315,11 @@ pub fn match_pattern_arg(
             }
             _ => false,
         },
-        // A `decltype` operand is a non-deduced context. It cannot bind
+        // A `decltype` operand or a qualified type that still mentions a
+        // template parameter is a non-deduced context. It cannot bind
         // parameters by structure; `select_partial_specialization` resolves it
         // after the other arguments have been deduced.
-        Type::Decltype { .. } => true,
+        Type::Decltype { .. } | Type::DependentNested(_) => true,
         _ => pattern == concrete,
     }
 }

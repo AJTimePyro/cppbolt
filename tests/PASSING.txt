@@ -816,3 +816,4 @@ negative/constexpr_nttp_forward_declaration
 negative/constexpr_nttp_forward_trait
 negative/static_assert_forward_constexpr
 cxx17/template_alias_partial_specialization
+cxx17/template_alias_dependent_nested
