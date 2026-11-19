@@ -124,9 +124,17 @@ impl CallScan {
                     | placement.as_ref().is_some_and(|e| self.expr(e))
             }
             Expr::PackExpansion { pattern, .. } => self.expr(pattern),
-            Expr::FoldExpr { left, right, .. } => {
-                left.as_ref().is_some_and(|e| self.expr(e))
-                    | right.as_ref().is_some_and(|e| self.expr(e))
+            Expr::FoldExpr {
+                left, right, pos, ..
+            } => {
+                let dependent = left.as_ref().is_some_and(|e| self.expr(e))
+                    | right.as_ref().is_some_and(|e| self.expr(e));
+                // Expansion builds new operator nodes with the fold's position,
+                // so the fold itself must carry the dependent classification.
+                if dependent {
+                    self.dependent_positions.insert((pos.line, pos.col));
+                }
+                dependent
             }
             Expr::Lambda {
                 params,

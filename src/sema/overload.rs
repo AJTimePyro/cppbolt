@@ -98,12 +98,17 @@ impl Sema {
         }
     }
 
-    /// Namespace-scope functions found by ADL for an unqualified call.
-    fn adl_candidates(&mut self, name: &str, arg_types: &[Type]) -> Vec<FunctionSig> {
+    fn associated_entities(&mut self, arg_types: &[Type]) -> AssociatedEntities {
         let mut out = AssociatedEntities::default();
         for arg in arg_types {
             self.associate_type(arg, &mut out);
         }
+        out
+    }
+
+    /// Namespace-scope functions found by ADL for an unqualified call.
+    fn adl_candidates(&mut self, name: &str, arg_types: &[Type]) -> Vec<FunctionSig> {
+        let out = self.associated_entities(arg_types);
         let mut found = Vec::new();
         for namespace in out.namespaces {
             let qualified = format!("{}::{}", namespace, name);
@@ -126,10 +131,7 @@ impl Sema {
         name: &str,
         arg_types: &[Type],
     ) -> Vec<(FunctionDecl, Vec<TemplateParam>)> {
-        let mut entities = AssociatedEntities::default();
-        for arg in arg_types {
-            self.associate_type(arg, &mut entities);
-        }
+        let entities = self.associated_entities(arg_types);
         let mut found: Vec<(FunctionDecl, Vec<TemplateParam>)> = Vec::new();
         for class in entities.classes {
             let Some(list) = self.hidden_friend_templates.get(&class).cloned() else {

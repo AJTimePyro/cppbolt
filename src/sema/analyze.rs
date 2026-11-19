@@ -256,9 +256,21 @@ impl Sema {
                     self.register_function(sig);
                 }
                 Decl::FriendFunction { class_name, func } => {
-                    let (mangled, f) = self.register_friend_function(class_name, func.clone())?;
-                    visible_functions.insert(mangled);
-                    *decl = Decl::Function(f);
+                    if func.template_params.is_empty() {
+                        let (mangled, f) =
+                            self.register_friend_function(class_name, func.clone())?;
+                        visible_functions.insert(mangled);
+                        *decl = Decl::Function(f);
+                    } else {
+                        // A friend template has no body to emit until a call
+                        // deduces its parameters. Leave the declaration in
+                        // place and expose it only through ADL.
+                        self.register_hidden_friend_template(
+                            class_name,
+                            func.clone(),
+                            func.template_params.clone(),
+                        );
+                    }
                 }
                 Decl::Template(t) => match &t.kind {
                     crate::ast::template::TemplateKind::Function(f) => {
@@ -334,6 +346,27 @@ impl Sema {
             }
         }
         Ok(())
+    }
+
+    /// Registers a friend function template for ADL on one class. The dedup
+    /// keeps repeated declarations and instantiations from adding the same
+    /// candidate twice.
+    pub(super) fn register_hidden_friend_template(
+        &mut self,
+        class_name: &str,
+        decl: FunctionDecl,
+        params: Vec<TemplateParam>,
+    ) {
+        let plain = QualifiedName::new(class_name).plain().to_string();
+        for key in [class_name.to_string(), plain] {
+            let list = self.hidden_friend_templates.entry(key).or_default();
+            if !list
+                .iter()
+                .any(|(d, _)| d.params == decl.params && d.return_type == decl.return_type)
+            {
+                list.push((decl.clone(), params.clone()));
+            }
+        }
     }
 
     /// Registers one friend function under its mangled name and associates it
