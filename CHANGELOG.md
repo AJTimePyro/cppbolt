@@ -8,10 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Constant Expressions (C++17)
+- A `static const` integral member of a non-template class now folds to its constant value during non-type template argument resolution, so `Box<C::n>` works with a qualified class name and in constant expressions such as `C::n + 1`. The member's own initializer must still be a valid integral constant expression; mutable members, members without an initializer, and non-integral or unresolved values remain invalid template arguments. Added positive and negative regression tests.
+
+### Partial Specialization Matching (C++17)
+- Alias templates in partial-specialization patterns are now expanded before deduction, so `S<Ptr<T>>` deduces `T` from `S<int*>`. Candidates are ranked by the expanded pattern, so an alias to `T*` no longer outranks a more specialized `const T*` pattern.
+- An alias whose expansion mixes a deducible component and a dependent nested type (for example `V<T> = Pair<T, typename T::type>`) now deduces from the structural part and confirms the fully substituted pattern. A dependent component no longer blocks deduction, and an alias nested inside another class-template pattern is compared after normalizing both sides.
+- Partial-specialization declarations are now checked at declaration time. A template parameter that cannot be deduced from the argument list is a hard error instead of being accepted and silently ignored during selection. A parameter deduced from one argument may still appear in a non-deduced context elsewhere.
+- Added regression tests for alias deduction and ranking, dependent nested types, non-deducible declarations, and valid non-deduced-context combinations.
+
 ### SFINAE Completion Audit (C++17)
 - Namespace-scope `constexpr` values now fold into non-type template arguments, including negated and trait-derived values and chains between constants (`constexpr bool b = !a;`). A constexpr global used as an NTTP no longer fails as a non-constant expression, and a constant is visible only after its declaration is reached, matching Clang and GCC. `static_assert` keeps folding against all program constants so a forward reference cannot silently pass.
 - Explicit template arguments now bind a parameter pack that is not the last template parameter; remaining explicit arguments go to the pack and trailing parameters are deduced from the call. Pack arguments carry their arity in the specialization identity, so an empty pack cannot collide with a one-element `int` pack, and a plain call re-runs deduction instead of binding to an earlier cached specialization.
-- Removed stray debug output that polluted negative-test diagnostics, and extended instantiation snapshots to cover hidden-friend tables. Added regression tests for constexpr NTTP globals, non-trailing packs, and undefined NTTP rejection; documented the remaining out-of-subset SFINAE cases in `supported-cpp.md`.
+- Removed stray debug output that polluted negative-test diagnostics, and extended instantiation snapshots to cover hidden-friend tables. Dependent non-type arguments and nested angle brackets now stay intact during two-phase lookup and substitution. Added regression tests for constexpr NTTP globals, non-trailing packs, and undefined NTTP rejection; documented the remaining out-of-subset SFINAE cases in `supported-cpp.md`.
 
 ### Two-Phase Lookup and ADL (C++17)
 - Ordinary lookup inside a function template now uses the overloads visible at the template's definition. A function declared later in the file can no longer rebind a name in that template.
