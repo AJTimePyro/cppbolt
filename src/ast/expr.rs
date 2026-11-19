@@ -316,6 +316,12 @@ fn take_expr_children(expr: &mut Expr, out: &mut Vec<Expr>) {
     }
 }
 
+/// Marker emitted by `Expr::to_source` when an expression form cannot be
+/// rendered as re-parsable source. Partial-specialization confirmation turns
+/// it into a hard error so an unrenderable operand never silently degrades to
+/// selecting the primary template.
+pub const UNRENDERABLE_EXPR: &str = "@cppbolt_unrenderable@";
+
 impl Expr {
     pub fn pos(&self) -> ExprPos {
         match self {
@@ -338,14 +344,20 @@ impl Expr {
         }
     }
 
-    /// Renders the expression as source-like text. Used when an expression is
-    /// embedded in a type name (for example `decltype(T())`) that may need to
-    /// be re-parsed after template substitution. Unhandled forms fall back to
-    /// the debug rendering, which is not re-parsable but is stable.
+    /// Renders the expression as re-parsable C++ source. Used when an
+    /// expression is embedded in a type name (for example `decltype(T())`)
+    /// that is re-parsed after template substitution. Expression forms that
+    /// cannot be rendered emit `UNRENDERABLE_EXPR`, which confirmation turns
+    /// into a hard error rather than silently rejecting the candidate.
     pub fn to_source(&self) -> String {
         match self {
             Expr::Identifier(id) => id.clone(),
             Expr::IntLiteral(value, _) => value.to_string(),
+            Expr::FloatLiteral(value, _) => format!("{value:?}"),
+            Expr::BoolLiteral(value) => value.to_string(),
+            Expr::CharLiteral(value) => format!("'{}'", value.escape_default()),
+            Expr::StringLiteral(value) => format!("\"{}\"", value.escape_default()),
+            Expr::This => "this".to_string(),
             Expr::Call { callee, args, .. } => {
                 let rendered = args
                     .iter()
@@ -363,6 +375,34 @@ impl Expr {
                 let sep = if *is_arrow { "->" } else { "." };
                 format!("{}{}{}", object.to_source(), sep, member)
             }
+            Expr::ArraySubscript { array, index, .. } => {
+                format!("({})[{}]", array.to_source(), index.to_source())
+            }
+            Expr::Ternary {
+                cond,
+                then_expr,
+                else_expr,
+            } => format!(
+                "({} ? {} : {})",
+                cond.to_source(),
+                then_expr.to_source(),
+                else_expr.to_source()
+            ),
+            Expr::Cast {
+                kind,
+                target_type,
+                expr,
+            } => {
+                let target = target_type.to_c_type();
+                match kind {
+                    CastKind::Static => format!("static_cast<{target}>({})", expr.to_source()),
+                    CastKind::Reinterpret => {
+                        format!("reinterpret_cast<{target}>({})", expr.to_source())
+                    }
+                    CastKind::CStyle => format!("({target}){}", expr.to_source()),
+                    CastKind::Functional => format!("{target}({})", expr.to_source()),
+                }
+            }
             Expr::SizeofType(ty) => format!("sizeof({})", ty.to_c_type()),
             Expr::AlignofType(ty) => format!("alignof({})", ty.to_c_type()),
             Expr::SizeofExpr(expr) => format!("sizeof({})", expr.to_source()),
@@ -374,7 +414,10 @@ impl Expr {
                     UnaryOp::BitNot => "~",
                     UnaryOp::Deref => "*",
                     UnaryOp::AddrOf => "&",
-                    _ => return format!("{:?}", self),
+                    UnaryOp::PreInc => "++",
+                    UnaryOp::PreDec => "--",
+                    UnaryOp::PostInc => return format!("{}++", expr.to_source()),
+                    UnaryOp::PostDec => return format!("{}--", expr.to_source()),
                 };
                 format!("{}{}", sym, expr.to_source())
             }
@@ -398,11 +441,15 @@ impl Expr {
                     BinaryOp::BitAnd => "&",
                     BinaryOp::BitOr => "|",
                     BinaryOp::BitXor => "^",
-                    _ => return format!("{:?}", self),
+                    BinaryOp::Shl => "<<",
+                    BinaryOp::Shr => ">>",
+                    BinaryOp::Comma => ",",
+                    BinaryOp::DotStar => ".*",
+                    BinaryOp::ArrowStar => "->*",
                 };
                 format!("({} {} {})", left.to_source(), sym, right.to_source())
             }
-            _ => format!("{:?}", self),
+            _ => UNRENDERABLE_EXPR.to_string(),
         }
     }
 

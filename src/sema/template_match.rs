@@ -200,6 +200,16 @@ fn confirm_resolved_pattern(
             // member type in the disposable probe so a missing nested type is
             // a substitution failure rather than a hard error.
             let substituted = super::template_name::substitute_template_name(name, bindings);
+            // An operand that could not be rendered as source cannot be
+            // confirmed. Rejecting it as a substitution failure would silently
+            // select the primary, so surface a hard error instead.
+            if substituted.contains(crate::ast::expr::UNRENDERABLE_EXPR) {
+                return Err(CompileError::new(
+                    "unsupported expression in dependent decltype pattern",
+                    pos.0,
+                    pos.1,
+                ));
+            }
             let mut resolved = Type::Struct(substituted);
             let probe = probe.get_or_insert_with(|| sema.clone());
             match probe.resolve_and_instantiate_type(&mut resolved, pos.0, pos.1) {
