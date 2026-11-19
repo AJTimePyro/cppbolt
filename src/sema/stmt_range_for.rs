@@ -35,6 +35,7 @@ fn make_member_call(object_name: &str, method: &str, pos: ExprPos) -> Expr {
         }),
         args: vec![],
         pos,
+        dependent: false,
     }
 }
 

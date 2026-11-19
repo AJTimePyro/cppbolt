@@ -308,6 +308,7 @@ impl Sema {
         &mut self,
         name: &str,
         arg_types: &[Type],
+        dependent: bool,
     ) -> Option<Vec<FunctionSig>> {
         let q1 = name.to_string();
         let q2 = QualifiedName::new(name).alternate().into_owned();
@@ -316,12 +317,25 @@ impl Sema {
             .get(&q1)
             .or_else(|| self.functions.get(&q2))
             .or_else(|| {
+                if let Some(identity) = &self.current_template_identity
+                    && let Some(visible) = self.template_definition_usings.get(identity)
+                    && !visible.contains(name)
+                {
+                    return None;
+                }
                 self.using_decls
                     .get(name)
                     .and_then(|full| self.functions.get(full))
             })
             .or_else(|| {
-                self.open_namespaces
+                let opened = if let Some(identity) = &self.current_template_identity
+                    && let Some(snapshot) = self.template_definition_namespaces.get(identity)
+                {
+                    snapshot.as_slice()
+                } else {
+                    self.open_namespaces.as_slice()
+                };
+                opened
                     .iter()
                     .find_map(|ns| self.functions.get(&format!("{}::{}", ns, name)))
             })
@@ -353,7 +367,15 @@ impl Sema {
         // ADL is for unqualified calls only, and its candidates are merged
         // with ordinary lookup rather than used as a fallback.
         if !name.contains("::") {
-            let adl = self.adl_candidates(name, arg_types);
+            let mut adl = self.adl_candidates(name, arg_types);
+            // A non-dependent call keeps the ADL set visible at the template's
+            // definition. A dependent call still uses instantiation-time ADL.
+            if !dependent
+                && let Some(identity) = &self.current_template_identity
+                && let Some(visible) = self.template_definition_functions.get(identity)
+            {
+                adl.retain(|sig| visible.contains(&sig.mangled_name));
+            }
             if !adl.is_empty() {
                 let mut merged: Vec<FunctionSig> = Vec::new();
                 for sig in candidates.into_iter().flatten().chain(adl) {

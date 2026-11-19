@@ -447,6 +447,7 @@ fn test_substitute_struct() -> Result<(), Box<dyn std::error::Error>> {
             Type::TypeParam("T".to_string()),
             false,
         )],
+        friends: Vec::new(),
         static_fields: Vec::new(),
         private_members: Vec::new(),
         nested_structs: Vec::new(),

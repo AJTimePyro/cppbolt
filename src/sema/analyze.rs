@@ -197,6 +197,8 @@ impl Sema {
 
     fn register_declarations(&mut self, program: &mut Program) -> Result<(), CompileError> {
         let mut defined_functions = std::collections::HashSet::new();
+        let mut visible_usings: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
         // Track the overloads visible at each source position. Function
         // templates snapshot this set so their bodies keep definition-time
         // ordinary bindings when instantiated later in the file.
@@ -215,6 +217,7 @@ impl Sema {
                 Decl::UsingDecl(name) => {
                     let resolved = self.resolve_alias_in_qualified_name(name);
                     let short_name = resolved.split("::").last().unwrap_or(&resolved).to_string();
+                    visible_usings.insert(short_name.clone());
                     self.using_decls.insert(short_name, resolved);
                 }
                 Decl::NamespaceAlias {
@@ -253,64 +256,75 @@ impl Sema {
                     self.register_function(sig);
                 }
                 Decl::FriendFunction { class_name, func } => {
-                    let mut f = func.clone();
-                    self.resolve_and_instantiate_type(&mut f.return_type, f.line, f.col)?;
-                    for p in &mut f.params {
-                        self.resolve_and_instantiate_type(&mut p.ty, f.line, f.col)?;
-                    }
-                    let mangled = self.mangle_name(&f.name, &f.params);
-                    let sig = FunctionSig {
-                        qualifiers: FunctionQualifiers::default(),
-                        name: f.name.clone(),
-                        mangled_name: mangled.clone(),
-                        return_type: f.return_type.clone(),
-                        param_types: f.params.iter().map(|p| p.ty.clone()).collect(),
-                        default_args: f.params.iter().map(|p| p.default_val.clone()).collect(),
-                        is_static: false,
-                        is_explicit: false,
-                        ref_qualifier: f.ref_qualifier,
-                    };
-                    // Only the mangled spelling is reachable by ordinary
-                    // lookup; the source name is reserved for ADL.
-                    self.functions.entry(mangled).or_default().push(sig.clone());
-                    let plain = crate::QualifiedName::new(class_name).plain().to_string();
-                    let keys = if plain == *class_name {
-                        vec![class_name.clone()]
-                    } else {
-                        vec![class_name.clone(), plain]
-                    };
-                    for key in keys {
-                        self.hidden_friends
-                            .entry(key)
-                            .or_default()
-                            .push(sig.clone());
-                    }
+                    let (mangled, f) = self.register_friend_function(class_name, func.clone())?;
+                    visible_functions.insert(mangled);
                     *decl = Decl::Function(f);
                 }
-                Decl::Template(t)
-                    if let crate::ast::template::TemplateKind::Function(f) = &t.kind =>
-                {
-                    let identity = super::template_registry::function_template_identity(
-                        &f.name, f.line, f.col,
-                    );
-                    // A template can call itself, so it sees its own identity.
-                    visible_functions.insert(format!("T:{identity}"));
-                    self.template_definition_functions
-                        .insert(identity, visible_functions.clone());
-                }
+                Decl::Template(t) => match &t.kind {
+                    crate::ast::template::TemplateKind::Function(f) => {
+                        let identity = super::template_registry::function_template_identity(
+                            &f.name, f.line, f.col,
+                        );
+                        // A template can call itself, so it sees its own identity.
+                        visible_functions.insert(format!("T:{identity}"));
+                        let positions = super::template_call_dependence::dependent_call_positions(
+                            f, &t.params, None,
+                        );
+                        self.dependent_calls.insert(identity.clone(), positions);
+                        self.template_definition_usings
+                            .insert(identity.clone(), visible_usings.clone());
+                        self.template_definition_namespaces
+                            .insert(identity.clone(), self.open_namespaces.clone());
+                        self.template_definition_functions
+                            .insert(identity, visible_functions.clone());
+                    }
+                    crate::ast::template::TemplateKind::Class(c) => {
+                        for method in &c.methods {
+                            let identity = super::template_registry::function_template_identity(
+                                &method.name,
+                                method.line,
+                                method.col,
+                            );
+                            let positions =
+                                super::template_call_dependence::dependent_call_positions(
+                                    method,
+                                    &t.params,
+                                    Some(&c.name),
+                                );
+                            self.dependent_calls.insert(identity.clone(), positions);
+                            self.template_definition_usings
+                                .insert(identity.clone(), visible_usings.clone());
+                            self.template_definition_namespaces
+                                .insert(identity.clone(), self.open_namespaces.clone());
+                            self.template_definition_functions
+                                .insert(identity, visible_functions.clone());
+                        }
+                    }
+                    _ => {}
+                },
                 Decl::StructDecl {
                     name,
                     methods,
                     static_fields,
                     ..
                 } => {
-                    for method in methods.iter().filter(|m| !m.template_params.is_empty()) {
+                    for method in methods.iter() {
                         let identity = super::template_registry::function_template_identity(
                             &method.name,
                             method.line,
                             method.col,
                         );
                         visible_functions.insert(format!("T:{identity}"));
+                        let positions = super::template_call_dependence::dependent_call_positions(
+                            method,
+                            &method.template_params,
+                            None,
+                        );
+                        self.dependent_calls.insert(identity.clone(), positions);
+                        self.template_definition_usings
+                            .insert(identity.clone(), visible_usings.clone());
+                        self.template_definition_namespaces
+                            .insert(identity.clone(), self.open_namespaces.clone());
                         self.template_definition_functions
                             .insert(identity, visible_functions.clone());
                     }
@@ -320,6 +334,51 @@ impl Sema {
             }
         }
         Ok(())
+    }
+
+    /// Registers one friend function under its mangled name and associates it
+    /// with the given class for ADL. Returns the mangled name and the resolved
+    /// declaration so the caller can emit its body.
+    pub(super) fn register_friend_function(
+        &mut self,
+        class_name: &str,
+        mut func: FunctionDecl,
+    ) -> Result<(String, FunctionDecl), CompileError> {
+        self.resolve_and_instantiate_type(&mut func.return_type, func.line, func.col)?;
+        for p in &mut func.params {
+            self.resolve_and_instantiate_type(&mut p.ty, func.line, func.col)?;
+        }
+        let mangled = self.mangle_name(&func.name, &func.params);
+        let sig = FunctionSig {
+            qualifiers: FunctionQualifiers::default(),
+            name: func.name.clone(),
+            mangled_name: mangled.clone(),
+            return_type: func.return_type.clone(),
+            param_types: func.params.iter().map(|p| p.ty.clone()).collect(),
+            default_args: func.params.iter().map(|p| p.default_val.clone()).collect(),
+            is_static: false,
+            is_explicit: false,
+            ref_qualifier: func.ref_qualifier,
+        };
+        // Only the mangled spelling is reachable by ordinary lookup; the
+        // source name is reserved for ADL.
+        self.functions
+            .entry(mangled.clone())
+            .or_default()
+            .push(sig.clone());
+        let plain = crate::QualifiedName::new(class_name).plain().to_string();
+        let keys = if plain == class_name {
+            vec![class_name.to_string()]
+        } else {
+            vec![class_name.to_string(), plain]
+        };
+        for key in keys {
+            self.hidden_friends
+                .entry(key)
+                .or_default()
+                .push(sig.clone());
+        }
+        Ok((mangled, func))
     }
 
     /// Registers the static fields and methods of a class.

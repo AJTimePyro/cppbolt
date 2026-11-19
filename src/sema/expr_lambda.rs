@@ -45,6 +45,7 @@ impl Sema {
             callee: Box::new(Expr::Identifier(lambda_name)),
             args: capture_info.ctor_call_args,
             pos: *pos,
+            dependent: false,
         };
         self.analyze_call(expr)
     }

@@ -164,7 +164,7 @@ impl Sema {
             {
                 return true;
             }
-            self.find_call_candidates(op_str, &[lty.clone(), rty.clone()])
+            self.find_call_candidates(op_str, &[lty.clone(), rty.clone()], true)
                 .is_some()
         });
         if has_overload || op == BinaryOp::Comma {
@@ -459,7 +459,7 @@ impl Sema {
             return Some(sig.return_type.clone());
         }
         let args = [lty.clone(), rty.clone()];
-        if let Some(sigs) = self.find_call_candidates(op_str, &args)
+        if let Some(sigs) = self.find_call_candidates(op_str, &args, true)
             && let Some(sig) = sigs
                 .iter()
                 .find(|s| self.score_call_candidate(s, &args, None).is_ok())

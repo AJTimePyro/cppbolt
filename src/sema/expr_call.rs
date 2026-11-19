@@ -14,7 +14,13 @@ fn function_return_type(ty: &Type) -> Option<Type> {
 
 impl Sema {
     pub(super) fn analyze_call(&mut self, expr: &mut Expr) -> Result<Type, CompileError> {
-        let Expr::Call { callee, args, pos } = expr else {
+        let Expr::Call {
+            callee,
+            args,
+            pos,
+            dependent,
+        } = expr
+        else {
             return Err(crate::internal_error!(
                 self.current_line,
                 self.current_col,
@@ -72,7 +78,16 @@ impl Sema {
                     return Ok(ret);
                 }
             }
-            return self.resolve_named_call(&name, args, &arg_types, callee, *pos);
+            let dependent = *dependent
+                || self
+                    .current_template_identity
+                    .as_ref()
+                    .is_some_and(|identity| {
+                        self.dependent_calls
+                            .get(identity)
+                            .is_some_and(|positions| positions.contains(&(pos.line, pos.col)))
+                    });
+            return self.resolve_named_call(&name, args, &arg_types, callee, *pos, dependent);
         }
 
         let callee_ty = self.analyze_expr(callee)?;
@@ -334,8 +349,9 @@ impl Sema {
         arg_types: &[Type],
         callee: &mut Expr,
         pos: ExprPos,
+        dependent: bool,
     ) -> Result<Type, CompileError> {
-        let candidates = self.find_call_candidates(name, arg_types);
+        let candidates = self.find_call_candidates(name, arg_types, dependent);
         let selection = candidates
             .as_ref()
             .map(|c| self.select_candidate(c, args, arg_types));

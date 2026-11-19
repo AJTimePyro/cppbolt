@@ -81,6 +81,7 @@ impl Parser {
             base_access,
             fields,
             methods,
+            friends: Vec::new(),
             static_fields,
             private_members,
             nested_structs,

@@ -270,6 +270,7 @@ impl Sema {
             base_access: p.inner_tmpl.base_access.clone(),
             fields: subst_fields,
             methods: subst_methods,
+            friends: Vec::new(),
             static_fields: subst_static_fields,
             private_members: p.inner_tmpl.private_members.clone(),
             nested_structs: p.inner_tmpl.nested_structs.clone(),

@@ -24,6 +24,9 @@ pub struct TemplateClass {
     pub base_access: Vec<crate::ast::BaseAccess>,
     pub fields: Vec<StructFieldDecl>,
     pub methods: Vec<FunctionDecl>,
+    /// Friend functions declared in the class template. They are registered
+    /// for ADL when a concrete specialization is instantiated.
+    pub friends: Vec<FunctionDecl>,
     pub static_fields: Vec<(String, Type, Option<Expr>)>,
     pub private_members: Vec<String>,
     pub nested_structs: Vec<Decl>,

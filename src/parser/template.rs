@@ -278,6 +278,14 @@ impl Parser {
         t_col: usize,
     ) -> Result<Vec<Decl>, CompileError> {
         let mut struct_decls = self.parse_struct()?;
+        let friends: Vec<FunctionDecl> = struct_decls
+            .iter()
+            .filter_map(|decl| match decl {
+                Decl::FriendFunction { func, .. } => Some(func.clone()),
+                _ => None,
+            })
+            .collect();
+        struct_decls.retain(|decl| !matches!(decl, Decl::FriendFunction { .. }));
         let Some(decl) = struct_decls.pop() else {
             return Err(CompileError::new(
                 "expected struct declaration",
@@ -318,6 +326,7 @@ impl Parser {
             base_access,
             fields,
             methods,
+            friends,
             static_fields,
             private_members,
             nested_structs,

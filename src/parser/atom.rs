@@ -95,6 +95,7 @@ impl Parser {
                         callee: Box::new(expr),
                         args,
                         pos: start,
+                        dependent: false,
                     };
                 }
                 TokenKind::LBrace => {

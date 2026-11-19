@@ -144,6 +144,9 @@ pub enum Expr {
         callee: Box<Expr>,
         args: Vec<Expr>,
         pos: ExprPos,
+        /// True when substitution changed the callee or an argument, meaning
+        /// the call is dependent and ADL must run at instantiation.
+        dependent: bool,
     },
     ArraySubscript {
         array: Box<Expr>,

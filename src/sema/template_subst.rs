@@ -286,8 +286,18 @@ pub fn substitute_expr(
     injected_class: Option<(&str, &Type)>,
 ) -> Result<(), CompileError> {
     match expr {
-        Expr::Call { callee, args, pos } => {
-            substitute_call(callee, args, mapping, injected_class, *pos)?
+        Expr::Call {
+            callee,
+            args,
+            pos,
+            dependent,
+        } => {
+            let before_callee = callee.clone();
+            let before_args = args.clone();
+            substitute_call(callee, args, mapping, injected_class, *pos)?;
+            // A changed callee or argument means the call depends on template
+            // parameters, so its ADL must run at instantiation.
+            *dependent |= *callee != before_callee || *args != before_args;
         }
         Expr::Unary { expr, .. } | Expr::SizeofExpr(expr) | Expr::Delete { expr, .. } => {
             substitute_expr(expr, mapping, injected_class)?;

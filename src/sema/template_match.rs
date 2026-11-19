@@ -527,6 +527,7 @@ mod tests {
             base_access: Vec::new(),
             fields: Vec::new(),
             methods: Vec::new(),
+            friends: Vec::new(),
             static_fields: Vec::new(),
             private_members: Vec::new(),
             nested_structs: Vec::new(),

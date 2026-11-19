@@ -286,13 +286,13 @@ impl Sema {
         }
         // Calls inside a signature's `decltype` also belong to the template
         // definition's lookup context.
+        let identity = super::template_registry::function_template_identity(
+            &template_decl.name,
+            template_decl.line,
+            template_decl.col,
+        );
         let saved_identity = self.current_template_identity.take();
-        self.current_template_identity =
-            Some(super::template_registry::function_template_identity(
-                &template_decl.name,
-                template_decl.line,
-                template_decl.col,
-            ));
+        self.current_template_identity = Some(identity);
         let sig_result = self.resolve_signature_types(&mut func_decl, pos.line, pos.col);
         self.current_template_identity = saved_identity;
         sig_result?;
@@ -374,6 +374,11 @@ impl Sema {
 
         let canonical_args = format_canonical_args(&cand.template_params, &cand.mapping);
         let inst_name = format!("{}<{}>", cand.decl.name, canonical_args);
+        let identity = super::template_registry::function_template_identity(
+            &cand.decl.name,
+            cand.decl.line,
+            cand.decl.col,
+        );
         let mut func_decl = cand.prepared.clone();
         substitute_function_body(&mut func_decl, &cand.active_mapping, None)?;
 
@@ -401,12 +406,7 @@ impl Sema {
             self.instantiated_functions.insert(mangled.clone());
             self.instantiation_depth += 1;
             let saved_identity = self.current_template_identity.take();
-            self.current_template_identity =
-                Some(super::template_registry::function_template_identity(
-                    &cand.decl.name,
-                    cand.decl.line,
-                    cand.decl.col,
-                ));
+            self.current_template_identity = Some(identity);
             let res = self.analyze_function(&mut func_decl);
             self.current_template_identity = saved_identity;
             self.instantiation_depth -= 1;

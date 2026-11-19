@@ -659,10 +659,18 @@ impl Sema {
 
         for m in methods.iter_mut() {
             if m.template_params.is_empty() {
-                self.resolve_and_instantiate_type(&mut m.return_type, line, col)?;
-                for p in &mut m.params {
-                    self.resolve_and_instantiate_type(&mut p.ty, line, col)?;
-                }
+                let saved_identity = self.current_template_identity.take();
+                self.current_template_identity =
+                    Some(function_template_identity(&m.name, m.line, m.col));
+                let result = (|| {
+                    self.resolve_and_instantiate_type(&mut m.return_type, line, col)?;
+                    for p in &mut m.params {
+                        self.resolve_and_instantiate_type(&mut p.ty, line, col)?;
+                    }
+                    Ok(())
+                })();
+                self.current_template_identity = saved_identity;
+                result?;
             }
         }
 
@@ -686,6 +694,23 @@ impl Sema {
 
         self.register_instantiated_static_fields(inst_name, static_fields, base_classes, line, col);
         self.register_instantiated_member_aliases(&template_class.name, inst_name, &mapping);
+        let inst_ty = Type::Struct(inst_name.to_string());
+        for friend in &template_class.friends {
+            let mut instantiated = super::template_subst_func::substitute_function(
+                friend,
+                &mapping,
+                Some((template_class.name.as_str(), &inst_ty)),
+                None,
+            )?;
+            self.register_friend_function(inst_name, instantiated.clone())?;
+            let prev_class = self.current_class.take();
+            self.current_class = Some(inst_name.to_string());
+            let analyzed = self.analyze_function(&mut instantiated);
+            self.current_class = prev_class;
+            analyzed?;
+            self.synthesized_decls
+                .push(crate::ast::Decl::Function(instantiated));
+        }
         let all_methods = std::mem::take(methods);
         self.synthesized_decls.push(struct_decl);
         self.setup_instantiated_methods(inst_name, all_methods)?;
@@ -775,6 +800,8 @@ impl Sema {
             let batch = std::mem::take(&mut self.deferred_methods);
             for deferred in batch {
                 let DeferredMethod { class_name, method } = deferred;
+                let method_identity =
+                    function_template_identity(&method.name, method.line, method.col);
                 let mut analyzed = method;
                 if !analyzed.is_static {
                     analyzed
@@ -783,7 +810,10 @@ impl Sema {
                 }
                 let prev_class = self.current_class.take();
                 self.current_class = Some(class_name.clone());
+                let saved_identity = self.current_template_identity.take();
+                self.current_template_identity = Some(method_identity);
                 let res = self.analyze_function(&mut analyzed);
+                self.current_template_identity = saved_identity;
                 self.current_class = prev_class;
                 if let Err(e) = res {
                     if e.kind == ErrorKind::Internal

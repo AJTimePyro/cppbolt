@@ -58,6 +58,7 @@ mod synthesize;
 mod synthesize_ops;
 mod template_alias;
 pub mod template_arg_match;
+mod template_call_dependence;
 mod template_deduce;
 mod template_deduce_type;
 mod template_func;
@@ -164,6 +165,12 @@ pub struct Sema {
     /// keyed by `name@line:col`. Ordinary lookup inside an instantiated body
     /// only sees these, so a later declaration cannot rebind a template name.
     pub template_definition_functions: HashMap<String, HashSet<String>>,
+    /// Dependent call sites inside each template, by source position.
+    pub dependent_calls: HashMap<String, HashSet<(usize, usize)>>,
+    /// Using-declaration names visible at each template's definition.
+    pub template_definition_usings: HashMap<String, HashSet<String>>,
+    /// Namespaces opened by `using namespace` at each template definition.
+    pub template_definition_namespaces: HashMap<String, Vec<String>>,
     /// Identity of the template whose body (or signature) is being analyzed.
     /// Set only while re-analyzing substituted template code.
     pub current_template_identity: Option<String>,
@@ -217,6 +224,9 @@ impl Sema {
             partial_specializations: HashMap::new(),
             function_templates: HashMap::new(),
             template_definition_functions: HashMap::new(),
+            dependent_calls: HashMap::new(),
+            template_definition_usings: HashMap::new(),
+            template_definition_namespaces: HashMap::new(),
             current_template_identity: None,
             alias_templates: HashMap::new(),
             variable_templates: HashMap::new(),

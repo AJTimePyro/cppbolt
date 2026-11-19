@@ -131,6 +131,7 @@ impl Sema {
                     }),
                     args: vec![],
                     pos,
+                    dependent: false,
                 };
                 return Ok(target_type.clone());
             }

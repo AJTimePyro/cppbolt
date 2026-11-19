@@ -66,7 +66,12 @@ impl Sema {
                         .params
                         .insert(0, this_param(inst_name, vmethod.is_const));
                 }
+                let saved_identity = self.current_template_identity.take();
+                self.current_template_identity = Some(
+                    super::template_registry::function_template_identity(&m.name, m.line, m.col),
+                );
                 let res = self.analyze_function(&mut vmethod);
+                self.current_template_identity = saved_identity;
                 self.current_class = prev_class;
                 match res {
                     Ok(()) => {
