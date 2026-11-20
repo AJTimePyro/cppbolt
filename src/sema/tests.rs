@@ -455,7 +455,8 @@ fn test_substitute_struct() -> Result<(), Box<dyn std::error::Error>> {
         alignment: None,
     };
 
-    let subst = template_subst::substitute_struct(&tclass, &mapping, "Holder<int>", (1, 1), None)?;
+    let subst =
+        template_subst::substitute_struct(&tclass, &mapping, "Holder<int>", (1, 1), None, None)?;
     let Decl::StructDecl {
         name,
         fields,

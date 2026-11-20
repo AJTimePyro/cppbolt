@@ -20,7 +20,7 @@ pub fn substitute_type(
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
 ) -> Result<Type, CompileError> {
-    substitute_type_full(ty, mapping, injected_class, (0, 0), None)
+    substitute_type_full(ty, mapping, injected_class, (0, 0), None, None)
 }
 fn substitute_template_instance(
     name: &str,
@@ -45,8 +45,9 @@ pub fn substitute_type_full(
     injected_class: Option<(&str, &Type)>,
     pos: (usize, usize),
     struct_aligns: Option<&HashMap<String, usize>>,
+    sema: Option<&crate::sema::Sema>,
 ) -> Result<Type, CompileError> {
-    if let Some(res) = substitute_modified_type(ty, mapping, injected_class)? {
+    if let Some(res) = substitute_modified_type(ty, mapping, injected_class, pos, sema)? {
         return Ok(res);
     }
     match ty {
@@ -70,11 +71,12 @@ pub fn substitute_type_full(
         }
         Type::DependentArray(inner, param_name) => {
             let subst_inner =
-                substitute_type_full(inner, mapping, injected_class, pos, struct_aligns)?;
+                substitute_type_full(inner, mapping, injected_class, pos, struct_aligns, sema)?;
             let size = super::template_subst_array::evaluate_dependent_array_size(
                 param_name,
                 mapping,
                 injected_class,
+                sema,
             )?;
             Ok(Type::Array(Box::new(subst_inner), size))
         }
@@ -82,13 +84,14 @@ pub fn substitute_type_full(
             return_type,
             param_types,
             ..
-        } => substitute_function_type(return_type, param_types, mapping, injected_class),
+        } => substitute_function_type(return_type, param_types, mapping, injected_class, sema),
         Type::PackExpansion(inner) => Ok(Type::PackExpansion(Box::new(substitute_type_full(
             inner,
             mapping,
             injected_class,
             pos,
             struct_aligns,
+            sema,
         )?))),
         Type::DependentAlignas(inner, pack_name) => {
             super::template_subst_align::substitute_dependent_alignas(
@@ -106,6 +109,7 @@ pub fn substitute_type_full(
                 injected_class,
                 pos,
                 struct_aligns,
+                sema,
             )?),
             *align,
         )),
@@ -129,31 +133,43 @@ fn substitute_modified_type(
     ty: &Type,
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
+    pos: (usize, usize),
+    sema: Option<&crate::sema::Sema>,
 ) -> Result<Option<Type>, CompileError> {
     match ty {
         Type::Const(inner) => {
-            let subst = substitute_type(inner, mapping, injected_class)?;
+            let subst = substitute_type_full(inner, mapping, injected_class, pos, None, sema)?;
             if subst.is_reference() {
                 Ok(Some(subst))
             } else {
                 Ok(Some(Type::Const(Box::new(subst))))
             }
         }
-        Type::Pointer(inner) => Ok(Some(Type::Pointer(Box::new(substitute_type(
+        Type::Pointer(inner) => Ok(Some(Type::Pointer(Box::new(substitute_type_full(
             inner,
             mapping,
             injected_class,
+            pos,
+            None,
+            sema,
         )?)))),
         Type::Reference(inner) => Ok(Some(collapse_reference(
             false,
-            substitute_type(inner, mapping, injected_class)?,
+            substitute_type_full(inner, mapping, injected_class, pos, None, sema)?,
         ))),
         Type::RvalueReference(inner) => Ok(Some(collapse_reference(
             true,
-            substitute_type(inner, mapping, injected_class)?,
+            substitute_type_full(inner, mapping, injected_class, pos, None, sema)?,
         ))),
         Type::Array(inner, size) => Ok(Some(Type::Array(
-            Box::new(substitute_type(inner, mapping, injected_class)?),
+            Box::new(substitute_type_full(
+                inner,
+                mapping,
+                injected_class,
+                pos,
+                None,
+                sema,
+            )?),
             *size,
         ))),
         Type::MemberPointer {
@@ -164,7 +180,7 @@ fn substitute_modified_type(
                 Some(TemplateArg::Type(Type::Struct(s) | Type::TypeParam(s))) => s.clone(),
                 _ => class_name.clone(),
             };
-            let mty = substitute_type(member_type, mapping, injected_class)?;
+            let mty = substitute_type_full(member_type, mapping, injected_class, pos, None, sema)?;
             Ok(Some(Type::MemberPointer {
                 class_name: cls,
                 member_type: Box::new(mty),
@@ -179,10 +195,18 @@ fn substitute_function_type(
     param_types: &[Type],
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
+    sema: Option<&crate::sema::Sema>,
 ) -> Result<Type, CompileError> {
     let subst_params = super::pack_expansion::expand_type_list(param_types, mapping, (0, 0))?;
     Ok(Type::Function {
-        return_type: Box::new(substitute_type(return_type, mapping, injected_class)?),
+        return_type: Box::new(substitute_type_full(
+            return_type,
+            mapping,
+            injected_class,
+            (0, 0),
+            None,
+            sema,
+        )?),
         param_types: subst_params,
         qualifiers: FunctionQualifiers::default(),
     })
@@ -439,6 +463,7 @@ pub fn substitute_struct(
     instantiated_name: &str,
     pos: (usize, usize),
     struct_aligns: Option<&HashMap<String, usize>>,
+    sema: Option<&crate::sema::Sema>,
 ) -> Result<Decl, CompileError> {
     let (line, col) = pos;
     let target_ty = Type::Struct(instantiated_name.to_string());
@@ -450,8 +475,8 @@ pub fn substitute_struct(
         if let Some((init_expr, _, _)) = &mut init {
             substitute_expr(init_expr, mapping, injected)?;
         }
-        let subst_fty =
-            substitute_type_full(fty, mapping, injected, pos, struct_aligns).map_err(|mut e| {
+        let subst_fty = substitute_type_full(fty, mapping, injected, pos, struct_aligns, sema)
+            .map_err(|mut e| {
                 if e.line == 0 && e.col == 0 {
                     e.line = line;
                     e.col = col;
@@ -474,7 +499,7 @@ pub fn substitute_struct(
         }
         static_fields.push((
             sname.clone(),
-            substitute_type_full(sty, mapping, injected, pos, struct_aligns)?,
+            substitute_type_full(sty, mapping, injected, pos, struct_aligns, sema)?,
             init,
         ));
     }
@@ -488,7 +513,7 @@ pub fn substitute_struct(
     let alignment = template_class
         .alignment
         .as_ref()
-        .map(|ty| substitute_type_full(ty, mapping, injected, pos, struct_aligns))
+        .map(|ty| substitute_type_full(ty, mapping, injected, pos, struct_aligns, sema))
         .transpose()?;
 
     Ok(Decl::StructDecl {

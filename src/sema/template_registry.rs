@@ -690,7 +690,7 @@ impl Sema {
     /// base classes. The search stops at a class that declares the name, so a
     /// derived member hides an inherited one.
     fn finish_nested_type_lookup(
-        &mut self,
+        &self,
         owner: &str,
         member: &str,
         line: usize,
@@ -786,6 +786,22 @@ impl Sema {
             return Ok(Some((inst, None)));
         }
         Ok(Some((inst, None)))
+    }
+
+    /// Resolves a type name written inside a delayed `sizeof` operand.
+    pub(super) fn resolve_type_name_for_sizeof(
+        &self,
+        name: &str,
+    ) -> Result<Option<Type>, CompileError> {
+        if let Some(alias) = self.lookup_type_alias(name) {
+            return Ok(Some(alias));
+        }
+        let Some((owner, member)) = name.rsplit_once("::") else {
+            return Ok(None);
+        };
+        Ok(self
+            .finish_nested_type_lookup(owner, member, 0, 0)?
+            .and_then(|(_, ty)| ty))
     }
 
     /// Instantiates a variable template reference such as `is_integral_v<int>`
@@ -987,6 +1003,7 @@ impl Sema {
             inst_name,
             pos,
             Some(&self.struct_aligns),
+            Some(self),
         )?;
         let Decl::StructDecl {
             fields,

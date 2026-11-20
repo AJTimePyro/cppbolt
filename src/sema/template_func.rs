@@ -285,7 +285,7 @@ impl Sema {
         let canonical_args = format_canonical_args(template_params, mapping);
         let inst_name = format!("{}<{}>", template_decl.name, canonical_args);
         let (mut func_decl, active_mapping) =
-            substitute_function_signature(template_decl, mapping, Some(inst_name))?;
+            substitute_function_signature(template_decl, mapping, Some(inst_name), Some(self))?;
 
         // A default template argument is part of the signature. Its dependent
         // nested types must resolve even when the argument is unused in it.

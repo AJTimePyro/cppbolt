@@ -880,3 +880,7 @@ cxx17/inherited_nested_type
 negative/inherited_nested_ambiguous
 negative/inherited_nested_private
 negative/inherited_nested_missing
+cxx17/dependent_sizeof_array_bound
+cxx17/dependent_sizeof_static_control
+negative/dependent_sizeof_array_bound_invalid
+cxx17/dependent_sizeof_sfinae
