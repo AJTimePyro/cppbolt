@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Dependent Nested Types (C++17)
+- A missing nested member on a concrete class-template specialization is no
+  longer hidden by a same-named member on the primary or on another partial
+  specialization. Namespace-scope aliases with an invalid nested-type chain now
+  fail at the alias declaration instead of yielding an opaque type.
+- An invalid nested type in an immediate substitution context is classified as
+  a substitution failure, so SFINAE fallbacks and primary partial
+  specializations are selected. Errors from instantiating another template stay
+  hard and are propagated even when another overload could serve the call.
+- Alias-chain resolution detects revisiting a name as a cycle and uses an
+  explicit 500-step guard only for ever-growing type names. Added positive and
+  negative regressions for one-, two- and three-level chains, SFINAE fallback,
+  invalid namespace-scope aliases, and nested-instantiation hard errors.
+
 ### Type-System Compatibility (C++17)
 - Multidimensional array types are now spelled with the outermost bound first,
   so stringify/reparse cycles preserve bound order. Partial-specialization
