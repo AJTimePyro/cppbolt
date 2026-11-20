@@ -33,7 +33,7 @@ pub fn evaluate_dependent_array_size(
     parser.allow_unknown_types = true;
     let mut expr = parser.parse_expr()?;
     substitute_expr(&mut expr, mapping, injected_class)?;
-    if let Expr::SizeofType(ty) = &mut expr
+    if let Expr::SizeofType(ty) | Expr::AlignofType(ty) = &mut expr
         && let Type::Struct(name) = ty
         && name.contains("::")
     {
@@ -45,7 +45,7 @@ pub fn evaluate_dependent_array_size(
             *ty = resolved;
         } else {
             return Err(CompileError::new(
-                format!("unresolved type '{}' in sizeof array bound", name),
+                format!("unresolved type '{}' in array bound", name),
                 0,
                 0,
             )
