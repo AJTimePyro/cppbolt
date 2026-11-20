@@ -369,6 +369,8 @@ mini_stl/string_basic
 mini_stl/string_comprehensive
 mini_stl/tuple_get_rvalue
 mini_stl/type_traits_basic
+mini_stl/type_traits_upstream
+mini_stl/type_traits_qualifiers
 mini_stl/unique_ptr_basic
 mini_stl/unique_ptr_return_local
 mini_stl/unique_ptr_self_reset
@@ -408,6 +410,7 @@ mini_stl_variant/stream_operator_overload
 mini_stl_variant/string_basic
 mini_stl_variant/string_comprehensive
 mini_stl_variant/type_traits_basic_variant
+mini_stl_variant/type_traits_upstream_variant
 mini_stl_variant/unique_ptr_basic_variant
 mini_stl_variant/variadic_make_unique_variant
 mini_stl_variant/vector_basic
