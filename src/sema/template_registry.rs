@@ -30,6 +30,65 @@ fn declares_member_alias(class: &TemplateClass, member: &str) -> bool {
     class.member_aliases.iter().any(|name| name == member)
 }
 
+fn class_bases(sema: &Sema, class_name: &str) -> Vec<String> {
+    let mut bases = Vec::new();
+    if let Some(layout) = sema.struct_layouts.get(class_name) {
+        bases.extend(layout.base_classes.iter().cloned());
+    }
+    if let Some(class) = sema.instantiated_class_definitions.get(class_name) {
+        bases.extend(class.base_classes.iter().cloned());
+    } else if let Some((class, _)) = sema
+        .class_templates
+        .get(QualifiedName::new(class_name).plain())
+    {
+        bases.extend(class.base_classes.iter().cloned());
+    }
+    bases
+        .into_iter()
+        .map(|base| sema.canonical_class_name(&base, Some(class_name)))
+        .collect()
+}
+
+fn nested_type_declarers(sema: &Sema, owner: &str, member: &str) -> Vec<String> {
+    let mut visited = HashSet::new();
+    let mut queue = vec![owner.to_string()];
+    let mut found = Vec::new();
+    while let Some(class_name) = queue.pop() {
+        if !visited.insert(class_name.clone()) {
+            continue;
+        }
+        let qualified = format!("{}::{}", class_name, member);
+        if sema.lookup_type_alias(&qualified).is_some()
+            || sema.struct_layouts.contains_key(&qualified)
+        {
+            found.push(class_name);
+            continue;
+        }
+        queue.extend(class_bases(sema, &class_name));
+    }
+    found
+}
+
+fn count_base_paths(
+    sema: &Sema,
+    from: &str,
+    target: &str,
+    visiting: &mut HashSet<String>,
+) -> usize {
+    if from == target {
+        return 1;
+    }
+    if !visiting.insert(from.to_string()) {
+        return 0;
+    }
+    let total: usize = class_bases(sema, from)
+        .iter()
+        .map(|base| count_base_paths(sema, base, target, visiting))
+        .sum();
+    visiting.remove(from);
+    total
+}
+
 /// True when a class template or one of its partial specializations declares
 /// a nested member with the given name. Such members are valid types even
 /// without a registered type alias.
@@ -377,6 +436,21 @@ impl Sema {
         // outside substitution. Dependent arguments are left for the existing
         // substitution machinery to resolve or reject at instantiation.
         let Some(gt_pos) = sname.rfind('>') else {
+            let Some((class_part, member)) = sname.rsplit_once("::") else {
+                return Ok(());
+            };
+            let plain = QualifiedName::new(class_part).plain();
+            if self.struct_layouts.contains_key(class_part)
+                || self.class_templates.contains_key(plain)
+                || self.class_specializations.contains_key(plain)
+            {
+                return Err(CompileError::new(
+                    format!("no type named '{}' in '{}'", member, class_part),
+                    line,
+                    col,
+                )
+                .with_kind(ErrorKind::Substitution));
+            }
             return Ok(());
         };
         if !sname[gt_pos..].starts_with(">::") {
@@ -612,9 +686,41 @@ impl Sema {
         Ok(value)
     }
 
-    /// Resolves `Owner<Args...>::member`. Returns the canonical owner name
-    /// together with the member type when found, or `None` as the member when
-    /// the owner was instantiated but has no such member.
+    /// Resolve a nested type through the owner and, when absent there, its
+    /// base classes. The search stops at a class that declares the name, so a
+    /// derived member hides an inherited one.
+    fn finish_nested_type_lookup(
+        &mut self,
+        owner: &str,
+        member: &str,
+        line: usize,
+        col: usize,
+    ) -> Result<Option<(String, Option<Type>)>, CompileError> {
+        let declarers = nested_type_declarers(self, owner, member);
+        if declarers.len() > 1 {
+            let paths: usize = declarers
+                .iter()
+                .map(|decl| count_base_paths(self, owner, decl, &mut HashSet::new()))
+                .sum();
+            if paths > 1 {
+                return Err(CompileError::new(
+                    format!("ambiguous nested type '{}' in '{}'", member, owner),
+                    line,
+                    col,
+                ));
+            }
+        }
+        let Some(declarer) = declarers.first() else {
+            return Ok(Some((owner.to_string(), None)));
+        };
+        let qualified = format!("{}::{}", declarer, member);
+        let ty = self
+            .lookup_type_alias(&qualified)
+            .unwrap_or_else(|| Type::Struct(qualified.clone()));
+        self.check_nested_type_access(&qualified, line, col)?;
+        Ok(Some((declarer.clone(), Some(ty))))
+    }
+
     fn resolve_nested_type_name(
         &mut self,
         name: &str,
@@ -628,6 +734,11 @@ impl Sema {
             && let Some(alias) = self.lookup_type_alias(name)
         {
             return Ok(Some((name.to_string(), Some(alias))));
+        }
+        if !name.contains(">::")
+            && let Some((owner, member)) = name.rsplit_once("::")
+        {
+            return self.finish_nested_type_lookup(owner, member, line, col);
         }
         let Some(gt_pos) = name.rfind('>') else {
             return Ok(None);
@@ -666,17 +777,13 @@ impl Sema {
                 }
             })?;
         let member = &name[gt_pos + 3..];
+        if let Some((owner, Some(ty))) = self.finish_nested_type_lookup(&inst, member, line, col)? {
+            return Ok(Some((owner, Some(ty))));
+        }
         if selected_class_definition(self, &inst)
             .is_some_and(|class| !declares_member_alias(&class, member))
         {
             return Ok(Some((inst, None)));
-        }
-        let canon = format!("{}::{}", inst, member);
-        if let Some(alias) = self.lookup_type_alias(&canon) {
-            return Ok(Some((inst, Some(alias))));
-        }
-        if self.struct_layouts.contains_key(&canon) {
-            return Ok(Some((inst, Some(Type::Struct(canon)))));
         }
         Ok(Some((inst, None)))
     }

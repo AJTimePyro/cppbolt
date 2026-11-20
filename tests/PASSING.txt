@@ -876,3 +876,7 @@ negative/alias_decltype_late_using_namespace
 negative/alias_template_decltype_later
 cxx17/nsdmi_later_member
 negative/nsdmi_later_free
+cxx17/inherited_nested_type
+negative/inherited_nested_ambiguous
+negative/inherited_nested_private
+negative/inherited_nested_missing

@@ -180,6 +180,11 @@ impl Parser {
                 }
             };
             self.expect(TokenKind::Semi)?;
+            if body.is_private {
+                body.private_members.push(tname.clone());
+                body.private_members
+                    .push(format!("{}::{}", body.name, tname));
+            }
             self.register_member_alias(&body.name, tname, ty);
             return Ok(true);
         }
@@ -219,6 +224,11 @@ impl Parser {
             if self.peek() == &TokenKind::Assign {
                 self.advance();
                 let ty = self.parse_type()?;
+                if body.is_private {
+                    body.private_members.push(alias.clone());
+                    body.private_members
+                        .push(format!("{}::{}", body.name, alias));
+                }
                 self.register_member_alias(&body.name, alias, ty);
             }
             self.expect(TokenKind::Semi)?;
