@@ -97,8 +97,14 @@ fn collect_deducible_params(
         | Type::RvalueReference(inner)
         | Type::PackExpansion(inner)
         | Type::Aligned(inner, _)
-        | Type::Array(inner, _)
-        | Type::DependentArray(inner, _) => {
+        | Type::Array(inner, _) => {
+            collect_deducible_params(inner, aliases, param_names, out);
+        }
+        Type::DependentArray(inner, bound) => {
+            // `T[N]` deduces the bound N as well as the element type.
+            if param_names.contains(bound.as_str()) {
+                out.insert(bound.clone());
+            }
             collect_deducible_params(inner, aliases, param_names, out);
         }
         Type::TemplateInstance { .. } => {
@@ -383,6 +389,69 @@ pub fn match_pattern_arg(
             }
             _ => false,
         },
+        Type::Function {
+            return_type: p_ret,
+            param_types: p_params,
+            qualifiers: p_qual,
+        } => match concrete {
+            Type::Function {
+                return_type: c_ret,
+                param_types: c_params,
+                qualifiers: c_qual,
+            } => {
+                // cv/ref/noexcept are part of the function type. Ignoring them
+                // would let a `const`/`noexcept` pattern match a plain function.
+                p_qual == c_qual
+                    && match_pattern_arg(p_ret, c_ret, bindings, aliases)
+                    && match_pattern_args(p_params, c_params, bindings, aliases)
+            }
+            _ => false,
+        },
+        Type::MemberPointer {
+            class_name: p_class,
+            member_type: p_member,
+        } => match concrete {
+            Type::MemberPointer {
+                class_name: c_class,
+                member_type: c_member,
+            } => {
+                // An unqualified class name in the pattern is a deduced type
+                // parameter (the `C` in `T C::*`), mirroring function-template
+                // deduction for pointers to members.
+                if !p_class.contains("::") {
+                    let arg = TemplateArg::Type(Type::Struct(c_class.clone()));
+                    if bindings.get(p_class).is_some_and(|e| e != &arg) {
+                        return false;
+                    }
+                    bindings.insert(p_class.clone(), arg);
+                } else if p_class != c_class {
+                    return false;
+                }
+                match_pattern_arg(p_member, c_member, bindings, aliases)
+            }
+            _ => false,
+        },
+        Type::Array(p_inner, p_n) => match concrete {
+            // `T[]` (the unbounded marker) matches any array bound; a written
+            // bound, including `T[0]`, matches only that exact bound.
+            Type::Array(c_inner, c_n)
+                if *p_n == crate::ast::types::UNBOUNDED_ARRAY || *p_n == *c_n =>
+            {
+                match_pattern_arg(p_inner, c_inner, bindings, aliases)
+            }
+            _ => false,
+        },
+        Type::DependentArray(p_inner, bound) => match concrete {
+            Type::Array(c_inner, c_n) => {
+                let arg = TemplateArg::NonType(*c_n as i128);
+                if bindings.get(bound).is_some_and(|e| e != &arg) {
+                    return false;
+                }
+                bindings.insert(bound.clone(), arg);
+                match_pattern_arg(p_inner, c_inner, bindings, aliases)
+            }
+            _ => false,
+        },
         Type::TemplateInstance {
             name: p_name,
             args: p_args,
@@ -531,6 +600,13 @@ pub fn calculate_specificity(pattern: &Type) -> usize {
         Type::Pointer(inner) => 2 + calculate_specificity(inner),
         Type::Const(inner) => 1 + calculate_specificity(inner),
         Type::Reference(inner) | Type::RvalueReference(inner) => 2 + calculate_specificity(inner),
+        // `T[]` is the least specific array pattern, `T[N]` more so, and a
+        // written bound (including `T[0]`) most specific.
+        Type::Array(inner, crate::ast::types::UNBOUNDED_ARRAY) => {
+            2 + calculate_specificity(inner)
+        }
+        Type::DependentArray(inner, _) => 3 + calculate_specificity(inner),
+        Type::Array(inner, _) => 4 + calculate_specificity(inner),
         Type::TemplateInstance { args, .. } => {
             4 + args.iter().map(calculate_specificity).sum::<usize>()
         }

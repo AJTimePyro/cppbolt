@@ -534,7 +534,7 @@ impl Sema {
                 col,
             ));
         }
-        if let Type::Array(elem, 0) = ty.clone()
+        if let Type::Array(elem, crate::ast::types::UNBOUNDED_ARRAY) = ty.clone()
             && let Some(
                 Expr::InitializerList { elements: list, .. }
                 | Expr::TypedInitList { elements: list, .. },

@@ -1,7 +1,7 @@
 //! Array declarator suffix parsing for types.
 
 use super::*;
-use crate::ast::types::Type;
+use crate::ast::types::{Type, UNBOUNDED_ARRAY};
 use crate::diagnostics::CompileError;
 
 enum ArrayDim {
@@ -105,9 +105,14 @@ impl Parser {
                 {
                     ArrayDim::Dependent(id.clone())
                 } else if let Some(dep_str) = expr_to_dependent_str(&expr)
-                    && (!self.active_type_params.is_empty()
-                        || matches!(expr, Expr::SizeofPack { .. }))
+                    && (super::template_helpers::text_mentions_active(
+                            &dep_str,
+                            &self.active_type_params,
+                        ) || matches!(expr, Expr::SizeofPack { .. }))
                 {
+                    // A literal bound such as `[3]` is fixed even inside a
+                    // template; only expressions that mention a parameter are
+                    // dependent. Otherwise `T[3]` would match any array bound.
                     ArrayDim::Dependent(dep_str)
                 } else {
                     match crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None) {
@@ -133,7 +138,7 @@ impl Parser {
                     }
                 }
             } else {
-                ArrayDim::Fixed(0)
+                ArrayDim::Fixed(UNBOUNDED_ARRAY)
             };
             self.expect(TokenKind::RBracket)?;
             dimensions.push(dim);

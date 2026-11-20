@@ -448,9 +448,14 @@ impl Parser {
             if is_pack_ahead {
                 self.allow_unknown_types = true;
             }
-            let res = self.parse_type();
+            let res = self.parse_type_id();
             self.allow_unknown_types = saved_allow;
             if let Ok(mut ty) = res {
+                // An array type can appear directly as a template argument
+                // (`is_array<T[3]>`); type-id parsing stops before the suffix.
+                if self.peek() == &TokenKind::LBracket {
+                    ty = self.parse_array_suffix(ty)?;
+                }
                 if self.peek() == &TokenKind::Ellipsis {
                     self.advance();
                     ty = Type::PackExpansion(Box::new(ty));

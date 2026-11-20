@@ -1,6 +1,6 @@
 //! C++ spelling of AST types, split from `types.rs` to keep that file under the size cap.
 
-use super::types::{FunctionQualifiers, Type};
+use super::types::{FunctionQualifiers, Type, UNBOUNDED_ARRAY};
 
 fn function_type(
     return_type: &Type,
@@ -64,6 +64,7 @@ impl Type {
             Type::Pointer(inner) => format!("{} *", inner.to_c_type()),
             Type::Reference(inner) => format!("{} &", inner.to_c_type()),
             Type::RvalueReference(inner) => format!("{} &&", inner.to_c_type()),
+            Type::Array(inner, UNBOUNDED_ARRAY) => format!("{}[]", inner.to_c_type()),
             Type::Array(inner, n) => format!("{}[{}]", inner.to_c_type(), n),
             Type::DependentArray(inner, param) => format!("{}[{}]", inner.to_c_type(), param),
             Type::NonType(n) => n.to_string(),

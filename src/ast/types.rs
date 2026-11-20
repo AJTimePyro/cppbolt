@@ -2,6 +2,11 @@ use crate::ast::expr::Expr;
 use crate::name::QualifiedName;
 use std::collections::HashMap;
 
+/// Bound stored for an unbounded array declarator (`T[]`). A real bound cannot
+/// reach this value in the ILP32 target. It is deliberately not `usize::MAX`,
+/// which `template_registry` already uses as an "unresolved bound" marker.
+pub const UNBOUNDED_ARRAY: usize = usize::MAX - 1;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WasmType {
     I32,
