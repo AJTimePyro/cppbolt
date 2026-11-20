@@ -851,3 +851,4 @@ cxx17/static_assert_qualified_values
 negative/static_assert_qualified_false
 negative/static_assert_variable_template_false
 negative/static_assert_unknown_qualified
+templates_operators/array_multidim_deduction

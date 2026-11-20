@@ -2,6 +2,35 @@
 
 use super::types::{FunctionQualifiers, Type, UNBOUNDED_ARRAY};
 
+/// C++ spells array bounds outermost first (`int[2][3]` is an array of two
+/// `int[3]`), while `Type::Array` nests the element type. Render the whole
+/// declarator so a stringified type reparses to the same type.
+fn array_type_spelling(ty: &Type) -> String {
+    fn collect(ty: &Type, bounds: &mut Vec<String>) -> String {
+        match ty {
+            Type::Array(inner, n) => {
+                let bound = if *n == UNBOUNDED_ARRAY {
+                    "[]".to_string()
+                } else {
+                    format!("[{n}]")
+                };
+                let base = collect(inner, bounds);
+                bounds.insert(0, bound);
+                base
+            }
+            Type::DependentArray(inner, param) => {
+                let base = collect(inner, bounds);
+                bounds.insert(0, format!("[{param}]"));
+                base
+            }
+            other => other.to_c_type(),
+        }
+    }
+    let mut bounds = Vec::new();
+    let base = collect(ty, &mut bounds);
+    format!("{base}{}", bounds.concat())
+}
+
 fn function_type(
     return_type: &Type,
     params: &[Type],
@@ -64,9 +93,7 @@ impl Type {
             Type::Pointer(inner) => format!("{} *", inner.to_c_type()),
             Type::Reference(inner) => format!("{} &", inner.to_c_type()),
             Type::RvalueReference(inner) => format!("{} &&", inner.to_c_type()),
-            Type::Array(inner, UNBOUNDED_ARRAY) => format!("{}[]", inner.to_c_type()),
-            Type::Array(inner, n) => format!("{}[{}]", inner.to_c_type(), n),
-            Type::DependentArray(inner, param) => format!("{}[{}]", inner.to_c_type(), param),
+            Type::Array(_, _) | Type::DependentArray(_, _) => array_type_spelling(self),
             Type::NonType(n) => n.to_string(),
             Type::DependentNonType(s) => {
                 if let Some(addr) = s.strip_prefix("@addr:") {

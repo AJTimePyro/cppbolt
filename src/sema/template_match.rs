@@ -432,17 +432,17 @@ pub fn match_pattern_arg(
             _ => false,
         },
         Type::Array(p_inner, p_n) => match concrete {
-            // `T[]` (the unbounded marker) matches any array bound; a written
-            // bound, including `T[0]`, matches only that exact bound.
-            Type::Array(c_inner, c_n)
-                if *p_n == crate::ast::types::UNBOUNDED_ARRAY || *p_n == *c_n =>
-            {
+            // `T[]` matches only an unbounded array; a written bound, including
+            // `T[0]`, matches only that exact bound.
+            Type::Array(c_inner, c_n) if *p_n == *c_n => {
                 match_pattern_arg(p_inner, c_inner, bindings, aliases)
             }
             _ => false,
         },
         Type::DependentArray(p_inner, bound) => match concrete {
-            Type::Array(c_inner, c_n) => {
+            // A deduced bound names a real array bound. It cannot bind to the
+            // unbounded-array marker, which is a distinct type in C++.
+            Type::Array(c_inner, c_n) if *c_n != crate::ast::types::UNBOUNDED_ARRAY => {
                 let arg = TemplateArg::NonType(*c_n as i128);
                 if bindings.get(bound).is_some_and(|e| e != &arg) {
                     return false;
@@ -602,9 +602,7 @@ pub fn calculate_specificity(pattern: &Type) -> usize {
         Type::Reference(inner) | Type::RvalueReference(inner) => 2 + calculate_specificity(inner),
         // `T[]` is the least specific array pattern, `T[N]` more so, and a
         // written bound (including `T[0]`) most specific.
-        Type::Array(inner, crate::ast::types::UNBOUNDED_ARRAY) => {
-            2 + calculate_specificity(inner)
-        }
+        Type::Array(inner, crate::ast::types::UNBOUNDED_ARRAY) => 2 + calculate_specificity(inner),
         Type::DependentArray(inner, _) => 3 + calculate_specificity(inner),
         Type::Array(inner, _) => 4 + calculate_specificity(inner),
         Type::TemplateInstance { args, .. } => {

@@ -106,9 +106,9 @@ impl Parser {
                     ArrayDim::Dependent(id.clone())
                 } else if let Some(dep_str) = expr_to_dependent_str(&expr)
                     && (super::template_helpers::text_mentions_active(
-                            &dep_str,
-                            &self.active_type_params,
-                        ) || matches!(expr, Expr::SizeofPack { .. }))
+                        &dep_str,
+                        &self.active_type_params,
+                    ) || matches!(expr, Expr::SizeofPack { .. }))
                 {
                     // A literal bound such as `[3]` is fixed even inside a
                     // template; only expressions that mention a parameter are
