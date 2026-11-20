@@ -224,6 +224,9 @@ impl<'a> Codegen<'a> {
             }
             for fld in &layout.fields {
                 collect_type_lifecycle(&fld.ty, &mut calls);
+                if let Some(init) = &fld.default_init {
+                    collect_expr_calls(init, &mut calls);
+                }
             }
         }
 

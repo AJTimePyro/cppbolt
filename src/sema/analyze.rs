@@ -46,6 +46,7 @@ impl Sema {
         self.synthesize_destructors(program);
         self.synthesize_constructors(program);
         self.register_declarations(program)?;
+        self.analyze_field_initializers(program)?;
         // Namespace aliases can name nested members selected through a
         // `decltype` pattern. Resolve them after methods and function templates
         // are registered; confirmation needs that lookup context.
@@ -160,12 +161,11 @@ impl Sema {
                     col,
                     ..
                 } => {
-                    for (fname, fty, finit) in fields.iter_mut() {
+                    for (_, fty, _) in fields.iter_mut() {
                         self.resolve_and_instantiate_type(fty, *line, *col)?;
-                        if let Some((init_expr, fline, fcol)) = finit {
-                            self.check_field_default_init(fname, fty, init_expr, (*fline, *fcol))?;
-                        }
                     }
+                    // NSDMI expressions are analyzed after member declarations
+                    // are registered; see analyze_field_initializers.
                     // A base that is a template specialization must have a
                     // layout before this class can inherit its vptr and slots.
                     for base in base_classes.clone() {
@@ -252,6 +252,44 @@ impl Sema {
                 let plain = crate::QualifiedName::new(name).plain().to_string();
                 self.variable_templates.insert(name.clone(), entry.clone());
                 self.variable_templates.insert(plain, entry);
+            }
+        }
+        Ok(())
+    }
+
+    /// Analyze default member initializers once the class's methods are
+    /// registered. Field types and layouts are already resolved; only the
+    /// initializer expressions and their stored layout copies are updated.
+    fn analyze_field_initializers(&mut self, program: &mut Program) -> Result<(), CompileError> {
+        for decl in &mut program.declarations {
+            let Decl::StructDecl { name, fields, .. } = decl else {
+                continue;
+            };
+            let visibility = self.class_field_visibility.get(name).cloned().or_else(|| {
+                let plain = QualifiedName::new(name).plain();
+                self.class_field_visibility.get(plain).cloned()
+            });
+            let class_name = name.clone();
+            let field_count = fields.len();
+            let previous_visibility =
+                std::mem::replace(&mut self.active_alias_visibility, visibility);
+            let previous_class = self.current_class.replace(class_name.clone());
+            let result = (|| {
+                for (fname, fty, finit) in fields.iter_mut() {
+                    if let Some((init_expr, line, col)) = finit {
+                        self.check_field_default_init(fname, fty, init_expr, (*line, *col))?;
+                    }
+                }
+                Ok(())
+            })();
+            self.current_class = previous_class;
+            self.active_alias_visibility = previous_visibility;
+            result?;
+            if let Some(layout) = self.struct_layouts.get_mut(&class_name) {
+                let start = layout.fields.len().saturating_sub(field_count);
+                for (slot, (_, _, finit)) in layout.fields[start..].iter_mut().zip(fields.iter()) {
+                    slot.default_init = finit.as_ref().map(|(expr, _, _)| expr.clone());
+                }
             }
         }
         Ok(())
@@ -402,6 +440,7 @@ impl Sema {
                 },
                 Decl::StructDecl {
                     name,
+                    fields,
                     methods,
                     static_fields,
                     ..
@@ -427,6 +466,24 @@ impl Sema {
                             .insert(identity, visible_functions.clone());
                     }
                     self.register_struct_declarations(name.as_str(), methods, static_fields)?;
+                    if fields.iter().any(|(_, _, init)| init.is_some()) {
+                        for m in methods.iter() {
+                            let qualified = format!("{}::{}", name, m.name);
+                            if let Some(sigs) = self.functions.get(&qualified) {
+                                for sig in sigs {
+                                    visible_functions.insert(sig.mangled_name.clone());
+                                }
+                            }
+                        }
+                        self.class_field_visibility.insert(
+                            name.to_string(),
+                            AliasVisibility {
+                                functions: visible_functions.clone(),
+                                usings: visible_usings.clone(),
+                                namespaces: self.open_namespaces.clone(),
+                            },
+                        );
+                    }
                 }
                 _ => {}
             }

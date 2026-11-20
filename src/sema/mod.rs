@@ -148,6 +148,8 @@ pub struct Sema {
     pub type_aliases: HashMap<String, Type>,
     /// Visibility snapshots for namespace aliases, keyed by alias name.
     pub alias_visibility: HashMap<String, AliasVisibility>,
+    /// Visibility snapshots for NSDMI expressions, keyed by class name.
+    pub class_field_visibility: HashMap<String, AliasVisibility>,
     /// Snapshot in force while validating a namespace alias.
     pub active_alias_visibility: Option<AliasVisibility>,
     /// Whether the analysis is inside the initializer of a variable.
@@ -281,6 +283,7 @@ impl Sema {
             namespace_aliases: HashMap::new(),
             type_aliases: HashMap::new(),
             alias_visibility: HashMap::new(),
+            class_field_visibility: HashMap::new(),
             active_alias_visibility: None,
             in_initializer: false,
             speculating: false,
