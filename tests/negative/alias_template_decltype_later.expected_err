@@ -1,0 +1,1 @@
+tests/negative/alias_template_decltype_later.cpp:1:39: error: Undefined function 'later'
