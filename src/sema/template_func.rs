@@ -103,9 +103,7 @@ impl Sema {
             .get(tmpl_name)
             .cloned()
             .unwrap_or_default();
-        if let Some(identity) = &self.current_template_identity
-            && let Some(visible) = self.template_definition_functions.get(identity)
-        {
+        if let Some(visible) = self.active_visible_functions() {
             candidates.retain(|(decl, _)| {
                 visible.contains(&format!(
                     "T:{}",

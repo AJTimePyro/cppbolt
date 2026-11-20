@@ -103,6 +103,14 @@ pub(crate) use sema_types::{ConversionFailure, DeferredMethod};
 pub use sema_types::{Scope, VarSymbol};
 use std::collections::{HashMap, HashSet};
 
+/// Function and using visibility captured at a namespace alias declaration.
+#[derive(Clone, Debug, Default)]
+pub(super) struct AliasVisibility {
+    pub functions: HashSet<String>,
+    pub usings: HashSet<String>,
+    pub namespaces: Vec<String>,
+}
+
 #[derive(Clone)]
 pub struct Sema {
     pub struct_layouts: HashMap<String, StructLayout>,
@@ -138,6 +146,10 @@ pub struct Sema {
     pub using_decls: HashMap<String, String>,
     pub namespace_aliases: HashMap<String, String>,
     pub type_aliases: HashMap<String, Type>,
+    /// Visibility snapshots for namespace aliases, keyed by alias name.
+    pub alias_visibility: HashMap<String, AliasVisibility>,
+    /// Snapshot in force while validating a namespace alias.
+    pub active_alias_visibility: Option<AliasVisibility>,
     /// Whether the analysis is inside the initializer of a variable.
     ///
     /// A constructor call in an initializer reports an initialization
@@ -205,6 +217,15 @@ pub struct Sema {
 }
 
 impl Sema {
+    pub(super) fn active_visible_functions(&self) -> Option<&std::collections::HashSet<String>> {
+        if let Some(vis) = &self.active_alias_visibility {
+            return Some(&vis.functions);
+        }
+        self.current_template_identity
+            .as_ref()
+            .and_then(|id| self.template_definition_functions.get(id))
+    }
+
     pub fn new() -> Self {
         let mut sema = Self {
             struct_layouts: HashMap::new(),
@@ -259,6 +280,8 @@ impl Sema {
             using_decls: HashMap::new(),
             namespace_aliases: HashMap::new(),
             type_aliases: HashMap::new(),
+            alias_visibility: HashMap::new(),
+            active_alias_visibility: None,
             in_initializer: false,
             speculating: false,
             speculative_hard: false,

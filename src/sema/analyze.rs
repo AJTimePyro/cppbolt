@@ -1,6 +1,41 @@
 use super::analyze_helpers::{collect_object_use_classes, method_matches_out_of_class};
 use super::*;
 
+fn decl_position(decl: &Decl) -> Option<(usize, usize)> {
+    match decl {
+        Decl::Function(f) | Decl::FriendFunction { func: f, .. } => Some((f.line, f.col)),
+        Decl::StructDecl { line, col, .. }
+        | Decl::StaticAssert { line, col, .. }
+        | Decl::GlobalVar { line, col, .. }
+        | Decl::NamespaceAlias { line, col, .. }
+        | Decl::UsingDecl { line, col, .. } => Some((*line, *col)),
+        Decl::Template(t) => Some((t.line, t.col)),
+        Decl::UsingNamespace { line, col, .. } => Some((*line, *col)),
+        Decl::EnumDecl { .. } => None,
+    }
+}
+
+fn snapshot_aliases_before(
+    sema: &mut Sema,
+    aliases: &[(String, (usize, usize))],
+    next: &mut usize,
+    pos: (usize, usize),
+    functions: &std::collections::HashSet<String>,
+    usings: &std::collections::HashSet<String>,
+) {
+    while *next < aliases.len() && aliases[*next].1 < pos {
+        sema.alias_visibility.insert(
+            aliases[*next].0.clone(),
+            AliasVisibility {
+                functions: functions.clone(),
+                usings: usings.clone(),
+                namespaces: sema.open_namespaces.clone(),
+            },
+        );
+        *next += 1;
+    }
+}
+
 impl Sema {
     pub fn analyze_program(&mut self, program: &mut Program) -> Result<(), CompileError> {
         self.object_use_classes = collect_object_use_classes(program);
@@ -165,13 +200,21 @@ impl Sema {
     /// context is registered so an invalid qualified member access is a hard
     /// error here, while dependent forms stay for substitution.
     fn validate_namespace_aliases(&mut self, program: &Program) -> Result<(), CompileError> {
-        let aliases: Vec<Type> = program
+        let aliases: Vec<(String, Type)> = program
             .namespace_type_aliases
-            .iter()
-            .filter_map(|name| self.type_aliases.get(name).cloned())
+            .keys()
+            .filter_map(|name| {
+                self.type_aliases
+                    .get(name)
+                    .map(|ty| (name.clone(), ty.clone()))
+            })
             .collect();
-        for mut ty in aliases {
-            self.resolve_and_instantiate_type(&mut ty, 0, 0)?;
+        for (name, mut ty) in aliases {
+            let visibility = self.alias_visibility.get(&name).cloned();
+            let previous = std::mem::replace(&mut self.active_alias_visibility, visibility);
+            let result = self.resolve_and_instantiate_type(&mut ty, 0, 0);
+            self.active_alias_visibility = previous;
+            result?;
         }
         Ok(())
     }
@@ -227,13 +270,37 @@ impl Sema {
             .flatten()
             .map(|sig| sig.mangled_name.clone())
             .collect();
+        let mut aliases: Vec<(String, (usize, usize))> = program
+            .namespace_type_aliases
+            .iter()
+            .map(|(name, pos)| (name.clone(), *pos))
+            .collect();
+        for decl in &program.declarations {
+            if let Decl::Template(t) = decl
+                && let TemplateKind::Alias(name, _) = &t.kind
+            {
+                aliases.push((name.clone(), (t.line, t.col)));
+            }
+        }
+        aliases.sort_by_key(|entry| entry.1);
+        let mut next_alias = 0;
         for decl in &mut program.declarations {
+            if let Some(pos) = decl_position(decl) {
+                snapshot_aliases_before(
+                    self,
+                    &aliases,
+                    &mut next_alias,
+                    pos,
+                    &visible_functions,
+                    &visible_usings,
+                );
+            }
             match decl {
-                Decl::UsingNamespace(ns) => {
+                Decl::UsingNamespace { name: ns, .. } => {
                     let resolved = self.resolve_alias_in_qualified_name(ns);
                     self.open_namespaces.push(resolved);
                 }
-                Decl::UsingDecl(name) => {
+                Decl::UsingDecl { name, .. } => {
                     let resolved = self.resolve_alias_in_qualified_name(name);
                     let short_name = resolved.split("::").last().unwrap_or(&resolved).to_string();
                     visible_usings.insert(short_name.clone());
@@ -364,6 +431,14 @@ impl Sema {
                 _ => {}
             }
         }
+        snapshot_aliases_before(
+            self,
+            &aliases,
+            &mut next_alias,
+            (usize::MAX, usize::MAX),
+            &visible_functions,
+            &visible_usings,
+        );
         Ok(())
     }
 

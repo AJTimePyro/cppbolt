@@ -45,7 +45,7 @@ pub struct Parser {
     pub known_templates: HashSet<String>,
     pub active_type_params: Vec<HashSet<String>>,
     pub type_aliases: HashMap<String, Type>,
-    pub namespace_type_aliases: HashSet<String>,
+    pub namespace_type_aliases: HashMap<String, (usize, usize)>,
     pub member_types: HashMap<String, Type>,
     /// Parsed `<...>` arguments of struct names, keyed by the canonical name.
     pub struct_template_args: HashMap<String, Vec<Type>>,
@@ -115,7 +115,7 @@ impl Parser {
             known_templates,
             active_type_params,
             type_aliases,
-            namespace_type_aliases: HashSet::new(),
+            namespace_type_aliases: HashMap::new(),
             member_types,
             struct_template_args: HashMap::new(),
             struct_member_aliases: HashMap::new(),
@@ -355,8 +355,8 @@ impl Parser {
     }
 
     /// Records a type alias under `name` and marks the name as known.
-    pub(super) fn register_type_alias(&mut self, name: String, ty: Type) {
-        self.namespace_type_aliases.insert(name.clone());
+    pub(super) fn register_type_alias(&mut self, name: String, ty: Type, pos: (usize, usize)) {
+        self.namespace_type_aliases.insert(name.clone(), pos);
         self.type_aliases.insert(name.clone(), ty);
         self.known_types.insert(name);
     }

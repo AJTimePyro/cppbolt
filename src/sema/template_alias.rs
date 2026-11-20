@@ -63,7 +63,16 @@ impl Sema {
         {
             expanded = Type::DependentNested(nested.clone());
         }
-        self.resolve_and_instantiate_type(&mut expanded, line, col)?;
+        // An alias template is a namespace-scope declaration too. Resolve its
+        // target with the visibility that applied where it was defined.
+        let visibility = self.alias_visibility.get(name).cloned().or_else(|| {
+            let plain = QualifiedName::new(name).plain();
+            self.alias_visibility.get(plain).cloned()
+        });
+        let previous = std::mem::replace(&mut self.active_alias_visibility, visibility);
+        let result = self.resolve_and_instantiate_type(&mut expanded, line, col);
+        self.active_alias_visibility = previous;
+        result?;
         Ok(Some(expanded))
     }
 }

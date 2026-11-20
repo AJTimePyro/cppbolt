@@ -357,6 +357,23 @@ impl Sema {
         arg_types: &[Type],
         dependent: bool,
     ) -> Option<Vec<FunctionSig>> {
+        // Namespace aliases validate late so specialization confirmation sees
+        // registered methods, but ordinary lookup must stay at the alias's
+        // declaration position. Use its snapshot when one is active.
+        let alias_vis = self.active_alias_visibility.as_ref();
+        let template_id = self.current_template_identity.as_ref();
+        let visible_functions = self.active_visible_functions();
+        let visible_usings = alias_vis
+            .map(|vis| &vis.usings)
+            .or_else(|| template_id.and_then(|id| self.template_definition_usings.get(id)));
+        let opened = alias_vis
+            .map(|vis| vis.namespaces.as_slice())
+            .or_else(|| {
+                template_id
+                    .and_then(|id| self.template_definition_namespaces.get(id))
+                    .map(|v| v.as_slice())
+            })
+            .unwrap_or(self.open_namespaces.as_slice());
         let q1 = name.to_string();
         let q2 = QualifiedName::new(name).alternate().into_owned();
         let mut candidates = self
@@ -364,10 +381,7 @@ impl Sema {
             .get(&q1)
             .or_else(|| self.functions.get(&q2))
             .or_else(|| {
-                if let Some(identity) = &self.current_template_identity
-                    && let Some(visible) = self.template_definition_usings.get(identity)
-                    && !visible.contains(name)
-                {
+                if visible_usings.is_some_and(|visible| !visible.contains(name)) {
                     return None;
                 }
                 self.using_decls
@@ -375,13 +389,6 @@ impl Sema {
                     .and_then(|full| self.functions.get(full))
             })
             .or_else(|| {
-                let opened = if let Some(identity) = &self.current_template_identity
-                    && let Some(snapshot) = self.template_definition_namespaces.get(identity)
-                {
-                    snapshot.as_slice()
-                } else {
-                    self.open_namespaces.as_slice()
-                };
                 opened
                     .iter()
                     .find_map(|ns| self.functions.get(&format!("{}::{}", ns, name)))
@@ -398,10 +405,7 @@ impl Sema {
             .functions
             .get(name)
             .is_some_and(|sigs| sigs.iter().any(|sig| sig.mangled_name == name));
-        if !already_bound
-            && let Some(identity) = &self.current_template_identity
-            && let Some(visible) = self.template_definition_functions.get(identity)
-        {
+        if !already_bound && let Some(visible) = &visible_functions {
             candidates = candidates.map(|sigs| {
                 sigs.into_iter()
                     .filter(|sig| visible.contains(&sig.mangled_name))
@@ -412,15 +416,16 @@ impl Sema {
             }
         }
         // ADL is for unqualified calls only, and its candidates are merged
-        // with ordinary lookup rather than used as a fallback.
+        // with ordinary lookup rather than used as a fallback. Copy the filter
+        // only when ADL needs it; the lookup phase above borrows it.
         if !name.contains("::") {
+            let adl_filter = if dependent {
+                None
+            } else {
+                visible_functions.cloned()
+            };
             let mut adl = self.adl_candidates(name, arg_types);
-            // A non-dependent call keeps the ADL set visible at the template's
-            // definition. A dependent call still uses instantiation-time ADL.
-            if !dependent
-                && let Some(identity) = &self.current_template_identity
-                && let Some(visible) = self.template_definition_functions.get(identity)
-            {
+            if let Some(visible) = &adl_filter {
                 adl.retain(|sig| visible.contains(&sig.mangled_name));
             }
             if !adl.is_empty() {
