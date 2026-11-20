@@ -859,3 +859,4 @@ negative/dependent_nested_no_fallback
 negative/namespace_alias_invalid_direct
 negative/namespace_alias_invalid_chain
 negative/namespace_alias_invalid_partial_spec
+negative/nested_instantiation_hard_error

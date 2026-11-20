@@ -386,6 +386,14 @@ impl Sema {
         }
 
         let tmpl_res = self.try_resolve_function_template_call(name, arg_types, args, pos);
+        // A nested instantiation failure while forming a template candidate is
+        // a hard error, even when another overload could serve the call. Only
+        // substitution failures may fall through to the other candidates.
+        if let Err(error) = &tmpl_res
+            && error.kind != crate::diagnostics::ErrorKind::Substitution
+        {
+            return Err(error.clone());
+        }
         let tmpl_score = match &tmpl_res {
             Ok(Some(sig)) => self.score_call_candidate(sig, arg_types, Some(args)).ok(),
             _ => None,

@@ -251,9 +251,11 @@ impl Sema {
                     ),
                     pos.line,
                     pos.col,
-                ));
+                )
+                .with_kind(crate::diagnostics::ErrorKind::Substitution));
             }
-            if let Some(e) = last_err {
+            if let Some(mut e) = last_err {
+                e.kind = crate::diagnostics::ErrorKind::Substitution;
                 return Err(e);
             }
             if let Some(failure) = last_substitution {
@@ -268,7 +270,8 @@ impl Sema {
                     ),
                     failure.line,
                     failure.col,
-                ));
+                )
+                .with_kind(crate::diagnostics::ErrorKind::Substitution));
             }
         }
         Ok(viable)
