@@ -11,7 +11,7 @@ use crate::ast::template::{TemplateClass, TemplateParam};
 use crate::ast::types::Type;
 use crate::diagnostics::{ErrorKind, SubstitutionFailure, TemplateFailure};
 use crate::name::QualifiedName;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Stable identity for a function template definition, used to find the
 /// ordinary lookup set captured when it was declared.
@@ -19,22 +19,70 @@ pub(crate) fn function_template_identity(name: &str, line: usize, col: usize) ->
     format!("{name}@{line}:{col}")
 }
 
+/// The class definition actually selected for a concrete specialization.
+/// A typedef on the primary (or on another partial specialization) is not a
+/// member of this specialization, so the selected definition must be used when
+/// checking whether a nested member exists.
+fn selected_class_definition(sema: &Sema, base: &str) -> Option<TemplateClass> {
+    if !base.contains('<') {
+        return None;
+    }
+    if let Some(spec) = sema.lookup_class_specialization(base) {
+        return Some(spec);
+    }
+    let (tmpl_name, args_str) = split_template_call_name(base)?;
+    let known: Vec<String> = sema
+        .class_templates
+        .keys()
+        .chain(sema.alias_templates.keys())
+        .cloned()
+        .collect();
+    let args = parse_types_list(args_str, &known).ok()?;
+    let plain = QualifiedName::new(tmpl_name).plain();
+    sema.partial_specializations
+        .get(plain)?
+        .iter()
+        .find_map(|spec| {
+            let mut bindings = HashMap::new();
+            if super::template_match::match_pattern_args(
+                &spec.pattern_args,
+                &args,
+                &mut bindings,
+                &sema.alias_templates,
+            ) && spec.params.iter().all(|p| bindings.contains_key(&p.name))
+            {
+                Some(spec.template_class.clone())
+            } else {
+                None
+            }
+        })
+}
+
 /// True when a class template or one of its partial specializations declares
 /// a nested member with the given name. Such members are valid types even
 /// without a registered type alias.
 fn template_declares_nested_member(sema: &Sema, base: &str, member: &str) -> bool {
     use crate::ast::Decl;
+    let (tmpl_name, _) = split_template_call_name(base).unwrap_or((base, ""));
+    let selected = selected_class_definition(sema, base);
     let primary = sema.class_templates.values().map(|(class, _)| class);
     let partials = sema
         .partial_specializations
         .values()
         .flatten()
         .map(|spec| &spec.template_class);
-    let classes: Vec<_> = primary.chain(partials).collect();
+    let classes: Vec<_> = if let Some(class) = &selected {
+        vec![class]
+    } else {
+        primary.chain(partials).collect()
+    };
 
     // A member may come from the class itself or from one of its bases.
     let mut visited: Vec<String> = Vec::new();
-    let mut queue = vec![QualifiedName::new(base).plain().to_string()];
+    let mut queue = vec![selected.as_ref().map_or_else(
+        || QualifiedName::new(tmpl_name).plain().to_string(),
+        |c| c.name.clone(),
+    )];
     while let Some(name) = queue.pop() {
         if visited.contains(&name) {
             continue;
@@ -69,6 +117,12 @@ fn template_declares_nested_member(sema: &Sema, base: &str, member: &str) -> boo
             || sema.lookup_type_alias(&qualified).is_some()
         {
             return true;
+        }
+        if selected.is_some() {
+            // Only the selected definition counts. Falling back to the plain
+            // template spelling would accept an alias declared by the primary
+            // even though this specialization does not have that member.
+            return false;
         }
         // Member aliases of nested member templates are registered under the
         // uninstantiated spelling, without template argument lists.
@@ -158,17 +212,24 @@ impl Sema {
         line: usize,
         col: usize,
     ) -> Result<(), CompileError> {
-        let mut previous: Option<String> = None;
-        // Bound the walk so mutually referring aliases cannot loop forever.
-        for _ in 0..16 {
-            self.resolve_and_instantiate_type(ty, line, col)?;
-            let Type::Struct(next) = &*ty else {
-                break;
-            };
-            if previous.as_deref() == Some(next.as_str()) || !next.contains(">::") {
+        // Cycles are detected by revisiting a name; the separate limit only
+        // guards aliases that generate ever-growing nested type names.
+        const MAX_ALIAS_CHAIN: usize = 500;
+        let mut visited = HashSet::new();
+        self.resolve_and_instantiate_type(ty, line, col)?;
+        while let Type::Struct(name) = &*ty {
+            let name = name.clone();
+            if !name.contains(">::") || !visited.insert(name) {
                 break;
             }
-            previous = Some(next.clone());
+            if visited.len() > MAX_ALIAS_CHAIN {
+                return Err(CompileError::internal(
+                    "dependent alias chain exceeded the resolution limit",
+                    line,
+                    col,
+                ));
+            }
+            self.resolve_and_instantiate_type(ty, line, col)?;
         }
         Ok(())
     }
@@ -339,7 +400,7 @@ impl Sema {
             return Ok(());
         }
         let inst_part = &sname[..gt_pos + 1];
-        let Some((base, args_str)) = super::template_deduce::split_template_call_name(inst_part)
+        let Some((_base, args_str)) = super::template_deduce::split_template_call_name(inst_part)
         else {
             return Ok(());
         };
@@ -358,7 +419,7 @@ impl Sema {
         // A nested struct declared by the template is a valid type even when
         // no member alias was registered for it. Only report a hard error when
         // no template definition declares a nested member of that name.
-        if template_declares_nested_member(self, base, &sname[gt_pos + 3..]) {
+        if template_declares_nested_member(self, inst_part, &sname[gt_pos + 3..]) {
             return Ok(());
         }
         Err(CompileError::new(
@@ -369,7 +430,11 @@ impl Sema {
             ),
             line,
             col,
-        ))
+        )
+        // This is an invalid type in the immediate context. Outside
+        // substitution it remains a normal compile error; inside candidate
+        // formation the caller discards the candidate instead.
+        .with_kind(ErrorKind::Substitution))
     }
 
     /// Resolves a qualified name to its type. Missing nested types yield

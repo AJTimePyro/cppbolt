@@ -1,0 +1,1 @@
+tests/negative/dependent_nested_no_fallback.cpp:6:21: error: no matching function for call to 'only': substitution failure: no type named 'type' in 'Maybe<NoType>'
