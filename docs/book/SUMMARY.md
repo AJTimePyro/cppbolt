@@ -20,6 +20,10 @@
 - [Runtime & Standard Library](internals/runtime.md)
 - [Testing System](internals/testing.md)
 
+# Standard Library
+
+- [`<type_traits>` (LLVM libc++ 23.1.5)](../stdlib/type_traits.md)
+
 # Architecture Decision Records
 
 - [ADR Template](adr/template.md)
