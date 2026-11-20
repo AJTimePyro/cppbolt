@@ -844,3 +844,7 @@ negative/partial_spec_unrenderable_decltype
 cxx17/sizeof_expr_sfinae
 negative/sizeof_expr_sfinae_no_fallback
 negative/sizeof_expr_nested_instantiation_hard
+cxx17/static_assert_qualified_values
+negative/static_assert_qualified_false
+negative/static_assert_variable_template_false
+negative/static_assert_unknown_qualified
