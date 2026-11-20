@@ -30,6 +30,9 @@ pub struct TemplateClass {
     pub static_fields: Vec<(String, Type, Option<Expr>)>,
     pub private_members: Vec<String>,
     pub nested_structs: Vec<Decl>,
+    /// Member alias names declared by this definition. A partial specialization
+    /// does not inherit the typedefs of the primary template.
+    pub member_aliases: Vec<String>,
     pub alignment: Option<Type>,
 }
 

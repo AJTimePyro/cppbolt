@@ -451,6 +451,7 @@ fn test_substitute_struct() -> Result<(), Box<dyn std::error::Error>> {
         static_fields: Vec::new(),
         private_members: Vec::new(),
         nested_structs: Vec::new(),
+        member_aliases: Vec::new(),
         alignment: None,
     };
 

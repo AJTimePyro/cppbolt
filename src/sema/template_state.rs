@@ -26,6 +26,7 @@ pub(super) struct InstantiationSnapshot {
     type_aliases: HashMap<String, Type>,
     synthesized_decls: Vec<Decl>,
     class_templates: HashMap<String, (TemplateClass, Vec<TemplateParam>)>,
+    instantiated_class_definitions: HashMap<String, TemplateClass>,
     variable_templates: HashMap<
         String,
         (
@@ -61,6 +62,7 @@ impl InstantiationSnapshot {
             type_aliases: sema.type_aliases.clone(),
             synthesized_decls: sema.synthesized_decls.clone(),
             class_templates: sema.class_templates.clone(),
+            instantiated_class_definitions: sema.instantiated_class_definitions.clone(),
             variable_templates: sema.variable_templates.clone(),
             instantiated_variable_templates: sema.instantiated_variable_templates.clone(),
             instantiated_classes: sema.instantiated_classes.clone(),
@@ -88,6 +90,7 @@ impl InstantiationSnapshot {
         sema.type_aliases = self.type_aliases;
         sema.synthesized_decls = self.synthesized_decls;
         sema.class_templates = self.class_templates;
+        sema.instantiated_class_definitions = self.instantiated_class_definitions;
         sema.variable_templates = self.variable_templates;
         sema.instantiated_variable_templates = self.instantiated_variable_templates;
         sema.instantiated_classes = self.instantiated_classes;

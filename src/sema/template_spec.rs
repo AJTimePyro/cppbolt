@@ -109,6 +109,8 @@ impl Sema {
         template_class: TemplateClass,
     ) -> Result<(TemplateClass, HashMap<String, TemplateArg>), CompileError> {
         if let Some(spec) = self.lookup_class_specialization(target.inst_name) {
+            self.instantiated_class_definitions
+                .insert(target.inst_name.to_string(), spec.clone());
             let m = self.prepare_instantiation_mapping(
                 &spec,
                 target.template_params,
@@ -120,6 +122,8 @@ impl Sema {
         } else if let Some((spec, mut m)) =
             self.select_partial_specialization(target.name, target.effective_args, target.pos)?
         {
+            self.instantiated_class_definitions
+                .insert(target.inst_name.to_string(), spec.clone());
             self.register_instantiation_nested_and_aliases(
                 &spec,
                 target.inst_name,

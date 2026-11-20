@@ -164,6 +164,10 @@ pub struct Sema {
     pub class_templates: HashMap<String, (TemplateClass, Vec<TemplateParam>)>,
     pub class_specializations: HashMap<String, TemplateClass>,
     pub partial_specializations: HashMap<String, Vec<template_match::PartialSpec>>,
+    /// The definition selected when each class-template specialization was
+    /// instantiated. Nested-member validation reads this instead of selecting
+    /// the specialization a second time.
+    pub instantiated_class_definitions: HashMap<String, TemplateClass>,
     pub function_templates: HashMap<String, Vec<(FunctionDecl, Vec<TemplateParam>)>>,
     /// Function overloads visible when each function template was defined,
     /// keyed by `name@line:col`. Ordinary lookup inside an instantiated body
@@ -229,6 +233,7 @@ impl Sema {
             class_templates: HashMap::new(),
             class_specializations: HashMap::new(),
             partial_specializations: HashMap::new(),
+            instantiated_class_definitions: HashMap::new(),
             function_templates: HashMap::new(),
             template_definition_functions: HashMap::new(),
             dependent_calls: HashMap::new(),

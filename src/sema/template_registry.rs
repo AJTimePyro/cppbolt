@@ -19,43 +19,15 @@ pub(crate) fn function_template_identity(name: &str, line: usize, col: usize) ->
     format!("{name}@{line}:{col}")
 }
 
-/// The class definition actually selected for a concrete specialization.
-/// A typedef on the primary (or on another partial specialization) is not a
-/// member of this specialization, so the selected definition must be used when
-/// checking whether a nested member exists.
+/// The definition selected when this specialization was instantiated. Reading
+/// the cache keeps nested-member validation on exactly the same selection path
+/// as normal instantiation, including confirmation and ambiguity handling.
 fn selected_class_definition(sema: &Sema, base: &str) -> Option<TemplateClass> {
-    if !base.contains('<') {
-        return None;
-    }
-    if let Some(spec) = sema.lookup_class_specialization(base) {
-        return Some(spec);
-    }
-    let (tmpl_name, args_str) = split_template_call_name(base)?;
-    let known: Vec<String> = sema
-        .class_templates
-        .keys()
-        .chain(sema.alias_templates.keys())
-        .cloned()
-        .collect();
-    let args = parse_types_list(args_str, &known).ok()?;
-    let plain = QualifiedName::new(tmpl_name).plain();
-    sema.partial_specializations
-        .get(plain)?
-        .iter()
-        .find_map(|spec| {
-            let mut bindings = HashMap::new();
-            if super::template_match::match_pattern_args(
-                &spec.pattern_args,
-                &args,
-                &mut bindings,
-                &sema.alias_templates,
-            ) && spec.params.iter().all(|p| bindings.contains_key(&p.name))
-            {
-                Some(spec.template_class.clone())
-            } else {
-                None
-            }
-        })
+    sema.instantiated_class_definitions.get(base).cloned()
+}
+
+fn declares_member_alias(class: &TemplateClass, member: &str) -> bool {
+    class.member_aliases.iter().any(|name| name == member)
 }
 
 /// True when a class template or one of its partial specializations declares
@@ -65,6 +37,12 @@ fn template_declares_nested_member(sema: &Sema, base: &str, member: &str) -> boo
     use crate::ast::Decl;
     let (tmpl_name, _) = split_template_call_name(base).unwrap_or((base, ""));
     let selected = selected_class_definition(sema, base);
+    if selected
+        .as_ref()
+        .is_some_and(|class| declares_member_alias(class, member))
+    {
+        return true;
+    }
     let primary = sema.class_templates.values().map(|(class, _)| class);
     let partials = sema
         .partial_specializations
@@ -291,7 +269,8 @@ impl Sema {
                     *ty = Type::NonType(value);
                     return Ok(());
                 }
-                let Some(resolved) = self.resolve_nested_type_name(name, line, col)? else {
+                let Some((_, Some(resolved))) = self.resolve_nested_type_name(name, line, col)?
+                else {
                     let (base, member) = name.rsplit_once("::").unwrap_or(("", name.as_str()));
                     return Err(CompileError::new(
                         format!("no type named '{}' in '{}'", member, base),
@@ -385,10 +364,14 @@ impl Sema {
         line: usize,
         col: usize,
     ) -> Result<(), CompileError> {
-        if let Some(alias) = self.resolve_nested_type_name(sname, line, col)? {
-            *ty = alias;
-            return Ok(());
-        }
+        let owner = match self.resolve_nested_type_name(sname, line, col)? {
+            Some((_, Some(alias))) => {
+                *ty = alias;
+                return Ok(());
+            }
+            Some((owner, None)) => owner,
+            None => String::new(),
+        };
         // A member of a concrete class-template specialization must exist:
         // `enable_if<false, T>::type` has no `type` member and is a hard error
         // outside substitution. Dependent arguments are left for the existing
@@ -419,7 +402,8 @@ impl Sema {
         // A nested struct declared by the template is a valid type even when
         // no member alias was registered for it. Only report a hard error when
         // no template definition declares a nested member of that name.
-        if template_declares_nested_member(self, inst_part, &sname[gt_pos + 3..]) {
+        let check_name = if owner.is_empty() { inst_part } else { &owner };
+        if template_declares_nested_member(self, check_name, &sname[gt_pos + 3..]) {
             return Ok(());
         }
         Err(CompileError::new(
@@ -628,14 +612,22 @@ impl Sema {
         Ok(value)
     }
 
+    /// Resolves `Owner<Args...>::member`. Returns the canonical owner name
+    /// together with the member type when found, or `None` as the member when
+    /// the owner was instantiated but has no such member.
     fn resolve_nested_type_name(
         &mut self,
         name: &str,
         line: usize,
         col: usize,
-    ) -> Result<Option<Type>, CompileError> {
-        if let Some(alias) = self.lookup_type_alias(name) {
-            return Ok(Some(alias));
+    ) -> Result<Option<(String, Option<Type>)>, CompileError> {
+        // A nested member of a concrete specialization can have a stale alias
+        // registered from a different definition (for example the primary).
+        // Validate it against the selected definition below instead.
+        if !name.contains(">::")
+            && let Some(alias) = self.lookup_type_alias(name)
+        {
+            return Ok(Some((name.to_string(), Some(alias))));
         }
         let Some(gt_pos) = name.rfind('>') else {
             return Ok(None);
@@ -673,14 +665,20 @@ impl Sema {
                     error
                 }
             })?;
-        let canon = format!("{}::{}", inst, &name[gt_pos + 3..]);
+        let member = &name[gt_pos + 3..];
+        if selected_class_definition(self, &inst)
+            .is_some_and(|class| !declares_member_alias(&class, member))
+        {
+            return Ok(Some((inst, None)));
+        }
+        let canon = format!("{}::{}", inst, member);
         if let Some(alias) = self.lookup_type_alias(&canon) {
-            return Ok(Some(alias));
+            return Ok(Some((inst, Some(alias))));
         }
         if self.struct_layouts.contains_key(&canon) {
-            return Ok(Some(Type::Struct(canon)));
+            return Ok(Some((inst, Some(Type::Struct(canon)))));
         }
-        Ok(None)
+        Ok(Some((inst, None)))
     }
 
     /// Instantiates a variable template reference such as `is_integral_v<int>`

@@ -274,6 +274,7 @@ impl Sema {
             static_fields: subst_static_fields,
             private_members: p.inner_tmpl.private_members.clone(),
             nested_structs: p.inner_tmpl.nested_structs.clone(),
+            member_aliases: p.inner_tmpl.member_aliases.clone(),
             alignment: p.inner_tmpl.alignment.clone(),
         };
 

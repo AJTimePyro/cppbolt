@@ -49,6 +49,9 @@ pub struct Parser {
     pub member_types: HashMap<String, Type>,
     /// Parsed `<...>` arguments of struct names, keyed by the canonical name.
     pub struct_template_args: HashMap<String, Vec<Type>>,
+    /// Member alias names declared by each class definition, keyed by the
+    /// definition's name, including partial-specialization arguments.
+    pub struct_member_aliases: HashMap<String, Vec<String>>,
     pub scoped_aliases: Vec<HashMap<String, Type>>,
     pub current_namespace: Vec<String>,
     pub open_namespaces: Vec<String>,
@@ -115,6 +118,7 @@ impl Parser {
             namespace_type_aliases: HashSet::new(),
             member_types,
             struct_template_args: HashMap::new(),
+            struct_member_aliases: HashMap::new(),
             scoped_aliases,
             current_namespace: Vec::new(),
             open_namespaces: Vec::new(),
@@ -359,6 +363,13 @@ impl Parser {
 
     /// Records a type alias declared inside a class under the qualified `Class::alias` spelling.
     pub(super) fn register_member_alias(&mut self, owner: &str, alias: String, ty: Type) {
+        let names = self
+            .struct_member_aliases
+            .entry(owner.to_string())
+            .or_default();
+        if !names.contains(&alias) {
+            names.push(alias.clone());
+        }
         let qualified = format!("{}::{}", owner, alias);
         self.type_aliases.insert(qualified.clone(), ty);
         self.known_types.insert(qualified);

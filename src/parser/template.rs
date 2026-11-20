@@ -327,6 +327,11 @@ impl Parser {
 
         self.register_template_name(&name);
         let pattern_args = self.struct_template_args.get(&name).cloned();
+        let member_aliases = self
+            .struct_member_aliases
+            .get(&name)
+            .cloned()
+            .unwrap_or_default();
         let template_class = TemplateClass {
             name,
             pattern_args,
@@ -340,6 +345,7 @@ impl Parser {
             static_fields,
             private_members,
             nested_structs,
+            member_aliases,
             alignment,
         };
         struct_decls.push(Decl::Template(TemplateDecl {
