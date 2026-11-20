@@ -636,9 +636,24 @@ impl Sema {
                         Some(&all_constants),
                         None,
                     );
-                    // Fail on a definite false. When the integral evaluator
-                    // cannot fold the condition (for example a comparison of
-                    // member pointers), leave it accepted as before.
+                    // The pre-pass snapshot misses class static members folded
+                    // later and variable templates not yet instantiated. Render
+                    // the condition so those references can be folded into the
+                    // live constant map before trying again.
+                    let value = if value.is_ok() {
+                        value
+                    } else {
+                        match crate::parser::types_array::expr_to_dependent_str(condition)
+                            .and_then(|spelling| self.eval_dependent_nontype(&spelling))
+                        {
+                            Some(resolved) => Ok(resolved),
+                            None => value,
+                        }
+                    };
+                    // Fail on a definite false. An unevaluable condition that
+                    // is not even well-formed is rejected below; a well-formed
+                    // one (for example a member-pointer comparison) keeps the
+                    // existing accepted behavior.
                     if matches!(value, Ok(0)) {
                         let suffix = message
                             .as_ref()
@@ -649,6 +664,21 @@ impl Sema {
                             *line,
                             *col,
                         ));
+                    }
+                    // If the condition is not even well-formed, its truth
+                    // cannot be established; reject instead of accepting it.
+                    // A well-formed but unevaluable condition (for example a
+                    // member-pointer comparison) keeps the accepted behavior.
+                    if value.is_err() {
+                        let mut probe = self.clone();
+                        let mut condition_copy = condition.clone();
+                        if probe.analyze_expr(&mut condition_copy).is_err() {
+                            return Err(CompileError::new(
+                                "static assertion condition is not a constant expression",
+                                *line,
+                                *col,
+                            ));
+                        }
                     }
                 }
                 Decl::StructDecl {
