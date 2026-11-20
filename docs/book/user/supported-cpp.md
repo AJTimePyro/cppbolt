@@ -99,12 +99,15 @@ The six SFINAE milestones (typed substitution failure, dependent nested types, i
 - Bit-fields (`struct S { int x : 3; };`) are not part of the type/parser model, so `decltype(s.x)` on a bit-field cannot be expressed.
 - Wide character types (`wchar_t`, `char16_t`, `char32_t`) have no distinct type representation. They parse as opaque names: `std::is_integral<char16_t>::value` yields `false` and `sizeof(char16_t)` is 4 rather than 2.
 - `decltype` treats a pointer subscript as a value: `decltype(std::declval<T*>()[0])` yields `T`, where Clang and GCC yield `T&`. Use a subscript whose `operator[]` returns by value, or unary `+`, when the result feeds a dependent pattern.
+- A `static_assert` inside a function template is not checked at instantiation; only namespace-scope assertions are evaluated.
 
 `decltype` on an overload-set operand, bare function-name decay, non-dependent `enable_if` fallback, and `void_t` detection are covered and match Clang/GCC.
 
 A `decltype` nested in a qualified partial-specialization pattern (for example `typename Box<decltype(T())>::type`) is a non-deduced context. The compiler binds parameters from the other arguments, then renders the operand as source, substitutes and resolves it for confirmation. Cast, ternary, shift, array-subscript and `declval` operands are supported; an operand that cannot be rendered is a hard error.
 
 `sizeof(expr)` type-checks its operand even though it is unevaluated: an invalid expression in a `decltype` trailing return type rejects the candidate, and an error from instantiating another template inside the operand stays hard. The parser reads a `sizeof` operand that starts with a template name as `sizeof(type)`; wrap such expressions in another pair of parentheses.
+
+`static_assert` folds qualified static constexpr members and variable-template values such as `S::value` and `std::is_integral_v<int>` into the condition before judging it. The compiler rejects a false condition and also rejects an unevaluable condition that is not well-formed, instead of silently accepting it. Well-formed conditions outside the integral evaluator, such as member-pointer comparisons, keep their accepted behavior.
 
 ### 1. Language Semantics & Edge Cases
 - **Copy Elision & Return Semantics**: Prvalue initialization is elided as guaranteed by C++17 (`T x = T(1);`). Returning local automatic variables by value applies C++11 implicit move semantics: overload resolution selects the move constructor before falling back to copy construction. Returning non-local or unmovable lvalues of move-only types (`std::unique_ptr`) is rejected at compile time.
