@@ -149,6 +149,30 @@ impl Sema {
         }
     }
 
+    /// Resolves a member alias target through any chain of dependent nested
+    /// types, so a registered alias holds the final type instead of an opaque
+    /// `Template<...>::type` spelling.
+    pub(super) fn resolve_member_alias_chain(
+        &mut self,
+        ty: &mut Type,
+        line: usize,
+        col: usize,
+    ) -> Result<(), CompileError> {
+        let mut previous: Option<String> = None;
+        // Bound the walk so mutually referring aliases cannot loop forever.
+        for _ in 0..16 {
+            self.resolve_and_instantiate_type(ty, line, col)?;
+            let Type::Struct(next) = &*ty else {
+                break;
+            };
+            if previous.as_deref() == Some(next.as_str()) || !next.contains(">::") {
+                break;
+            }
+            previous = Some(next.clone());
+        }
+        Ok(())
+    }
+
     pub fn resolve_and_instantiate_type(
         &mut self,
         ty: &mut Type,
@@ -505,9 +529,16 @@ impl Sema {
             return Ok(None);
         };
         let known: Vec<String> = self.class_templates.keys().cloned().collect();
-        let Ok(args) = super::template_deduce::parse_types_list(args_str, &known) else {
+        let Ok(mut args) = super::template_deduce::parse_types_list(args_str, &known) else {
             return Ok(None);
         };
+        // Expand alias and nested type arguments before instantiating the
+        // owner, so `Trait<Alias<T>>::value` reads the right specialization.
+        for arg in &mut args {
+            if self.resolve_and_instantiate_type(arg, line, col).is_err() {
+                return Ok(None);
+            }
+        }
         // If instantiating the owner fails, let the caller's normal nested
         // type resolution report it with the right hard/soft classification.
         let Ok(inst) = self.instantiate_class_template(base, &args, line, col) else {
@@ -618,7 +649,12 @@ impl Sema {
             .chain(self.alias_templates.keys())
             .cloned()
             .collect();
-        let args = super::template_deduce::parse_types_list(args_str, &known)?;
+        let mut args = super::template_deduce::parse_types_list(args_str, &known)?;
+        // An argument can be an alias template or a dependent nested type;
+        // expand it before deducing so the specialization sees the real type.
+        for arg in &mut args {
+            self.resolve_and_instantiate_type(arg, line, col)?;
+        }
         let effective =
             super::template_deduce::fill_default_template_args(base, &params, &args, (line, col))?;
         let mapping = super::template_deduce::build_template_arg_map(&params, &effective);
@@ -841,7 +877,13 @@ impl Sema {
         })?;
 
         self.register_instantiated_static_fields(inst_name, static_fields, base_classes, line, col);
-        self.register_instantiated_member_aliases(&template_class.name, inst_name, &mapping);
+        self.register_instantiated_member_aliases(
+            &template_class.name,
+            inst_name,
+            &mapping,
+            line,
+            col,
+        );
         let inst_ty = Type::Struct(inst_name.to_string());
         for friend in &template_class.friends {
             let mut instantiated = super::template_subst_func::substitute_function(
@@ -909,19 +951,29 @@ impl Sema {
         tmpl_name: &str,
         inst_name: &str,
         mapping: &HashMap<String, crate::sema::pack_expansion::TemplateArg>,
+        line: usize,
+        col: usize,
     ) {
         let plain_tmpl = QualifiedName::new(tmpl_name).plain();
         let plain_inst = QualifiedName::new(inst_name).plain();
         let is_std =
             QualifiedName::new(inst_name).in_std() || QualifiedName::new(tmpl_name).in_std();
         let mut new_aliases = Vec::new();
-        for (alias_name, ty) in &self.type_aliases {
+        let existing: Vec<(String, Type)> = self
+            .type_aliases
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        for (alias_name, ty) in &existing {
             let Some((owner, member)) = alias_name.rsplit_once("::") else {
                 continue;
             };
             if QualifiedName::new(owner).plain() == plain_tmpl
-                && let Ok(subst_ty) = substitute_type(ty, mapping, None)
+                && let Ok(mut subst_ty) = substitute_type(ty, mapping, None)
             {
+                // Path 2 is a best-effort re-registration; a resolution error
+                // leaves the partially resolved type as it did before.
+                let _ = self.resolve_member_alias_chain(&mut subst_ty, line, col);
                 new_aliases.push((format!("{inst_name}::{member}"), subst_ty.clone()));
                 if is_std {
                     new_aliases.push((format!("std::{plain_inst}::{member}"), subst_ty.clone()));

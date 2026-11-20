@@ -101,7 +101,7 @@ impl Sema {
                 return Ok(Type::Struct(name.clone()));
             }
         }
-        self.resolve_and_instantiate_type(&mut subst_ty, line, col)?;
+        self.resolve_member_alias_chain(&mut subst_ty, line, col)?;
         Ok(subst_ty)
     }
 
