@@ -1,89 +1,61 @@
-#ifndef _MINI_STL_TYPE_TRAITS_
-#define _MINI_STL_TYPE_TRAITS_
+// -*- C++ -*-
+//===----------------------------------------------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
 
-namespace std {
+#ifndef _LIBCPP_TYPE_TRAITS
+#define _LIBCPP_TYPE_TRAITS
 
-template <typename T, T v>
-struct integral_constant {
-    static const T value = v;
-    typedef T value_type;
-    typedef integral_constant<T, v> type;
-    operator T() const { return value; }
-};
+// Adapted from LLVM libc++ 23.1.5 (llvmorg-23.1.5), libcxx/include/type_traits
+// and its libcxx/include/__type_traits/*.h dependencies. The upstream umbrella
+// header aggregates these components; only the C++17 traits supported by
+// cppbolt are included here. See docs/stdlib/type_traits.md for the supported
+// set, the compatibility shims and the known limitations.
 
-typedef integral_constant<bool, true> true_type;
-typedef integral_constant<bool, false> false_type;
+#include <compat/compiler/compiler.h>
+#include <detail/type_traits/builtins.h>
 
-template <typename T, typename U>
-struct is_same : false_type {};
+#include <detail/type_traits/integral_constant.h>
+#include <detail/type_traits/enable_if.h>
+#include <detail/type_traits/conditional.h>
+#include <detail/type_traits/void_t.h>
+#include <detail/type_traits/is_same.h>
+#include <detail/type_traits/negation.h>
 
-template <typename T>
-struct is_same<T, T> : true_type {};
+#include <detail/type_traits/remove_cv.h>
+#include <detail/type_traits/remove_const.h>
+#include <detail/type_traits/remove_volatile.h>
+#include <detail/type_traits/add_cv_quals.h>
+#include <detail/type_traits/remove_reference.h>
+#include <detail/type_traits/add_reference.h>
+#include <detail/type_traits/remove_pointer.h>
+#include <detail/type_traits/add_pointer.h>
+#include <detail/type_traits/decay.h>
 
-template <typename T>
-struct remove_reference {
-    typedef T type;
-};
+#include <detail/type_traits/is_void.h>
+#include <detail/type_traits/is_integral.h>
+#include <detail/type_traits/is_floating_point.h>
+#include <detail/type_traits/is_null_pointer.h>
+#include <detail/type_traits/is_array.h>
+#include <detail/type_traits/is_const.h>
+#include <detail/type_traits/is_reference.h>
+#include <detail/type_traits/is_pointer.h>
+#include <detail/type_traits/is_member_pointer.h>
+#include <detail/type_traits/is_arithmetic.h>
+#include <detail/type_traits/is_fundamental.h>
+#include <detail/type_traits/is_compound.h>
+#include <detail/type_traits/is_signed.h>
+#include <detail/type_traits/is_unsigned.h>
+#include <detail/type_traits/make_signed.h>
+#include <detail/type_traits/make_unsigned.h>
 
-template <typename T>
-struct remove_reference<T&> {
-    typedef T type;
-};
+#include <detail/type_traits/rank.h>
+#include <detail/type_traits/remove_extent.h>
+#include <detail/type_traits/remove_all_extents.h>
+#include <detail/type_traits/alignment_of.h>
 
-template <typename T>
-struct remove_reference<T&&> {
-    typedef T type;
-};
-
-template <typename T>
-using remove_reference_t = typename remove_reference<T>::type;
-
-// enable_if: `type` exists only when the condition is true. The false
-// partial specialization leaves the member out so dependent uses fail in the
-// immediate context and participate in SFINAE.
-template <bool B, typename T = void>
-struct enable_if {
-    typedef T type;
-};
-
-template <typename T>
-struct enable_if<false, T> {};
-
-template <bool B, typename T = void>
-using enable_if_t = typename enable_if<B, T>::type;
-
-// Maps any valid sequence of types to void; invalid dependent types fail
-// substitution instead of being hidden.
-template <typename...>
-using void_t = void;
-
-// is_integral: cv-qualified forms reduce to the unqualified trait.
-template <typename T>
-struct is_integral {
-    static const bool value = false;
-};
-
-template <> struct is_integral<bool> { static const bool value = true; };
-template <> struct is_integral<char> { static const bool value = true; };
-template <> struct is_integral<signed char> { static const bool value = true; };
-template <> struct is_integral<unsigned char> { static const bool value = true; };
-template <> struct is_integral<short> { static const bool value = true; };
-template <> struct is_integral<unsigned short> { static const bool value = true; };
-template <> struct is_integral<int> { static const bool value = true; };
-template <> struct is_integral<unsigned int> { static const bool value = true; };
-template <> struct is_integral<long> { static const bool value = true; };
-template <> struct is_integral<unsigned long> { static const bool value = true; };
-template <> struct is_integral<long long> { static const bool value = true; };
-template <> struct is_integral<unsigned long long> { static const bool value = true; };
-
-template <typename T>
-struct is_integral<const T> {
-    static const bool value = is_integral<T>::value;
-};
-
-template <typename T>
-constexpr bool is_integral_v = is_integral<T>::value;
-
-} // namespace std
-
-#endif // _MINI_STL_TYPE_TRAITS_
+#endif // _LIBCPP_TYPE_TRAITS
