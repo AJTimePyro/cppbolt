@@ -106,6 +106,8 @@ The six SFINAE milestones (typed substitution failure, dependent nested types, i
 
 A `decltype` nested in a qualified partial-specialization pattern (for example `typename Box<decltype(T())>::type`) is a non-deduced context. The compiler binds parameters from the other arguments, then renders the operand as source, substitutes and resolves it for confirmation. Cast, ternary, shift, array-subscript and `declval` operands are supported; an operand that cannot be rendered is a hard error.
 
+For nested-member checks (`T::type` and multi-level chains), the compiler uses the definition selected when the specialization was instantiated. Selection includes partial-specialization confirmation. A typedef declared by the primary is not a member of a partial specialization that omits it. Lookup fails when no selected definition provides the member.
+
 `sizeof(expr)` type-checks its operand even though it is unevaluated: an invalid expression in a `decltype` trailing return type rejects the candidate, and an error from instantiating another template inside the operand stays hard. The parser reads a `sizeof` operand that starts with a template name as `sizeof(type)`; wrap such expressions in another pair of parentheses.
 
 `static_assert` folds qualified static constexpr members and variable-template values such as `S::value` and `std::is_integral_v<int>` into the condition before judging it. The compiler rejects a false condition and also rejects an unevaluable condition that is not well-formed, instead of silently accepting it. Well-formed conditions outside the integral evaluator, such as member-pointer comparisons, keep their accepted behavior.

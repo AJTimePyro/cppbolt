@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Dependent Nested Types (C++17)
+- Nested-member validation reads the definition recorded by class-template instantiation instead of matching partial specializations a second time. The compiler records each definition's own member aliases, so a typedef on the primary cannot supply a member to a partial specialization that omits it.
 - A missing nested member on a concrete class-template specialization is no
   longer hidden by a same-named member on the primary or on another partial
   specialization. Namespace-scope aliases with an invalid nested-type chain now
