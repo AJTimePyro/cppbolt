@@ -32,8 +32,8 @@ template <class _Tp>
 struct remove_all_extents<_Tp[]> {
   using type _LIBCPP_NODEBUG = _Tp;
 };
-// cppbolt resolves only one dependent `::type` level, so the upstream recursion
-// is unrolled here for the common multi-dimensional cases.
+// The one-dimensional specialization yields its element type directly, so the
+// common multi-dimensional cases are spelled out rather than recursing.
 template <class _Tp, size_t _Np, size_t _Mp>
 struct remove_all_extents<_Tp[_Np][_Mp]> {
   using type _LIBCPP_NODEBUG = _Tp;
@@ -42,7 +42,6 @@ template <class _Tp, size_t _Np, size_t _Mp, size_t _Kp>
 struct remove_all_extents<_Tp[_Np][_Mp][_Kp]> {
   using type _LIBCPP_NODEBUG = _Tp;
 };
-
 template <class _Tp>
 using __remove_all_extents_t _LIBCPP_NODEBUG = typename remove_all_extents<_Tp>::type;
 

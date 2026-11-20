@@ -19,7 +19,7 @@ _LIBCPP_BEGIN_NAMESPACE_STD
 
 // cppbolt adaptation: upstream uses the `__add_pointer` builtin. Direct
 // partial specializations handle the reference-to-void cases from the classic
-// upstream implementation without an extra dependent `::type`.
+// upstream implementation, keeping this header independent of the shim.
 template <class _Tp>
 struct _LIBCPP_NO_SPECIALIZATIONS add_pointer {
   using type _LIBCPP_NODEBUG = _Tp*;

@@ -18,8 +18,8 @@
 _LIBCPP_BEGIN_NAMESPACE_STD
 
 // cppbolt adaptation: upstream forwards to the `__remove_cv` builtin. Direct
-// partial specializations are the classic upstream form and avoid an extra
-// dependent `::type` level cppbolt cannot resolve.
+// partial specializations are the classic upstream form and keep this header
+// independent of the builtin shim.
 template <class _Tp>
 struct _LIBCPP_NO_SPECIALIZATIONS remove_cv {
   using type _LIBCPP_NODEBUG = _Tp;

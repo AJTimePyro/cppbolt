@@ -19,8 +19,8 @@
 _LIBCPP_BEGIN_NAMESPACE_STD
 
 // cppbolt adaptation: upstream compares `__remove_cv(_Tp)` with `void` through
-// a builtin. Direct partial specializations give the same result without the
-// nested dependent type cppbolt cannot fold in a template argument.
+// a builtin. Direct partial specializations give the same result without an
+// extra indirection through the builtin shim.
 template <class _Tp>
 struct _LIBCPP_NO_SPECIALIZATIONS is_void : false_type {};
 template <>

@@ -18,7 +18,8 @@
 _LIBCPP_BEGIN_NAMESPACE_STD
 
 // cppbolt adaptation: upstream uses the `__remove_pointer` builtin. The
-// classic upstream partial specialization avoids an extra dependent `::type`.
+// classic upstream partial specialization keeps this header independent of
+// the builtin shim.
 template <class _Tp>
 struct _LIBCPP_NO_SPECIALIZATIONS remove_pointer {
   using type _LIBCPP_NODEBUG = _Tp;

@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Type-System Compatibility (C++17)
+- Multidimensional array types are now spelled with the outermost bound first,
+  so stringify/reparse cycles preserve bound order. Partial-specialization
+  deduction now binds `T[N][M]` to `N` then `M`, matching Clang and GCC, and
+  bounded (`T[N]`) and unbounded (`T[]`) array patterns no longer cross-match.
+- Member alias targets resolve through chains of dependent nested `::type`
+  names instead of stopping after one level. Alias and nested-type arguments to
+  variable templates and static const members are expanded before instantiation.
+- Added regression tests for both compiler fixes and refreshed the
+  `<type_traits>` integration notes. The `remove_all_extents` shim keeps its
+  unrolled multi-dimensional cases because its one-dimensional pattern yields
+  the element type directly.
+
 ### Partial Specialization Matching (C++17)
 - A `decltype` nested inside a qualified dependent type in a partial-specialization pattern is now substituted and resolved during confirmation, so patterns like `H<T, typename Box<decltype(T())>::type>` select the specialization. Parameters are still deduced from the other pattern arguments, and an invalid operand rejects the candidate instead of becoming a hard error. Added a regression covering matching, non-matching, substitution failure, and alias interaction.
 - Nested `decltype` operands are rendered as re-parsable C++ source when the qualified pattern is stringified. Cast, ternary, shift, array-subscript and `declval` operands now select the specialization instead of falling back to the primary. An operand that cannot be rendered is a hard error. Added matching and non-matching regressions for each operand form and a negative test for the unrenderable case.

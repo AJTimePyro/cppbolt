@@ -51,8 +51,8 @@ for the types cppbolt can represent:
 | Conversion operator to a member typedef | cppbolt needs the template parameter directly | `operator _Tp()` |
 | Explicit specialization of variable templates, functional casts in constant initializers | Not supported | Upstream class-template specialization form |
 | Member alias templates (`_IfImpl`, `_OrImpl`, `_And`) | Not supported | Upstream partial-specialization form (from `conditional`/`conjunction`) |
-| Nested dependent `::type` in non-type template arguments | cppbolt resolves only one level | Direct partial specializations in the transformation headers |
-| Multi-dimensional array partial-specialization patterns | cppbolt binds bounds differently from Clang/GCC | `extent` omitted; `remove_all_extents` unrolled for common dimensions |
+| `extent` builtin (`__array_extent`) | No such intrinsic, and the trait's defaulted non-type parameter is not used for partial-specialization selection | Trait not imported; the compiler now binds multidimensional array bounds correctly |
+| Multi-dimensional `remove_all_extents` | The imported one-dimensional pattern yields the element type directly rather than recursing | Unrolled specializations for two and three dimensions retained |
 
 ### General compiler improvements made for this integration
 
@@ -64,7 +64,15 @@ These live in the compiler, not the library, and benefit future integrations:
 - `src/sema/template_match.rs`: partial-specialization matching now deduces
   from array (`T[N]`, `T[]`) and member-pointer (`T C::*`) patterns, including
   member-function parameter packs and specificity ranking between bounded and
-  unbounded array patterns.
+  unbounded array patterns. Bounded and unbounded arrays are now distinct
+  patterns, so `T[N]` does not match `int[]` and `T[]` does not match `int[3]`.
+- `src/ast/type_display.rs`: multidimensional types are spelled outermost bound
+  first, so a stringified type reparses with the same bounds. This is what makes
+  `T[N][M]` deduce `N` then `M` as Clang and GCC do.
+- `src/sema/template_registry.rs` / `src/sema/template_nested.rs`: member alias
+  targets are resolved through chains of dependent nested `::type` names, and
+  alias or nested-type arguments to variable templates and static const members
+  are expanded before instantiation.
 
 ## Supported functionality
 
@@ -99,9 +107,10 @@ Verified against Clang 23.1.5 and GCC 16.2.1 using `-nostdinc++ -I stdlib`:
   `aligned_union`, `result_of` and `invoke_result`.
 - `conjunction`, `disjunction` and `is_swappable` are not imported: their
   recursive variadic metaprogramming cannot be evaluated by cppbolt.
-- `extent` on multidimensional arrays is not imported: cppbolt binds
-  multidimensional array partial-specialization parameters differently from
-  Clang/GCC. `rank`, `remove_extent` and `remove_all_extents` are supported.
+- `extent` is not imported: it needs an `__array_extent` builtin shim, and
+  cppbolt does not use a defaulted non-type template parameter to select a
+  partial specialization (a general limitation that also affects non-array
+  traits). `rank`, `remove_extent` and `remove_all_extents` are supported.
 - C++20/23/26 traits (`type_identity`, `remove_cvref`,
   `is_constant_evaluated`, `is_implicit_lifetime`,
   `reference_constructs_from_temporary`, `is_within_lifetime`, ...) are outside

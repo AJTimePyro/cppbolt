@@ -21,8 +21,8 @@ _LIBCPP_BEGIN_NAMESPACE_STD
 
 // cppbolt adaptation: upstream selects the signed twin via `__type_list` and
 // `is_enum`, then restores cv with `__copy_cv_t`. cppbolt has no enum base or
-// 128-bit types and can only resolve one dependent `::type` level, so the
-// upstream specializations are written out directly for its integer types.
+// 128-bit types, so the upstream specializations are written out directly for
+// its integer types.
 template <class _Tp>
 struct __make_signed {};
 

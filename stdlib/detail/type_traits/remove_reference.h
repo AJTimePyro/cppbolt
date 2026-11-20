@@ -19,7 +19,7 @@ _LIBCPP_BEGIN_NAMESPACE_STD
 
 // cppbolt adaptation: upstream obtains this from a compiler builtin with no
 // fallback. The classic upstream partial-specialization form is used instead,
-// which also avoids an extra dependent `::type` indirection cppbolt cannot fold.
+// which keeps this header independent of the builtin shim.
 template <class _Tp>
 struct remove_reference {
   typedef _Tp type;
