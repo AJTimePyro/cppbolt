@@ -11,6 +11,10 @@ impl Sema {
         self.synthesize_destructors(program);
         self.synthesize_constructors(program);
         self.register_declarations(program)?;
+        // Namespace aliases can name nested members selected through a
+        // `decltype` pattern. Resolve them after methods and function templates
+        // are registered; confirmation needs that lookup context.
+        self.validate_namespace_aliases(program)?;
         self.validate_virtual_returns(program)?;
         self.analyze_declarations(program)?;
         // Bodies deferred during early template instantiation are retried now
@@ -153,10 +157,14 @@ impl Sema {
                 _ => {}
             }
         }
-        // Namespace-scope aliases are parsed straight into `type_aliases` and
-        // never pass through signature analysis. Resolve them now that class
-        // templates are registered so an invalid qualified member access is a
-        // hard error here, while dependent forms stay for substitution.
+        Ok(())
+    }
+
+    /// Namespace-scope aliases are parsed straight into `type_aliases` and
+    /// never pass through signature analysis. Resolve them once the full lookup
+    /// context is registered so an invalid qualified member access is a hard
+    /// error here, while dependent forms stay for substitution.
+    fn validate_namespace_aliases(&mut self, program: &Program) -> Result<(), CompileError> {
         let aliases: Vec<Type> = program
             .namespace_type_aliases
             .iter()
