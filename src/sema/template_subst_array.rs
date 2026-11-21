@@ -33,26 +33,17 @@ pub fn evaluate_dependent_array_size(
     parser.allow_unknown_types = true;
     let mut expr = parser.parse_expr()?;
     substitute_expr(&mut expr, mapping, injected_class)?;
-    if let Expr::SizeofType(ty) | Expr::AlignofType(ty) = &mut expr
-        && let Type::Struct(name) = ty
-        && name.contains("::")
-    {
-        let resolved = sema
-            .map(|sema| sema.resolve_type_name_for_sizeof(name))
-            .transpose()?
-            .flatten();
-        if let Some(resolved) = resolved {
-            *ty = resolved;
-        } else {
-            return Err(CompileError::new(
-                format!("unresolved type '{}' in array bound", name),
-                0,
-                0,
-            )
-            .with_kind(ErrorKind::Substitution));
-        }
+    if let Some(sema) = sema {
+        resolve_sizeof_operands(&mut expr, sema)?;
     }
-    match crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None) {
+    // Layout lives on Sema; without it `Type::size_of` falls back to 4.
+    let env = crate::sema::constexpr_eval::ConstexprEnv {
+        struct_sizes: sema.map(|s| &s.struct_sizes),
+        constants: None,
+        pack_lengths: None,
+        struct_aligns: sema.map(|s| &s.struct_aligns),
+    };
+    match crate::sema::constexpr_eval::eval_integral_constexpr_with_env(&expr, env) {
         Ok(val) if val >= 0 => Ok(val as usize),
         Ok(_) => Err(CompileError::new(
             "Array dimension must be non-negative integer constant",
@@ -61,4 +52,41 @@ pub fn evaluate_dependent_array_size(
         )),
         Err(error) => Err(error),
     }
+}
+
+/// Resolves qualified struct operands of every `sizeof`/`alignof` in the bound,
+/// including ones nested inside composite expressions such as
+/// `sizeof(T::type) + 1`.
+fn resolve_sizeof_operands(expr: &mut Expr, sema: &crate::sema::Sema) -> Result<(), CompileError> {
+    match expr {
+        Expr::SizeofType(ty) | Expr::AlignofType(ty) => {
+            if let Type::Struct(name) = ty
+                && name.contains("::")
+            {
+                let resolved = sema.resolve_type_name_for_sizeof(name)?.ok_or_else(|| {
+                    CompileError::new(format!("unresolved type '{name}' in array bound"), 0, 0)
+                        .with_kind(ErrorKind::Substitution)
+                })?;
+                *ty = resolved;
+            }
+        }
+        Expr::Unary { expr, .. } | Expr::Cast { expr, .. } | Expr::SizeofExpr(expr) => {
+            resolve_sizeof_operands(expr, sema)?;
+        }
+        Expr::Binary { left, right, .. } => {
+            resolve_sizeof_operands(left, sema)?;
+            resolve_sizeof_operands(right, sema)?;
+        }
+        Expr::Ternary {
+            cond,
+            then_expr,
+            else_expr,
+        } => {
+            resolve_sizeof_operands(cond, sema)?;
+            resolve_sizeof_operands(then_expr, sema)?;
+            resolve_sizeof_operands(else_expr, sema)?;
+        }
+        _ => {}
+    }
+    Ok(())
 }
