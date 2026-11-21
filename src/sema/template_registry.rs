@@ -64,9 +64,52 @@ fn nested_type_declarers(sema: &Sema, owner: &str, member: &str) -> Vec<String> 
             found.push(class_name);
             continue;
         }
+        // A non-type member declared directly in this class hides any nested
+        // type of the same name in a base, so stop the search here.
+        if class_declares_nontype_member(sema, &class_name, member) {
+            continue;
+        }
         queue.extend(class_bases(sema, &class_name));
     }
     found
+}
+
+/// True when the class itself declares a non-type member (data field, static
+/// member, enumerator or method) named `member`. The layout's `fields` include
+/// inherited entries laid out before the class's own, so compare offsets with
+/// the end of the direct base subobjects.
+fn class_declares_nontype_member(sema: &Sema, class_name: &str, member: &str) -> bool {
+    let Some(layout) = sema.struct_layouts.get(class_name) else {
+        return false;
+    };
+    let own_start = layout
+        .direct_base_offsets
+        .iter()
+        .filter_map(|(name, offset)| {
+            let base = sema.struct_layouts.get(name)?;
+            // An empty base at offset zero does not advance the cursor, so its
+            // size must not be counted as space before the derived fields.
+            if *offset == 0 && base.fields.is_empty() && !base.has_vtable {
+                Some(0)
+            } else {
+                Some(offset.saturating_add(base.size))
+            }
+        })
+        .max()
+        .unwrap_or(0);
+    layout
+        .fields
+        .iter()
+        .any(|field| field.name == member && field.offset >= own_start)
+        || sema
+            .global_vars
+            .contains_key(&format!("{}::{}", class_name, member))
+        || sema
+            .enum_values
+            .contains_key(&format!("{}::{}", class_name, member))
+        || sema
+            .functions
+            .contains_key(&format!("{}::{}", class_name, member))
 }
 
 fn count_base_paths(
