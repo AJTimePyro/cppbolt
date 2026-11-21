@@ -38,6 +38,7 @@ impl Sema {
         }
         if let Some(namespace) = namespace_of(&key)
             && !out.namespaces.iter().any(|ns| ns == namespace)
+            && !self.struct_layouts.contains_key(namespace)
         {
             out.namespaces.push(namespace.to_string());
         }

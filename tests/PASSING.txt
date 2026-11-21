@@ -905,3 +905,4 @@ cxx17/template_nsdmi_member_call
 cxx17/decltype_earlier_param
 cxx17/nested_type_hiding
 negative/nested_type_hidden_by_member
+negative/adl_nested_class_enclosing_static_hidden
