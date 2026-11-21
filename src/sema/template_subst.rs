@@ -12,7 +12,7 @@ use crate::ast::types::{FunctionQualifiers, Type};
 use crate::diagnostics::CompileError;
 use crate::sema::pack_expansion::{TemplateArg, expand_expr_list, expand_type_list};
 pub use crate::sema::template_name::substitute_template_name;
-pub use crate::sema::template_subst_func::substitute_function;
+pub use crate::sema::template_subst_func::{substitute_function, substitute_function_with_sema};
 use std::collections::HashMap;
 
 pub fn substitute_type(
@@ -21,6 +21,16 @@ pub fn substitute_type(
     injected_class: Option<(&str, &Type)>,
 ) -> Result<Type, CompileError> {
     substitute_type_full(ty, mapping, injected_class, (0, 0), None, None)
+}
+
+/// `substitute_type` with Sema-backed resolution for dependent bounds.
+pub fn substitute_type_with_sema(
+    ty: &Type,
+    mapping: &HashMap<String, TemplateArg>,
+    injected_class: Option<(&str, &Type)>,
+    sema: Option<&mut crate::sema::Sema>,
+) -> Result<Type, CompileError> {
+    substitute_type_full(ty, mapping, injected_class, (0, 0), None, sema)
 }
 fn substitute_template_instance(
     name: &str,
@@ -45,9 +55,11 @@ pub fn substitute_type_full(
     injected_class: Option<(&str, &Type)>,
     pos: (usize, usize),
     struct_aligns: Option<&HashMap<String, usize>>,
-    sema: Option<&crate::sema::Sema>,
+    mut sema: Option<&mut crate::sema::Sema>,
 ) -> Result<Type, CompileError> {
-    if let Some(res) = substitute_modified_type(ty, mapping, injected_class, pos, sema)? {
+    if let Some(res) =
+        substitute_modified_type(ty, mapping, injected_class, pos, sema.as_deref_mut())?
+    {
         return Ok(res);
     }
     match ty {
@@ -70,8 +82,14 @@ pub fn substitute_type_full(
             })
         }
         Type::DependentArray(inner, param_name) => {
-            let subst_inner =
-                substitute_type_full(inner, mapping, injected_class, pos, struct_aligns, sema)?;
+            let subst_inner = substitute_type_full(
+                inner,
+                mapping,
+                injected_class,
+                pos,
+                struct_aligns,
+                sema.as_deref_mut(),
+            )?;
             let size = super::template_subst_array::evaluate_dependent_array_size(
                 param_name,
                 mapping,
@@ -134,11 +152,18 @@ fn substitute_modified_type(
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
     pos: (usize, usize),
-    sema: Option<&crate::sema::Sema>,
+    mut sema: Option<&mut crate::sema::Sema>,
 ) -> Result<Option<Type>, CompileError> {
     match ty {
         Type::Const(inner) => {
-            let subst = substitute_type_full(inner, mapping, injected_class, pos, None, sema)?;
+            let subst = substitute_type_full(
+                inner,
+                mapping,
+                injected_class,
+                pos,
+                None,
+                sema.as_deref_mut(),
+            )?;
             if subst.is_reference() {
                 Ok(Some(subst))
             } else {
@@ -195,7 +220,7 @@ fn substitute_function_type(
     param_types: &[Type],
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
-    sema: Option<&crate::sema::Sema>,
+    sema: Option<&mut crate::sema::Sema>,
 ) -> Result<Type, CompileError> {
     let subst_params = super::pack_expansion::expand_type_list(param_types, mapping, (0, 0))?;
     Ok(Type::Function {
@@ -461,7 +486,7 @@ fn substitute_callee_identifier(
 /// initializer, reporting a missing nested type at the instantiation site.
 fn resolve_initializer_operands(
     expr: &mut Expr,
-    sema: Option<&crate::sema::Sema>,
+    sema: Option<&mut crate::sema::Sema>,
     (line, col): (usize, usize),
 ) -> Result<(), CompileError> {
     let Some(sema) = sema else {
@@ -484,7 +509,7 @@ pub fn substitute_struct(
     instantiated_name: &str,
     pos: (usize, usize),
     struct_aligns: Option<&HashMap<String, usize>>,
-    sema: Option<&crate::sema::Sema>,
+    mut sema: Option<&mut crate::sema::Sema>,
 ) -> Result<Decl, CompileError> {
     let (line, col) = pos;
     let target_ty = Type::Struct(instantiated_name.to_string());
@@ -495,22 +520,35 @@ pub fn substitute_struct(
         let mut init = finit.clone();
         if let Some((init_expr, _, _)) = &mut init {
             substitute_expr(init_expr, mapping, injected)?;
-            resolve_initializer_operands(init_expr, sema, pos)?;
+            resolve_initializer_operands(init_expr, sema.as_deref_mut(), pos)?;
         }
-        let subst_fty = substitute_type_full(fty, mapping, injected, pos, struct_aligns, sema)
-            .map_err(|mut e| {
-                if e.line == 0 && e.col == 0 {
-                    e.line = line;
-                    e.col = col;
-                }
-                e
-            })?;
+        let subst_fty = substitute_type_full(
+            fty,
+            mapping,
+            injected,
+            pos,
+            struct_aligns,
+            sema.as_deref_mut(),
+        )
+        .map_err(|mut e| {
+            if e.line == 0 && e.col == 0 {
+                e.line = line;
+                e.col = col;
+            }
+            e
+        })?;
         fields.push((fname.clone(), subst_fty, init));
     }
 
     let mut methods = Vec::new();
     for m in &template_class.methods {
-        methods.push(substitute_function(m, mapping, injected, None)?);
+        methods.push(substitute_function_with_sema(
+            m,
+            mapping,
+            injected,
+            None,
+            sema.as_deref_mut(),
+        )?);
     }
 
     let mut static_fields = Vec::new();
@@ -518,11 +556,18 @@ pub fn substitute_struct(
         let mut init = sinit.clone();
         if let Some(init_expr) = &mut init {
             substitute_expr(init_expr, mapping, injected)?;
-            resolve_initializer_operands(init_expr, sema, pos)?;
+            resolve_initializer_operands(init_expr, sema.as_deref_mut(), pos)?;
         }
         static_fields.push((
             sname.clone(),
-            substitute_type_full(sty, mapping, injected, pos, struct_aligns, sema)?,
+            substitute_type_full(
+                sty,
+                mapping,
+                injected,
+                pos,
+                struct_aligns,
+                sema.as_deref_mut(),
+            )?,
             init,
         ));
     }

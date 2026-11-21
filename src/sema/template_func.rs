@@ -3,7 +3,7 @@ use super::template_deduce::{
 };
 use super::template_partial_order::{self, FunctionTemplateCand};
 use super::template_subst_func::{
-    mark_dependent_nested, substitute_function_body, substitute_function_signature,
+    mark_dependent_nested, substitute_function_body_with_sema, substitute_function_signature,
 };
 use super::*;
 use crate::ast::decl::RefQualifier;
@@ -394,7 +394,14 @@ impl Sema {
             cand.decl.col,
         );
         let mut func_decl = cand.prepared.clone();
-        substitute_function_body(&mut func_decl, &cand.active_mapping, None)?;
+        substitute_function_body_with_sema(&mut func_decl, &cand.active_mapping, None, Some(self))
+            .map_err(|mut error| {
+                if error.line == 0 && error.col == 0 {
+                    error.line = pos.line;
+                    error.col = pos.col;
+                }
+                error
+            })?;
 
         let mangled = self.mangle_name(&func_decl.name, &func_decl.params);
         let sig = FunctionSig {

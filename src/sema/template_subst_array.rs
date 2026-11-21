@@ -11,7 +11,7 @@ pub fn evaluate_dependent_array_size(
     param_name: &str,
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
-    sema: Option<&crate::sema::Sema>,
+    mut sema: Option<&mut crate::sema::Sema>,
 ) -> Result<usize, CompileError> {
     if let Some(TemplateArg::NonType(n)) = mapping.get(param_name)
         && *n >= 0
@@ -33,15 +33,15 @@ pub fn evaluate_dependent_array_size(
     parser.allow_unknown_types = true;
     let mut expr = parser.parse_expr()?;
     substitute_expr(&mut expr, mapping, injected_class)?;
-    if let Some(sema) = sema {
+    if let Some(sema) = sema.as_deref_mut() {
         resolve_sizeof_operands(&mut expr, sema, "in array bound")?;
     }
     // Layout lives on Sema; without it `Type::size_of` falls back to 4.
     let env = crate::sema::constexpr_eval::ConstexprEnv {
-        struct_sizes: sema.map(|s| &s.struct_sizes),
+        struct_sizes: sema.as_ref().map(|s| &s.struct_sizes),
         constants: None,
         pack_lengths: None,
-        struct_aligns: sema.map(|s| &s.struct_aligns),
+        struct_aligns: sema.as_ref().map(|s| &s.struct_aligns),
     };
     match crate::sema::constexpr_eval::eval_integral_constexpr_with_env(&expr, env) {
         Ok(val) if val >= 0 => Ok(val as usize),
@@ -60,7 +60,7 @@ pub fn evaluate_dependent_array_size(
 /// nested type.
 pub(super) fn resolve_sizeof_operands(
     expr: &mut Expr,
-    sema: &crate::sema::Sema,
+    sema: &mut crate::sema::Sema,
     context: &str,
 ) -> Result<(), CompileError> {
     match expr {

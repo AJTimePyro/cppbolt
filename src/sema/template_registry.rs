@@ -788,19 +788,14 @@ impl Sema {
         Ok(Some((inst, None)))
     }
 
-    /// Resolves a type name written inside a delayed `sizeof` operand.
+    /// Resolves a delayed `sizeof` operand type, instantiating a qualified
+    /// owner on demand when its nested type comes from a base class.
     pub(super) fn resolve_type_name_for_sizeof(
-        &self,
+        &mut self,
         name: &str,
     ) -> Result<Option<Type>, CompileError> {
-        if let Some(alias) = self.lookup_type_alias(name) {
-            return Ok(Some(alias));
-        }
-        let Some((owner, member)) = name.rsplit_once("::") else {
-            return Ok(None);
-        };
         Ok(self
-            .finish_nested_type_lookup(owner, member, 0, 0)?
+            .resolve_nested_type_name(name, 0, 0)?
             .and_then(|(_, ty)| ty))
     }
 
@@ -997,12 +992,13 @@ impl Sema {
         let (line, col) = pos;
         self.instantiate_nested_structs(template_class, inst_name, &mapping, pos)?;
 
+        let struct_aligns = self.struct_aligns.clone();
         let mut struct_decl = substitute_struct(
             template_class,
             &mapping,
             inst_name,
             pos,
-            Some(&self.struct_aligns),
+            Some(&struct_aligns),
             Some(self),
         )?;
         let Decl::StructDecl {

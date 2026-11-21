@@ -6,7 +6,7 @@ use super::pack_expansion::{
 };
 use super::template_name::substitute_template_name;
 use super::template_subst::substitute_expr;
-use super::template_subst_stmt::substitute_stmt;
+use super::template_subst_stmt::substitute_stmt_with_sema;
 use crate::ast::FunctionQualifiers;
 use crate::ast::decl::{FunctionDecl, Param};
 use crate::ast::expr::Expr;
@@ -130,27 +130,31 @@ fn mark_expr_dependent_nested(
     }
 }
 
+fn substitute_param_type(
+    ty: &Type,
+    map: &HashMap<String, TemplateArg>,
+    injected_class: Option<(&str, &Type)>,
+    mark_dependent: bool,
+    sema: Option<&mut crate::sema::Sema>,
+) -> Result<Type, CompileError> {
+    let mut subst =
+        super::template_subst::substitute_type_full(ty, map, injected_class, (0, 0), None, sema)?;
+    if mark_dependent {
+        mark_dependent_nested(ty, &mut subst, map);
+    }
+    Ok(subst)
+}
+
 fn substitute_params(
     params: &[Param],
     unbound_pack_names: &HashSet<String>,
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
     mark_dependent: bool,
-    sema: Option<&crate::sema::Sema>,
+    mut sema: Option<&mut crate::sema::Sema>,
 ) -> Result<Vec<Param>, CompileError> {
-    let subst_ty = |ty: &Type, map: &HashMap<String, TemplateArg>| {
-        let mut subst = super::template_subst::substitute_type_full(
-            ty,
-            map,
-            injected_class,
-            (0, 0),
-            None,
-            sema,
-        )?;
-        if mark_dependent {
-            mark_dependent_nested(ty, &mut subst, map);
-        }
-        Ok(subst)
+    let mut subst_ty = |ty: &Type, map: &HashMap<String, TemplateArg>| {
+        substitute_param_type(ty, map, injected_class, mark_dependent, sema.as_deref_mut())
     };
     let mut result = Vec::new();
     for p in params {
@@ -293,7 +297,7 @@ fn substitute_signature(
     injected_class: Option<(&str, &Type)>,
     new_name: Option<String>,
     mark_dependent: bool,
-    sema: Option<&crate::sema::Sema>,
+    mut sema: Option<&mut crate::sema::Sema>,
 ) -> Result<(FunctionDecl, HashMap<String, TemplateArg>), CompileError> {
     let mut remaining_template_params = Vec::new();
     let mut active_mapping = mapping.clone();
@@ -330,7 +334,7 @@ fn substitute_signature(
         injected_class,
         (0, 0),
         None,
-        sema,
+        sema.as_deref_mut(),
     )?;
     if mark_dependent {
         mark_dependent_nested(&func.return_type, &mut return_type, mapping);
@@ -369,10 +373,20 @@ pub fn substitute_function_body(
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
 ) -> Result<(), CompileError> {
+    substitute_function_body_with_sema(func, mapping, injected_class, None)
+}
+
+/// `substitute_function_body` with Sema-backed resolution in the body.
+pub fn substitute_function_body_with_sema(
+    func: &mut FunctionDecl,
+    mapping: &HashMap<String, TemplateArg>,
+    injected_class: Option<(&str, &Type)>,
+    sema: Option<&mut crate::sema::Sema>,
+) -> Result<(), CompileError> {
     func.ctor_initializers =
         substitute_ctor_initializers(&func.ctor_initializers, mapping, injected_class)?;
     if let Some(body_stmt) = &mut func.body {
-        substitute_stmt(body_stmt, mapping, injected_class)?;
+        substitute_stmt_with_sema(body_stmt, mapping, injected_class, sema)?;
     }
     Ok(())
 }
@@ -384,7 +398,7 @@ pub fn substitute_function_signature(
     func: &FunctionDecl,
     mapping: &HashMap<String, TemplateArg>,
     new_name: Option<String>,
-    sema: Option<&crate::sema::Sema>,
+    sema: Option<&mut crate::sema::Sema>,
 ) -> Result<(FunctionDecl, HashMap<String, TemplateArg>), SubstitutionFailure> {
     substitute_signature(func, mapping, None, new_name, true, sema).map_err(Into::into)
 }
@@ -395,8 +409,25 @@ pub fn substitute_function(
     injected_class: Option<(&str, &Type)>,
     new_name: Option<String>,
 ) -> Result<FunctionDecl, CompileError> {
-    let (mut decl, active_mapping) =
-        substitute_signature(func, mapping, injected_class, new_name, false, None)?;
-    substitute_function_body(&mut decl, &active_mapping, injected_class)?;
+    substitute_function_with_sema(func, mapping, injected_class, new_name, None)
+}
+
+/// `substitute_function` with Sema-backed resolution in the signature and body.
+pub fn substitute_function_with_sema(
+    func: &FunctionDecl,
+    mapping: &HashMap<String, TemplateArg>,
+    injected_class: Option<(&str, &Type)>,
+    new_name: Option<String>,
+    mut sema: Option<&mut crate::sema::Sema>,
+) -> Result<FunctionDecl, CompileError> {
+    let (mut decl, active_mapping) = substitute_signature(
+        func,
+        mapping,
+        injected_class,
+        new_name,
+        false,
+        sema.as_deref_mut(),
+    )?;
+    substitute_function_body_with_sema(&mut decl, &active_mapping, injected_class, sema)?;
     Ok(decl)
 }

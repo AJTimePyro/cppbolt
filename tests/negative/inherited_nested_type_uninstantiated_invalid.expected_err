@@ -1,0 +1,1 @@
+tests/negative/inherited_nested_type_uninstantiated_invalid.cpp:11:1: error: unresolved type 'BadWrapper<int>::type' in array bound
