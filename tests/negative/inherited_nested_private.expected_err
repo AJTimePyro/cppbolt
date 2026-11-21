@@ -1,1 +1,1 @@
-0:0: error: 'secret' is a private member of 'Base'
+tests/negative/inherited_nested_private.cpp:6:1: error: 'secret' is a private member of 'Base'

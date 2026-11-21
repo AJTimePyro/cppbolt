@@ -1,1 +1,1 @@
-0:0: error: no type named 'type' in 'NoType<Has, int>'
+tests/negative/ns_alias_decltype_missing_member.cpp:8:1: error: no type named 'type' in 'NoType<Has, int>'

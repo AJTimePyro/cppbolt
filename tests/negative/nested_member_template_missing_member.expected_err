@@ -1,1 +1,1 @@
-0:0: error: no type named 'type' in 'A::Outer<int>::Inner<double>'
+tests/negative/nested_member_template_missing_member.cpp:7:1: error: no type named 'type' in 'A::Outer<int>::Inner<double>'

@@ -21,6 +21,10 @@ use std::path::{Path, PathBuf};
 ///   that closes the cycle is the first line of the file.
 /// - `tests/negative/stray_endif.cpp`: the stray `#endif` is the first token
 ///   of the file.
+/// - `tests/negative/namespace_alias_later_variable.cpp`: the failing `using`
+///   declaration is the first token of the file. Its target names an
+///   undeclared identifier; expression identifiers carry no token position, so
+///   the diagnostic anchors to the declaration that failed to resolve.
 const FIRST_POSITION_DIAGNOSTICS: &[(&str, &str)] = &[
     ("tests/negative/error_directive.cpp", "#error stop here"),
     (
@@ -28,6 +32,10 @@ const FIRST_POSITION_DIAGNOSTICS: &[(&str, &str)] = &[
         "include cycle detected: 'tests/negative/include_cycle_a.h'",
     ),
     ("tests/negative/stray_endif.cpp", "#endif without #if"),
+    (
+        "tests/negative/namespace_alias_later_variable.cpp",
+        "Undeclared variable or identifier 'later_var'",
+    ),
 ];
 
 /// Returns true when a diagnostic is one of the exempted ones.
@@ -179,4 +187,37 @@ fn every_corpus_diagnostic_names_a_real_position() -> Result<(), Box<dyn std::er
         failures.join("\n")
     );
     Ok(())
+}
+
+/// Compiles an inline source and returns the diagnostic's position fields.
+fn diagnostic_position(source: &str, name: &str) -> Option<(String, usize, usize)> {
+    let provider = RepoIncludes;
+    compile_with_provider(source, name, 256, &provider)
+        .err()
+        .map(|error| (error.file, error.line, error.col))
+}
+
+#[test]
+fn namespace_alias_errors_report_the_alias_declaration_position() {
+    let source = "struct NoType {};\n\
+                  template <class T> struct Maybe { typedef T type; };\n\
+                  template <> struct Maybe<NoType> {};\n\
+                  using Invalid = Maybe<NoType>::type;\n\
+                  int main() {}\n";
+    assert_eq!(
+        diagnostic_position(source, "alias.cpp"),
+        Some(("alias.cpp".to_string(), 4, 1))
+    );
+}
+
+#[test]
+fn static_assert_failure_reports_the_condition_position() {
+    let source = "constexpr int ok = 5;\n\
+                  static_assert(ok == 6, \"mismatch\");\n\
+                  int main() {}\n";
+    // `ok` in `static_assert(ok == 6, ...)` begins at column 15.
+    assert_eq!(
+        diagnostic_position(source, "assert.cpp"),
+        Some(("assert.cpp".to_string(), 2, 15))
+    );
 }

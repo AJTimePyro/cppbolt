@@ -1,1 +1,1 @@
-0:0: error: no type named 'type' in 'NoType<Plain, int>'
+tests/negative/ns_alias_failed_confirmation_missing.cpp:9:1: error: no type named 'type' in 'NoType<Plain, int>'

@@ -1,1 +1,1 @@
-0:0: error: no type named 'type' in 'enable_if<0, int>'
+tests/negative/enable_if_false_ns_alias.cpp:4:1: error: no type named 'type' in 'enable_if<0, int>'

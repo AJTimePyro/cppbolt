@@ -184,14 +184,10 @@ impl Sema {
             })
             .collect();
         aliases.sort_by_key(|(_, _, pos)| *pos);
-        let aliases: Vec<(String, Type)> = aliases
-            .into_iter()
-            .map(|(name, ty, _)| (name, ty))
-            .collect();
-        for (name, mut ty) in aliases {
+        for (name, mut ty, pos) in aliases {
             let visibility = self.alias_visibility.get(&name).cloned();
             let previous = std::mem::replace(&mut self.active_alias_visibility, visibility.clone());
-            let result = self.resolve_and_instantiate_type(&mut ty, 0, 0);
+            let result = self.resolve_and_instantiate_type(&mut ty, pos.0, pos.1);
             self.active_alias_visibility = previous;
             result?;
             // A `decltype` operand is re-analyzed when the alias is used; keep
@@ -359,6 +355,14 @@ impl Sema {
         // is not even well-formed is rejected below; a well-formed
         // one (for example a member-pointer comparison) keeps the
         // existing accepted behavior.
+        // Point at the condition, not the `static_assert` keyword, so the
+        // diagnostic names the expression that failed.
+        let pos = condition.pos();
+        let (error_line, error_col) = if pos.line == 0 {
+            (line, col)
+        } else {
+            (pos.line, pos.col)
+        };
         if matches!(value, Ok(0)) {
             let suffix = message
                 .as_ref()
@@ -366,8 +370,8 @@ impl Sema {
                 .unwrap_or_default();
             return Err(CompileError::new(
                 format!("static assertion failed{suffix}"),
-                line,
-                col,
+                error_line,
+                error_col,
             ));
         }
         // If the condition is not even well-formed, its truth
@@ -380,8 +384,8 @@ impl Sema {
             if probe.analyze_expr(&mut condition_copy).is_err() {
                 return Err(CompileError::new(
                     "static assertion condition is not a constant expression",
-                    line,
-                    col,
+                    error_line,
+                    error_col,
                 ));
             }
         }

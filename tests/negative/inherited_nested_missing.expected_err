@@ -1,1 +1,1 @@
-0:0: error: no type named 'missing' in 'Derived'
+tests/negative/inherited_nested_missing.cpp:3:1: error: no type named 'missing' in 'Derived'
