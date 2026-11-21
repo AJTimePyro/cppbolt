@@ -19,14 +19,12 @@ impl Sema {
     ) -> Result<(), TemplateFailure> {
         let saved = std::mem::take(&mut self.signature_params);
         let result = (|| {
-            // A parameter's own type cannot name the parameters being bound,
-            // so complete those with no parameters in scope first. Otherwise
-            // a `Decltype` parameter type would re-enter this resolver with
-            // the same parameter list and recurse forever.
+            // Bind each parameter before resolving the next one's type so a
+            // later `decltype(x)` can name an earlier parameter.
             for p in &mut func.params {
                 self.resolve_signature_type(&mut p.ty, line, col)?;
+                self.signature_params.push(p.clone());
             }
-            self.signature_params = func.params.clone();
             self.resolve_signature_type(&mut func.return_type, line, col)?;
             Ok(())
         })();
