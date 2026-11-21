@@ -323,6 +323,41 @@ impl Sema {
         Ok(())
     }
 
+    /// Returns whether an unevaluated expression in a static_assert consists
+    /// exclusively of constant operands (constexpr globals, constants, literals).
+    fn expr_is_constant_candidate(&self, expr: &Expr) -> bool {
+        match expr {
+            Expr::IntLiteral(..)
+            | Expr::FloatLiteral(..)
+            | Expr::BoolLiteral(..)
+            | Expr::CharLiteral(..)
+            | Expr::StringLiteral(..) => true,
+            Expr::Identifier(name) => {
+                if let Some(var) = self.global_vars.get(name) {
+                    var.ty.is_const()
+                } else {
+                    self.enum_values.contains_key(name)
+                        || self.static_const_values.contains_key(name)
+                }
+            }
+            Expr::Binary { left, right, .. } => {
+                self.expr_is_constant_candidate(left) && self.expr_is_constant_candidate(right)
+            }
+            Expr::Unary { expr, .. } => self.expr_is_constant_candidate(expr),
+            Expr::SizeofExpr(..) | Expr::SizeofType(..) | Expr::AlignofType(..) => true,
+            Expr::Ternary {
+                cond,
+                then_expr,
+                else_expr,
+            } => {
+                self.expr_is_constant_candidate(cond)
+                    && self.expr_is_constant_candidate(then_expr)
+                    && self.expr_is_constant_candidate(else_expr)
+            }
+            _ => false,
+        }
+    }
+
     fn analyze_static_assert(
         &mut self,
         condition: &Expr,
@@ -351,10 +386,6 @@ impl Sema {
                 None => value,
             }
         };
-        // Fail on a definite false. An unevaluable condition that
-        // is not even well-formed is rejected below; a well-formed
-        // one (for example a member-pointer comparison) keeps the
-        // existing accepted behavior.
         // Point at the condition, not the `static_assert` keyword, so the
         // diagnostic names the expression that failed.
         let pos = condition.pos();
@@ -363,33 +394,31 @@ impl Sema {
         } else {
             (pos.line, pos.col)
         };
-        if matches!(value, Ok(0)) {
-            let suffix = message
-                .as_ref()
-                .map(|m| format!(": {m}"))
-                .unwrap_or_default();
-            return Err(CompileError::new(
-                format!("static assertion failed{suffix}"),
-                error_line,
-                error_col,
-            ));
-        }
-        // If the condition is not even well-formed, its truth
-        // cannot be established; reject instead of accepting it.
-        // A well-formed but unevaluable condition (for example a
-        // member-pointer comparison) keeps the accepted behavior.
-        if value.is_err() {
-            let mut probe = self.clone();
-            let mut condition_copy = condition.clone();
-            if probe.analyze_expr(&mut condition_copy).is_err() {
-                return Err(CompileError::new(
-                    "static assertion condition is not a constant expression",
+        match value {
+            Ok(0) => {
+                let suffix = message
+                    .as_ref()
+                    .map(|m| format!(": {m}"))
+                    .unwrap_or_default();
+                Err(CompileError::new(
+                    format!("static assertion failed{suffix}"),
                     error_line,
                     error_col,
-                ));
+                ))
+            }
+            Ok(_) => Ok(()),
+            Err(_) => {
+                if self.expr_is_constant_candidate(condition) {
+                    Ok(())
+                } else {
+                    Err(CompileError::new(
+                        "static assertion condition is not a constant expression",
+                        error_line,
+                        error_col,
+                    ))
+                }
             }
         }
-        Ok(())
     }
 
     fn analyze_struct_decl(
