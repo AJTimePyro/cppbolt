@@ -457,6 +457,20 @@ mod tests {
     }
 
     #[test]
+    fn deep_binary_expr_drops_without_overflow() {
+        let mut cur = Expr::IntLiteral(1, Type::Int);
+        for _ in 0..10_000 {
+            cur = Expr::Binary {
+                op: BinaryOp::Add,
+                left: Box::new(cur),
+                right: Box::new(Expr::IntLiteral(1, Type::Int)),
+                pos: ExprPos::new(1, 1),
+            };
+        }
+        drop(cur);
+    }
+
+    #[test]
     fn test_sizeof_pack_expr() {
         let expr = Expr::SizeofPack {
             name: "Args".to_string(),
