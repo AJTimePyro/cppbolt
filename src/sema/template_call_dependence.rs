@@ -184,11 +184,9 @@ impl CallScan {
                 self.expr(expr);
             }
             StmtKind::VarDecl { name, ty, init, .. } => {
-                if self.ty(ty) {
+                let init_dependent = init.as_ref().map_or(false, |expr| self.expr(expr));
+                if self.ty(ty) || init_dependent {
                     self.names.insert(name.clone());
-                }
-                if let Some(expr) = init {
-                    self.expr(expr);
                 }
             }
             StmtKind::If {
