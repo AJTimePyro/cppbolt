@@ -350,11 +350,16 @@ impl Sema {
                 None => false,
             };
             if !in_class {
-                return Err(CompileError::new(
+                let error = CompileError::new(
                     format!("'{child}' is a private member of '{p_clean}'"),
                     line,
                     col,
-                ));
+                );
+                return Err(if self.in_substitution_context {
+                    error.with_kind(crate::diagnostics::ErrorKind::Substitution)
+                } else {
+                    error
+                });
             }
         }
         Ok(())

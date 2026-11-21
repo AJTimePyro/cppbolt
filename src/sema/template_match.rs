@@ -217,7 +217,11 @@ fn confirm_resolved_pattern(
                 ));
             }
             let mut resolved = Type::Struct(substituted);
-            let probe = probe.get_or_insert_with(|| sema.clone());
+            let probe = probe.get_or_insert_with(|| {
+                let mut p = sema.clone();
+                p.in_substitution_context = true;
+                p
+            });
             match probe.resolve_and_instantiate_type(&mut resolved, pos.0, pos.1) {
                 Ok(()) => Ok(&resolved == concrete),
                 Err(error) if error.kind == ErrorKind::Substitution => Ok(false),
@@ -234,7 +238,11 @@ fn confirm_resolved_pattern(
                 // candidate), then expand the alias and compare. The caller
                 // supplies one disposable clone per candidate, so a rejected
                 // candidate leaves no semantic state behind.
-                let probe = probe.get_or_insert_with(|| sema.clone());
+                let probe = probe.get_or_insert_with(|| {
+                    let mut p = sema.clone();
+                    p.in_substitution_context = true;
+                    p
+                });
                 let mut resolved_args = Vec::new();
                 for arg in p_args {
                     // Expand pack arguments before resolving so a `Ts...` in

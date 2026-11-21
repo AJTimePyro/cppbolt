@@ -158,6 +158,9 @@ pub struct Sema {
     /// Declaration-position contexts of `decltype` aliases, keyed by the
     /// rendered operand so re-resolution keeps the original bindings.
     pub decltype_alias_context: HashMap<String, AliasVisibility>,
+    /// True while confirming a partial specialization: nested-type access and
+    /// ambiguity failures are substitution failures in this immediate context.
+    pub in_substitution_context: bool,
     /// Whether the analysis is inside the initializer of a variable.
     ///
     /// A constructor call in an initializer reports an initialization
@@ -292,6 +295,7 @@ impl Sema {
             class_field_visibility: HashMap::new(),
             active_alias_visibility: None,
             decltype_alias_context: HashMap::new(),
+            in_substitution_context: false,
             in_initializer: false,
             speculating: false,
             speculative_hard: false,

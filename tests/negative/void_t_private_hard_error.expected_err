@@ -1,0 +1,1 @@
+tests/negative/void_t_private_hard_error.cpp:6:29: error: 'type' is a private member of 'HasPrivate'

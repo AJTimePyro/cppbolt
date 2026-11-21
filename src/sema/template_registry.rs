@@ -703,11 +703,16 @@ impl Sema {
                 .map(|decl| count_base_paths(self, owner, decl, &mut HashSet::new()))
                 .sum();
             if paths > 1 {
-                return Err(CompileError::new(
+                let error = CompileError::new(
                     format!("ambiguous nested type '{}' in '{}'", member, owner),
                     line,
                     col,
-                ));
+                );
+                return Err(if self.in_substitution_context {
+                    error.with_kind(ErrorKind::Substitution)
+                } else {
+                    error
+                });
             }
         }
         let Some(declarer) = declarers.first() else {
@@ -733,6 +738,7 @@ impl Sema {
         if !name.contains(">::")
             && let Some(alias) = self.lookup_type_alias(name)
         {
+            self.check_nested_type_access(name, line, col)?;
             return Ok(Some((name.to_string(), Some(alias))));
         }
         if !name.contains(">::")
