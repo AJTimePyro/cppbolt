@@ -389,30 +389,36 @@ The following catalog lists diagnostics emitted by the compiler, paired with rea
   ```
 
 #### `no matching function for call to '<name>'` (SFINAE Rejection)
-- **Cause**: All candidate function or member templates are rejected during signature substitution. The diagnostic lists each candidate and the reason for rejection.
+- **Cause**: Signature substitution rejected every function or member template candidate. The diagnostic lists each candidate with its rejection reason.
 - **Trigger** (`tests/negative/sfinae_all_candidates_rejected_reasons.cpp`):
   ```cpp
-  template <class T> int f(typename T::missing*) { return 1; }
+  template <typename T> int f(T, T) { return 1; }
+  template <typename U> int f(U*, U) { return 2; }
   int main() {
-      f<int>(0); // error: no matching function for call to 'f': substitution failure: no type named 'missing' in 'int'
+      return f(1, 2.0); // error: no matching function for call to 'f': 2 candidates rejected: template argument deduction conflict for 'T': deduced 'int' and 'double'; type mismatch in deduction: expected pointer
   }
   ```
 
 #### `template parameter '<param>' cannot be deduced from the partial specialization argument list`
-- **Cause**: A template parameter in a partial specialization appears only in non-deduced contexts, making the specialization unusable.
+- **Cause**: A partial specialization parameter appears only in non-deduced contexts, so deduction can never bind it.
 - **Trigger** (`tests/negative/partial_spec_nondeducible_alias.cpp`):
   ```cpp
-  template <class T, class U> struct Pair {};
-  template <class T> using Second = Pair<int, typename T::type>;
-  template <class T> struct S<Second<T>> {}; // error: template parameter 'T' cannot be deduced from the partial specialization argument list
+  template<class...> using void_t = void;
+  template<class U> struct S {};
+  template<class U> struct S<void_t<typename U::type>> {}; // error: template parameter 'U' cannot be deduced from the partial specialization argument list
+  int main() { return 0; }
   ```
 
 #### `unsupported expression in dependent decltype pattern`
-- **Cause**: A `decltype` expression in a partial-specialization pattern contains an AST node (such as a lambda or pack expansion) that cannot be rendered as re-parsable source for confirmation.
+- **Cause**: A partial specialization contains a dependent `decltype` pattern whose AST node (such as a lambda or pack expansion) cannot be printed as re-parsable source for pattern confirmation.
 - **Trigger** (`tests/negative/partial_spec_unrenderable_decltype.cpp`):
   ```cpp
-  template <class T, class = void> struct Check {};
-  template <class T> struct Check<T, decltype([]{})> {}; // error: unsupported expression in dependent decltype pattern
+  template<class T> struct Box { using type = T; };
+  template<class T, class U> struct X { static constexpr int value = 0; };
+  template<class T>
+  struct X<T, typename Box<decltype([]() { return T(); })>::type> { // error: unsupported expression in dependent decltype pattern
+      static constexpr int value = 1;
+  };
   ```
 
 ---

@@ -24,7 +24,7 @@ We rejected this option. Runtime loops introduce call overhead, complicate lvalu
 ### Option 2: Expand fold expressions into concrete binary expression trees during semantic analysis
 Expand fold expressions during template substitution in `src/sema/fold_expansion.rs`. Parameter packs expand into concrete trees of `Expr::Binary`, `Expr::Assign`, or `Expr::CompoundAssign` before WebAssembly code generation.
 
-We chose this option. It extends the single-phase AST expansion architecture established in ADR 0010 and ADR 0013. The existing constant expression evaluator (`src/sema/constexpr_eval.rs`) and code generator (`src/codegen/`) process the resulting binary expression trees with zero runtime changes.
+We chose this option. It extends the AST expansion architecture established in ADR 0010 and ADR 0013. The existing constant expression evaluator (`src/sema/constexpr_eval.rs`) and code generator (`src/codegen/`) process the resulting binary expression trees with zero runtime changes.
 
 ## Decision
 

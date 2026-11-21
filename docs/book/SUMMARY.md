@@ -22,7 +22,7 @@
 
 # Standard Library
 
-- [`<type_traits>` (LLVM libc++ 23.1.5)](../stdlib/type_traits.md)
+- [`<type_traits>` (LLVM libc++ 23.1.5)](stdlib/type_traits.md)
 
 # Architecture Decision Records
 
@@ -36,7 +36,7 @@
 - [ADR 0007: Free-List Allocator](adr/0007-free-list-allocator.md)
 - [ADR 0008: String Representation](adr/0008-string-representation.md)
 - [ADR 0009: C ABI and JS Interop](adr/0009-c-abi-and-js-interop.md)
-- [ADR 0010: Template Instantiation Model](adr/0010-template-instantiation-model.md)
+- [ADR 0010: Template Instantiation Model and Two-Phase Lookup](adr/0010-template-instantiation-model.md)
 - [ADR 0011: Move Semantics, Value Categories, and Smart Pointers](adr/0011-move-semantics-and-value-categories.md)
 - [ADR 0012: Template Specialization, Non-Type Parameters, and Alias Templates](adr/0012-template-specialization-nttp-aliases.md)
 - [ADR 0013: C++11 Variadic Templates, Parameter Packs, and Partial Ordering](adr/0013-variadic-templates.md)

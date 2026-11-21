@@ -122,10 +122,10 @@ fn take_expr_children(expr: &mut Expr, out: &mut Vec<Expr>) {
         Expr::Delete { expr, .. } => take_box(expr, out),
         Expr::Lambda { params, .. } => {
             for p in params {
-                if let Some(def) = p.default_val.take() {
-                    if has_children(&def) {
-                        out.push(def);
-                    }
+                if let Some(def) = p.default_val.take()
+                    && has_children(&def)
+                {
+                    out.push(def);
                 }
             }
         }
