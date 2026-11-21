@@ -457,6 +457,27 @@ fn substitute_callee_identifier(
     }
 }
 
+/// Resolves dependent `sizeof`/`alignof` operands left in a substituted member
+/// initializer, reporting a missing nested type at the instantiation site.
+fn resolve_initializer_operands(
+    expr: &mut Expr,
+    sema: Option<&crate::sema::Sema>,
+    (line, col): (usize, usize),
+) -> Result<(), CompileError> {
+    let Some(sema) = sema else {
+        return Ok(());
+    };
+    super::template_subst_array::resolve_sizeof_operands(expr, sema, "in initializer").map_err(
+        |mut error| {
+            if error.line == 0 && error.col == 0 {
+                error.line = line;
+                error.col = col;
+            }
+            error
+        },
+    )
+}
+
 pub fn substitute_struct(
     template_class: &TemplateClass,
     mapping: &HashMap<String, TemplateArg>,
@@ -474,6 +495,7 @@ pub fn substitute_struct(
         let mut init = finit.clone();
         if let Some((init_expr, _, _)) = &mut init {
             substitute_expr(init_expr, mapping, injected)?;
+            resolve_initializer_operands(init_expr, sema, pos)?;
         }
         let subst_fty = substitute_type_full(fty, mapping, injected, pos, struct_aligns, sema)
             .map_err(|mut e| {
@@ -496,6 +518,7 @@ pub fn substitute_struct(
         let mut init = sinit.clone();
         if let Some(init_expr) = &mut init {
             substitute_expr(init_expr, mapping, injected)?;
+            resolve_initializer_operands(init_expr, sema, pos)?;
         }
         static_fields.push((
             sname.clone(),

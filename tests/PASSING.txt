@@ -887,3 +887,5 @@ cxx17/dependent_sizeof_sfinae
 cxx17/dependent_alignof_array_bound
 cxx17/dependent_sizeof_array_bound_layout
 negative/dependent_sizeof_array_bound_composite_invalid
+cxx17/dependent_sizeof_nsdmi_layout
+negative/dependent_sizeof_initializer_invalid

@@ -34,7 +34,7 @@ pub fn evaluate_dependent_array_size(
     let mut expr = parser.parse_expr()?;
     substitute_expr(&mut expr, mapping, injected_class)?;
     if let Some(sema) = sema {
-        resolve_sizeof_operands(&mut expr, sema)?;
+        resolve_sizeof_operands(&mut expr, sema, "in array bound")?;
     }
     // Layout lives on Sema; without it `Type::size_of` falls back to 4.
     let env = crate::sema::constexpr_eval::ConstexprEnv {
@@ -54,37 +54,42 @@ pub fn evaluate_dependent_array_size(
     }
 }
 
-/// Resolves qualified struct operands of every `sizeof`/`alignof` in the bound,
+/// Resolves qualified struct operands of every `sizeof`/`alignof` in `expr`,
 /// including ones nested inside composite expressions such as
-/// `sizeof(T::type) + 1`.
-fn resolve_sizeof_operands(expr: &mut Expr, sema: &crate::sema::Sema) -> Result<(), CompileError> {
+/// `sizeof(T::type) + 1`. `context` is used in the diagnostic for a missing
+/// nested type.
+pub(super) fn resolve_sizeof_operands(
+    expr: &mut Expr,
+    sema: &crate::sema::Sema,
+    context: &str,
+) -> Result<(), CompileError> {
     match expr {
         Expr::SizeofType(ty) | Expr::AlignofType(ty) => {
             if let Type::Struct(name) = ty
                 && name.contains("::")
             {
                 let resolved = sema.resolve_type_name_for_sizeof(name)?.ok_or_else(|| {
-                    CompileError::new(format!("unresolved type '{name}' in array bound"), 0, 0)
+                    CompileError::new(format!("unresolved type '{name}' {context}"), 0, 0)
                         .with_kind(ErrorKind::Substitution)
                 })?;
                 *ty = resolved;
             }
         }
         Expr::Unary { expr, .. } | Expr::Cast { expr, .. } | Expr::SizeofExpr(expr) => {
-            resolve_sizeof_operands(expr, sema)?;
+            resolve_sizeof_operands(expr, sema, context)?;
         }
         Expr::Binary { left, right, .. } => {
-            resolve_sizeof_operands(left, sema)?;
-            resolve_sizeof_operands(right, sema)?;
+            resolve_sizeof_operands(left, sema, context)?;
+            resolve_sizeof_operands(right, sema, context)?;
         }
         Expr::Ternary {
             cond,
             then_expr,
             else_expr,
         } => {
-            resolve_sizeof_operands(cond, sema)?;
-            resolve_sizeof_operands(then_expr, sema)?;
-            resolve_sizeof_operands(else_expr, sema)?;
+            resolve_sizeof_operands(cond, sema, context)?;
+            resolve_sizeof_operands(then_expr, sema, context)?;
+            resolve_sizeof_operands(else_expr, sema, context)?;
         }
         _ => {}
     }
