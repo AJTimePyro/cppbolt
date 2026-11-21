@@ -1,0 +1,1 @@
+tests/negative/static_assert_variable_template_false.cpp:3:15: error: static assertion failed: int is integral

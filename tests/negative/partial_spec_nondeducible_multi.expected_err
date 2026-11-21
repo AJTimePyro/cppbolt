@@ -1,0 +1,1 @@
+tests/negative/partial_spec_nondeducible_multi.cpp:4:1: error: template parameter 'U' cannot be deduced from the partial specialization argument list

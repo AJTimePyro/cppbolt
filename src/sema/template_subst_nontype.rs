@@ -38,9 +38,25 @@ pub fn evaluate_dependent_nontype(
         Err(_) => return Ok(Type::DependentNonType(expr_str.to_string())),
     };
     let mut parser = crate::parser::Parser::new(tokens);
+    // The spelling is re-parsed without the declaration's template scope, so
+    // seed the type parameters the mapping knows about. Otherwise `sizeof(T)`
+    // is read as `sizeof` of an expression and keeps the unresolved name.
+    parser.active_type_params.push(
+        mapping
+            .iter()
+            .filter(|(_, arg)| matches!(arg, TemplateArg::Type(_)))
+            .map(|(name, _)| name.clone())
+            .collect(),
+    );
     let mut expr = match parser.parse_expr() {
         Ok(e) => e,
-        Err(_) => return Ok(Type::DependentNonType(expr_str.to_string())),
+        Err(_) => {
+            // The dependent spelling may not re-parse (e.g. `!Trait<T>::v`).
+            // Substitute the parameters textually and let sema resolve it.
+            return Ok(Type::DependentNonType(
+                super::template_name::substitute_dependent_text(expr_str, mapping),
+            ));
+        }
     };
     substitute_expr(&mut expr, mapping, injected_class)?;
     match crate::sema::constexpr_eval::eval_constexpr_with_mapping(&expr, None, mapping) {

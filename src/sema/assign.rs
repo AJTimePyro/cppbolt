@@ -367,6 +367,7 @@ impl Sema {
             }),
             args: vec![],
             pos,
+            dependent: false,
         };
     }
 }

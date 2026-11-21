@@ -1,5 +1,6 @@
 use super::structs::StructBody;
 use super::*;
+use crate::ast::template::TemplateParam;
 
 impl Parser {
     pub(super) fn parse_nested_struct_member(
@@ -50,6 +51,24 @@ impl Parser {
         let decl_res = self.parse_nested_struct(body);
         self.active_type_params.pop();
         let decl = decl_res?;
+        let Some(template_class) = self.nested_template_class_from_decl(decl, &params)? else {
+            return Ok(false);
+        };
+        body.nested_structs.push(Decl::Template(TemplateDecl {
+            params,
+            kind: TemplateKind::Class(template_class),
+            line: t_tok.line,
+            col: t_tok.col,
+        }));
+        Ok(true)
+    }
+
+    /// Builds the class-template payload from a parsed nested struct.
+    fn nested_template_class_from_decl(
+        &mut self,
+        decl: Decl,
+        params: &[TemplateParam],
+    ) -> Result<Option<TemplateClass>, CompileError> {
         let Decl::StructDecl {
             name,
             is_class,
@@ -65,32 +84,34 @@ impl Parser {
             ..
         } = decl
         else {
-            return Ok(false);
+            return Ok(None);
         };
         if !name.contains('<') {
-            template::validate_trailing_pack(&params, "class template")?;
+            template::validate_trailing_pack(params, "class template")?;
         }
         self.register_template_name(&name);
-        let template_class = TemplateClass {
+        let pattern_args = self.struct_template_args.get(&name).cloned();
+        let member_aliases = self
+            .struct_member_aliases
+            .get(&name)
+            .cloned()
+            .unwrap_or_default();
+        Ok(Some(TemplateClass {
             name,
+            pattern_args,
             is_class,
             is_final,
             base_classes,
             base_access,
             fields,
             methods,
+            friends: Vec::new(),
             static_fields,
             private_members,
             nested_structs,
+            member_aliases,
             alignment,
-        };
-        body.nested_structs.push(Decl::Template(TemplateDecl {
-            params,
-            kind: TemplateKind::Class(template_class),
-            line: t_tok.line,
-            col: t_tok.col,
-        }));
-        Ok(true)
+        }))
     }
 
     fn parse_nested_struct(&mut self, body: &mut StructBody) -> Result<Decl, CompileError> {
@@ -170,6 +191,11 @@ impl Parser {
                 }
             };
             self.expect(TokenKind::Semi)?;
+            if body.is_private {
+                body.private_members.push(tname.clone());
+                body.private_members
+                    .push(format!("{}::{}", body.name, tname));
+            }
             self.register_member_alias(&body.name, tname, ty);
             return Ok(true);
         }
@@ -209,6 +235,11 @@ impl Parser {
             if self.peek() == &TokenKind::Assign {
                 self.advance();
                 let ty = self.parse_type()?;
+                if body.is_private {
+                    body.private_members.push(alias.clone());
+                    body.private_members
+                        .push(format!("{}::{}", body.name, alias));
+                }
                 self.register_member_alias(&body.name, alias, ty);
             }
             self.expect(TokenKind::Semi)?;
@@ -236,9 +267,19 @@ impl Parser {
         Ok(false)
     }
 
-    pub(super) fn parse_struct_friend(&mut self) -> Result<bool, CompileError> {
-        if self.peek() == &TokenKind::KwFriend {
-            self.advance();
+    pub(super) fn parse_struct_friend(
+        &mut self,
+        body: &mut StructBody,
+        template_params: Option<&[TemplateParam]>,
+    ) -> Result<bool, CompileError> {
+        if self.peek() != &TokenKind::KwFriend {
+            return Ok(false);
+        }
+        let start = self.current().clone();
+        self.advance();
+        if !self.is_type_start() {
+            // `friend class X;` and other non-function friends have no
+            // function body to emit.
             while self.peek() != &TokenKind::Semi && self.peek() != &TokenKind::Eof {
                 self.advance();
             }
@@ -247,6 +288,24 @@ impl Parser {
             }
             return Ok(true);
         }
-        Ok(false)
+        let specifiers = self.parse_specifier_type()?;
+        let return_type = self.parse_declarator_prefix(&specifiers)?;
+        let name = match self.advance().kind.clone() {
+            TokenKind::Ident(id) => id,
+            TokenKind::KwOperator => self.parse_operator_name()?,
+            _ => {
+                return Err(CompileError::new(
+                    "Expected friend function name",
+                    self.current().line,
+                    self.current().col,
+                ));
+            }
+        };
+        let mut func = self.parse_function_tail(name, return_type, start.line, start.col)?;
+        if let Some(params) = template_params {
+            func.template_params = params.to_vec();
+        }
+        body.friends.push(func);
+        Ok(true)
     }
 }

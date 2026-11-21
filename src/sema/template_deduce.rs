@@ -1,6 +1,6 @@
 //! Template argument deduction and explicit template argument resolution.
 
-use crate::ast::decl::FunctionDecl;
+use crate::ast::decl::{FunctionDecl, Param};
 use crate::ast::expr::{Expr, ExprPos};
 use crate::ast::template::TemplateParam;
 use crate::ast::types::Type;
@@ -16,16 +16,23 @@ pub fn split_template_call_name(name: &str) -> Option<(&str, &str)> {
         return None;
     }
     let mut depth = 0;
+    let mut paren = 0i32;
     let mut open = None;
     for (i, &b) in name.as_bytes().iter().enumerate().rev() {
-        if b == b'>' {
-            depth += 1;
-        } else if b == b'<' {
-            depth -= 1;
-            if depth == 0 {
-                open = Some(i);
-                break;
+        // Angle brackets inside a parenthesized expression (a comparison or
+        // an `->`) are not template delimiters.
+        match b {
+            b')' => paren += 1,
+            b'(' => paren -= 1,
+            b'>' if paren == 0 => depth += 1,
+            b'<' if paren == 0 => {
+                depth -= 1;
+                if depth == 0 {
+                    open = Some(i);
+                    break;
+                }
             }
+            _ => {}
         }
     }
     let open = open?;
@@ -78,11 +85,14 @@ fn deduce_pack_arguments(
         Type::PackExpansion(inner) => &**inner,
         other => other,
     };
-    let pack_name = template_params
-        .iter()
-        .find(|p| p.is_pack)
-        .map(|p| p.name.clone())
-        .unwrap_or_else(|| pack_param.name.clone());
+    let pack_name = match pattern_ty {
+        Type::TypeParam(name) => name.clone(),
+        _ => template_params
+            .iter()
+            .find(|p| p.is_pack)
+            .map(|p| p.name.clone())
+            .unwrap_or_else(|| pack_param.name.clone()),
+    };
 
     let mut pack_types = Vec::new();
     for (i, arg_ty) in arg_types.iter().enumerate().skip(start) {
@@ -130,7 +140,7 @@ fn deduce_pack_arguments(
 
 fn validate_arg_counts(
     has_pack: bool,
-    non_pack_params: &[crate::ast::decl::Param],
+    fixed_params: &[&crate::ast::decl::Param],
     total_params: usize,
     arg_count: usize,
     pos: ExprPos,
@@ -145,7 +155,7 @@ fn validate_arg_counts(
             pos.col,
         ));
     }
-    let min_args = non_pack_params
+    let min_args = fixed_params
         .iter()
         .take_while(|p| p.default_val.is_none())
         .count();
@@ -192,12 +202,12 @@ fn insert_explicit_template_args(
     deduced: &mut HashMap<String, TemplateArg>,
     explicit_pack: &mut Vec<Type>,
 ) {
-    let has_t_pack = template_params.last().is_some_and(|p| p.is_pack);
-    let non_pack_t_count = if has_t_pack {
-        template_params.len().saturating_sub(1)
-    } else {
-        template_params.len()
-    };
+    // A parameter pack need not be the last template parameter. Explicit
+    // arguments fill the non-pack parameters before the pack, and every
+    // remaining explicit argument is absorbed by the pack; parameters after
+    // the pack are left for deduction from the call.
+    let pack_index = template_params.iter().position(|p| p.is_pack);
+    let non_pack_t_count = pack_index.unwrap_or(template_params.len());
     for (i, explicit_arg) in explicit_args.iter().enumerate() {
         if i < non_pack_t_count {
             let mut arg = TemplateArg::from(explicit_arg.clone());
@@ -209,7 +219,7 @@ fn insert_explicit_template_args(
                 *ty = template_params[i].param_type.clone();
             }
             deduced.insert(template_params[i].name.clone(), arg);
-        } else if has_t_pack {
+        } else if pack_index.is_some() {
             explicit_pack.push(explicit_arg.clone());
         }
     }
@@ -251,16 +261,22 @@ pub fn deduce_template_arguments(
     } else {
         func_decl.params.len()
     };
-    let non_pack_params = &func_decl.params[..non_pack_count];
+    // A function parameter pack before the deduced pack is a non-deduced
+    // context: it contributes no arguments, so only fixed parameters consume
+    // positions in the call.
+    let fixed_params: Vec<_> = func_decl.params[..non_pack_count]
+        .iter()
+        .filter(|p| !p.is_pack)
+        .collect();
     validate_arg_counts(
         has_pack,
-        non_pack_params,
+        &fixed_params,
         func_decl.params.len(),
         arg_types.len(),
         pos,
     )?;
 
-    let has_t_pack = template_params.last().is_some_and(|p| p.is_pack);
+    let pack_index = template_params.iter().position(|p| p.is_pack);
     let mut deduced: HashMap<String, TemplateArg> = HashMap::new();
     let mut explicit_pack = Vec::new();
     insert_explicit_template_args(
@@ -271,13 +287,48 @@ pub fn deduce_template_arguments(
     );
     validate_explicit_pack_count(
         has_pack,
-        non_pack_count,
+        fixed_params.len(),
         explicit_pack.len(),
         arg_types.len(),
         pos,
     )?;
 
-    for (i, p) in non_pack_params.iter().enumerate() {
+    deduce_fixed_params(&fixed_params, (arg_types, args), &mut deduced, pos)?;
+
+    let mut result = deduced;
+
+    if has_pack {
+        let (pack_name, deduced_pack) = deduce_pack_arguments(
+            &func_decl.params[non_pack_count],
+            template_params,
+            call_args,
+            fixed_params.len() + explicit_pack.len(),
+            pos,
+        )?;
+        let mut pack_types = explicit_pack;
+        pack_types.extend(deduced_pack);
+        result.insert(pack_name, TemplateArg::TypePack(pack_types));
+    } else if let Some(index) = pack_index
+        && !explicit_pack.is_empty()
+    {
+        result.insert(
+            template_params[index].name.clone(),
+            TemplateArg::TypePack(explicit_pack),
+        );
+    }
+
+    fill_missing_deduced(template_params, &mut result, pos)?;
+    Ok(result)
+}
+
+/// Deduces template arguments from the fixed (non-pack) parameters.
+fn deduce_fixed_params(
+    fixed_params: &[&Param],
+    (arg_types, args): (&[Type], &[Expr]),
+    deduced: &mut HashMap<String, TemplateArg>,
+    pos: ExprPos,
+) -> Result<(), CompileError> {
+    for (i, p) in fixed_params.iter().enumerate() {
         if i >= arg_types.len() {
             break;
         }
@@ -289,32 +340,10 @@ pub fn deduce_template_arguments(
             arg_ty.clone()
         };
         if type_has_template_param(&p.ty) {
-            deduce_type(&p.ty, &adjusted_arg_ty, &mut deduced, is_lval, pos)?;
+            deduce_type(&p.ty, &adjusted_arg_ty, deduced, is_lval, pos)?;
         }
     }
-
-    let mut result = deduced;
-
-    if has_pack {
-        let (pack_name, deduced_pack) = deduce_pack_arguments(
-            &func_decl.params[non_pack_count],
-            template_params,
-            call_args,
-            non_pack_count + explicit_pack.len(),
-            pos,
-        )?;
-        let mut pack_types = explicit_pack;
-        pack_types.extend(deduced_pack);
-        result.insert(pack_name, TemplateArg::TypePack(pack_types));
-    } else if has_t_pack
-        && !explicit_pack.is_empty()
-        && let Some(last_p) = template_params.last()
-    {
-        result.insert(last_p.name.clone(), TemplateArg::TypePack(explicit_pack));
-    }
-
-    fill_missing_deduced(template_params, &mut result, pos)?;
-    Ok(result)
+    Ok(())
 }
 
 /// Pads missing template arguments from parameter default types.

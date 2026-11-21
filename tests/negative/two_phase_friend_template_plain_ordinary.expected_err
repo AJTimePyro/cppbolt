@@ -1,0 +1,1 @@
+tests/negative/two_phase_friend_template_plain_ordinary.cpp:2:14: error: Undefined function 'f'

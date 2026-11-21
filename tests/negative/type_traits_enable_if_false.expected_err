@@ -1,0 +1,1 @@
+tests/negative/type_traits_enable_if_false.cpp:4:21: error: no matching function for call to 'f': substitution failure: no type named 'type' in 'enable_if<is_integral<double>::value, int>'

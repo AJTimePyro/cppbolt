@@ -1,0 +1,1 @@
+tests/negative/two_phase_late_ordinary.cpp:1:40: error: Undefined function 'g'

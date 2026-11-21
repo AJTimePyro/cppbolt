@@ -1,0 +1,1 @@
+tests/negative/static_assert_qualified_false.cpp:3:15: error: static assertion failed: qualified member mismatch

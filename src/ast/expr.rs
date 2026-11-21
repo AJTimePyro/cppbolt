@@ -144,6 +144,9 @@ pub enum Expr {
         callee: Box<Expr>,
         args: Vec<Expr>,
         pos: ExprPos,
+        /// True when substitution changed the callee or an argument, meaning
+        /// the call is dependent and ADL must run at instantiation.
+        dependent: bool,
     },
     ArraySubscript {
         array: Box<Expr>,
@@ -214,104 +217,11 @@ pub enum Expr {
     },
 }
 
-impl Drop for Expr {
-    /// Drops deeply nested expression trees iteratively so a long
-    /// left-associative chain cannot overflow the Rust stack while the AST is
-    /// being released.
-    fn drop(&mut self) {
-        let mut stack = Vec::new();
-        take_expr_children(self, &mut stack);
-        while let Some(mut expr) = stack.pop() {
-            take_expr_children(&mut expr, &mut stack);
-        }
-    }
-}
-
-/// Moves one child expression out of `child`, leaving a cheap leaf placeholder.
-#[inline]
-fn take_box(child: &mut Box<Expr>, out: &mut Vec<Expr>) {
-    out.push(std::mem::replace(&mut **child, Expr::BoolLiteral(false)));
-}
-
-/// Moves every child expression out of `expr`, leaving cheap leaf
-/// placeholders behind so the recursive `Box` drop cannot descend further.
-fn take_expr_children(expr: &mut Expr, out: &mut Vec<Expr>) {
-    match expr {
-        Expr::Binary { left, right, .. } => {
-            take_box(left, out);
-            take_box(right, out);
-        }
-        Expr::Unary { expr, .. } | Expr::Cast { expr, .. } | Expr::SizeofExpr(expr) => {
-            take_box(expr, out);
-        }
-        Expr::Assign { target, value, .. } | Expr::CompoundAssign { target, value, .. } => {
-            take_box(target, out);
-            take_box(value, out);
-        }
-        Expr::Call { callee, args, .. } => {
-            take_box(callee, out);
-            out.append(&mut std::mem::take(args));
-        }
-        Expr::ArraySubscript { array, index, .. } => {
-            take_box(array, out);
-            take_box(index, out);
-        }
-        Expr::MemberAccess { object, .. } => take_box(object, out),
-        Expr::Ternary {
-            cond,
-            then_expr,
-            else_expr,
-        } => {
-            take_box(cond, out);
-            take_box(then_expr, out);
-            take_box(else_expr, out);
-        }
-        Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } => {
-            out.append(elements);
-        }
-        Expr::New {
-            args,
-            array_size,
-            placement,
-            ..
-        } => {
-            out.append(&mut std::mem::take(args));
-            if let Some(size) = array_size {
-                take_box(size, out);
-            }
-            if let Some(place) = placement {
-                take_box(place, out);
-            }
-        }
-        Expr::Delete { expr, .. } => take_box(expr, out),
-        Expr::Lambda { params, .. } => {
-            for p in params {
-                if let Some(def) = p.default_val.take() {
-                    out.push(def);
-                }
-            }
-        }
-        Expr::PackExpansion { pattern, .. } => take_box(pattern, out),
-        Expr::FoldExpr { left, right, .. } => {
-            if let Some(l) = left {
-                take_box(l, out);
-            }
-            if let Some(r) = right {
-                take_box(r, out);
-            }
-        }
-        Expr::SizeofPack { .. }
-        | Expr::IntLiteral(..)
-        | Expr::FloatLiteral(..)
-        | Expr::BoolLiteral(_)
-        | Expr::CharLiteral(_)
-        | Expr::StringLiteral(_)
-        | Expr::Identifier(_)
-        | Expr::This
-        | Expr::SizeofType(_)
-        | Expr::AlignofType(_) => {}
-    }
-}
+/// Marker emitted by `Expr::to_source` when an expression form cannot be
+/// rendered as re-parsable source. Partial-specialization confirmation turns
+/// it into a hard error so an unrenderable operand never silently degrades to
+/// selecting the primary template.
+pub const UNRENDERABLE_EXPR: &str = "@cppbolt_unrenderable@";
 
 impl Expr {
     pub fn pos(&self) -> ExprPos {
@@ -333,6 +243,132 @@ impl Expr {
             Expr::Cast { expr, .. } | Expr::SizeofExpr(expr) => expr.pos(),
             _ => ExprPos::default(),
         }
+    }
+
+    /// Renders the expression as re-parsable C++ source. Used when an
+    /// expression is embedded in a type name (for example `decltype(T())`)
+    /// that is re-parsed after template substitution. Expression forms that
+    /// cannot be rendered emit `UNRENDERABLE_EXPR`, which confirmation turns
+    /// into a hard error rather than silently rejecting the candidate.
+    pub fn to_source(&self) -> String {
+        match self {
+            Expr::Identifier(id) => id.clone(),
+            Expr::IntLiteral(value, _) => value.to_string(),
+            Expr::FloatLiteral(value, _) => format!("{value:?}"),
+            Expr::BoolLiteral(value) => value.to_string(),
+            Expr::CharLiteral(value) => format!("'{}'", value.escape_default()),
+            Expr::StringLiteral(value) => format!("\"{}\"", value.escape_default()),
+            Expr::This => "this".to_string(),
+            Expr::Call { callee, args, .. } => {
+                let rendered = args
+                    .iter()
+                    .map(|arg| arg.to_source())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{}({})", callee.to_source(), rendered)
+            }
+            Expr::MemberAccess {
+                object,
+                member,
+                is_arrow,
+                ..
+            } => {
+                let sep = if *is_arrow { "->" } else { "." };
+                format!("{}{}{}", object.to_source(), sep, member)
+            }
+            Expr::ArraySubscript { array, index, .. } => {
+                format!("({})[{}]", array.to_source(), index.to_source())
+            }
+            Expr::Ternary {
+                cond,
+                then_expr,
+                else_expr,
+            } => format!(
+                "({} ? {} : {})",
+                cond.to_source(),
+                then_expr.to_source(),
+                else_expr.to_source()
+            ),
+            Expr::Cast {
+                kind,
+                target_type,
+                expr,
+            } => {
+                let target = target_type.to_c_type();
+                match kind {
+                    CastKind::Static => format!("static_cast<{target}>({})", expr.to_source()),
+                    CastKind::Reinterpret => {
+                        format!("reinterpret_cast<{target}>({})", expr.to_source())
+                    }
+                    CastKind::CStyle => format!("({target}){}", expr.to_source()),
+                    CastKind::Functional => format!("{target}({})", expr.to_source()),
+                }
+            }
+            Expr::SizeofType(ty) => format!("sizeof({})", ty.to_c_type()),
+            Expr::AlignofType(ty) => format!("alignof({})", ty.to_c_type()),
+            Expr::SizeofExpr(expr) => format!("sizeof({})", expr.to_source()),
+            Expr::Unary { .. } => self.render_unary(),
+            Expr::Binary { .. } => self.render_binary(),
+            _ => UNRENDERABLE_EXPR.to_string(),
+        }
+    }
+
+    /// Renders a unary expression, handling postfix operators separately.
+    fn render_unary(&self) -> String {
+        let Expr::Unary { op, expr, .. } = self else {
+            return UNRENDERABLE_EXPR.to_string();
+        };
+        match op {
+            UnaryOp::PostInc => return format!("{}++", expr.to_source()),
+            UnaryOp::PostDec => return format!("{}--", expr.to_source()),
+            _ => {}
+        }
+        let sym = match op {
+            UnaryOp::Neg => "-",
+            UnaryOp::Plus => "+",
+            UnaryOp::Not => "!",
+            UnaryOp::BitNot => "~",
+            UnaryOp::Deref => "*",
+            UnaryOp::AddrOf => "&",
+            UnaryOp::PreInc => "++",
+            UnaryOp::PreDec => "--",
+            UnaryOp::PostInc | UnaryOp::PostDec => unreachable!(),
+        };
+        format!("{}{}", sym, expr.to_source())
+    }
+
+    /// Renders a binary expression with its operator symbol.
+    fn render_binary(&self) -> String {
+        let Expr::Binary {
+            op, left, right, ..
+        } = self
+        else {
+            return UNRENDERABLE_EXPR.to_string();
+        };
+        let sym = match op {
+            BinaryOp::Add => "+",
+            BinaryOp::Sub => "-",
+            BinaryOp::Mul => "*",
+            BinaryOp::Div => "/",
+            BinaryOp::Rem => "%",
+            BinaryOp::Eq => "==",
+            BinaryOp::Ne => "!=",
+            BinaryOp::Lt => "<",
+            BinaryOp::Le => "<=",
+            BinaryOp::Gt => ">",
+            BinaryOp::Ge => ">=",
+            BinaryOp::LogicalAnd => "&&",
+            BinaryOp::LogicalOr => "||",
+            BinaryOp::BitAnd => "&",
+            BinaryOp::BitOr => "|",
+            BinaryOp::BitXor => "^",
+            BinaryOp::Shl => "<<",
+            BinaryOp::Shr => ">>",
+            BinaryOp::Comma => ",",
+            BinaryOp::DotStar => ".*",
+            BinaryOp::ArrowStar => "->*",
+        };
+        format!("({} {} {})", left.to_source(), sym, right.to_source())
     }
 
     pub fn is_lvalue(&self) -> bool {
@@ -414,6 +450,20 @@ mod tests {
                 op: FoldOp::Binary(BinaryOp::Add),
                 left: Some(Box::new(cur)),
                 right: None,
+                pos: ExprPos::new(1, 1),
+            };
+        }
+        drop(cur);
+    }
+
+    #[test]
+    fn deep_binary_expr_drops_without_overflow() {
+        let mut cur = Expr::IntLiteral(1, Type::Int);
+        for _ in 0..10_000 {
+            cur = Expr::Binary {
+                op: BinaryOp::Add,
+                left: Box::new(cur),
+                right: Box::new(Expr::IntLiteral(1, Type::Int)),
                 pos: ExprPos::new(1, 1),
             };
         }

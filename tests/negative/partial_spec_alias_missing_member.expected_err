@@ -1,0 +1,1 @@
+tests/negative/partial_spec_alias_missing_member.cpp:6:3: error: no type named 'type' in 'C<int, int>'

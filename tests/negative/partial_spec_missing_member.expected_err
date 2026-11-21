@@ -1,0 +1,1 @@
+tests/negative/partial_spec_missing_member.cpp:11:3: error: no type named 'type' in 'A<Yes, int>'

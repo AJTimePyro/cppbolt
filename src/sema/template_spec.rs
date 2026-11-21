@@ -109,23 +109,27 @@ impl Sema {
         template_class: TemplateClass,
     ) -> Result<(TemplateClass, HashMap<String, TemplateArg>), CompileError> {
         if let Some(spec) = self.lookup_class_specialization(target.inst_name) {
+            self.instantiated_class_definitions
+                .insert(target.inst_name.to_string(), spec.clone());
             let m = self.prepare_instantiation_mapping(
                 &spec,
                 target.template_params,
                 target.effective_args,
                 target.inst_name,
                 target.pos,
-            );
+            )?;
             Ok((spec, m))
         } else if let Some((spec, mut m)) =
             self.select_partial_specialization(target.name, target.effective_args, target.pos)?
         {
+            self.instantiated_class_definitions
+                .insert(target.inst_name.to_string(), spec.clone());
             self.register_instantiation_nested_and_aliases(
                 &spec,
                 target.inst_name,
                 &mut m,
                 target.pos,
-            );
+            )?;
             Ok((spec, m))
         } else {
             let m = self.prepare_instantiation_mapping(
@@ -134,14 +138,19 @@ impl Sema {
                 target.effective_args,
                 target.inst_name,
                 target.pos,
-            );
+            )?;
             Ok((template_class, m))
         }
     }
 
-    pub fn ensure_class_instantiated(&mut self, sname: &str, line: usize, col: usize) {
+    pub fn ensure_class_instantiated(
+        &mut self,
+        sname: &str,
+        line: usize,
+        col: usize,
+    ) -> Result<(), CompileError> {
         if self.struct_layouts.contains_key(sname) {
-            return;
+            return Ok(());
         }
         let plain = QualifiedName::new(sname).plain();
         if let Some(Type::TemplateInstance { name, args }) = self
@@ -154,11 +163,10 @@ impl Sema {
             for arg in &mut args {
                 let _ = self.resolve_and_instantiate_type(arg, line, col);
             }
-            if let Ok(inst) = self.instantiate_class_template(&name, &args, line, col) {
-                self.alias_static_fields(&inst, sname);
-                self.alias_static_fields(&inst, plain);
-            }
-            return;
+            let inst = self.instantiate_class_template(&name, &args, line, col)?;
+            self.alias_static_fields(&inst, sname);
+            self.alias_static_fields(&inst, plain);
+            return Ok(());
         }
         if let Some((base, args_str)) = super::template_deduce::split_template_call_name(sname) {
             let known: Vec<String> = self
@@ -171,9 +179,14 @@ impl Sema {
                 for arg in &mut args {
                     let _ = self.resolve_and_instantiate_type(arg, line, col);
                 }
-                let _ = self.instantiate_class_template(base, &args, line, col);
+                let inst = self.instantiate_class_template(base, &args, line, col)?;
+                // The canonical name can differ from the written one when
+                // default or folded non-type arguments are involved.
+                self.alias_static_fields(&inst, sname);
+                self.alias_static_fields(&inst, plain);
             }
         }
+        Ok(())
     }
 
     pub fn alias_static_fields(&mut self, source: &str, target: &str) {
@@ -186,15 +199,27 @@ impl Sema {
             .collect();
         for (fld, var) in matching {
             let qual = format!("{target}::{fld}");
-            self.global_vars.insert(
-                qual.clone(),
-                VarSymbol {
-                    name: var.name.clone(),
-                    ty: var.ty.clone(),
-                    is_global: true,
-                    stack_offset: 0,
-                },
-            );
+            // A member declared on the target shadows the inherited one.
+            self.global_vars.entry(qual).or_insert(VarSymbol {
+                name: var.name.clone(),
+                ty: var.ty.clone(),
+                is_global: true,
+                stack_offset: 0,
+            });
+        }
+        // Inherited constants must be visible through the alias too, so a
+        // derived trait's `value` can be used as a non-type argument. A member
+        // declared on the target takes precedence over the inherited value.
+        let constants: Vec<(String, i128)> = self
+            .static_const_values
+            .iter()
+            .filter(|(k, _)| k.starts_with(&prefix))
+            .map(|(k, v)| (k[prefix.len()..].to_string(), *v))
+            .collect();
+        for (fld, value) in constants {
+            self.static_const_values
+                .entry(format!("{target}::{fld}"))
+                .or_insert(value);
         }
     }
 }

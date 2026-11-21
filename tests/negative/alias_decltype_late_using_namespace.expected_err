@@ -1,0 +1,1 @@
+tests/negative/alias_decltype_late_using_namespace.cpp:2:20: error: Undefined function 'f'

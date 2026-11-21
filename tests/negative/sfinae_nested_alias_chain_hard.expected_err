@@ -1,0 +1,1 @@
+tests/negative/sfinae_nested_alias_chain_hard.cpp:7:40: error: no type named 'type' in 'Bad'

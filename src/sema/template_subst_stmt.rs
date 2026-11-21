@@ -4,7 +4,7 @@ use super::pack_expansion::{
     TemplateArg, build_slice_mapping, collect_packs_in_expr, rename_pack_identifiers,
     validate_pack_lengths,
 };
-use super::template_subst::{substitute_expr, substitute_type};
+use super::template_subst::{substitute_expr, substitute_type_with_sema};
 use crate::ast::expr::Expr;
 use crate::ast::stmt::{Stmt, StmtKind};
 use crate::ast::types::Type;
@@ -52,6 +52,15 @@ pub fn substitute_stmt(
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
 ) -> Result<(), CompileError> {
+    substitute_stmt_with_sema(stmt, mapping, injected_class, None)
+}
+
+pub fn substitute_stmt_with_sema(
+    stmt: &mut Stmt,
+    mapping: &HashMap<String, TemplateArg>,
+    injected_class: Option<(&str, &Type)>,
+    mut sema: Option<&mut crate::sema::Sema>,
+) -> Result<(), CompileError> {
     match &mut stmt.kind {
         StmtKind::Expr(expr) => {
             if let Some(new_kind) = substitute_expr_stmt(expr, mapping, injected_class)? {
@@ -63,7 +72,7 @@ pub fn substitute_stmt(
         }
         StmtKind::Compound(stmts) | StmtKind::VarDeclGroup(stmts) => {
             for s in stmts {
-                substitute_stmt(s, mapping, injected_class)?;
+                substitute_stmt_with_sema(s, mapping, injected_class, sema.as_deref_mut())?;
             }
         }
         StmtKind::If {
@@ -72,35 +81,35 @@ pub fn substitute_stmt(
         } => {
             for (cond, then_stmt) in branches {
                 substitute_expr(cond, mapping, injected_class)?;
-                substitute_stmt(then_stmt, mapping, injected_class)?;
+                substitute_stmt_with_sema(then_stmt, mapping, injected_class, sema.as_deref_mut())?;
             }
             if let Some(else_s) = else_stmt {
-                substitute_stmt(else_s, mapping, injected_class)?;
+                substitute_stmt_with_sema(else_s, mapping, injected_class, sema.as_deref_mut())?;
             }
         }
         StmtKind::While { .. }
         | StmtKind::DoWhile { .. }
         | StmtKind::RangeFor { .. }
         | StmtKind::For { .. } => {
-            substitute_loop_stmt(&mut stmt.kind, mapping, injected_class)?;
+            substitute_loop_stmt(&mut stmt.kind, mapping, injected_class, sema)?;
         }
         StmtKind::StructuredBinding { ty, init, .. } => {
-            *ty = substitute_type(ty, mapping, injected_class)?;
+            *ty = substitute_type_with_sema(ty, mapping, injected_class, sema.as_deref_mut())?;
             substitute_expr(init, mapping, injected_class)?;
         }
         StmtKind::Switch { expr, body } => {
             substitute_expr(expr, mapping, injected_class)?;
-            substitute_stmt(body, mapping, injected_class)?;
+            substitute_stmt_with_sema(body, mapping, injected_class, sema.as_deref_mut())?;
         }
         StmtKind::Return(Some(expr)) => substitute_expr(expr, mapping, injected_class)?,
         StmtKind::VarDecl { ty, init, .. } => {
-            *ty = substitute_type(ty, mapping, injected_class)?;
+            *ty = substitute_type_with_sema(ty, mapping, injected_class, sema.as_deref_mut())?;
             if let Some(init_e) = init {
                 substitute_expr(init_e, mapping, injected_class)?;
             }
         }
         StmtKind::TypeAlias { ty, .. } => {
-            *ty = substitute_type(ty, mapping, injected_class)?;
+            *ty = substitute_type_with_sema(ty, mapping, injected_class, sema)?;
         }
         StmtKind::Return(None)
         | StmtKind::Break
@@ -119,20 +128,21 @@ fn substitute_loop_stmt(
     kind: &mut StmtKind,
     mapping: &HashMap<String, TemplateArg>,
     injected_class: Option<(&str, &Type)>,
+    mut sema: Option<&mut crate::sema::Sema>,
 ) -> Result<(), CompileError> {
     match kind {
         StmtKind::While { cond, body } => {
             substitute_expr(cond, mapping, injected_class)?;
-            substitute_stmt(body, mapping, injected_class)?;
+            substitute_stmt_with_sema(body, mapping, injected_class, sema.as_deref_mut())?;
         }
         StmtKind::DoWhile { body, cond } => {
-            substitute_stmt(body, mapping, injected_class)?;
+            substitute_stmt_with_sema(body, mapping, injected_class, sema.as_deref_mut())?;
             substitute_expr(cond, mapping, injected_class)?;
         }
         StmtKind::RangeFor { decl, range, body } => {
-            substitute_stmt(decl, mapping, injected_class)?;
+            substitute_stmt_with_sema(decl, mapping, injected_class, sema.as_deref_mut())?;
             substitute_expr(range, mapping, injected_class)?;
-            substitute_stmt(body, mapping, injected_class)?;
+            substitute_stmt_with_sema(body, mapping, injected_class, sema.as_deref_mut())?;
         }
         StmtKind::For {
             init,
@@ -141,7 +151,7 @@ fn substitute_loop_stmt(
             body,
         } => {
             if let Some(init_s) = init {
-                substitute_stmt(init_s, mapping, injected_class)?;
+                substitute_stmt_with_sema(init_s, mapping, injected_class, sema.as_deref_mut())?;
             }
             if let Some(cond_e) = cond {
                 substitute_expr(cond_e, mapping, injected_class)?;
@@ -149,7 +159,7 @@ fn substitute_loop_stmt(
             if let Some(step_e) = step {
                 substitute_expr(step_e, mapping, injected_class)?;
             }
-            substitute_stmt(body, mapping, injected_class)?;
+            substitute_stmt_with_sema(body, mapping, injected_class, sema)?;
         }
         _ => {}
     }

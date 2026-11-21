@@ -1,0 +1,1 @@
+tests/negative/partial_spec_nondeducible_pack.cpp:6:1: error: template parameter 'Ts' cannot be deduced from the partial specialization argument list

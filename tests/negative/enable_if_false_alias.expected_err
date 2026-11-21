@@ -1,0 +1,1 @@
+tests/negative/enable_if_false_alias.cpp:3:1: error: no type named 'type' in 'enable_if<0, int>'

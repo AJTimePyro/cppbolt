@@ -1,7 +1,7 @@
 use super::*;
 
 impl Parser {
-    pub(super) fn parse_struct(&mut self) -> Result<Decl, CompileError> {
+    pub(super) fn parse_struct(&mut self) -> Result<Vec<Decl>, CompileError> {
         let mut struct_align = None;
         if self.peek() == &TokenKind::KwAlignas {
             let spec = self.parse_alignas_spec()?;
@@ -17,7 +17,7 @@ impl Parser {
             self.advance();
             let mut body = StructBody::new(name.clone(), is_class, is_final, start.line, start.col);
             body.alignment = struct_align;
-            return Ok(body.into_decl(Vec::new()));
+            return Ok(Self::emit_friends(body, Vec::new()));
         }
 
         let base_classes = self.parse_base_classes(is_class)?;
@@ -41,7 +41,23 @@ impl Parser {
                 .or_insert_with(|| fty.clone());
         }
 
-        Ok(body.into_decl(base_classes))
+        Ok(Self::emit_friends(body, base_classes))
+    }
+
+    /// Emits friend functions before the class so their signatures are
+    /// registered by the time the class is processed.
+    fn emit_friends(mut body: StructBody, bases: Vec<(String, BaseAccess)>) -> Vec<Decl> {
+        let class_name = body.name.clone();
+        let mut decls: Vec<Decl> = body
+            .friends
+            .drain(..)
+            .map(|func| Decl::FriendFunction {
+                class_name: class_name.clone(),
+                func,
+            })
+            .collect();
+        decls.push(body.into_decl(bases));
+        decls
     }
 
     fn parse_struct_name(
@@ -73,6 +89,7 @@ impl Parser {
                 .collect::<Vec<_>>()
                 .join(", ");
             name = format!("{}<{}>", name, canonical_args);
+            self.struct_template_args.insert(name.clone(), args);
         }
         let is_final = if matches!(self.peek(), TokenKind::Ident(id) if id == "final") {
             self.advance();
@@ -100,7 +117,28 @@ impl Parser {
         if self.parse_struct_access(body)? {
             return Ok(());
         }
-        if self.parse_struct_friend()? {
+
+        // `template<...> friend f(...)` declares a friend function template.
+        // Parse the header tentatively and hand it to the friend parser when
+        // `friend` follows; otherwise restore the cursor for the other paths.
+        if self.peek() == &TokenKind::KwTemplate {
+            let saved_pos = self.pos;
+            let saved_splits = self.shr_splits.len();
+            self.advance();
+            self.expect(TokenKind::Lt)?;
+            let params = self.parse_template_params()?;
+            let is_friend = self.peek() == &TokenKind::KwFriend;
+            if is_friend {
+                let result = self.parse_struct_friend(body, Some(&params));
+                self.active_type_params.pop();
+                result?;
+                return Ok(());
+            }
+            self.active_type_params.pop();
+            self.rollback_pos(saved_pos, saved_splits);
+        }
+
+        if self.parse_struct_friend(body, None)? {
             return Ok(());
         }
         if self.parse_nested_struct_member(body)? {
@@ -184,6 +222,7 @@ pub(super) struct StructBody {
     pub(super) static_fields: Vec<(String, Type, Option<Expr>)>,
     pub(super) private_members: Vec<String>,
     pub(super) nested_structs: Vec<Decl>,
+    pub(super) friends: Vec<FunctionDecl>,
     pub(super) is_private: bool,
     pub(super) alignment: Option<Type>,
     pub(super) line: usize,
@@ -207,6 +246,7 @@ impl StructBody {
             static_fields: Vec::new(),
             private_members: Vec::new(),
             nested_structs: Vec::new(),
+            friends: Vec::new(),
             is_private: is_class,
             alignment: None,
             line,

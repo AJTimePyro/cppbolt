@@ -1,0 +1,1 @@
+tests/negative/static_assert_runtime_call.cpp:2:15: error: static assertion condition is not a constant expression

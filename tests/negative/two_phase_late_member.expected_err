@@ -1,0 +1,1 @@
+tests/negative/two_phase_late_member.cpp:1:48: error: Undefined function 'g'

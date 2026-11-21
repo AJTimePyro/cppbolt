@@ -19,7 +19,7 @@ Standard containers and utilities such as `std::tuple`, variadic `std::make_uniq
 - Option 2: Compile-time pack lowering to concrete AST nodes during template substitution (Single-Phase AST Expansion).
   - Parameter packs expand into concrete, individual AST expressions, types, and declarations during template instantiation in semantic analysis (`src/sema/template_subst.rs`, `src/sema/pack_expansion.rs`).
   - WebAssembly code generation sees only concrete types, structs, and calls, requiring zero runtime pack support.
-  - Extends the established single-phase template model (ADR 0010, ADR 0012).
+  - Extends the established template model (ADR 0010, ADR 0012).
 
 ## Decision
 1. Single-phase AST pack lowering (`src/sema/pack_expansion.rs`, `src/sema/template_subst.rs`).

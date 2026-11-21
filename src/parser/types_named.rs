@@ -6,30 +6,42 @@ impl Parser {
     pub(super) fn parse_decltype_specifier(&mut self) -> Result<Type, CompileError> {
         self.advance();
         self.expect(TokenKind::LParen)?;
-        let res = if self.peek() == &TokenKind::KwNullptr {
+        if self.peek() == &TokenKind::KwNullptr {
             self.advance();
-            Type::Nullptr
-        } else {
-            let expr = self.parse_expr()?;
-            if let Expr::Unary {
-                op: UnaryOp::AddrOf,
-                expr: inner,
-                ..
-            } = &expr
-                && let Expr::Identifier(name) = &**inner
-                && let Some(member_ty) = self.member_types.get(name)
+            self.expect(TokenKind::RParen)?;
+            return Ok(Type::Nullptr);
+        }
+
+        // A second `(` may wrap the whole operand. C++17 gives an
+        // unparenthesized id-expression or member access the declared type,
+        // so record which form we saw.
+        let start = self.pos;
+        let mut parenthesized = None;
+        if self.peek() == &TokenKind::LParen {
+            self.advance();
+            if let Ok(expr) = self.parse_expr()
+                && self.peek() == &TokenKind::RParen
             {
-                let (class_name, _) = name.rsplit_once("::").unwrap_or(("", ""));
-                Type::MemberPointer {
-                    class_name: class_name.to_string(),
-                    member_type: Box::new(member_ty.clone()),
+                self.advance();
+                if self.peek() == &TokenKind::RParen {
+                    parenthesized = Some(expr);
                 }
-            } else {
-                Type::Pointer(Box::new(Type::Void))
             }
+            if parenthesized.is_none() {
+                self.pos = start;
+            }
+        }
+        let is_parenthesized = parenthesized.is_some();
+        let expr = match parenthesized {
+            Some(expr) => expr,
+            None => self.parse_expr()?,
         };
         self.expect(TokenKind::RParen)?;
-        Ok(res)
+        Ok(Type::Decltype {
+            expr: Box::new(expr),
+            parenthesized: is_parenthesized,
+            alias: None,
+        })
     }
 
     pub(super) fn resolve_named_struct_fallback(

@@ -19,6 +19,7 @@ impl Parser {
             | TokenKind::KwDecltype
             | TokenKind::KwTypename
             | TokenKind::KwAlignas => true,
+            TokenKind::Ident(id) if id == "volatile" => true,
             TokenKind::ColonColon => {
                 if let TokenKind::Ident(sub) = self.peek_ahead(1) {
                     sub == "size_t"
@@ -430,7 +431,9 @@ impl Parser {
             return self.is_known_template(base);
         }
         if let Some((base, _member)) = plain.split_once("::") {
-            return self.is_active_type_param(base) || self.type_aliases.contains_key(base);
+            return self.is_active_type_param(base)
+                || self.type_aliases.contains_key(base)
+                || self.known_types.contains(base);
         }
         false
     }

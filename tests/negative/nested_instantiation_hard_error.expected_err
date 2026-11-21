@@ -1,0 +1,1 @@
+tests/negative/nested_instantiation_hard_error.cpp:7:26: error: no type named 'missing' in 'Tag'

@@ -1,0 +1,1 @@
+tests/negative/sfinae_nested_type_missing.cpp:4:21: error: no matching function for call to 'f': substitution failure: no type named 'type' in 'NoType'

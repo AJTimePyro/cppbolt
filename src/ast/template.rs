@@ -2,7 +2,7 @@ use super::decl::{Decl, FunctionDecl, StructFieldDecl};
 use super::expr::Expr;
 use super::types::Type;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TemplateParam {
     pub name: String,
     pub default_type: Option<Type>,
@@ -15,15 +15,24 @@ pub struct TemplateParam {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TemplateClass {
     pub name: String,
+    /// Parsed template arguments of a specialization pattern. Kept as AST
+    /// because `to_c_type()` is lossy for `decltype` operands.
+    pub pattern_args: Option<Vec<Type>>,
     pub is_class: bool,
     pub is_final: bool,
     pub base_classes: Vec<String>,
     pub base_access: Vec<crate::ast::BaseAccess>,
     pub fields: Vec<StructFieldDecl>,
     pub methods: Vec<FunctionDecl>,
+    /// Friend functions declared in the class template. They are registered
+    /// for ADL when a concrete specialization is instantiated.
+    pub friends: Vec<FunctionDecl>,
     pub static_fields: Vec<(String, Type, Option<Expr>)>,
     pub private_members: Vec<String>,
     pub nested_structs: Vec<Decl>,
+    /// Member alias names declared by this definition. A partial specialization
+    /// does not inherit the typedefs of the primary template.
+    pub member_aliases: Vec<String>,
     pub alignment: Option<Type>,
 }
 
@@ -32,6 +41,8 @@ pub enum TemplateKind {
     Class(TemplateClass),
     Function(Box<FunctionDecl>),
     Alias(String, Type),
+    /// A variable template such as `template <class T> constexpr bool v = ...`.
+    Variable(String, Type, Option<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]

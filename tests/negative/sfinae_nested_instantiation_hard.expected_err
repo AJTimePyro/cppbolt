@@ -1,0 +1,1 @@
+tests/negative/sfinae_nested_instantiation_hard.cpp:13:5: error: ambiguous partial specializations for 'Ambig<int, int>'

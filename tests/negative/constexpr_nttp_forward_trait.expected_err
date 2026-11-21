@@ -1,0 +1,1 @@
+tests/negative/constexpr_nttp_forward_trait.cpp:3:1: error: template argument for non-type parameter must be a constant expression
