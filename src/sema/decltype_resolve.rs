@@ -44,6 +44,11 @@ impl Sema {
         let mut probe = self.clone();
         probe.speculating = true;
         probe.speculative_hard = false;
+        if probe.active_alias_visibility.is_none()
+            && let Some(context) = self.decltype_alias_context.get(&expr.to_source())
+        {
+            probe.active_alias_visibility = Some(context.clone());
+        }
         probe.enter_scope();
         if let Some(scope) = probe.scopes.last_mut() {
             for param in &self.signature_params {

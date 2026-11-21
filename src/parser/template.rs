@@ -370,6 +370,7 @@ impl Parser {
             TokenKind::Ident(id) => id,
             _ => return Err(CompileError::new("expected identifier", id_line, id_col)),
         };
+        let name = self.qualify_name(name);
         self.register_template_name(&name);
         self.expect(TokenKind::Assign)?;
         let ty = self.parse_type_id()?;

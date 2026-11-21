@@ -147,6 +147,7 @@ impl Parser {
                 self.advance();
                 let ty = self.parse_type_id()?;
                 self.expect(TokenKind::Semi)?;
+                let name = self.qualify_name(name);
                 self.register_type_alias(name, ty, (pos.line, pos.col));
                 return Ok(());
             }

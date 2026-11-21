@@ -15,21 +15,33 @@ fn decl_position(decl: &Decl) -> Option<(usize, usize)> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn snapshot_aliases_before(
     sema: &mut Sema,
     aliases: &[(String, (usize, usize))],
     next: &mut usize,
+    globals: &[(String, (usize, usize))],
+    next_global: &mut usize,
+    visible_globals: &mut std::collections::HashSet<String>,
     pos: (usize, usize),
     functions: &std::collections::HashSet<String>,
     usings: &std::collections::HashSet<String>,
+    using_targets: &std::collections::HashMap<String, String>,
 ) {
     while *next < aliases.len() && aliases[*next].1 < pos {
+        let alias_pos = aliases[*next].1;
+        while *next_global < globals.len() && globals[*next_global].1 < alias_pos {
+            visible_globals.insert(globals[*next_global].0.clone());
+            *next_global += 1;
+        }
         sema.alias_visibility.insert(
             aliases[*next].0.clone(),
             AliasVisibility {
                 functions: functions.clone(),
                 usings: usings.clone(),
                 namespaces: sema.open_namespaces.clone(),
+                variables: Some(visible_globals.clone()),
+                using_targets: Some(using_targets.clone()),
             },
         );
         *next += 1;
@@ -211,10 +223,17 @@ impl Sema {
             .collect();
         for (name, mut ty) in aliases {
             let visibility = self.alias_visibility.get(&name).cloned();
-            let previous = std::mem::replace(&mut self.active_alias_visibility, visibility);
+            let previous = std::mem::replace(&mut self.active_alias_visibility, visibility.clone());
             let result = self.resolve_and_instantiate_type(&mut ty, 0, 0);
             self.active_alias_visibility = previous;
             result?;
+            // A `decltype` operand is re-analyzed when the alias is used; keep
+            // the declaration-position context so a later using-declaration or
+            // variable cannot change what the alias meant.
+            if let Type::Decltype { expr, .. } = self.type_aliases.get(&name).unwrap_or(&ty) {
+                self.decltype_alias_context
+                    .insert(expr.to_source(), visibility.unwrap_or_default());
+            }
         }
         Ok(())
     }
@@ -321,6 +340,21 @@ impl Sema {
             }
         }
         aliases.sort_by_key(|entry| entry.1);
+        let mut globals: Vec<(String, (usize, usize))> = program
+            .declarations
+            .iter()
+            .filter_map(|decl| match decl {
+                Decl::GlobalVar {
+                    name, line, col, ..
+                } => Some((name.clone(), (*line, *col))),
+                _ => None,
+            })
+            .collect();
+        globals.sort_by_key(|entry| entry.1);
+        let mut visible_globals = std::collections::HashSet::new();
+        let mut next_global = 0;
+        let mut visible_using_targets: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
         let mut next_alias = 0;
         for decl in &mut program.declarations {
             if let Some(pos) = decl_position(decl) {
@@ -328,9 +362,13 @@ impl Sema {
                     self,
                     &aliases,
                     &mut next_alias,
+                    &globals,
+                    &mut next_global,
+                    &mut visible_globals,
                     pos,
                     &visible_functions,
                     &visible_usings,
+                    &visible_using_targets,
                 );
             }
             match decl {
@@ -342,6 +380,7 @@ impl Sema {
                     let resolved = self.resolve_alias_in_qualified_name(name);
                     let short_name = resolved.split("::").last().unwrap_or(&resolved).to_string();
                     visible_usings.insert(short_name.clone());
+                    visible_using_targets.insert(short_name.clone(), resolved.clone());
                     self.using_decls.insert(short_name, resolved);
                 }
                 Decl::NamespaceAlias {
@@ -481,6 +520,7 @@ impl Sema {
                                 functions: visible_functions.clone(),
                                 usings: visible_usings.clone(),
                                 namespaces: self.open_namespaces.clone(),
+                                ..Default::default()
                             },
                         );
                     }
@@ -492,9 +532,13 @@ impl Sema {
             self,
             &aliases,
             &mut next_alias,
+            &globals,
+            &mut next_global,
+            &mut visible_globals,
             (usize::MAX, usize::MAX),
             &visible_functions,
             &visible_usings,
+            &visible_using_targets,
         );
         Ok(())
     }

@@ -103,12 +103,15 @@ pub(crate) use sema_types::{ConversionFailure, DeferredMethod};
 pub use sema_types::{Scope, VarSymbol};
 use std::collections::{HashMap, HashSet};
 
-/// Function and using visibility captured at a namespace alias declaration.
+/// Function, using and variable visibility captured at a namespace alias
+/// declaration. `None` sets mean "unrestricted", used outside alias contexts.
 #[derive(Clone, Debug, Default)]
 pub(super) struct AliasVisibility {
     pub functions: HashSet<String>,
     pub usings: HashSet<String>,
     pub namespaces: Vec<String>,
+    pub variables: Option<HashSet<String>>,
+    pub using_targets: Option<HashMap<String, String>>,
 }
 
 #[derive(Clone)]
@@ -152,6 +155,9 @@ pub struct Sema {
     pub class_field_visibility: HashMap<String, AliasVisibility>,
     /// Snapshot in force while validating a namespace alias.
     pub active_alias_visibility: Option<AliasVisibility>,
+    /// Declaration-position contexts of `decltype` aliases, keyed by the
+    /// rendered operand so re-resolution keeps the original bindings.
+    pub decltype_alias_context: HashMap<String, AliasVisibility>,
     /// Whether the analysis is inside the initializer of a variable.
     ///
     /// A constructor call in an initializer reports an initialization
@@ -285,6 +291,7 @@ impl Sema {
             alias_visibility: HashMap::new(),
             class_field_visibility: HashMap::new(),
             active_alias_visibility: None,
+            decltype_alias_context: HashMap::new(),
             in_initializer: false,
             speculating: false,
             speculative_hard: false,
@@ -395,9 +402,26 @@ impl Sema {
         self.lookup_var_in_context(name, self.current_func_name.as_deref().unwrap_or(""))
     }
 
+    /// A namespace-scope variable is visible in an alias context only if it
+    /// was declared before the alias. Class members (qualified names) and
+    /// everything outside alias validation stay unrestricted.
+    fn visible_global(&self, name: &str) -> Option<&VarSymbol> {
+        let snapshot = self
+            .active_alias_visibility
+            .as_ref()
+            .and_then(|vis| vis.variables.as_ref());
+        let visible = snapshot.is_none()
+            || !name.contains("::") && snapshot.is_some_and(|names| names.contains(name));
+        if visible {
+            self.global_vars.get(name)
+        } else {
+            None
+        }
+    }
+
     pub fn lookup_var_in_context(&self, name: &str, func_name: &str) -> Option<&VarSymbol> {
         if let Some(stripped) = name.strip_prefix("::") {
-            return self.global_vars.get(stripped);
+            return self.visible_global(stripped);
         }
         for scope in self.scopes.iter().rev() {
             if let Some(var) = scope.vars.get(name) {
@@ -408,7 +432,7 @@ impl Sema {
         if !effective_func.is_empty() {
             let mut curr = effective_func;
             while let Some((ns, _)) = curr.rsplit_once("::") {
-                if let Some(var) = self.global_vars.get(&format!("{}::{}", ns, name)) {
+                if let Some(var) = self.visible_global(&format!("{}::{}", ns, name)) {
                     return Some(var);
                 }
                 curr = ns;
@@ -416,21 +440,21 @@ impl Sema {
         }
         let resolved = self.resolve_alias_in_qualified_name(name);
         let name = resolved.as_str();
-        if let Some(var) = self.global_vars.get(name) {
+        if let Some(var) = self.visible_global(name) {
             return Some(var);
         }
         if let Some(alias) = QualifiedName::new(name).implicit_alias()
-            && let Some(var) = self.global_vars.get(alias.as_ref())
+            && let Some(var) = self.visible_global(alias.as_ref())
         {
             return Some(var);
         }
         if let Some(target) = self.using_decls.get(name)
-            && let Some(var) = self.global_vars.get(target)
+            && let Some(var) = self.visible_global(target)
         {
             return Some(var);
         }
         for ns in &self.open_namespaces {
-            if let Some(var) = self.global_vars.get(&format!("{}::{}", ns, name)) {
+            if let Some(var) = self.visible_global(&format!("{}::{}", ns, name)) {
                 return Some(var);
             }
         }

@@ -1,0 +1,1 @@
+tests/negative/namespace_alias_later_variable.cpp:1:1: error: Undeclared variable or identifier 'later_var'

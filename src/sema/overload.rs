@@ -384,9 +384,11 @@ impl Sema {
                 if visible_usings.is_some_and(|visible| !visible.contains(name)) {
                     return None;
                 }
-                self.using_decls
-                    .get(name)
-                    .and_then(|full| self.functions.get(full))
+                let target = alias_vis
+                    .and_then(|vis| vis.using_targets.as_ref())
+                    .and_then(|targets| targets.get(name))
+                    .or_else(|| self.using_decls.get(name));
+                target.and_then(|full| self.functions.get(full))
             })
             .or_else(|| {
                 opened
