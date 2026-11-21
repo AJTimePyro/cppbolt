@@ -145,9 +145,10 @@ impl Parser {
             name = self.qualify_name(name);
             if self.peek() == &TokenKind::Assign {
                 self.advance();
-                let ty = self.parse_type_id()?;
+                let mut ty = self.parse_type_id()?;
                 self.expect(TokenKind::Semi)?;
                 let name = self.qualify_name(name);
+                ty.set_decltype_alias(name.clone());
                 self.register_type_alias(name, ty, (pos.line, pos.col));
                 return Ok(());
             }
@@ -164,7 +165,7 @@ impl Parser {
     fn parse_typedef_decl(&mut self) -> Result<(), CompileError> {
         let pos = self.current_pos();
         self.advance();
-        let base_type = self.parse_type()?;
+        let mut base_type = self.parse_type()?;
         if self.is_function_pointer_declarator_ahead() {
             // Function-pointer typedef: Base (*Name)(args).
             let (final_ty, id) =
@@ -185,6 +186,7 @@ impl Parser {
                 }
             };
             self.expect(TokenKind::Semi)?;
+            base_type.set_decltype_alias(name.clone());
             self.register_type_alias(name, base_type, (pos.line, pos.col));
             Ok(())
         }

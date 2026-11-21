@@ -77,6 +77,7 @@ pub enum Type {
     Decltype {
         expr: Box<Expr>,
         parenthesized: bool,
+        alias: Option<String>,
     },
     TypeParam(String),
     TemplateInstance {
@@ -106,6 +107,12 @@ pub enum Type {
 impl Type {
     pub fn is_const(&self) -> bool {
         matches!(self, Type::Const(_))
+    }
+
+    pub fn set_decltype_alias(&mut self, alias_name: String) {
+        if let Type::Decltype { alias, .. } = self {
+            *alias = Some(alias_name);
+        }
     }
 
     pub fn is_scalar(&self) -> bool {

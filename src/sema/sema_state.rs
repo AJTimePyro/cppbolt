@@ -56,7 +56,7 @@ pub struct Sema {
     /// Snapshot in force while validating a namespace alias.
     pub active_alias_visibility: Option<AliasVisibility>,
     /// Declaration-position contexts of `decltype` aliases, keyed by the
-    /// rendered operand so re-resolution keeps the original bindings.
+    /// alias name so re-resolution keeps the original bindings.
     pub decltype_alias_context: HashMap<String, AliasVisibility>,
     /// True while confirming a partial specialization: nested-type access and
     /// ambiguity failures are substitution failures in this immediate context.

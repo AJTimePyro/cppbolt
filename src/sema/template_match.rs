@@ -371,6 +371,7 @@ mod tests {
         let decltype = Type::Decltype {
             expr: Box::new(Expr::AlignofType(Type::Struct("T::type".to_string()))),
             parenthesized: false,
+            alias: None,
         };
         sema.partial_specializations
             .entry("Pick".to_string())

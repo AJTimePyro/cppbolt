@@ -51,8 +51,10 @@ impl Sema {
             Type::Decltype {
                 expr,
                 parenthesized,
+                alias,
             } => {
-                let resolved = self.resolve_decltype_type(expr, *parenthesized, line, col)?;
+                let resolved =
+                    self.resolve_decltype_type(expr, *parenthesized, alias.as_deref(), line, col)?;
                 *ty = resolved;
                 self.resolve_and_instantiate_type(ty, line, col)?;
             }

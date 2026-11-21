@@ -85,12 +85,18 @@ impl DeclSnapshot {
                 self.next_global += 1;
             }
             let name = self.aliases[self.next_alias].0.clone();
+            let mut namespaces = sema.open_namespaces.clone();
+            let mut curr = name.as_str();
+            while let Some((ns, _)) = curr.rsplit_once("::") {
+                namespaces.push(ns.to_string());
+                curr = ns;
+            }
             sema.alias_visibility.insert(
                 name,
                 AliasVisibility {
                     functions: self.visible_functions.clone(),
                     usings: self.visible_usings.clone(),
-                    namespaces: sema.open_namespaces.clone(),
+                    namespaces,
                     variables: Some(self.visible_globals.clone()),
                     using_targets: Some(self.visible_using_targets.clone()),
                 },

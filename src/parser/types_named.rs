@@ -40,6 +40,7 @@ impl Parser {
         Ok(Type::Decltype {
             expr: Box::new(expr),
             parenthesized: is_parenthesized,
+            alias: None,
         })
     }
 

@@ -80,12 +80,14 @@ pub fn substitute_type_full(ty: &Type, ctx: &mut SubstContext<'_>) -> Result<Typ
         Type::Decltype {
             expr,
             parenthesized,
+            alias,
         } => {
             let mut substituted = (**expr).clone();
             substitute_expr(&mut substituted, ctx.mapping, ctx.injected_class)?;
             Ok(Type::Decltype {
                 expr: Box::new(substituted),
                 parenthesized: *parenthesized,
+                alias: alias.clone(),
             })
         }
         Type::DependentArray(inner, param_name) => {

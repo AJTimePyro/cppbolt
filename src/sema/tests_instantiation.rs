@@ -100,7 +100,7 @@ fn speculative_decltype_check_leaves_state_unchanged() -> Result<(), Box<dyn std
     let before = sema.clone();
 
     let bad = Expr::Identifier("missing_decltype_name".to_string());
-    assert!(sema.resolve_decltype_type(&bad, false, 1, 1).is_err());
+    assert!(sema.resolve_decltype_type(&bad, false, None, 1, 1).is_err());
     assert_eq!(
         sema.struct_layouts
             .keys()
@@ -135,7 +135,7 @@ fn speculative_decltype_check_leaves_state_unchanged() -> Result<(), Box<dyn std
     assert!(sema.instantiation_stack.is_empty());
 
     let good = Expr::Identifier("g".to_string());
-    let ty = sema.resolve_decltype_type(&good, false, 1, 1)?;
+    let ty = sema.resolve_decltype_type(&good, false, None, 1, 1)?;
     assert_eq!(ty, Type::Int);
     assert_eq!(
         sema.struct_layouts

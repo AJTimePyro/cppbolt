@@ -36,6 +36,7 @@ impl Sema {
         &mut self,
         expr: &Expr,
         parenthesized: bool,
+        alias: Option<&str>,
         line: usize,
         col: usize,
     ) -> Result<Type, CompileError> {
@@ -43,7 +44,8 @@ impl Sema {
         probe.speculating = true;
         probe.speculative_hard = false;
         if probe.active_alias_visibility.is_none()
-            && let Some(context) = self.decltype_alias_context.get(&expr.to_source())
+            && let Some(name) = alias
+            && let Some(context) = self.decltype_alias_context.get(name)
         {
             probe.active_alias_visibility = Some(context.clone());
         }

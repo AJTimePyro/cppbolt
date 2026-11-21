@@ -29,6 +29,7 @@ pub(super) fn confirm_resolved_pattern(
         Type::Decltype {
             expr,
             parenthesized,
+            ..
         } => confirm_decltype(expr, *parenthesized, concrete, sema, ctx),
         Type::Struct(name) if name.contains("decltype") => {
             confirm_stringified_decltype(name, concrete, sema, ctx)
@@ -67,6 +68,7 @@ fn confirm_decltype(
     let original = Type::Decltype {
         expr: Box::new(expr.clone()),
         parenthesized,
+        alias: None,
     };
     let mut substituted = super::template_subst::substitute_type(&original, ctx.bindings, None)?;
     super::template_subst_func::mark_dependent_nested(&original, &mut substituted, ctx.bindings);
@@ -75,11 +77,18 @@ fn confirm_decltype(
     let Type::Decltype {
         expr: resolved_expr,
         parenthesized,
+        alias,
     } = &substituted
     else {
         return Ok(false);
     };
-    match sema.resolve_decltype_type(resolved_expr, *parenthesized, ctx.pos.0, ctx.pos.1) {
+    match sema.resolve_decltype_type(
+        resolved_expr,
+        *parenthesized,
+        alias.as_deref(),
+        ctx.pos.0,
+        ctx.pos.1,
+    ) {
         Ok(resolved) => Ok(&resolved == concrete),
         Err(error) => {
             if error.kind == ErrorKind::Substitution {

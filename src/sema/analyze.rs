@@ -190,12 +190,9 @@ impl Sema {
             let result = self.resolve_and_instantiate_type(&mut ty, pos.0, pos.1);
             self.active_alias_visibility = previous;
             result?;
-            // A `decltype` operand is re-analyzed when the alias is used; keep
-            // the declaration-position context so a later using-declaration or
-            // variable cannot change what the alias meant.
-            if let Type::Decltype { expr, .. } = self.type_aliases.get(&name).unwrap_or(&ty) {
+            if let Type::Decltype { .. } = self.type_aliases.get(&name).unwrap_or(&ty) {
                 self.decltype_alias_context
-                    .insert(expr.to_source(), visibility.unwrap_or_default());
+                    .insert(name.clone(), visibility.unwrap_or_default());
             }
         }
         Ok(())

@@ -179,7 +179,8 @@ impl Parser {
         let name = self.qualify_name(name);
         self.register_template_name(&name);
         self.expect(TokenKind::Assign)?;
-        let ty = self.parse_type_id()?;
+        let mut ty = self.parse_type_id()?;
+        ty.set_decltype_alias(name.clone());
         self.expect(TokenKind::Semi)?;
         Ok(vec![Decl::Template(TemplateDecl {
             params,
