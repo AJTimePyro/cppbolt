@@ -70,6 +70,13 @@ impl Sema {
         // aborts before code generation.
         self.retry_deferred_methods()?;
         program.declarations.append(&mut self.synthesized_decls);
+        // Class-template specializations are synthesized after the first
+        // initializer pass. Analyze their NSDMIs now so unqualified member
+        // calls bind to the specialization's methods before codegen.
+        self.analyze_field_initializers(program)?;
+        // Member calls in those NSDMIs can instantiate pending methods into
+        // `synthesized_decls`; surface them to the program for codegen.
+        program.declarations.append(&mut self.synthesized_decls);
         Ok(())
     }
 

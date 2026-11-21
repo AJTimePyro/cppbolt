@@ -898,3 +898,4 @@ cxx17/namespace_alias_distinct_scope
 negative/namespace_alias_later_variable
 cxx17/void_t_nested_type_access
 negative/void_t_private_hard_error
+cxx17/template_nsdmi_member_call
