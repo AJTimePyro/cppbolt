@@ -1,0 +1,1 @@
+tests/negative/two_phase_hidden_friend_ordinary.cpp:2:14: error: Undefined function 'hidden'

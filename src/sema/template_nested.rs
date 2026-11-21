@@ -5,7 +5,7 @@ use crate::ast::decl::{Decl, FunctionDecl, StructFieldDecl};
 use crate::ast::template::{TemplateClass, TemplateDecl, TemplateKind, TemplateParam};
 use crate::ast::types::Type;
 use crate::name::QualifiedName;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 struct NestedStructParams<'a> {
     name: &'a str,
@@ -33,7 +33,7 @@ impl Sema {
         inst_name: &str,
         mapping: &mut HashMap<String, TemplateArg>,
         pos: (usize, usize),
-    ) {
+    ) -> Result<(), CompileError> {
         let (line, col) = pos;
         for nested in &template_class.nested_structs {
             let nested_name = match nested {
@@ -58,7 +58,7 @@ impl Sema {
             }
         }
 
-        self.populate_instantiation_member_aliases(template_class, inst_name, mapping, line, col);
+        self.populate_instantiation_member_aliases(template_class, inst_name, mapping, line, col)
     }
 
     pub(super) fn prepare_instantiation_mapping(
@@ -68,15 +68,41 @@ impl Sema {
         args: &[Type],
         inst_name: &str,
         pos: (usize, usize),
-    ) -> HashMap<String, TemplateArg> {
+    ) -> Result<HashMap<String, TemplateArg>, CompileError> {
         let mut mapping = super::template_deduce::build_template_arg_map(template_params, args);
         self.register_instantiation_nested_and_aliases(
             template_class,
             inst_name,
             &mut mapping,
             pos,
-        );
-        mapping
+        )?;
+        Ok(mapping)
+    }
+
+    /// Substitutes a member alias target and resolves its dependent nested
+    /// types. A bad nested type here is an error in the instantiated class,
+    /// not in the caller's signature.
+    fn substitute_member_alias_type(
+        &mut self,
+        ty: &Type,
+        mapping: &HashMap<String, TemplateArg>,
+        nested: &HashSet<String>,
+        line: usize,
+        col: usize,
+    ) -> Result<Type, CompileError> {
+        use super::template_subst_func::mark_dependent_nested;
+        let mut subst_ty = substitute_type(ty, mapping, None)?;
+        mark_dependent_nested(ty, &mut subst_ty, mapping);
+        if let Type::DependentNested(name) = &subst_ty {
+            let member = name.rsplit_once("::").map_or(name.as_str(), |(_, m)| m);
+            // Nested struct layouts are registered later in this same
+            // instantiation, so leave their names for that pass to resolve.
+            if nested.contains(member) {
+                return Ok(Type::Struct(name.clone()));
+            }
+        }
+        self.resolve_member_alias_chain(&mut subst_ty, line, col)?;
+        Ok(subst_ty)
     }
 
     fn populate_instantiation_member_aliases(
@@ -86,11 +112,23 @@ impl Sema {
         mapping: &mut HashMap<String, TemplateArg>,
         line: usize,
         col: usize,
-    ) {
+    ) -> Result<(), CompileError> {
         let plain_tmpl = QualifiedName::new(&template_class.name).plain();
         let plain_inst = QualifiedName::new(inst_name).plain();
         let is_std = QualifiedName::new(inst_name).in_std()
             || QualifiedName::new(&template_class.name).in_std();
+        let nested: HashSet<String> = template_class
+            .nested_structs
+            .iter()
+            .filter_map(|decl| match decl {
+                Decl::StructDecl { name, .. } => Some(
+                    name.rsplit_once("::")
+                        .map_or(name.as_str(), |(_, short)| short)
+                        .to_string(),
+                ),
+                _ => None,
+            })
+            .collect();
 
         let mut changed = true;
         let mut iterations = 0;
@@ -106,11 +144,10 @@ impl Sema {
                 let Some((owner, member)) = alias_name.rsplit_once("::") else {
                     continue;
                 };
-                if QualifiedName::new(owner).plain() == plain_tmpl
-                    && !mapping.contains_key(member)
-                    && let Ok(mut subst_ty) = substitute_type(&ty, mapping, None)
+                if QualifiedName::new(owner).plain() == plain_tmpl && !mapping.contains_key(member)
                 {
-                    let _ = self.resolve_and_instantiate_type(&mut subst_ty, line, col);
+                    let subst_ty =
+                        self.substitute_member_alias_type(&ty, mapping, &nested, line, col)?;
                     mapping.insert(member.to_string(), TemplateArg::Type(subst_ty.clone()));
                     self.type_aliases
                         .insert(format!("{inst_name}::{member}"), subst_ty.clone());
@@ -126,6 +163,7 @@ impl Sema {
                 }
             }
         }
+        Ok(())
     }
 
     pub(super) fn instantiate_nested_structs(
@@ -225,15 +263,18 @@ impl Sema {
 
         let subst_inner_tmpl = TemplateClass {
             name: nested_tmpl_name.clone(),
+            pattern_args: None,
             is_class: p.inner_tmpl.is_class,
             is_final: p.inner_tmpl.is_final,
             base_classes: p.inner_tmpl.base_classes.clone(),
             base_access: p.inner_tmpl.base_access.clone(),
             fields: subst_fields,
             methods: subst_methods,
+            friends: Vec::new(),
             static_fields: subst_static_fields,
             private_members: p.inner_tmpl.private_members.clone(),
             nested_structs: p.inner_tmpl.nested_structs.clone(),
+            member_aliases: p.inner_tmpl.member_aliases.clone(),
             alignment: p.inner_tmpl.alignment.clone(),
         };
 
@@ -259,7 +300,7 @@ impl Sema {
         if !self.class_templates.contains_key(name)
             && let Some((owner, _)) = name.rsplit_once("::")
         {
-            self.ensure_class_instantiated(owner, line, col);
+            let _ = self.ensure_class_instantiated(owner, line, col);
         }
         if !self.class_templates.contains_key(name)
             && let Some(cls) = &self.current_class

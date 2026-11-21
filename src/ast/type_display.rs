@@ -1,6 +1,35 @@
 //! C++ spelling of AST types, split from `types.rs` to keep that file under the size cap.
 
-use super::types::{FunctionQualifiers, Type};
+use super::types::{FunctionQualifiers, Type, UNBOUNDED_ARRAY};
+
+/// C++ spells array bounds outermost first (`int[2][3]` is an array of two
+/// `int[3]`), while `Type::Array` nests the element type. Render the whole
+/// declarator so a stringified type reparses to the same type.
+fn array_type_spelling(ty: &Type) -> String {
+    fn collect(ty: &Type, bounds: &mut Vec<String>) -> String {
+        match ty {
+            Type::Array(inner, n) => {
+                let bound = if *n == UNBOUNDED_ARRAY {
+                    "[]".to_string()
+                } else {
+                    format!("[{n}]")
+                };
+                let base = collect(inner, bounds);
+                bounds.insert(0, bound);
+                base
+            }
+            Type::DependentArray(inner, param) => {
+                let base = collect(inner, bounds);
+                bounds.insert(0, format!("[{param}]"));
+                base
+            }
+            other => other.to_c_type(),
+        }
+    }
+    let mut bounds = Vec::new();
+    let base = collect(ty, &mut bounds);
+    format!("{base}{}", bounds.concat())
+}
 
 fn function_type(
     return_type: &Type,
@@ -64,8 +93,7 @@ impl Type {
             Type::Pointer(inner) => format!("{} *", inner.to_c_type()),
             Type::Reference(inner) => format!("{} &", inner.to_c_type()),
             Type::RvalueReference(inner) => format!("{} &&", inner.to_c_type()),
-            Type::Array(inner, n) => format!("{}[{}]", inner.to_c_type(), n),
-            Type::DependentArray(inner, param) => format!("{}[{}]", inner.to_c_type(), param),
+            Type::Array(_, _) | Type::DependentArray(_, _) => array_type_spelling(self),
             Type::NonType(n) => n.to_string(),
             Type::DependentNonType(s) => {
                 if let Some(addr) = s.strip_prefix("@addr:") {
@@ -85,6 +113,8 @@ impl Type {
                     .join(", ");
                 format!("{}<{}>", name, formatted)
             }
+            Type::DependentNested(name) => name.clone(),
+            Type::Decltype { expr, .. } => format!("decltype({})", expr.to_source()),
             Type::Struct(name) | Type::Enum(name) => match name.as_str() {
                 "istream" | "ostream" | "ios_base" | "string" => format!("std::{}", name),
                 _ => name.clone(),

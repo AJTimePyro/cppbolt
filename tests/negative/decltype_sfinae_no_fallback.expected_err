@@ -1,0 +1,1 @@
+tests/negative/decltype_sfinae_no_fallback.cpp:3:47: error: no matching function for call to 'f': substitution failure: No member named 'value' in struct 'No'

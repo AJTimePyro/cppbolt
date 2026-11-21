@@ -54,6 +54,12 @@ pub struct FunctionDecl {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Decl {
     Function(FunctionDecl),
+    /// A friend function defined in a class. Registered for ADL through the
+    /// class, never through ordinary unqualified lookup.
+    FriendFunction {
+        class_name: String,
+        func: FunctionDecl,
+    },
     GlobalVar {
         name: String,
         ty: Type,
@@ -87,8 +93,16 @@ pub enum Decl {
         line: usize,
         col: usize,
     },
-    UsingNamespace(String),
-    UsingDecl(String),
+    UsingNamespace {
+        name: String,
+        line: usize,
+        col: usize,
+    },
+    UsingDecl {
+        name: String,
+        line: usize,
+        col: usize,
+    },
     NamespaceAlias {
         alias: String,
         target: String,
@@ -102,6 +116,9 @@ pub enum Decl {
 pub struct Program {
     pub declarations: Vec<Decl>,
     pub type_aliases: HashMap<String, Type>,
+    /// Names of type aliases declared at namespace scope, as opposed to member
+    /// aliases whose names are qualified by their owning class.
+    pub namespace_type_aliases: HashMap<String, (usize, usize)>,
 }
 
 #[cfg(test)]

@@ -1,0 +1,1 @@
+tests/negative/qualified_alias_missing_member.cpp:6:5: error: no type named 'type' in 'A::Disable<int>'

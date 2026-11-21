@@ -5,14 +5,51 @@ use super::pack_expansion::{
     pack_element_name, rename_pack_identifiers, validate_pack_lengths,
 };
 use super::template_name::substitute_template_name;
-use super::template_subst::{substitute_expr, substitute_type};
-use super::template_subst_stmt::substitute_stmt;
+use super::template_subst::substitute_expr;
+use super::template_subst_stmt::substitute_stmt_with_sema;
 use crate::ast::FunctionQualifiers;
 use crate::ast::decl::{FunctionDecl, Param};
 use crate::ast::expr::Expr;
 use crate::ast::types::Type;
-use crate::diagnostics::CompileError;
+use crate::diagnostics::{CompileError, SubstitutionFailure};
 use std::collections::{HashMap, HashSet};
+
+/// Substitution inputs shared by the type, parameter and declaration helpers.
+/// Bundling them keeps the public entry points within the argument limit.
+pub struct SubstContext<'a> {
+    pub mapping: &'a HashMap<String, TemplateArg>,
+    pub injected_class: Option<(&'a str, &'a Type)>,
+    pub pos: (usize, usize),
+    pub struct_aligns: Option<&'a HashMap<String, usize>>,
+    pub sema: Option<&'a mut crate::sema::Sema>,
+}
+
+impl<'a> SubstContext<'a> {
+    /// Reborrow with a different mapping (e.g. one slice of a pack).
+    pub(super) fn with_mapping<'b>(
+        &'b mut self,
+        mapping: &'b HashMap<String, TemplateArg>,
+    ) -> SubstContext<'b> {
+        SubstContext {
+            mapping,
+            injected_class: self.injected_class,
+            pos: self.pos,
+            struct_aligns: self.struct_aligns,
+            sema: self.sema.as_deref_mut(),
+        }
+    }
+
+    /// Reborrow without struct alignment data, as nested type substitution does.
+    pub(super) fn without_aligns(&mut self) -> SubstContext<'_> {
+        SubstContext {
+            mapping: self.mapping,
+            injected_class: self.injected_class,
+            pos: self.pos,
+            struct_aligns: None,
+            sema: self.sema.as_deref_mut(),
+        }
+    }
+}
 
 fn substitute_func_name(func_name: &str, injected_class: Option<(&str, &Type)>) -> String {
     if let Some((cname, target_ty)) = injected_class {
@@ -31,12 +68,134 @@ fn substitute_func_name(func_name: &str, injected_class: Option<(&str, &Type)>) 
     func_name.to_string()
 }
 
+/// A qualified type whose base mentions a template parameter is dependent:
+/// resolving it may fail in the immediate context and discard the candidate.
+fn is_dependent_qualified_name(name: &str, mapping: &HashMap<String, TemplateArg>) -> bool {
+    let Some((base, _)) = name.rsplit_once("::") else {
+        return false;
+    };
+    if mapping.contains_key(base) {
+        return true;
+    }
+    let Some(open) = base.find('<') else {
+        return false;
+    };
+    let args = &base[open + 1..base.rfind('>').unwrap_or(base.len())];
+    args.split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+        .any(|part| mapping.contains_key(part))
+}
+
+/// Records dependent qualified names formed by substitution so type resolution
+/// can reject a missing nested type as a substitution failure.
+pub(super) fn mark_dependent_nested(
+    original: &Type,
+    substituted: &mut Type,
+    mapping: &HashMap<String, TemplateArg>,
+) {
+    let dependent_name = match (original, &*substituted) {
+        (Type::Struct(orig), Type::Struct(name)) if is_dependent_qualified_name(orig, mapping) => {
+            Some(name.clone())
+        }
+        _ => None,
+    };
+    if let Some(name) = dependent_name {
+        *substituted = Type::DependentNested(name);
+        return;
+    }
+    match (original, substituted) {
+        (Type::Const(a), Type::Const(b))
+        | (Type::Pointer(a), Type::Pointer(b))
+        | (Type::Reference(a), Type::Reference(b))
+        | (Type::RvalueReference(a), Type::RvalueReference(b))
+        | (Type::PackExpansion(a), Type::PackExpansion(b))
+        | (Type::DependentArray(a, _), Type::DependentArray(b, _))
+        | (Type::Array(a, _), Type::Array(b, _)) => mark_dependent_nested(a, b, mapping),
+        (
+            Type::Function {
+                return_type: a,
+                param_types: ap,
+                ..
+            },
+            Type::Function {
+                return_type: b,
+                param_types: bp,
+                ..
+            },
+        ) => {
+            mark_dependent_nested(a, b, mapping);
+            for (orig, subst) in ap.iter().zip(bp.iter_mut()) {
+                mark_dependent_nested(orig, subst, mapping);
+            }
+        }
+        (
+            Type::MemberPointer { member_type: a, .. },
+            Type::MemberPointer { member_type: b, .. },
+        )
+        | (
+            Type::BoundMemberFunction { member_type: a, .. },
+            Type::BoundMemberFunction { member_type: b, .. },
+        )
+        | (Type::Aligned(a, _), Type::Aligned(b, _))
+        | (Type::DependentAlignas(a, _), Type::DependentAlignas(b, _)) => {
+            mark_dependent_nested(a, b, mapping);
+        }
+        (Type::TemplateInstance { args: a, .. }, Type::TemplateInstance { args: b, .. }) => {
+            for (orig, subst) in a.iter().zip(b.iter_mut()) {
+                mark_dependent_nested(orig, subst, mapping);
+            }
+        }
+        (Type::Decltype { expr: a, .. }, Type::Decltype { expr: b, .. }) => {
+            mark_expr_dependent_nested(a, b, mapping);
+        }
+        _ => {}
+    }
+}
+
+/// Marks nested names formed by substitution inside a `decltype` operand, so
+/// a missing nested type becomes a substitution failure rather than being
+/// silently treated as a struct name.
+fn mark_expr_dependent_nested(
+    original: &Expr,
+    substituted: &mut Expr,
+    mapping: &HashMap<String, TemplateArg>,
+) {
+    // Only `sizeof`/`alignof` carry a type in the patterns that reach here.
+    if let (Expr::SizeofType(a), Expr::SizeofType(b))
+    | (Expr::AlignofType(a), Expr::AlignofType(b)) = (original, substituted)
+    {
+        mark_dependent_nested(a, b, mapping);
+    }
+}
+
+fn substitute_param_type(
+    ty: &Type,
+    map: &HashMap<String, TemplateArg>,
+    injected_class: Option<(&str, &Type)>,
+    mark_dependent: bool,
+    sema: Option<&mut crate::sema::Sema>,
+) -> Result<Type, CompileError> {
+    let mut ctx = SubstContext {
+        mapping: map,
+        injected_class,
+        pos: (0, 0),
+        struct_aligns: None,
+        sema,
+    };
+    let mut subst = super::template_subst::substitute_type_full(ty, &mut ctx)?;
+    if mark_dependent {
+        mark_dependent_nested(ty, &mut subst, map);
+    }
+    Ok(subst)
+}
+
 fn substitute_params(
     params: &[Param],
     unbound_pack_names: &HashSet<String>,
-    mapping: &HashMap<String, TemplateArg>,
-    injected_class: Option<(&str, &Type)>,
+    mark_dependent: bool,
+    ctx: &mut SubstContext<'_>,
 ) -> Result<Vec<Param>, CompileError> {
+    let mapping = ctx.mapping;
+    let injected_class = ctx.injected_class;
     let mut result = Vec::new();
     for p in params {
         if p.is_pack {
@@ -45,7 +204,13 @@ fn substitute_params(
             if !still_free.is_empty() {
                 result.push(Param {
                     name: p.name.clone(),
-                    ty: substitute_type(&p.ty, mapping, injected_class)?,
+                    ty: substitute_param_type(
+                        &p.ty,
+                        mapping,
+                        injected_class,
+                        mark_dependent,
+                        ctx.sema.as_deref_mut(),
+                    )?,
                     default_val: None,
                     is_pack: true,
                 });
@@ -59,7 +224,13 @@ fn substitute_params(
                 .unwrap_or(0);
             for i in 0..pack_len {
                 let subst_map = build_slice_mapping(mapping, &known, i);
-                let ty = substitute_type(&p.ty, &subst_map, injected_class)?;
+                let ty = substitute_param_type(
+                    &p.ty,
+                    &subst_map,
+                    injected_class,
+                    mark_dependent,
+                    ctx.sema.as_deref_mut(),
+                )?;
                 let stripped = match ty {
                     Type::PackExpansion(inner) => *inner,
                     other => other,
@@ -78,7 +249,13 @@ fn substitute_params(
             }
             result.push(Param {
                 name: p.name.clone(),
-                ty: substitute_type(&p.ty, mapping, injected_class)?,
+                ty: substitute_param_type(
+                    &p.ty,
+                    mapping,
+                    injected_class,
+                    mark_dependent,
+                    ctx.sema.as_deref_mut(),
+                )?,
                 default_val,
                 is_pack: false,
             });
@@ -167,12 +344,19 @@ fn substitute_ctor_initializers(
     Ok(result)
 }
 
-pub fn substitute_function(
+/// Substitutes only the parts of a declaration that form its signature.
+///
+/// This is the immediate context for SFINAE: failures here discard the
+/// enclosing template candidate. Bodies and constructor initializers are left
+/// untouched and are substituted later by `substitute_function_body`.
+fn substitute_signature(
     func: &FunctionDecl,
-    mapping: &HashMap<String, TemplateArg>,
-    injected_class: Option<(&str, &Type)>,
     new_name: Option<String>,
-) -> Result<FunctionDecl, CompileError> {
+    mark_dependent: bool,
+    ctx: &mut SubstContext<'_>,
+) -> Result<(FunctionDecl, HashMap<String, TemplateArg>), CompileError> {
+    let mapping = ctx.mapping;
+    let injected_class = ctx.injected_class;
     let mut remaining_template_params = Vec::new();
     let mut active_mapping = mapping.clone();
     for p in &func.params {
@@ -201,32 +385,108 @@ pub fn substitute_function(
         .filter(|p| p.is_pack && !mapping.contains_key(&p.name))
         .map(|p| p.name.clone())
         .collect();
-    let name = new_name.unwrap_or_else(|| substitute_func_name(&func.name, injected_class));
-    let return_type = substitute_type(&func.return_type, mapping, injected_class)?;
-    let params = substitute_params(&func.params, &unbound_pack_names, mapping, injected_class)?;
-    let ctor_initializers =
+
+    let decl = {
+        let mut active_ctx = ctx.with_mapping(mapping);
+        let mut return_type =
+            super::template_subst::substitute_type_full(&func.return_type, &mut active_ctx)?;
+        if mark_dependent {
+            mark_dependent_nested(&func.return_type, &mut return_type, mapping);
+        }
+        FunctionDecl {
+            qualifiers: FunctionQualifiers::default(),
+            name: new_name.unwrap_or_else(|| substitute_func_name(&func.name, injected_class)),
+            return_type,
+            params: substitute_params(
+                &func.params,
+                &unbound_pack_names,
+                mark_dependent,
+                &mut active_ctx,
+            )?,
+            body: func.body.clone(),
+            is_virtual: func.is_virtual,
+            is_pure_virtual: func.is_pure_virtual,
+            is_const: func.is_const,
+            is_explicit: func.is_explicit,
+            ref_qualifier: func.ref_qualifier,
+            is_static: func.is_static,
+            ctor_initializers: func.ctor_initializers.clone(),
+            template_params: remaining_template_params,
+            line: func.line,
+            col: func.col,
+        }
+    };
+    Ok((decl, active_mapping))
+}
+
+/// Substitutes a declaration's body and constructor initializers. Errors here
+/// are genuine semantic errors, not substitution failures.
+pub fn substitute_function_body(
+    func: &mut FunctionDecl,
+    mapping: &HashMap<String, TemplateArg>,
+    injected_class: Option<(&str, &Type)>,
+) -> Result<(), CompileError> {
+    substitute_function_body_with_sema(func, mapping, injected_class, None)
+}
+
+pub fn substitute_function_body_with_sema(
+    func: &mut FunctionDecl,
+    mapping: &HashMap<String, TemplateArg>,
+    injected_class: Option<(&str, &Type)>,
+    sema: Option<&mut crate::sema::Sema>,
+) -> Result<(), CompileError> {
+    func.ctor_initializers =
         substitute_ctor_initializers(&func.ctor_initializers, mapping, injected_class)?;
-
-    let mut body = func.body.clone();
-    if let Some(body_stmt) = &mut body {
-        substitute_stmt(body_stmt, mapping, injected_class)?;
+    if let Some(body_stmt) = &mut func.body {
+        substitute_stmt_with_sema(body_stmt, mapping, injected_class, sema)?;
     }
+    Ok(())
+}
 
-    Ok(FunctionDecl {
-        qualifiers: FunctionQualifiers::default(),
-        name,
-        return_type,
-        params,
-        body,
-        is_virtual: func.is_virtual,
-        is_pure_virtual: func.is_pure_virtual,
-        is_const: func.is_const,
-        is_explicit: func.is_explicit,
-        ref_qualifier: func.ref_qualifier,
-        is_static: func.is_static,
-        ctor_initializers,
-        template_params: remaining_template_params,
-        line: func.line,
-        col: func.col,
-    })
+/// Signature-only substitution for overload candidate formation. The returned
+/// mapping includes pack names introduced by the declaration and is needed when
+/// the chosen candidate's body is substituted later.
+pub fn substitute_function_signature(
+    func: &FunctionDecl,
+    mapping: &HashMap<String, TemplateArg>,
+    new_name: Option<String>,
+    sema: Option<&mut crate::sema::Sema>,
+) -> Result<(FunctionDecl, HashMap<String, TemplateArg>), SubstitutionFailure> {
+    let mut ctx = SubstContext {
+        mapping,
+        injected_class: None,
+        pos: (0, 0),
+        struct_aligns: None,
+        sema,
+    };
+    substitute_signature(func, new_name, true, &mut ctx).map_err(Into::into)
+}
+
+pub fn substitute_function(
+    func: &FunctionDecl,
+    mapping: &HashMap<String, TemplateArg>,
+    injected_class: Option<(&str, &Type)>,
+    new_name: Option<String>,
+) -> Result<FunctionDecl, CompileError> {
+    substitute_function_with_sema(func, mapping, injected_class, new_name, None)
+}
+
+pub fn substitute_function_with_sema(
+    func: &FunctionDecl,
+    mapping: &HashMap<String, TemplateArg>,
+    injected_class: Option<(&str, &Type)>,
+    new_name: Option<String>,
+    mut sema: Option<&mut crate::sema::Sema>,
+) -> Result<FunctionDecl, CompileError> {
+    let mut signature_ctx = SubstContext {
+        mapping,
+        injected_class,
+        pos: (0, 0),
+        struct_aligns: None,
+        sema: sema.as_deref_mut(),
+    };
+    let (mut decl, active_mapping) =
+        substitute_signature(func, new_name, false, &mut signature_ctx)?;
+    substitute_function_body_with_sema(&mut decl, &active_mapping, injected_class, sema)?;
+    Ok(decl)
 }

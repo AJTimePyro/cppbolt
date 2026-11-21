@@ -8,6 +8,108 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Static Assert & Constant Evaluation (C++17)
+- `static_assert` conditions now reject non-constant expressions, including runtime variables and non-constexpr function calls, with an explicit compile error. Diagnostics point to the failing condition expression rather than the keyword token.
+- Qualified static constexpr members and variable template specializations fold into assertion conditions before evaluation.
+
+### Two-Phase Lookup & ADL (C++17)
+- Local variables and references initialized from dependent expressions (`auto x = t;`) are tracked as dependent names, preserving instantiation-time ADL for subsequent calls.
+- Argument-dependent lookup skips enclosing classes of nested types, preventing unqualified calls from invoking static member functions of outer classes.
+- Namespace alias lookup keys visibility snapshots by alias name, preventing collisions when separate aliases share identical `decltype` expressions.
+
+### Architecture & Memory Optimization
+- Iterative expression dropping replaces drained nodes with leaf placeholders before dropping, eliminating redundant allocations and inner drop traversals.
+- Refactored semantic analysis and parser modules to comply with repository census limits (all source files under 500 lines, functions under 80 lines, and at most five parameters).
+
+### Dependent Nested Types (C++17)
+- Nested-member validation reads the definition recorded by class-template instantiation instead of matching partial specializations a second time. The compiler records each definition's own member aliases, so a typedef on the primary cannot supply a member to a partial specialization that omits it.
+- A missing nested member on a concrete class-template specialization is no
+  longer hidden by a same-named member on the primary or on another partial
+  specialization. Namespace-scope aliases with an invalid nested-type chain now
+  fail at the alias declaration instead of yielding an opaque type.
+- An invalid nested type in an immediate substitution context is classified as
+  a substitution failure, so SFINAE fallbacks and primary partial
+  specializations are selected. Errors from instantiating another template stay
+  hard and are propagated even when another overload could serve the call.
+- Alias-chain resolution detects revisiting a name as a cycle and uses an
+  explicit 500-step guard only for ever-growing type names. Added positive and
+  negative regressions for one-, two- and three-level chains, SFINAE fallback,
+  invalid namespace-scope aliases, and nested-instantiation hard errors.
+
+### Type-System Compatibility (C++17)
+- Multidimensional array types are now spelled with the outermost bound first,
+  so stringify/reparse cycles preserve bound order. Partial-specialization
+  deduction now binds `T[N][M]` to `N` then `M`, matching Clang and GCC, and
+  bounded (`T[N]`) and unbounded (`T[]`) array patterns no longer cross-match.
+- Member alias targets resolve through chains of dependent nested `::type`
+  names instead of stopping after one level. Alias and nested-type arguments to
+  variable templates and static const members are expanded before instantiation.
+- Added regression tests for both compiler fixes and refreshed the
+  `<type_traits>` integration notes. The `remove_all_extents` shim keeps its
+  unrolled multi-dimensional cases because its one-dimensional pattern yields
+  the element type directly.
+
+### Partial Specialization Matching (C++17)
+- A `decltype` nested inside a qualified dependent type in a partial-specialization pattern is now substituted and resolved during confirmation, so patterns like `H<T, typename Box<decltype(T())>::type>` select the specialization. Parameters are still deduced from the other pattern arguments, and an invalid operand rejects the candidate instead of becoming a hard error. Added a regression covering matching, non-matching, substitution failure, and alias interaction.
+- Nested `decltype` operands are rendered as re-parsable C++ source when the qualified pattern is stringified. Cast, ternary, shift, array-subscript and `declval` operands now select the specialization instead of falling back to the primary. An operand that cannot be rendered is a hard error. Added matching and non-matching regressions for each operand form and a negative test for the unrenderable case.
+
+### Substitution Failure (C++17)
+- A qualified type that names a missing member of a concrete class-template specialization is now a hard error outside substitution, so `enable_if<false, T>::type` in a namespace-scope alias or function signature is rejected. Nested structs declared by a template remain valid, and dependent member accesses still reject only the candidate during substitution.
+
+### Constant Expressions (C++17)
+- A `static const` integral member of a non-template class now folds to its constant value during non-type template argument resolution, so `Box<C::n>` works with a qualified class name and in constant expressions such as `C::n + 1`. The member's own initializer must still be a valid integral constant expression; mutable members, members without an initializer, and non-integral or unresolved values remain invalid template arguments. Added positive and negative regression tests.
+
+### Partial Specialization Matching (C++17)
+- Alias templates in partial-specialization patterns are now expanded before deduction, so `S<Ptr<T>>` deduces `T` from `S<int*>`. Candidates are ranked by the expanded pattern, so an alias to `T*` no longer outranks a more specialized `const T*` pattern.
+- An alias whose expansion mixes a deducible component and a dependent nested type (for example `V<T> = Pair<T, typename T::type>`) now deduces from the structural part and confirms the fully substituted pattern. A dependent component no longer blocks deduction, and an alias nested inside another class-template pattern is compared after normalizing both sides.
+- Partial-specialization declarations are now checked at declaration time. A template parameter that cannot be deduced from the argument list is a hard error instead of being accepted and silently ignored during selection. A parameter deduced from one argument may still appear in a non-deduced context elsewhere.
+- Added regression tests for alias deduction and ranking, dependent nested types, non-deducible declarations, and valid non-deduced-context combinations.
+
+### SFINAE Completion Audit (C++17)
+- Namespace-scope `constexpr` values now fold into non-type template arguments, including negated and trait-derived values and chains between constants (`constexpr bool b = !a;`). A constexpr global used as an NTTP no longer fails as a non-constant expression, and a constant is visible only after its declaration is reached, matching Clang and GCC. `static_assert` keeps folding against all program constants so a forward reference cannot silently pass.
+- `static_assert` now folds qualified static constexpr members and variable-template values such as `S::value` and `std::is_integral_v<int>` into the condition before judging it, so a false assertion is rejected. A condition that cannot be evaluated and is not well-formed is rejected instead of being silently accepted; well-formed but unevaluable forms such as member-pointer comparisons keep their accepted behavior.
+- Explicit template arguments now bind a parameter pack that is not the last template parameter; remaining explicit arguments go to the pack and trailing parameters are deduced from the call. Pack arguments carry their arity in the specialization identity, so an empty pack cannot collide with a one-element `int` pack, and a plain call re-runs deduction instead of binding to an earlier cached specialization.
+- Removed stray debug output that polluted negative-test diagnostics, and extended instantiation snapshots to cover hidden-friend tables. Dependent non-type arguments and nested angle brackets now stay intact during two-phase lookup and substitution. Added regression tests for constexpr NTTP globals, non-trailing packs, and undefined NTTP rejection; documented the remaining out-of-subset SFINAE cases in `supported-cpp.md`.
+
+### Two-Phase Lookup and ADL (C++17)
+- Ordinary lookup inside a function template now uses the overloads visible at the template's definition. A function declared later in the file can no longer rebind a name in that template.
+- Dependent unqualified calls collect ADL candidates from the associated namespaces and classes of the instantiated arguments, and merge them with ordinary candidates. Associated entities include base classes, template type arguments, pointers, references and arrays. Qualified calls do not use ADL.
+- Friend functions defined inside a class are parsed and registered for ADL through that class. Ordinary unqualified lookup cannot find them.
+- Dependent calls in trailing return types, `decltype` and `void_t` detection continue to use substitution failures for invalid immediate-context calls while nested template instantiation errors stay hard.
+- Function and member templates declared after an earlier template no longer enter that template's ordinary lookup. Self-recursive templates still see themselves.
+- ADL also runs for names shared with builtins such as `free`, and friend operators parse as function names.
+- Non-dependent calls inside templates now freeze both ordinary lookup and ADL at the template definition. Dependent calls keep instantiation-time ADL. Definition snapshots also cover class-template methods, member-template signatures and using declarations.
+- Hidden friends declared in class templates are registered for each concrete specialization and found through ADL only. Repeated instantiation does not duplicate them. Their bodies are analyzed like other instantiated functions, so default arguments apply.
+- Calls to a class-template's own hidden friend from its methods keep instantiation-time ADL. A later `using namespace` does not enter an earlier template's lookup.
+- Operator calls inside templates now use the same dependence rules as named calls. The compiler classifies binary and unary operator expressions on the definition AST, so a non-dependent operator uses definition-time lookup and a dependent operator keeps instantiation-time ADL. A non-dependent class-type operator with no definition-visible overload is a compile error, and codegen finds unary operators in the operand's associated namespace.
+- The parser accepts friend function templates inside a class or class template, and semantic analysis registers them for ADL per class or specialization. Each keeps its own signature; repeated instantiation or lookup does not duplicate candidates, and ordinary unqualified lookup still cannot see them.
+- Fold expansion gives generated operator nodes the fold's source position. The dependence classifier now marks that position when the pack pattern is dependent, so a fold over a user-defined operator no longer fails the non-dependent operator check.
+- Added tests for friend visibility across definition points, friend templates in plain classes, dependent folds with overloaded operators, and dependent-call classification in nested calls, nested expressions, class-template methods, member templates, and calls sharing a source line.
+
+### Standard Library (C++17)
+- Added C++17 SFINAE library traits: `std::enable_if`/`enable_if_t`, `std::void_t`, `std::declval`, and `std::is_integral`/`is_integral_v` in `<type_traits>` and `<utility>`. They reuse the compiler's substitution-failure machinery instead of special-casing names. Supporting changes fold static const data members and variable template specializations into non-type arguments, expand alias templates when checking partial-specialization patterns, parse unnamed template parameters and variable templates, treat `volatile` as a type-start qualifier, and keep both constant maps in instantiation snapshots so rejected candidates leave no state behind. Fixed base-class constant aliasing so a derived trait's own value shadows the inherited one.
+
+### Partial Specialization (C++17)
+- Partial-specialization matching is now SFINAE-safe. An invalid type in a specialization's pattern, including a `decltype` operand or a dependent nested type, discards that specialization and lets the compiler try the next candidate instead of aborting; errors from instantiating another template stay hard. Added tests for ambiguous `decltype` and hard instantiation, and for empty, nested and mismatched packs, pack fallback, repeat after failure, pointer patterns, ordering, and SFINAE alternatives.
+
+### Substitution Failure (C++17)
+- Added a typed `SubstitutionFailure` distinct from ordinary semantic errors. The compiler now discards only the candidate whose function or member template signature forms an invalid type, then continues with the remaining candidates.
+- Signature substitution no longer rewrites bodies or constructor initializers. The compiler substitutes member template bodies after selecting a candidate, so rejected candidates register no method or pending instantiation.
+- Hard errors from instantiating another template while resolving a signature type, and errors in a selected specialization's body, still abort compilation. When every candidate is rejected, the call reports `no matching function for call to '...'` with every rejection reason. A rejected member template reports the conversion failure that ruled it out.
+- The compiler reuses the signature formed during candidate selection when instantiating the winner, substituting only its body. Deduction of two trailing function parameter packs now assigns trailing call arguments to the last pack, matching clang and GCC.
+- Dependent nested types in template signatures (`typename T::type`, `typename Traits<T>::type`) resolve through aliases registered when the base class is instantiated. A missing nested type discards the candidate; an error from instantiating the base template stays hard. Nested aliases resolve in parameter and return types, including aliases of aliases, default template arguments, and function-pointer parameters. An invalid nested type inside a class template's own alias now fails that instantiation instead of being stored as an opaque type.
+
+### Expression SFINAE (C++17)
+- Added `Type::Decltype { expr, parenthesized }`: the operand stays in the AST and is resolved after substitution. C++17 value-category rules are applied, including the declared-type rule for an unparenthesized id-expression or member access and `T&` for a parenthesized lvalue.
+- Added trailing return types on function declarations (`auto f(T x) -> decltype(x.member())`). The trailing type participates in template signature substitution and candidate viability.
+- A `decltype` operand is analyzed on a disposable clone of `Sema`, so a rejected candidate cannot change the expression, symbol tables, scopes, or instantiation state. Expression errors in the immediate context become substitution failures; errors from instantiating another template stay hard. Parameter types are completed before parameters are bound, so a `decltype` parameter type cannot recurse; an unparenthesized id-expression or member access uses the entity's declared type, keeping reference members and dropping receiver-added const. Global symbols are visible while field and parameter types are resolved, and `sizeof`/`alignof` both keep nested instantiation errors hard.
+- `sizeof(expr)` now type-checks its operand instead of returning `size_t` without analysis. An invalid expression in a `decltype` trailing return type rejects the candidate as a substitution failure, while a nested-instantiation error inside the operand stays hard. Added positive and negative regression tests.
+
+### Template Instantiation State
+- Class template instantiation caches only completed specializations. A specialization still being built stays on the instantiation stack and satisfies recursive references, but is not treated as finished. A failed instantiation restores the layouts, aliases, globals, methods, synthesized declarations and counters it wrote, so a later request can retry it from a clean state.
+- The instantiation stack and depth counter are now unwound on every exit path, including errors from specialization selection and nested-type resolution. Function templates drop their in-progress marker when body analysis fails, so a failed specialization is never reused as a successful one.
+- Added regression tests for failed class and function instantiations, recursive and nested instantiation, repeated and distinct specializations, substitution failures followed by valid overloads, and member-template rejection without leaked registrations.
+
 ### Fold Expressions (C++17)
 - Added unary and binary folds over all 32 fold operators, with standard empty-pack fallbacks (`&&` to `true`, `||` to `false`, `,` to a void expression) and evaluation in constexpr contexts, array bounds, and non-type template arguments.
 - Fixed folds over overloaded operators, assignment folds, folds whose pattern contains `new` or `sizeof...`, and chained results that need a converting constructor.

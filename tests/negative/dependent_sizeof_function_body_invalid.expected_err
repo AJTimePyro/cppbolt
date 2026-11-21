@@ -1,0 +1,1 @@
+tests/negative/dependent_sizeof_function_body_invalid.cpp:9:21: error: unresolved type 'NoType::type' in array bound

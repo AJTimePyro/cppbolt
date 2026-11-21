@@ -7,7 +7,7 @@
 
 use super::*;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct VirtualKey {
     pub(crate) name: String,
     pub(crate) params: Vec<Type>,

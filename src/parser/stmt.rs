@@ -322,6 +322,7 @@ impl Parser {
                     callee: Box::new(Expr::Identifier(ty.strip_const().to_c_type())),
                     args,
                     pos: ExprPos::new(line, col),
+                    dependent: false,
                 })),
                 // Scalar types unpack a single expression; arrays stay an initializer list.
                 _ if args.len() == 1 && !matches!(ty.strip_const(), Type::Array(_, _)) => {

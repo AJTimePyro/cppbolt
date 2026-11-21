@@ -1,0 +1,1 @@
+tests/negative/type_traits_declval_evaluated.cpp:2:14: error: Undefined function 'std::declval<int>_'

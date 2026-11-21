@@ -1,0 +1,1 @@
+tests/negative/enable_if_nested_hard_error.cpp:4:14: error: no type named 'missing' in 'int'

@@ -1,0 +1,1 @@
+tests/negative/ns_direct_decltype_missing_member.cpp:8:14: error: no type named 'type' in 'NoType<Has, int>'

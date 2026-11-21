@@ -1,5 +1,11 @@
+use crate::ast::expr::Expr;
 use crate::name::QualifiedName;
 use std::collections::HashMap;
+
+/// Bound stored for an unbounded array declarator (`T[]`). A real bound cannot
+/// reach this value in the ILP32 target. It is deliberately not `usize::MAX`,
+/// which `template_registry` already uses as an "unresolved bound" marker.
+pub const UNBOUNDED_ARRAY: usize = usize::MAX - 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WasmType {
@@ -32,7 +38,7 @@ impl PartialEq for FunctionQualifiers {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Void,
     Nullptr,
@@ -61,6 +67,18 @@ pub enum Type {
     DependentNonType(String),
     Struct(String),
     Enum(String),
+    /// A dependent qualified type such as `T::type` or `Traits<T>::type`
+    /// whose base was substituted. It must resolve to a concrete type; an
+    /// unresolved name is a substitution failure in the immediate context.
+    DependentNested(String),
+    /// A `decltype(expr)` type. The operand is kept in the AST and resolved
+    /// after substitution, when the concrete types of names are known.
+    /// `parenthesized` records the C++17 rule for the operand form.
+    Decltype {
+        expr: Box<Expr>,
+        parenthesized: bool,
+        alias: Option<String>,
+    },
     TypeParam(String),
     TemplateInstance {
         name: String,
@@ -89,6 +107,12 @@ pub enum Type {
 impl Type {
     pub fn is_const(&self) -> bool {
         matches!(self, Type::Const(_))
+    }
+
+    pub fn set_decltype_alias(&mut self, alias_name: String) {
+        if let Type::Decltype { alias, .. } = self {
+            *alias = Some(alias_name);
+        }
     }
 
     pub fn is_scalar(&self) -> bool {
@@ -357,6 +381,8 @@ impl Type {
                 .or_else(|| struct_sizes.get(QualifiedName::new(name).plain()))
                 .unwrap_or(&4),
             Type::TypeParam(_)
+            | Type::DependentNested(_)
+            | Type::Decltype { .. }
             | Type::NonType(_)
             | Type::DependentNonType(_)
             | Type::DependentArray(_, _) => 4,
@@ -404,6 +430,8 @@ impl Type {
                     .or_else(|| struct_aligns.get(QualifiedName::new(name).plain()))
                     .unwrap_or(&4),
                 Type::TypeParam(_)
+                | Type::DependentNested(_)
+                | Type::Decltype { .. }
                 | Type::NonType(_)
                 | Type::DependentNonType(_)
                 | Type::DependentArray(_, _) => 4,
@@ -454,6 +482,8 @@ impl Type {
             | Type::Struct(_)
             | Type::TemplateInstance { .. }
             | Type::TypeParam(_)
+            | Type::DependentNested(_)
+            | Type::Decltype { .. }
             | Type::NonType(_)
             | Type::DependentNonType(_)
             | Type::DependentArray(_, _)
@@ -463,17 +493,5 @@ impl Type {
             Type::Const(_) => unreachable!(),
             Type::Aligned(inner, _) | Type::DependentAlignas(inner, _) => inner.to_wasm_type(),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_pack_expansion_type() {
-        let ty = Type::PackExpansion(Box::new(Type::TypeParam("T".to_string())));
-        assert_eq!(ty.to_c_type(), "T...");
-        assert_eq!(ty.strip_all_const(), ty);
     }
 }

@@ -1,0 +1,1 @@
+tests/negative/inherited_nested_ambiguous.cpp:4:1: error: ambiguous nested type 'value_type' in 'C'

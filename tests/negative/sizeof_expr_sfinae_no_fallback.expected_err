@@ -1,0 +1,1 @@
+tests/negative/sizeof_expr_sfinae_no_fallback.cpp:12:32: error: no matching function for call to 'f': substitution failure: No member named 'value' in struct 'No'

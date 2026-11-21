@@ -1,0 +1,1 @@
+tests/negative/dependent_sizeof_initializer_invalid.cpp:8:1: error: unresolved type 'NoType::type' in initializer

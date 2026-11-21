@@ -1,0 +1,1 @@
+tests/negative/type_traits_tparam_sfinae.cpp:3:21: error: no matching function for call to 'only_integral': substitution failure: no type named 'type' in 'enable_if<0, void>'

@@ -1,0 +1,1 @@
+tests/negative/namespace_alias_invalid_partial_spec.cpp:4:1: error: no type named 'type' in 'Traits<int *>'

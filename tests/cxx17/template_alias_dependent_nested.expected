@@ -1,0 +1,11 @@
+S<Pair<HasInt,int>>    = 1
+S<Pair<HasInt,double>> = 0
+S<Pair<NoType,int>>    = 0
+Q<Pair<int,HasInt>>    = 2
+Q<Pair<int,NoType>>    = 0
+M<Triple<HasInt,double,int>> = 3
+M<Triple<HasInt,double,double>> = 0
+OT<HasInt,int>         = 4
+OT<HasInt,double>      = 0
+OT<NoType,int>         = 0
+Nested<Wrap<Pair<HasInt,int>>> = 5

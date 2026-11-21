@@ -1,0 +1,6 @@
+A<HasInt>            = 1
+A<int>               = 0
+B<HasInt,int>        = 2
+C<NPair<7,double>>   = 3
+D<Pair<HasInt,int>>  = 4
+E<Tuple<int,double>> = 5

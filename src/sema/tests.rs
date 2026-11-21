@@ -435,6 +435,7 @@ fn test_substitute_struct() -> Result<(), Box<dyn std::error::Error>> {
     mapping.insert("T".to_string(), TemplateArg::Type(Type::Int));
     let tclass = TemplateClass {
         name: "Holder".to_string(),
+        pattern_args: None,
         is_class: true,
         is_final: false,
         base_classes: Vec::new(),
@@ -446,13 +447,22 @@ fn test_substitute_struct() -> Result<(), Box<dyn std::error::Error>> {
             Type::TypeParam("T".to_string()),
             false,
         )],
+        friends: Vec::new(),
         static_fields: Vec::new(),
         private_members: Vec::new(),
         nested_structs: Vec::new(),
+        member_aliases: Vec::new(),
         alignment: None,
     };
 
-    let subst = template_subst::substitute_struct(&tclass, &mapping, "Holder<int>", (1, 1), None)?;
+    let mut ctx = template_subst::SubstContext {
+        mapping: &mapping,
+        injected_class: None,
+        pos: (1, 1),
+        struct_aligns: None,
+        sema: None,
+    };
+    let subst = template_subst::substitute_struct(&tclass, "Holder<int>", &mut ctx)?;
     let Decl::StructDecl {
         name,
         fields,

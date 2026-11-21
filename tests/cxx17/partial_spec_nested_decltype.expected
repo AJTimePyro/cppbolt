@@ -1,0 +1,10 @@
+H<int,int>=1 H<int,double>=0
+G<HasGet,int>=2 G<NoGet,int>=0
+L<int,int>=4 L<int,double>=0
+M<int,int>=5 N<WithGet*,int>=6
+CS<int,int>=1 CS<int,double>=0
+TS<int,int>=1 TS<int,double>=0
+SS<int,int>=1 SS<int,double>=0
+RS<int,int>=1 RS<int,double>=0
+DS<ArrayLike,int>=1 DS<ArrayLike,double>=0
+VS<int,int>=1 VS<int,double>=0

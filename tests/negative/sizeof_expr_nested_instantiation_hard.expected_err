@@ -1,0 +1,1 @@
+tests/negative/sizeof_expr_nested_instantiation_hard.cpp:9:33: error: no type named 'type' in 'No'

@@ -122,7 +122,7 @@ fn simplify_arg_str(part: &str) -> String {
     part.to_string()
 }
 
-fn replace_whole_word(text: &str, word: &str, replacement: &str) -> String {
+pub(crate) fn replace_whole_word(text: &str, word: &str, replacement: &str) -> String {
     let mut result = String::new();
     let mut remainder = text;
     while let Some(idx) = remainder.find(word) {
@@ -141,5 +141,34 @@ fn replace_whole_word(text: &str, word: &str, replacement: &str) -> String {
         remainder = &remainder[after_idx..];
     }
     result.push_str(remainder);
+    result
+}
+
+/// Textually substitutes template parameters inside a dependent non-type
+/// argument spelling that cannot be re-parsed as an expression.
+pub(crate) fn substitute_dependent_text(
+    text: &str,
+    mapping: &HashMap<String, TemplateArg>,
+) -> String {
+    let mut result = text.to_string();
+    for (param, arg) in mapping {
+        let value = match arg {
+            TemplateArg::Type(ty) => ty.to_c_type(),
+            TemplateArg::NonType(n) => n.to_string(),
+            TemplateArg::NonTypeAddress(addr) => format!("&{addr}"),
+            TemplateArg::NonTypeNull(_) => "nullptr".to_string(),
+            TemplateArg::TypePack(types) => types
+                .iter()
+                .map(|t| t.to_c_type())
+                .collect::<Vec<_>>()
+                .join(", "),
+            TemplateArg::NonTypePack(vals) => vals
+                .iter()
+                .map(|v| v.to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
+        };
+        result = replace_whole_word(&result, param, &value);
+    }
     result
 }

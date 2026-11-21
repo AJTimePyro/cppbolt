@@ -1,0 +1,1 @@
+tests/negative/constexpr_nttp_undefined.cpp:2:14: error: template argument for non-type parameter must be a constant expression

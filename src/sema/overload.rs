@@ -4,7 +4,6 @@
 use super::*;
 
 impl Sema {
-    /// The diagnostic for arguments that match no constructor of a class.
     pub(super) fn no_matching_constructor(&self, class_name: &str, pos: ExprPos) -> CompileError {
         let message = if self.in_initializer {
             format!("no matching constructor for initialization of '{class_name}'")
@@ -191,45 +190,84 @@ impl Sema {
         }
     }
 
+    /// Whether an expression at `pos` was dependent in the template definition
+    /// whose body is currently being analyzed. Positions are preserved by
+    /// substitution, so this also holds for rewritten and nested expressions.
+    pub(super) fn expression_is_dependent(&self, pos: ExprPos) -> bool {
+        self.current_template_identity
+            .as_ref()
+            .is_some_and(|identity| {
+                self.dependent_calls
+                    .get(identity)
+                    .is_some_and(|positions| positions.contains(&(pos.line, pos.col)))
+            })
+    }
+
     pub(super) fn find_call_candidates(
         &mut self,
         name: &str,
         arg_types: &[Type],
+        dependent: bool,
     ) -> Option<Vec<FunctionSig>> {
-        let q1 = name.to_string();
-        let q2 = QualifiedName::new(name).alternate().into_owned();
-        let mut candidates = self
+        // Namespace aliases validate late so specialization confirmation sees
+        // registered methods, but ordinary lookup must stay at the alias's
+        // declaration position. Use its snapshot when one is active.
+        let alias_vis = self.active_alias_visibility.as_ref();
+        let template_id = self.current_template_identity.as_ref();
+        let visible_functions = self.active_visible_functions();
+        let visible_usings = alias_vis
+            .map(|vis| &vis.usings)
+            .or_else(|| template_id.and_then(|id| self.template_definition_usings.get(id)));
+        let opened = alias_vis
+            .map(|vis| vis.namespaces.as_slice())
+            .or_else(|| {
+                template_id
+                    .and_then(|id| self.template_definition_namespaces.get(id))
+                    .map(|v| v.as_slice())
+            })
+            .unwrap_or(self.open_namespaces.as_slice());
+        let mut candidates =
+            self.ordinary_lookup_candidates(name, alias_vis, visible_usings, opened);
+        // While re-analyzing a substituted template body, ordinary lookup is
+        // limited to the overloads that existed at the template's definition.
+        // ADL below is intentionally not filtered: it runs at instantiation.
+        // A mangled callee is already a resolved binding from an earlier
+        // analysis pass, so it must not be filtered by the definition-time set.
+        // It still goes through ADL below, which finds nothing for a mangled
+        // name but stays correct for builtin names such as `free`.
+        let already_bound = self
             .functions
-            .get(&q1)
-            .or_else(|| self.functions.get(&q2))
-            .or_else(|| {
-                self.using_decls
-                    .get(name)
-                    .and_then(|full| self.functions.get(full))
-            })
-            .or_else(|| {
-                self.open_namespaces
-                    .iter()
-                    .find_map(|ns| self.functions.get(&format!("{}::{}", ns, name)))
-            })
-            .cloned();
-        if candidates.is_none() {
-            for aty in arg_types {
-                let clean = aty.strip_const().strip_reference();
-                if let Type::Struct(s) = clean
-                    && let Some((ns, _)) = s.rsplit_once("::")
-                    && let Some(sigs) = self.functions.get(&format!("{}::{}", ns, name))
-                {
-                    candidates = Some(sigs.clone());
-                    break;
-                }
+            .get(name)
+            .is_some_and(|sigs| sigs.iter().any(|sig| sig.mangled_name == name));
+        if !already_bound && let Some(visible) = &visible_functions {
+            candidates = candidates.map(|sigs| {
+                sigs.into_iter()
+                    .filter(|sig| visible.contains(&sig.mangled_name))
+                    .collect()
+            });
+            if candidates.as_ref().is_some_and(|sigs| sigs.is_empty()) {
+                candidates = None;
             }
+        }
+        // ADL is for unqualified calls only, and its candidates are merged
+        // with ordinary lookup rather than used as a fallback. Copy the filter
+        // only when ADL needs it; the lookup phase above borrows it.
+        if !name.contains("::") {
+            let visible_functions = visible_functions.cloned();
+            candidates = self.merge_adl_candidates(
+                candidates,
+                name,
+                arg_types,
+                dependent,
+                visible_functions.as_ref(),
+            );
         }
         if candidates.is_none()
             && let Some((class_name, method_name)) = name.rsplit_once("::")
         {
             if class_name.contains('<') {
-                self.ensure_class_instantiated(class_name, self.current_line, self.current_col);
+                let _ =
+                    self.ensure_class_instantiated(class_name, self.current_line, self.current_col);
             }
             let static_methods = self.find_static_methods_in_class(class_name, method_name);
             if !static_methods.is_empty() {
@@ -237,6 +275,70 @@ impl Sema {
             }
         }
         candidates
+    }
+
+    /// Ordinary (non-ADL) lookup at the active declaration position.
+    fn ordinary_lookup_candidates(
+        &self,
+        name: &str,
+        alias_vis: Option<&crate::sema::AliasVisibility>,
+        visible_usings: Option<&std::collections::HashSet<String>>,
+        opened: &[String],
+    ) -> Option<Vec<FunctionSig>> {
+        let q1 = name.to_string();
+        let q2 = QualifiedName::new(name).alternate().into_owned();
+        self.functions
+            .get(&q1)
+            .or_else(|| self.functions.get(&q2))
+            .or_else(|| {
+                if visible_usings.is_some_and(|visible| !visible.contains(name)) {
+                    return None;
+                }
+                let target = alias_vis
+                    .and_then(|vis| vis.using_targets.as_ref())
+                    .and_then(|targets| targets.get(name))
+                    .or_else(|| self.using_decls.get(name));
+                target.and_then(|full| self.functions.get(full))
+            })
+            .or_else(|| {
+                opened
+                    .iter()
+                    .find_map(|ns| self.functions.get(&format!("{}::{}", ns, name)))
+            })
+            .cloned()
+    }
+
+    /// Merges ADL candidates with ordinary lookup, de-duplicating by mangled name.
+    fn merge_adl_candidates(
+        &mut self,
+        candidates: Option<Vec<FunctionSig>>,
+        name: &str,
+        arg_types: &[Type],
+        dependent: bool,
+        visible_functions: Option<&std::collections::HashSet<String>>,
+    ) -> Option<Vec<FunctionSig>> {
+        let adl_filter = if dependent {
+            None
+        } else {
+            visible_functions.cloned()
+        };
+        let mut adl = self.adl_candidates(name, arg_types);
+        if let Some(visible) = &adl_filter {
+            adl.retain(|sig| visible.contains(&sig.mangled_name));
+        }
+        if adl.is_empty() {
+            return candidates;
+        }
+        let mut merged: Vec<FunctionSig> = Vec::new();
+        for sig in candidates.into_iter().flatten().chain(adl) {
+            if !merged
+                .iter()
+                .any(|existing| existing.mangled_name == sig.mangled_name)
+            {
+                merged.push(sig);
+            }
+        }
+        Some(merged)
     }
 }
 

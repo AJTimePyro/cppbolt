@@ -4,6 +4,29 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-21: C++17 SFINAE, Two-Phase Lookup, <type_traits>, and Constant Evaluation
+
+Implemented C++17 template substitution failure handling, two-phase name lookup with argument-dependent lookup (ADL), expression SFINAE via `decltype`, LLVM libc++ 23.1.5 `<type_traits>` integration, and constant expression hardening.
+
+### Summary of Work
+
+1. Added typed substitution failures (`SubstitutionFailure` and `TemplateFailure`) in `src/diagnostics/mod.rs` and `src/sema/template_func.rs`. Invalid types formed in signature immediate contexts discard the candidate from overload resolution instead of aborting compilation.
+2. Implemented expression SFINAE and `decltype` resolution in `src/sema/decltype_resolve.rs`. Analyzed operands on disposable `Sema` clones, applied C++17 value-category rules, added trailing return types, and bound parameters sequentially so later parameters can reference earlier ones.
+3. Implemented two-phase name lookup and ADL in `src/sema/analyze_decls.rs`, `src/sema/template_call_dependence.rs`, and `src/sema/overload_adl.rs`. Captured visible declarations at template definition points, classified call and operator expressions by source position, tracked dependent local variables (`auto x = t;`), and restricted ADL associated namespaces to exclude enclosing classes of nested types.
+4. Expanded partial specialization pattern matching in `src/sema/template_match*.rs`. Expanded alias templates before deduction, deduced multidimensional array bounds (`T[N]`, `T[]`), confirmed nested `decltype` patterns through source re-parsing, and rejected non-deducible partial specialization declarations.
+5. Integrated an adapted C++17 subset of LLVM libc++ 23.1.5 `<type_traits>`. Added 36 headers under `stdlib/detail/type_traits/` and created `stdlib/detail/type_traits/builtins.h` to supply compiler builtins using partial specializations.
+6. Hardened constant evaluation and static assertions in `src/sema/analyze.rs` and `src/sema/constexpr_globals.rs`. Resolved qualified static constexpr members, rejected non-constant expressions in `static_assert` conditions, and anchored diagnostic coordinates to offending expressions.
+7. Maintained repository census limits and memory safety: decomposed oversized files and functions across `src/sema/` and `src/parser/` (all files under 500 lines, functions under 80 lines), and optimized iterative AST dropping in `src/ast/expr_drop.rs` to avoid redundant drop traversals.
+
+### Verification Results
+
+- Unit tests: all library unit tests pass.
+- Census audit: `cargo run --bin cppbolt-census` reports 0 files over 500 lines, 0 functions over 80 lines, and 0 functions with more than 5 non-receiver parameters.
+- Clippy: `cargo clippy --all-targets -- -D warnings` passes with 0 warnings.
+- Documentation: `mdbook build docs/book` succeeds with 0 errors, and `python3 tools/check_feature_matrix.py` validates all 281 feature matrix test links.
+
+---
+
 ## 2026-11-16: Pointer-to-Member Operators, ABI Representation, and C++17 Fold Integration
 
 Implemented C++ pointer-to-member language support (ISO C++17 [dcl.mptr], [expr.mptr.oper], [conv.mem]), flat 64-bit Itanium ABI representation, and fold expression integration across the parser, semantic analyzer, WebAssembly code generator, and test suite:

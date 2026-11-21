@@ -1,0 +1,1 @@
+tests/negative/adl_nested_class_enclosing_static_hidden.cpp:10:12: error: Undefined function 'helper'

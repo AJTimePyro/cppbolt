@@ -1,0 +1,1 @@
+tests/negative/decltype_hard_alignof_instantiation.cpp:4:21: error: no type named 'type' in 'Bad'

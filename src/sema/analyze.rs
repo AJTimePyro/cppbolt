@@ -1,5 +1,4 @@
 use super::analyze_helpers::{collect_object_use_classes, method_matches_out_of_class};
-use super::constexpr_globals::collect_constexpr_globals;
 use super::*;
 
 impl Sema {
@@ -7,16 +6,29 @@ impl Sema {
         self.object_use_classes = collect_object_use_classes(program);
         self.attach_out_of_class_methods(program);
         self.seed_lifecycle_types(program);
+        self.seed_global_symbols(program);
         self.register_types(program)?;
         self.synthesize_destructors(program);
         self.synthesize_constructors(program);
         self.register_declarations(program)?;
+        self.analyze_field_initializers(program)?;
+        // Namespace aliases can name nested members selected through a
+        // `decltype` pattern. Resolve them after methods and function templates
+        // are registered; confirmation needs that lookup context.
+        self.validate_namespace_aliases(program)?;
         self.validate_virtual_returns(program)?;
         self.analyze_declarations(program)?;
         // Bodies deferred during early template instantiation are retried now
         // that globals and functions are registered. A permanent error here
         // aborts before code generation.
         self.retry_deferred_methods()?;
+        program.declarations.append(&mut self.synthesized_decls);
+        // Class-template specializations are synthesized after the first
+        // initializer pass. Analyze their NSDMIs now so unqualified member
+        // calls bind to the specialization's methods before codegen.
+        self.analyze_field_initializers(program)?;
+        // Member calls in those NSDMIs can instantiate pending methods into
+        // `synthesized_decls`; surface them to the program for codegen.
         program.declarations.append(&mut self.synthesized_decls);
         Ok(())
     }
@@ -77,6 +89,27 @@ impl Sema {
         });
     }
 
+    /// Registers global symbols before type expressions are resolved, so a
+    /// `decltype` operand can name a global in a field or parameter type. The
+    /// declared type is refined later by `analyze_global_var`.
+    fn seed_global_symbols(&mut self, program: &Program) {
+        for decl in &program.declarations {
+            let Decl::GlobalVar { name, ty, .. } = decl else {
+                continue;
+            };
+            let symbol = VarSymbol {
+                name: name.clone(),
+                ty: ty.clone(),
+                is_global: true,
+                stack_offset: 0,
+            };
+            self.global_vars.insert(name.clone(), symbol.clone());
+            if let Some(alias) = QualifiedName::new(name).implicit_alias() {
+                self.global_vars.insert(alias.into_owned(), symbol);
+            }
+        }
+    }
+
     fn register_types(&mut self, program: &mut Program) -> Result<(), CompileError> {
         self.type_aliases = program.type_aliases.clone();
         for decl in &mut program.declarations {
@@ -100,17 +133,16 @@ impl Sema {
                     col,
                     ..
                 } => {
-                    for (fname, fty, finit) in fields.iter_mut() {
+                    for (_, fty, _) in fields.iter_mut() {
                         self.resolve_and_instantiate_type(fty, *line, *col)?;
-                        if let Some((init_expr, fline, fcol)) = finit {
-                            self.check_field_default_init(fname, fty, init_expr, (*fline, *fcol))?;
-                        }
                     }
+                    // NSDMI expressions are analyzed after member declarations
+                    // are registered; see analyze_field_initializers.
                     // A base that is a template specialization must have a
                     // layout before this class can inherit its vptr and slots.
                     for base in base_classes.clone() {
                         let canonical = self.canonical_class_name(&base, Some(name));
-                        self.ensure_class_instantiated(&canonical, *line, *col);
+                        let _ = self.ensure_class_instantiated(&canonical, *line, *col);
                     }
                     self.compute_struct_layout(RecordLayout {
                         name: name.as_str(),
@@ -130,6 +162,37 @@ impl Sema {
                 }
                 Decl::Template(t) => self.register_template_declaration(t)?,
                 _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// Namespace-scope aliases are parsed straight into `type_aliases` and
+    /// never pass through signature analysis. Resolve them once the full lookup
+    /// context is registered so an invalid qualified member access is a hard
+    /// error here, while dependent forms stay for substitution.
+    fn validate_namespace_aliases(&mut self, program: &Program) -> Result<(), CompileError> {
+        // Resolve in source order: the instantiation order of alias targets
+        // flows into emitted code, so HashMap iteration must not decide it.
+        let mut aliases: Vec<(String, Type, (usize, usize))> = program
+            .namespace_type_aliases
+            .iter()
+            .filter_map(|(name, pos)| {
+                self.type_aliases
+                    .get(name)
+                    .map(|ty| (name.clone(), ty.clone(), *pos))
+            })
+            .collect();
+        aliases.sort_by_key(|(_, _, pos)| *pos);
+        for (name, mut ty, pos) in aliases {
+            let visibility = self.alias_visibility.get(&name).cloned();
+            let previous = std::mem::replace(&mut self.active_alias_visibility, visibility.clone());
+            let result = self.resolve_and_instantiate_type(&mut ty, pos.0, pos.1);
+            self.active_alias_visibility = previous;
+            result?;
+            if let Type::Decltype { .. } = self.type_aliases.get(&name).unwrap_or(&ty) {
+                self.decltype_alias_context
+                    .insert(name.clone(), visibility.unwrap_or_default());
             }
         }
         Ok(())
@@ -163,250 +226,62 @@ impl Sema {
             TemplateKind::Alias(name, ty) => {
                 self.register_alias_template(name.clone(), ty.clone(), t.params.clone());
             }
+            TemplateKind::Variable(name, ty, init) => {
+                let entry = (t.params.clone(), ty.clone(), init.clone());
+                let plain = crate::QualifiedName::new(name).plain().to_string();
+                self.variable_templates.insert(name.clone(), entry.clone());
+                self.variable_templates.insert(plain, entry);
+            }
         }
         Ok(())
     }
 
-    fn register_declarations(&mut self, program: &mut Program) -> Result<(), CompileError> {
-        let mut defined_functions = std::collections::HashSet::new();
+    /// Analyze default member initializers once the class's methods are
+    /// registered. Field types and layouts are already resolved; only the
+    /// initializer expressions and their stored layout copies are updated.
+    fn analyze_field_initializers(&mut self, program: &mut Program) -> Result<(), CompileError> {
         for decl in &mut program.declarations {
-            match decl {
-                Decl::UsingNamespace(ns) => {
-                    let resolved = self.resolve_alias_in_qualified_name(ns);
-                    self.open_namespaces.push(resolved);
-                }
-                Decl::UsingDecl(name) => {
-                    let resolved = self.resolve_alias_in_qualified_name(name);
-                    let short_name = resolved.split("::").last().unwrap_or(&resolved).to_string();
-                    self.using_decls.insert(short_name, resolved);
-                }
-                Decl::NamespaceAlias {
-                    alias,
-                    target,
-                    line,
-                    col,
-                } => {
-                    self.record_local_namespace_alias(alias, target, *line, *col)?;
-                }
-                Decl::Function(f) => {
-                    self.resolve_and_instantiate_type(&mut f.return_type, f.line, f.col)?;
-                    for p in &mut f.params {
-                        self.resolve_and_instantiate_type(&mut p.ty, f.line, f.col)?;
-                    }
-                    let mangled = self.mangle_name(&f.name, &f.params);
-                    if f.body.is_some() && !defined_functions.insert(mangled.clone()) {
-                        return Err(CompileError::new(
-                            format!("Redefinition of function '{}'", f.name),
-                            f.line,
-                            f.col,
-                        ));
-                    }
-                    let sig = FunctionSig {
-                        qualifiers: FunctionQualifiers::default(),
-                        name: f.name.clone(),
-                        mangled_name: mangled,
-                        return_type: f.return_type.clone(),
-                        param_types: f.params.iter().map(|p| p.ty.clone()).collect(),
-                        default_args: f.params.iter().map(|p| p.default_val.clone()).collect(),
-                        is_static: false,
-                        is_explicit: f.is_explicit,
-                        ref_qualifier: f.ref_qualifier,
-                    };
-                    self.register_function(sig);
-                }
-                Decl::StructDecl {
-                    name,
-                    methods,
-                    static_fields,
-                    ..
-                } => {
-                    self.register_struct_declarations(name.as_str(), methods, static_fields)?;
-                }
-                _ => {}
-            }
-        }
-        Ok(())
-    }
-
-    /// Registers the static fields and methods of a class.
-    ///
-    /// Non-template method signatures are completed like free function
-    /// signatures, so template types in their parameter and return types are
-    /// instantiated before overload lookup sees them.
-    fn register_struct_declarations(
-        &mut self,
-        name: &str,
-        methods: &mut [FunctionDecl],
-        static_fields: &[(String, Type, Option<Expr>)],
-    ) -> Result<(), CompileError> {
-        for sf in static_fields {
-            let qual_name = format!("{}::{}", name, sf.0);
-            let sym = VarSymbol {
-                name: qual_name.clone(),
-                ty: sf.1.clone(),
-                is_global: true,
-                stack_offset: 0,
-            };
-            self.global_vars.insert(qual_name.clone(), sym.clone());
-            if let Some(alias) = QualifiedName::new(&qual_name).implicit_alias() {
-                self.global_vars.insert(alias.to_string(), sym);
-            }
-        }
-        let previous_class = self.current_class.replace(name.to_string());
-        for m in methods.iter_mut() {
-            if !m.template_params.is_empty() {
-                self.member_templates
-                    .entry(name.to_string())
-                    .or_default()
-                    .push(m.clone());
-                let plain = QualifiedName::new(name).plain();
-                if plain != name {
-                    self.member_templates
-                        .entry(plain.to_string())
-                        .or_default()
-                        .push(m.clone());
-                }
+            let Decl::StructDecl { name, fields, .. } = decl else {
                 continue;
-            }
-            self.resolve_and_instantiate_type(&mut m.return_type, m.line, m.col)?;
-            for param in &mut m.params {
-                self.resolve_and_instantiate_type(&mut param.ty, m.line, m.col)?;
-            }
-            self.register_struct_method(name, m);
-        }
-        self.current_class = previous_class;
-        Ok(())
-    }
-
-    pub(super) fn register_struct_method(&mut self, class_name: &str, m: &FunctionDecl) {
-        let mut params = m.params.clone();
-        if !m.is_static {
-            params.insert(0, this_param(class_name, m.is_const));
-        }
-        let qual_name = format!("{}::{}", class_name, m.name);
-        let mut mangled = self.mangle_name(&qual_name, &params);
-        match m.ref_qualifier {
-            RefQualifier::LValue => mangled.push_str("_R"),
-            RefQualifier::RValue => mangled.push_str("_O"),
-            RefQualifier::None => {}
-        }
-        let mut quals = m.qualifiers;
-        quals.is_const = m.is_const;
-        let sig = FunctionSig {
-            qualifiers: quals,
-            name: m.name.clone(),
-            mangled_name: mangled,
-            return_type: m.return_type.clone(),
-            param_types: params.iter().map(|p| p.ty.clone()).collect(),
-            default_args: params.iter().map(|p| p.default_val.clone()).collect(),
-            is_static: m.is_static,
-            is_explicit: m.is_explicit,
-            ref_qualifier: m.ref_qualifier,
-        };
-        self.register_function(sig.clone());
-        self.functions
-            .entry(qual_name)
-            .or_default()
-            .push(sig.clone());
-        let short = QualifiedName::new(class_name).class_short_name();
-        if m.name == class_name {
-            let short_qual = format!("{}::{}", class_name, short);
-            self.functions.entry(short_qual).or_default().push(sig);
-        } else if m.name == format!("~{}", class_name) {
-            let short_qual = format!("{}::~{}", class_name, short);
-            self.functions.entry(short_qual).or_default().push(sig);
-        }
-    }
-
-    /// Rejects abstract variable types and completes a zero-length array type
-    /// from an initializer list.
-    pub(super) fn check_and_complete_var_type(
-        &self,
-        ty: &mut Type,
-        init: &Option<Expr>,
-        line: usize,
-        col: usize,
-    ) -> Result<(), CompileError> {
-        if let Type::Struct(sname) = ty.strip_const()
-            && let Some(layout) = self.struct_layouts.get(sname)
-            && layout.is_abstract
-        {
-            return Err(CompileError::new(
-                format!("Variable type '{}' is an abstract class", sname),
-                line,
-                col,
-            ));
-        }
-        if let Type::Array(elem, 0) = ty.clone()
-            && let Some(
-                Expr::InitializerList { elements: list, .. }
-                | Expr::TypedInitList { elements: list, .. },
-            ) = init
-        {
-            *ty = Type::Array(elem, list.len());
-        }
-        Ok(())
-    }
-
-    /// Checks and records a global variable and its initializer.
-    fn analyze_global_var(
-        &mut self,
-        name: &str,
-        ty: &mut Type,
-        init: &mut Option<Expr>,
-        line: usize,
-        col: usize,
-    ) -> Result<(), CompileError> {
-        self.current_line = line;
-        self.current_col = col;
-        self.resolve_and_instantiate_type(ty, line, col)?;
-        self.check_and_complete_var_type(ty, init, line, col)?;
-        if let Some(init_expr) = init {
-            let init_ty = match init_expr {
-                Expr::InitializerList { .. } | Expr::TypedInitList { .. } => {
-                    self.resolve_var_init_type(ty, init_expr)?.0
-                }
-                _ => self.analyze_expr_keeping_reference(init_expr)?,
             };
-            if !self.can_assign_expr(ty, &init_ty, Some(init_expr)) {
-                return Err(CompileError::new(
-                    format!(
-                        "Type mismatch in global '{}': cannot assign {} to {}",
-                        name,
-                        init_ty.to_c_type(),
-                        ty.to_c_type()
-                    ),
-                    line,
-                    col,
-                ));
+            let visibility = self.class_field_visibility.get(name).cloned().or_else(|| {
+                let plain = QualifiedName::new(name).plain();
+                self.class_field_visibility.get(plain).cloned()
+            });
+            let class_name = name.clone();
+            let field_count = fields.len();
+            let previous_visibility =
+                std::mem::replace(&mut self.active_alias_visibility, visibility);
+            let previous_class = self.current_class.replace(class_name.clone());
+            let result = (|| {
+                for (fname, fty, finit) in fields.iter_mut() {
+                    if let Some((init_expr, line, col)) = finit {
+                        self.check_field_default_init(fname, fty, init_expr, (*line, *col))?;
+                    }
+                }
+                Ok(())
+            })();
+            self.current_class = previous_class;
+            self.active_alias_visibility = previous_visibility;
+            result?;
+            if let Some(layout) = self.struct_layouts.get_mut(&class_name) {
+                let start = layout.fields.len().saturating_sub(field_count);
+                for (slot, (_, _, finit)) in layout.fields[start..].iter_mut().zip(fields.iter()) {
+                    slot.default_init = finit.as_ref().map(|(expr, _, _)| expr.clone());
+                }
             }
-        }
-        self.global_vars.insert(
-            name.to_string(),
-            VarSymbol {
-                name: name.to_string(),
-                ty: ty.clone(),
-                is_global: true,
-                stack_offset: 0,
-            },
-        );
-        if let Some(alias) = QualifiedName::new(name).implicit_alias() {
-            self.global_vars.insert(
-                alias.to_string(),
-                VarSymbol {
-                    name: alias.to_string(),
-                    ty: ty.clone(),
-                    is_global: true,
-                    stack_offset: 0,
-                },
-            );
         }
         Ok(())
     }
 
     fn analyze_declarations(&mut self, program: &mut Program) -> Result<(), CompileError> {
-        let constants = collect_constexpr_globals(&program.declarations, &self.struct_sizes);
+        // static_assert folds against every constexpr in the program; NTTP
+        // folding below stays declaration-ordered via register_constexpr_global.
+        let all_constants = self.collect_constexpr_globals(&program.declarations);
         for decl in &mut program.declarations {
+            // A namespace-scope constant is visible only after its declaration
+            // is reached; earlier constants are available to later initializers.
+            self.register_constexpr_global(decl);
             match decl {
                 Decl::GlobalVar {
                     name,
@@ -428,48 +303,183 @@ impl Sema {
                     line,
                     col,
                 } => {
-                    let value = crate::sema::constexpr_eval::eval_constexpr_with_context(
-                        condition,
-                        Some(&self.struct_sizes),
-                        Some(&constants),
-                        None,
-                    );
-                    // Fail on a definite false. When the integral evaluator
-                    // cannot fold the condition (for example a comparison of
-                    // member pointers), leave it accepted as before.
-                    if matches!(value, Ok(0)) {
-                        let suffix = message
-                            .as_ref()
-                            .map(|m| format!(": {m}"))
-                            .unwrap_or_default();
-                        return Err(CompileError::new(
-                            format!("static assertion failed{suffix}"),
-                            *line,
-                            *col,
-                        ));
-                    }
+                    self.analyze_static_assert(condition, message, *line, *col, &all_constants)?;
                 }
-                Decl::StructDecl { name, methods, .. } => {
-                    self.current_class = Some(name.to_string());
-                    for m in methods {
-                        if !m.template_params.is_empty() {
-                            continue;
-                        }
-                        let mut func_decl = m.clone();
-                        if !m.is_static {
-                            func_decl.params.insert(0, this_param(name, m.is_const));
-                        }
-                        self.analyze_function(&mut func_decl)?;
-                        m.body = func_decl.body;
-                        m.return_type = func_decl.return_type;
-                        self.update_registered_method_return_type(name, m);
-                    }
-                    self.current_class = None;
+                Decl::StructDecl {
+                    name,
+                    methods,
+                    static_fields,
+                    base_classes,
+                    ..
+                } => {
+                    self.analyze_struct_decl(name, methods, static_fields, base_classes)?;
                 }
                 _ => {}
             }
         }
         Ok(())
+    }
+
+    /// Returns whether an unevaluated expression in a static_assert consists
+    /// exclusively of constant operands (constexpr globals, constants, literals).
+    fn expr_is_constant_candidate(&self, expr: &Expr) -> bool {
+        match expr {
+            Expr::IntLiteral(..)
+            | Expr::FloatLiteral(..)
+            | Expr::BoolLiteral(..)
+            | Expr::CharLiteral(..)
+            | Expr::StringLiteral(..) => true,
+            Expr::Identifier(name) => {
+                if let Some(var) = self.global_vars.get(name) {
+                    var.ty.is_const()
+                } else {
+                    self.enum_values.contains_key(name)
+                        || self.static_const_values.contains_key(name)
+                }
+            }
+            Expr::Binary { left, right, .. } => {
+                self.expr_is_constant_candidate(left) && self.expr_is_constant_candidate(right)
+            }
+            Expr::Unary { expr, .. } => self.expr_is_constant_candidate(expr),
+            Expr::SizeofExpr(..) | Expr::SizeofType(..) | Expr::AlignofType(..) => true,
+            Expr::Ternary {
+                cond,
+                then_expr,
+                else_expr,
+            } => {
+                self.expr_is_constant_candidate(cond)
+                    && self.expr_is_constant_candidate(then_expr)
+                    && self.expr_is_constant_candidate(else_expr)
+            }
+            _ => false,
+        }
+    }
+
+    fn analyze_static_assert(
+        &mut self,
+        condition: &Expr,
+        message: &Option<String>,
+        line: usize,
+        col: usize,
+        all_constants: &HashMap<String, i128>,
+    ) -> Result<(), CompileError> {
+        let value = crate::sema::constexpr_eval::eval_constexpr_with_context(
+            condition,
+            Some(&self.struct_sizes),
+            Some(all_constants),
+            None,
+        );
+        // The pre-pass snapshot misses class static members folded
+        // later and variable templates not yet instantiated. Render
+        // the condition so those references can be folded into the
+        // live constant map before trying again.
+        let value = if value.is_ok() {
+            value
+        } else {
+            match crate::parser::types_array::expr_to_dependent_str(condition)
+                .and_then(|spelling| self.eval_dependent_nontype(&spelling))
+            {
+                Some(resolved) => Ok(resolved),
+                None => value,
+            }
+        };
+        // Point at the condition, not the `static_assert` keyword, so the
+        // diagnostic names the expression that failed.
+        let pos = condition.pos();
+        let (error_line, error_col) = if pos.line == 0 {
+            (line, col)
+        } else {
+            (pos.line, pos.col)
+        };
+        match value {
+            Ok(0) => {
+                let suffix = message
+                    .as_ref()
+                    .map(|m| format!(": {m}"))
+                    .unwrap_or_default();
+                Err(CompileError::new(
+                    format!("static assertion failed{suffix}"),
+                    error_line,
+                    error_col,
+                ))
+            }
+            Ok(_) => Ok(()),
+            Err(_) => {
+                if self.expr_is_constant_candidate(condition) {
+                    Ok(())
+                } else {
+                    Err(CompileError::new(
+                        "static assertion condition is not a constant expression",
+                        error_line,
+                        error_col,
+                    ))
+                }
+            }
+        }
+    }
+
+    fn analyze_struct_decl(
+        &mut self,
+        name: &str,
+        methods: &mut [FunctionDecl],
+        static_fields: &[(String, Type, Option<Expr>)],
+        base_classes: &[String],
+    ) -> Result<(), CompileError> {
+        self.current_class = Some(name.to_string());
+        // A static const integral member of a plain class can be
+        // used as a non-type template argument. Fold it here, once
+        // earlier namespace constants are in scope.
+        for sf in static_fields {
+            self.fold_static_const_member(name, sf);
+        }
+        // Inherited constants are reachable through the derived
+        // class name, as for class-template specializations.
+        for base in base_classes {
+            self.alias_static_fields(base, name);
+        }
+        for m in methods {
+            if !m.template_params.is_empty() {
+                continue;
+            }
+            let mut func_decl = m.clone();
+            if !m.is_static {
+                func_decl.params.insert(0, this_param(name, m.is_const));
+            }
+            self.analyze_function(&mut func_decl)?;
+            m.body = func_decl.body;
+            m.return_type = func_decl.return_type;
+            self.update_registered_method_return_type(name, m);
+        }
+        self.current_class = None;
+        Ok(())
+    }
+
+    /// Folds one const static data member into `static_const_values` under
+    /// `Owner::member` when its initializer is a valid integral constant
+    /// expression. Shared by plain classes and class-template specializations.
+    pub(super) fn fold_static_const_member(
+        &mut self,
+        owner: &str,
+        sf: &(String, Type, Option<Expr>),
+    ) {
+        if !sf.1.is_const() {
+            return;
+        }
+        let Some(init) = &sf.2 else {
+            return;
+        };
+        let mut init_clone = init.clone();
+        let _ = self.analyze_expr(&mut init_clone);
+        let constants = self.static_const_values.clone();
+        if let Ok(value) = super::constexpr_eval::eval_constexpr_with_context(
+            &init_clone,
+            Some(&self.struct_sizes),
+            Some(&constants),
+            None,
+        ) {
+            self.static_const_values
+                .insert(format!("{}::{}", owner, sf.0), value);
+        }
     }
 }
 

@@ -48,8 +48,9 @@ impl Parser {
             || self.peek() == &TokenKind::KwClass
             || self.is_struct_after_alignas()
         {
-            let decl = self.parse_struct()?;
-            flatten_struct_decl(decl, declarations);
+            for decl in self.parse_struct()? {
+                flatten_struct_decl(decl, declarations);
+            }
             return Ok(());
         }
 
@@ -119,6 +120,7 @@ impl Parser {
     }
 
     fn parse_using_decl(&mut self, declarations: &mut Vec<Decl>) -> Result<(), CompileError> {
+        let pos = self.current_pos();
         self.advance();
         if self.peek() == &TokenKind::KwNamespace {
             self.advance();
@@ -126,7 +128,11 @@ impl Parser {
             let ns = self.resolve_namespace_alias(&raw_ns);
             self.expect(TokenKind::Semi)?;
             self.open_namespaces.push(ns.clone());
-            declarations.push(Decl::UsingNamespace(ns));
+            declarations.push(Decl::UsingNamespace {
+                name: ns,
+                line: pos.line,
+                col: pos.col,
+            });
             return Ok(());
         }
         {
@@ -139,26 +145,33 @@ impl Parser {
             name = self.qualify_name(name);
             if self.peek() == &TokenKind::Assign {
                 self.advance();
-                let ty = self.parse_type_id()?;
+                let mut ty = self.parse_type_id()?;
                 self.expect(TokenKind::Semi)?;
-                self.register_type_alias(name, ty);
+                let name = self.qualify_name(name);
+                ty.set_decltype_alias(name.clone());
+                self.register_type_alias(name, ty, (pos.line, pos.col));
                 return Ok(());
             }
             self.expect(TokenKind::Semi)?;
-            declarations.push(Decl::UsingDecl(name));
+            declarations.push(Decl::UsingDecl {
+                name,
+                line: pos.line,
+                col: pos.col,
+            });
             Ok(())
         }
     }
 
     fn parse_typedef_decl(&mut self) -> Result<(), CompileError> {
+        let pos = self.current_pos();
         self.advance();
-        let base_type = self.parse_type()?;
+        let mut base_type = self.parse_type()?;
         if self.is_function_pointer_declarator_ahead() {
             // Function-pointer typedef: Base (*Name)(args).
             let (final_ty, id) =
                 self.parse_function_pointer_declarator(base_type, Some("Expected typedef name"))?;
             self.expect(TokenKind::Semi)?;
-            self.register_type_alias(id, final_ty);
+            self.register_type_alias(id, final_ty, (pos.line, pos.col));
             return Ok(());
         }
         {
@@ -173,7 +186,8 @@ impl Parser {
                 }
             };
             self.expect(TokenKind::Semi)?;
-            self.register_type_alias(name, base_type);
+            base_type.set_decltype_alias(name.clone());
+            self.register_type_alias(name, base_type, (pos.line, pos.col));
             Ok(())
         }
     }

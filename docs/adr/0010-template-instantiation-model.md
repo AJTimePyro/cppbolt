@@ -1,43 +1,43 @@
-# ADR 0010: Template Instantiation Model and Single-Phase Lookup
+# ADR 0010: Template Instantiation Model and Two-Phase Lookup
 
 ## Status
 Accepted
 
 ## Context
-Compiling templated standard library headers like `<vector>`, `<utility>`, and `<algorithm>` requires supporting class and function templates with type parameters (`stdlib/vector`, `stdlib/utility`, `stdlib/algorithm`, `src/ast/template.rs`, `src/sema/template_registry.rs`). Standard C++ specifies two-phase lookup: non-dependent names bind at definition time, and dependent names bind at instantiation time. Implementing two-phase lookup in `cppbolt` would require duplicate symbol tables and separate typing passes for uninstantiated ASTs before concrete types exist. In addition, real-world headers require out-of-class member method definitions, member function templates within both class templates and plain structs, dependent member type aliases, and multi-arity overload sets.
+Compiling templated standard library headers like `<vector>`, `<utility>`, and `<algorithm>` requires class and function templates with type parameters (`stdlib/vector`, `stdlib/utility`, `stdlib/algorithm`, `src/ast/template.rs`, `src/sema/template_registry.rs`). Standard C++ uses two-phase lookup: unqualified names bind in the definition context, and dependent calls add ADL candidates at instantiation. Real headers also need out-of-class member method definitions, member function templates inside class templates and plain structs, dependent member type aliases, and multi-arity overload sets.
 
 ## Options Considered
 - Option 1: Two-phase lookup conforming to ISO C++.
-  - Rejects invalid non-dependent symbols in uninstantiated templates early.
-  - Requires separate symbol resolution and typing passes over uninstantiated AST structures, adding substantial parser and semantic analysis complexity.
+  - Keeps definition-time bindings stable when later declarations would otherwise win overload resolution.
+  - Lets dependent calls find functions in the associated namespaces of their instantiated arguments.
+  - Adds a definition-time snapshot of visible overloads and an ADL candidate pass to the existing instantiation path.
 - Option 2: Single-phase lookup at instantiation time.
-  - Fits the existing compiler pipeline; the parser stores uninstantiated template declarations (`TemplateDecl`), and semantic analysis checks and lowers AST nodes when concrete types are supplied.
-  - Malformed non-dependent code in uninstantiated templates remains undetected unless instantiated.
+  - Fits the existing pipeline with no extra state, but a declaration later in the file can rebind a name in an earlier template.
 
 ## Decision
-1. Single-phase name lookup (`src/ast/template.rs`, `src/sema/template_registry.rs`).
-   We store template declarations directly in `Program` as `TemplateDecl` nodes without early name binding (`src/ast/template.rs`). We validate and resolve types only when a concrete specialization is requested (`src/sema/template_registry.rs`).
+1. Two-phase name lookup (`src/ast/template.rs`, `src/sema/analyze_decls.rs`, `src/sema/overload_adl.rs`).
+   `Program` stores template declarations as `TemplateDecl` nodes. When we register declarations, we record the overloads and template identities visible at each function template's definition, keyed by name, line and column. While we re-analyze a substituted template body or signature, ordinary unqualified lookup and function-template candidate collection only see that recorded set. A declaration that appears later in the file cannot rebind the name. Member templates use the same snapshot when a pending method body is analyzed. Dependent calls also collect ADL candidates from the instantiated argument types and merge them with the ordinary set. The same definition-time versus instantiation-time classification covers binary and unary operator expressions. ADL reaches hidden friends of a class, including friend function templates declared in classes and class-template specializations, but ordinary lookup does not. We resolve types when a concrete specialization is requested (`src/sema/template_registry_lookup.rs`).
 
-2. Canonical specialization identity (`src/sema/template_registry.rs`).
-   We name each specialization using its template name and canonical argument types (such as `Holder<int>` or `std::vector<int>`). We cache instantiated struct and function declarations in `Sema` so identical specializations reuse the same generated definitions.
+2. Canonical specialization identity (`src/sema/template_registry_instantiate.rs`).
+   We name each specialization using its template name and canonical argument types (such as `Holder<int>` or `std::vector<int>`). We cache instantiated struct and function declarations in `Sema` so identical specializations reuse the same generated definitions. Only completed specializations enter the cache: a specialization still being built lives on the instantiation stack, and a failed one restores the state it wrote so a later request can retry it (`src/sema/template_state.rs`).
 
-3. Lazy member function instantiation (`src/sema/template_registry.rs`, `src/sema/expr_ops.rs`).
+3. Lazy member function instantiation (`src/sema/template_registry_members.rs`, `src/sema/expr_ops.rs`).
    We lay out fields and register member function signatures when instantiating a class template. We defer member function body analysis and emission until called or referenced, permitting template arguments that do not support unused member methods. Non-virtual destructors instantiate eagerly alongside virtual methods so synthesized cleanup logic can drop values on scope exit.
 
-4. Out-of-class template method resolution (`src/sema/template_registry.rs`).
+4. Out-of-class template method resolution (`src/sema/analyze_helpers.rs`).
    When the parser encounters `template <typename T> void Class<T>::method()`, we look up the primary class template and attach the method AST directly to its declaration before any instantiation occurs.
 
-5. Member function templates (`src/sema/constructor.rs`, `src/sema/template_registry.rs`).
+5. Member function templates (`src/sema/constructor.rs`, `src/sema/template_registry_members.rs`).
    Member methods declaring their own template parameters (such as `pair(U1&&, U2&&)` or `DefaultLess::operator()<T>`) bypass eager class method registration and register into `member_templates`. We deduce their arguments and synthesize concrete methods during call resolution. For non-template structs, instantiated methods synthesize into dedicated struct declarations so codegen compiles them with concrete types.
 
-6. Instantiated dependent type aliases (`src/sema/template_registry.rs`).
+6. Instantiated dependent type aliases (`src/sema/template_registry_types.rs`).
    When instantiating a class template that declares member type aliases (such as `using iterator = T*`), we substitute the template arguments into the target type and register the qualified alias (such as `std::vector<int>::iterator` resolving to `int*`).
 
-7. Multi-arity function template candidate sets (`src/sema/template_registry.rs`, `src/sema/template_func.rs`).
+7. Multi-arity function template candidate sets (`src/sema/template_registry_lookup.rs`, `src/sema/template_func.rs`).
    Function template registration maintains a candidate vector for each identifier. Overload resolution filters candidates by parameter count and default arguments before argument deduction, allowing overloads like `sort(first, last)` and `sort(first, last, comp)` to coexist.
 
-8. Recursion depth budget (`src/sema/template_registry.rs`).
-   We cap recursion depth at 500 levels, rejecting recursive template expansions with an explicit diagnostic before exhausting the WebAssembly call stack.
+8. Recursion depth budget (`src/sema/template_state.rs`, `src/sema/template_registry_instantiate.rs`).
+   We cap recursion depth at 500 levels, rejecting recursive template expansions with an explicit diagnostic before exhausting the WebAssembly call stack. The stack and depth counter are unwound on every exit path, including errors, so a rejected expansion cannot leave later instantiations artificially deep.
 
 9. Nested class instantiation in class templates (`src/sema/template_nested.rs`).
    When instantiating a class template containing member struct declarations (such as `AVLTree<T>::Node`), we capture nested AST declarations in `TemplateClass` and clone them with outer type arguments substituted. Each nested struct receives its qualified canonical name (such as `std::detail::AVLTree<int, int>::Node`), computes its record layout, and registers synthesized lifecycle hooks and member methods.
@@ -58,3 +58,5 @@ Compiling templated standard library headers like `<vector>`, `<utility>`, and `
 
 ### Negative / Trade-offs
 - Ill-formed non-dependent expressions in uninstantiated template bodies do not trigger compile errors unless an instantiation requests them.
+- Friend declarations are never added to an ordinary lookup snapshot. A hidden friend reaches a non-dependent call only through definition-time ADL and a dependent call through instantiation-time ADL, so a friend introduced after a template definition is invisible to that template's non-dependent calls.
+- Hidden friends of base classes are not found through ADL for a derived-class argument. Record layouts store base names without namespace qualification while friends are keyed by the qualified class name, and conversion ranking does not bridge the two spellings.

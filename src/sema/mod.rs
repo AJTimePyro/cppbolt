@@ -1,24 +1,28 @@
 //! Semantic analysis: symbols, overloads, record layout, and type checks.
-//!
-//! See the mdBook guide at `docs/book/internals/semantic-analysis.md`.
-
+//! See `docs/book/internals/semantic-analysis.md`.
 mod analyze;
+mod analyze_decls;
 mod analyze_field_init;
+mod analyze_global;
 mod analyze_helpers;
 mod assign;
+mod builtins;
 mod call_arity;
 pub mod constexpr_eval;
 mod constexpr_globals;
 mod constructor;
 mod constructor_helpers;
+mod decltype_resolve;
 mod expected_type;
 mod expr;
 mod expr_call;
+mod expr_call_helpers;
 mod expr_call_member;
 mod expr_lambda;
 mod expr_lambda_free_vars;
 mod expr_member;
 mod expr_ops;
+mod expr_ops_unary;
 mod expr_subscript;
 pub mod fold_expansion;
 #[cfg(test)]
@@ -43,10 +47,12 @@ mod member_pointer;
 #[cfg(test)]
 mod member_ptr_tests;
 mod overload;
+mod overload_adl;
 pub mod pack_expansion;
 #[cfg(test)]
 mod pack_expansion_tests;
 mod receiver;
+mod sema_state;
 mod sema_types;
 mod stmt;
 mod stmt_decl;
@@ -57,17 +63,28 @@ mod synthesize;
 mod synthesize_ops;
 mod template_alias;
 pub mod template_arg_match;
+mod template_call_dependence;
 mod template_deduce;
 mod template_deduce_type;
 mod template_func;
+mod template_func_helpers;
 mod template_match;
+mod template_match_args;
+mod template_match_confirm;
+mod template_match_deduce;
 mod template_name;
 mod template_nested;
+mod template_nested_lookup;
 pub mod template_partial_order;
 mod template_registry;
 mod template_registry_helpers;
+mod template_registry_instantiate;
+mod template_registry_lookup;
 mod template_registry_members;
+mod template_registry_types;
+mod template_registry_variable;
 mod template_spec;
+mod template_state;
 pub mod template_subst;
 mod template_subst_align;
 mod template_subst_array;
@@ -79,6 +96,8 @@ mod template_subst_pack;
 mod template_subst_stmt;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_instantiation;
 mod tests_pack;
 
 pub(crate) use expected_type::is_member_pointer_address;
@@ -96,75 +115,32 @@ pub(crate) use function_sig::FunctionSig;
 pub(crate) use layout_types::VTableSlotInfo;
 pub use layout_types::{StructField, StructLayout};
 pub(crate) use receiver::{receiver_is_const_type, sig_receiver_is_const};
+pub use sema_state::{AliasVisibility, Sema};
 pub(crate) use sema_types::{ConversionFailure, DeferredMethod};
 pub use sema_types::{Scope, VarSymbol};
 use std::collections::{HashMap, HashSet};
 
-pub struct Sema {
-    pub struct_layouts: HashMap<String, StructLayout>,
-    pub struct_order: Vec<String>,
-    pub enum_values: HashMap<String, i64>,
-    pub enum_types: HashMap<String, String>,
-    pub scoped_enums: HashSet<String>,
-    pub functions: HashMap<String, Vec<FunctionSig>>,
-    pub global_vars: HashMap<String, VarSymbol>,
-    pub scopes: Vec<Scope>,
-    pub current_func_return_type: Option<Type>,
-    pub current_frame_size: i32,
-    pub struct_sizes: HashMap<String, usize>,
-    pub struct_aligns: HashMap<String, usize>,
-    pub current_line: usize,
-    pub current_col: usize,
-    pub loop_depth: usize,
-    pub switch_depth: usize,
-    pub current_class: Option<String>,
-    pub current_func_name: Option<String>,
-    pub open_namespaces: Vec<String>,
-    pub using_decls: HashMap<String, String>,
-    pub namespace_aliases: HashMap<String, String>,
-    pub type_aliases: HashMap<String, Type>,
-    /// Whether the analysis is inside the initializer of a variable.
-    ///
-    /// A constructor call in an initializer reports an initialization
-    /// diagnostic, while a constructor call in an expression reports a call
-    /// diagnostic.
-    pub in_initializer: bool,
-    /// Target type available at the current expression site (initializer,
-    /// assignment, return, cast). Used to disambiguate overloaded
-    /// `&Class::member` addresses.
-    pub expected_type: Option<Type>,
-    pub range_for_counter: usize,
-    pub lambda_counter: usize,
-    pub synthesized_decls: Vec<Decl>,
-    pub current_func_is_const: bool,
-    pub class_templates: HashMap<String, (TemplateClass, Vec<TemplateParam>)>,
-    pub class_specializations: HashMap<String, TemplateClass>,
-    pub partial_specializations: HashMap<String, Vec<template_match::PartialSpec>>,
-    pub function_templates: HashMap<String, Vec<(FunctionDecl, Vec<TemplateParam>)>>,
-    pub alias_templates: HashMap<String, (Vec<TemplateParam>, Type)>,
-    pub instantiated_classes: HashSet<String>,
-    pub instantiated_functions: HashSet<String>,
-    pub pending_template_methods: HashMap<String, (String, FunctionDecl)>,
-    pub(crate) deferred_methods: Vec<DeferredMethod>,
-    /// Classes used as complete objects; only their bodies need checking.
-    pub(crate) object_use_classes: HashSet<String>,
-    pub member_templates: HashMap<String, Vec<FunctionDecl>>,
-    pub instantiation_depth: usize,
-    pub instantiation_stack: Vec<String>,
-    pub structs_with_dtor: HashSet<String>,
-    pub structs_with_move: HashSet<String>,
-    depth: crate::depth::DepthCounters,
-}
-
 impl Sema {
+    pub(super) fn active_visible_functions(&self) -> Option<&std::collections::HashSet<String>> {
+        if let Some(vis) = &self.active_alias_visibility {
+            return Some(&vis.functions);
+        }
+        self.current_template_identity
+            .as_ref()
+            .and_then(|id| self.template_definition_functions.get(id))
+    }
+
     pub fn new() -> Self {
         let mut sema = Self {
             struct_layouts: HashMap::new(),
             struct_order: Vec::new(),
             enum_values: HashMap::new(),
+            static_const_values: HashMap::new(),
             enum_types: HashMap::new(),
             scoped_enums: HashSet::new(),
             functions: HashMap::new(),
+            hidden_friends: HashMap::new(),
+            hidden_friend_templates: HashMap::new(),
             global_vars: HashMap::new(),
             scopes: Vec::new(),
             current_func_return_type: None,
@@ -182,8 +158,16 @@ impl Sema {
             class_templates: HashMap::new(),
             class_specializations: HashMap::new(),
             partial_specializations: HashMap::new(),
+            instantiated_class_definitions: HashMap::new(),
             function_templates: HashMap::new(),
+            template_definition_functions: HashMap::new(),
+            dependent_calls: HashMap::new(),
+            template_definition_usings: HashMap::new(),
+            template_definition_namespaces: HashMap::new(),
+            current_template_identity: None,
             alias_templates: HashMap::new(),
+            variable_templates: HashMap::new(),
+            instantiated_variable_templates: HashMap::new(),
             instantiated_classes: HashSet::new(),
             instantiated_functions: HashSet::new(),
             pending_template_methods: HashMap::new(),
@@ -200,76 +184,21 @@ impl Sema {
             using_decls: HashMap::new(),
             namespace_aliases: HashMap::new(),
             type_aliases: HashMap::new(),
+            alias_visibility: HashMap::new(),
+            class_field_visibility: HashMap::new(),
+            active_alias_visibility: None,
+            decltype_alias_context: HashMap::new(),
+            in_substitution_context: false,
             in_initializer: false,
+            speculating: false,
+            speculative_hard: false,
+            signature_params: Vec::new(),
             expected_type: None,
             depth: crate::depth::DepthCounters::new(),
         };
 
         sema.register_builtins();
         sema
-    }
-
-    fn register_builtins(&mut self) {
-        // Built-in printf: variadic, mangled as "printf"
-        self.register_function(FunctionSig {
-            qualifiers: FunctionQualifiers::default(),
-            name: "printf".to_string(),
-            mangled_name: "printf".to_string(),
-            return_type: Type::Int,
-            param_types: vec![Type::Pointer(Box::new(Type::Char))],
-            default_args: vec![None],
-            is_static: false,
-            is_explicit: false,
-            ref_qualifier: RefQualifier::None,
-        });
-        self.register_function(FunctionSig {
-            qualifiers: FunctionQualifiers::default(),
-            name: "std::printf".to_string(),
-            mangled_name: "std::printf".to_string(),
-            return_type: Type::Int,
-            param_types: vec![Type::Pointer(Box::new(Type::Char))],
-            default_args: vec![None],
-            is_static: false,
-            is_explicit: false,
-            ref_qualifier: RefQualifier::None,
-        });
-
-        // Built-in malloc & free
-        self.register_function(FunctionSig {
-            qualifiers: FunctionQualifiers::default(),
-            name: "malloc".to_string(),
-            mangled_name: "malloc".to_string(),
-            return_type: Type::Pointer(Box::new(Type::Void)),
-            param_types: vec![Type::Int],
-            default_args: vec![None],
-            is_static: false,
-            is_explicit: false,
-            ref_qualifier: RefQualifier::None,
-        });
-
-        self.register_function(FunctionSig {
-            qualifiers: FunctionQualifiers::default(),
-            name: "free".to_string(),
-            mangled_name: "free".to_string(),
-            return_type: Type::Void,
-            param_types: vec![Type::Pointer(Box::new(Type::Void))],
-            default_args: vec![None],
-            is_static: false,
-            is_explicit: false,
-            ref_qualifier: RefQualifier::None,
-        });
-
-        self.register_function(FunctionSig {
-            qualifiers: FunctionQualifiers::default(),
-            name: "__builtin_wasm_memory_size".to_string(),
-            mangled_name: "__builtin_wasm_memory_size".to_string(),
-            return_type: Type::Int,
-            param_types: vec![Type::Int],
-            default_args: vec![None],
-            is_static: false,
-            is_explicit: false,
-            ref_qualifier: RefQualifier::None,
-        });
     }
 
     /// Registers an overload under its source name, mangled name, and any
@@ -307,9 +236,26 @@ impl Sema {
         self.lookup_var_in_context(name, self.current_func_name.as_deref().unwrap_or(""))
     }
 
+    /// A namespace-scope variable is visible in an alias context only if it
+    /// was declared before the alias. Class members (qualified names) and
+    /// everything outside alias validation stay unrestricted.
+    fn visible_global(&self, name: &str) -> Option<&VarSymbol> {
+        let snapshot = self
+            .active_alias_visibility
+            .as_ref()
+            .and_then(|vis| vis.variables.as_ref());
+        let visible = snapshot.is_none()
+            || !name.contains("::") && snapshot.is_some_and(|names| names.contains(name));
+        if visible {
+            self.global_vars.get(name)
+        } else {
+            None
+        }
+    }
+
     pub fn lookup_var_in_context(&self, name: &str, func_name: &str) -> Option<&VarSymbol> {
         if let Some(stripped) = name.strip_prefix("::") {
-            return self.global_vars.get(stripped);
+            return self.visible_global(stripped);
         }
         for scope in self.scopes.iter().rev() {
             if let Some(var) = scope.vars.get(name) {
@@ -320,7 +266,7 @@ impl Sema {
         if !effective_func.is_empty() {
             let mut curr = effective_func;
             while let Some((ns, _)) = curr.rsplit_once("::") {
-                if let Some(var) = self.global_vars.get(&format!("{}::{}", ns, name)) {
+                if let Some(var) = self.visible_global(&format!("{}::{}", ns, name)) {
                     return Some(var);
                 }
                 curr = ns;
@@ -328,21 +274,21 @@ impl Sema {
         }
         let resolved = self.resolve_alias_in_qualified_name(name);
         let name = resolved.as_str();
-        if let Some(var) = self.global_vars.get(name) {
+        if let Some(var) = self.visible_global(name) {
             return Some(var);
         }
         if let Some(alias) = QualifiedName::new(name).implicit_alias()
-            && let Some(var) = self.global_vars.get(alias.as_ref())
+            && let Some(var) = self.visible_global(alias.as_ref())
         {
             return Some(var);
         }
         if let Some(target) = self.using_decls.get(name)
-            && let Some(var) = self.global_vars.get(target)
+            && let Some(var) = self.visible_global(target)
         {
             return Some(var);
         }
         for ns in &self.open_namespaces {
-            if let Some(var) = self.global_vars.get(&format!("{}::{}", ns, name)) {
+            if let Some(var) = self.visible_global(&format!("{}::{}", ns, name)) {
                 return Some(var);
             }
         }

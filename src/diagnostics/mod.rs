@@ -14,6 +14,9 @@ pub enum ErrorKind {
     /// A name whose declaration may appear later in the translation unit.
     /// Only these errors may be deferred and retried after registration.
     UnresolvedName,
+    /// An invalid type formed in the immediate context of template signature
+    /// substitution. It discards the candidate instead of aborting the build.
+    Substitution,
     /// Feature outside the supported C++ subset.
     Unsupported,
     /// Internal invariant failure or resource limit reached.
@@ -93,6 +96,62 @@ impl fmt::Display for CompileError {
 }
 
 impl std::error::Error for CompileError {}
+
+/// An invalid type or expression formed while substituting template arguments
+/// into a signature's immediate context. The enclosing overload candidate is
+/// discarded; this is not an ordinary compilation error.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubstitutionFailure {
+    pub message: String,
+    pub line: usize,
+    pub col: usize,
+}
+
+impl SubstitutionFailure {
+    pub fn new(message: impl Into<String>, line: usize, col: usize) -> Self {
+        Self {
+            message: message.into(),
+            line,
+            col,
+        }
+    }
+
+    /// Substitution helpers often report `(0, 0)`; anchor those to the call site.
+    pub fn at_call(mut self, line: usize, col: usize) -> Self {
+        if self.line == 0 && self.col == 0 {
+            self.line = line;
+            self.col = col;
+        }
+        self
+    }
+}
+
+impl From<CompileError> for SubstitutionFailure {
+    fn from(error: CompileError) -> Self {
+        Self::new(error.message, error.line, error.col)
+    }
+}
+
+/// Outcome of forming a function template candidate signature.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TemplateFailure {
+    /// Failure in the immediate context: remove the candidate, keep resolving.
+    Substitution(SubstitutionFailure),
+    /// A genuine error, for example while instantiating another template: abort.
+    Hard(CompileError),
+}
+
+impl From<SubstitutionFailure> for TemplateFailure {
+    fn from(failure: SubstitutionFailure) -> Self {
+        Self::Substitution(failure)
+    }
+}
+
+impl From<CompileError> for TemplateFailure {
+    fn from(error: CompileError) -> Self {
+        Self::Hard(error)
+    }
+}
 
 /// Reports a broken internal invariant through the same diagnostic path as
 /// user errors so browser builds never unwind on an `unwrap`.

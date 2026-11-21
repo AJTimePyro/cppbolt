@@ -1,0 +1,1 @@
+tests/negative/sfinae_all_candidates_rejected_reasons.cpp:7:12: error: no matching function for call to 'f': 2 candidates rejected: template argument deduction conflict for 'T': deduced 'int' and 'double'; type mismatch in deduction: expected pointer

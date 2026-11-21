@@ -195,7 +195,7 @@ impl<'a> Codegen<'a> {
     }
 }
 
-fn candidate_function_names(name: &str, arg_types: &[Type]) -> Vec<String> {
+pub(super) fn candidate_function_names(name: &str, arg_types: &[Type]) -> Vec<String> {
     let mut candidate_names = vec![
         name.to_string(),
         QualifiedName::new(name).alternate().into_owned(),

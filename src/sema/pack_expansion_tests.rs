@@ -80,6 +80,7 @@ fn test_pack_length_mismatch_error() -> Result<(), Box<dyn std::error::Error>> {
             Expr::Identifier("Us".to_string()),
         ],
         pos: ExprPos::new(1, 1),
+        dependent: false,
     };
     let exprs = vec![Expr::PackExpansion {
         pattern: Box::new(pattern),

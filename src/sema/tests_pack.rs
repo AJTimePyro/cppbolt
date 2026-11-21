@@ -17,6 +17,7 @@ fn test_pack_expansion_expr_list() -> Result<(), Box<dyn std::error::Error>> {
         callee: Box::new(Expr::Identifier("f".to_string())),
         args: vec![Expr::Identifier("args".to_string())],
         pos: ExprPos::default(),
+        dependent: false,
     };
     let exprs = vec![Expr::PackExpansion {
         pattern: Box::new(pattern),

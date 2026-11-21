@@ -1,0 +1,1 @@
+tests/negative/sfinae_substitution_all_rejected.cpp:4:12: error: no matching function for call to 'only': substitution failure: Array dimension must be non-negative integer constant

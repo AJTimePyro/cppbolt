@@ -1,0 +1,1 @@
+tests/negative/partial_spec_hard_instantiation.cpp:7:14: error: no type named 'type' in 'Bad'

@@ -1,0 +1,9 @@
+Box<C::n>     = 7
+Box<C::m>     = 3
+Box<NS::D::k> = 11
+Box<::C::n>   = 7
+Box<Derived::h> = 13
+Box<C::n + 1> = 8
+Wrap<C, C::m> = 3
+Outer<C::n>   = 14
+Box<E::v>     = 6

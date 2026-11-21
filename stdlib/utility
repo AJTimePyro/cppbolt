@@ -4,6 +4,10 @@
 #include <cstddef>
 
 namespace std {
+    // Declared but never defined: valid only in unevaluated operands.
+    template<typename T>
+    T&& declval();
+
     template<typename T>
     constexpr T&& move(T& t) noexcept {
         return static_cast<T&&>(t);

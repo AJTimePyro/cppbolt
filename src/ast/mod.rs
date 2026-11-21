@@ -4,11 +4,14 @@
 
 pub mod decl;
 pub mod expr;
+mod expr_drop;
 pub mod fold_op;
 pub mod stmt;
 pub mod template;
 mod type_display;
 pub mod types;
+#[cfg(test)]
+mod types_tests;
 
 pub use decl::{
     BaseAccess, Decl, FieldInit, FunctionDecl, Param, Program, RefQualifier, StructFieldDecl,

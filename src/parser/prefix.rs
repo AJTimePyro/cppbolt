@@ -29,6 +29,7 @@ impl Parser {
                             callee: Box::new(Expr::Identifier(ty.to_c_type())),
                             args,
                             pos: start,
+                            dependent: false,
                         };
                         return self.parse_postfix(call, start);
                     }

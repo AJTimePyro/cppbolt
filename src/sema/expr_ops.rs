@@ -1,29 +1,88 @@
 use super::*;
 
+fn builtin_binary_result_type(op: &BinaryOp, lty: &Type, rty: &Type) -> Type {
+    match op {
+        BinaryOp::LogicalAnd
+        | BinaryOp::LogicalOr
+        | BinaryOp::Eq
+        | BinaryOp::Ne
+        | BinaryOp::Lt
+        | BinaryOp::Le
+        | BinaryOp::Gt
+        | BinaryOp::Ge => Type::Bool,
+        BinaryOp::Shl | BinaryOp::Shr => lty.strip_reference().integer_promotion(),
+        _ => {
+            let lty_d = lty.decay_array();
+            let rty_d = rty.decay_array();
+            if lty_d.is_pointer() && rty.is_integer() {
+                lty_d
+            } else if rty_d.is_pointer() && lty.is_integer() && *op == BinaryOp::Add {
+                rty_d
+            } else if lty_d.is_pointer() && rty_d.is_pointer() && *op == BinaryOp::Sub {
+                Type::Int
+            } else {
+                lty.strip_reference()
+                    .usual_arithmetic_conversion(rty.strip_reference())
+            }
+        }
+    }
+}
+
+/// Splits the left-associative binary spine of `expr` into its base operand
+/// and trailing (operator, right operand, position) triples.
+fn unwind_binary_spine(expr: &mut Expr) -> (Expr, Vec<(BinaryOp, Expr, ExprPos)>) {
+    let placeholder = Expr::IntLiteral(0, Type::Int);
+    let mut owned = std::mem::replace(expr, placeholder);
+    let mut spine = Vec::new();
+    while let Expr::Binary {
+        op,
+        left,
+        right,
+        pos,
+    } = &mut owned
+    {
+        let op = *op;
+        let pos = *pos;
+        let left_owned = std::mem::replace(&mut **left, Expr::BoolLiteral(false));
+        let right_owned = std::mem::replace(&mut **right, Expr::BoolLiteral(false));
+        spine.push((op, right_owned, pos));
+        owned = left_owned;
+    }
+    (owned, spine)
+}
+
 impl Sema {
     /// Result type of a binary operator once both operand types are known.
     ///
     /// Kept separate from `analyze_binary` so left-associative operator chains
     /// can be type-checked by walking the chain iteratively instead of
     /// recursing once per term.
-    pub(super) fn binary_result_type(&mut self, op: &BinaryOp, lty: &Type, rty: &Type) -> Type {
+    pub(super) fn binary_result_type(
+        &mut self,
+        op: &BinaryOp,
+        lty: &Type,
+        rty: &Type,
+        dependent: bool,
+        pos: ExprPos,
+    ) -> Result<Type, CompileError> {
         let clean_lty = lty.strip_reference().strip_const();
         let clean_rty = rty.strip_reference().strip_const();
         if (matches!(clean_lty, Type::Struct(_) | Type::Enum(_))
             || matches!(clean_rty, Type::Struct(_) | Type::Enum(_)))
             && let Some(op_str) = op.op_name()
-            && let Some(res) = self.resolve_overloaded_binary_type(op_str, lty, rty, clean_lty)
+            && let Some(res) =
+                self.resolve_overloaded_binary_type(op_str, lty, rty, clean_lty, dependent)
         {
-            return res;
+            return Ok(res);
         }
 
         if *op == BinaryOp::Comma {
-            return rty.clone();
+            return Ok(rty.clone());
         }
         if *op == BinaryOp::DotStar || *op == BinaryOp::ArrowStar {
-            return self
+            return Ok(self
                 .check_member_pointer_binary(*op, lty, rty, ExprPos::default())
-                .unwrap_or(Type::Int);
+                .unwrap_or(Type::Int));
         }
 
         let (l_clean, r_clean) = (
@@ -35,41 +94,33 @@ impl Sema {
             && let Some(sig) = self.find_conversion_to(s, r_clean, lty.strip_reference().is_const())
         {
             let conv = sig.return_type.strip_reference().clone();
-            return self.binary_result_type(op, &conv, rty);
+            return self.binary_result_type(op, &conv, rty, dependent, pos);
         }
         if let Type::Struct(s) = r_clean
             && !matches!(l_clean, Type::Struct(_))
             && let Some(sig) = self.find_conversion_to(s, l_clean, rty.strip_reference().is_const())
         {
             let conv = sig.return_type.strip_reference().clone();
-            return self.binary_result_type(op, lty, &conv);
+            return self.binary_result_type(op, lty, &conv, dependent, pos);
         }
 
-        match op {
-            BinaryOp::LogicalAnd
-            | BinaryOp::LogicalOr
-            | BinaryOp::Eq
-            | BinaryOp::Ne
-            | BinaryOp::Lt
-            | BinaryOp::Le
-            | BinaryOp::Gt
-            | BinaryOp::Ge => Type::Bool,
-            BinaryOp::Shl | BinaryOp::Shr => lty.strip_reference().integer_promotion(),
-            _ => {
-                let lty_d = lty.decay_array();
-                let rty_d = rty.decay_array();
-                if lty_d.is_pointer() && rty.is_integer() {
-                    lty_d
-                } else if rty_d.is_pointer() && lty.is_integer() && *op == BinaryOp::Add {
-                    rty_d
-                } else if lty_d.is_pointer() && rty_d.is_pointer() && *op == BinaryOp::Sub {
-                    Type::Int
-                } else {
-                    lty.strip_reference()
-                        .usual_arithmetic_conversion(rty.strip_reference())
-                }
-            }
+        // A class-type operand needs an overload. In a template, a
+        // non-dependent operator expression must find it at the definition
+        // context; leaving it unresolved would let codegen bind a later
+        // declaration that ordinary lookup cannot see.
+        if !dependent
+            && self.current_template_identity.is_some()
+            && op.op_name().is_some()
+            && (matches!(l_clean, Type::Struct(_)) || matches!(r_clean, Type::Struct(_)))
+        {
+            return Err(CompileError::unresolved_name(
+                "invalid operands to binary expression",
+                pos.line,
+                pos.col,
+            ));
         }
+
+        Ok(builtin_binary_result_type(op, lty, rty))
     }
 
     pub(super) fn analyze_binary(&mut self, expr: &mut Expr) -> Result<Type, CompileError> {
@@ -83,35 +134,7 @@ impl Sema {
 
         // Take the left-associative spine apart so a chain of `n` operators
         // needs one stack frame, not `n`.
-        let placeholder = Expr::IntLiteral(0, Type::Int);
-        let mut owned = std::mem::replace(expr, placeholder);
-        let mut spine: Vec<(BinaryOp, Expr, ExprPos)> = Vec::new();
-        loop {
-            let Some((op, left_owned, right_owned, pos)) = (if let Expr::Binary {
-                op,
-                left,
-                right,
-                pos,
-            } = &mut owned
-            {
-                let op = *op;
-                let pos = *pos;
-                Some((
-                    op,
-                    std::mem::replace(&mut **left, Expr::BoolLiteral(false)),
-                    std::mem::replace(&mut **right, Expr::BoolLiteral(false)),
-                    pos,
-                ))
-            } else {
-                None
-            }) else {
-                break;
-            };
-            spine.push((op, right_owned, pos));
-            owned = left_owned;
-        }
-
-        let mut base = owned;
+        let (mut base, mut spine) = unwind_binary_spine(expr);
         let mut lty = self.analyze_expr(&mut base)?;
         for (op, right, pos) in spine.iter_mut().rev() {
             let mut rty = self.analyze_expr(right)?;
@@ -119,7 +142,14 @@ impl Sema {
                 lty = self.check_member_pointer_binary(*op, &lty, &rty, *pos)?;
                 continue;
             }
-            self.apply_binary_conversions(*op, (&mut base, &mut lty), (right, &mut rty), *pos);
+            let dependent = self.expression_is_dependent(*pos);
+            self.apply_binary_conversions(
+                *op,
+                (&mut base, &mut lty),
+                (right, &mut rty),
+                *pos,
+                dependent,
+            );
             // Adding two pointers is not a C++ expression.
             if *op == BinaryOp::Add
                 && lty.decay_array().is_pointer()
@@ -131,7 +161,7 @@ impl Sema {
                     pos.col,
                 ));
             }
-            lty = self.binary_result_type(op, &lty, &rty);
+            lty = self.binary_result_type(op, &lty, &rty, dependent, *pos)?;
         }
 
         let mut rebuilt = base;
@@ -153,6 +183,7 @@ impl Sema {
         left: (&mut Expr, &mut Type),
         right: (&mut Expr, &mut Type),
         pos: ExprPos,
+        dependent: bool,
     ) {
         let (base, lty) = left;
         let (right, rty) = right;
@@ -164,7 +195,7 @@ impl Sema {
             {
                 return true;
             }
-            self.find_call_candidates(op_str, &[lty.clone(), rty.clone()])
+            self.find_call_candidates(op_str, &[lty.clone(), rty.clone()], dependent)
                 .is_some()
         });
         if has_overload || op == BinaryOp::Comma {
@@ -199,27 +230,32 @@ impl Sema {
             ));
         };
 
-        if *op == UnaryOp::AddrOf
-            && let Expr::Identifier(name) = expr.as_ref()
-            && let Some(resolved) = self.try_resolve_member_pointer_address(name, *pos)?
-        {
-            if let Some(encoded_name) = resolved.encoded_name {
-                // Taking the address of a template-specialization method must
-                // force its deferred instantiation so codegen can emit it.
-                if let Some((_, mangled)) = encoded_name.split_once("@@") {
-                    self.instantiate_pending_method(mangled)?;
-                }
-                if let Expr::Identifier(name) = &mut **expr {
-                    *name = encoded_name;
-                }
-            }
-            return Ok(resolved.ty);
+        if let Some(ty) = self.resolve_member_pointer_address(*op, expr, *pos)? {
+            return Ok(ty);
         }
 
         let ty = self.analyze_expr(expr)?;
+        let dependent = self.expression_is_dependent(*pos);
         match op {
-            UnaryOp::Not => Ok(Type::Bool),
-            UnaryOp::Deref => self.analyze_deref(&ty, *pos),
+            UnaryOp::Not => {
+                if let Type::Struct(sname) = ty.strip_const() {
+                    if let Some(sig) = self.find_unary_operator(UnaryOp::Not, &ty, dependent) {
+                        self.instantiate_pending_method(&sig.mangled_name)?;
+                        return Ok(sig.return_type);
+                    }
+                    // `!x` may also use a contextual conversion to bool.
+                    let has_bool_conv = self.find_method_in_class(sname, "operator bool").is_some();
+                    if !dependent && self.current_template_identity.is_some() && !has_bool_conv {
+                        return Err(CompileError::unresolved_name(
+                            "invalid argument type to unary expression",
+                            pos.line,
+                            pos.col,
+                        ));
+                    }
+                }
+                Ok(Type::Bool)
+            }
+            UnaryOp::Deref => self.analyze_deref(&ty, *pos, dependent),
             UnaryOp::AddrOf => {
                 if let Type::Pointer(inner) = &ty
                     && let Type::Function { .. } = &**inner
@@ -227,7 +263,7 @@ impl Sema {
                     return Ok(ty);
                 }
                 // A class operand may name an overloaded `operator&`.
-                if let Some(sig) = self.find_unary_operator(UnaryOp::AddrOf, &ty) {
+                if let Some(sig) = self.find_unary_operator(UnaryOp::AddrOf, &ty, dependent) {
                     self.instantiate_pending_method(&sig.mangled_name)?;
                     return Ok(sig.return_type);
                 }
@@ -235,7 +271,7 @@ impl Sema {
             }
             UnaryOp::BitNot | UnaryOp::Neg | UnaryOp::Plus => {
                 // A class operand may name an overloaded operator.
-                if let Some(sig) = self.find_unary_operator(*op, &ty) {
+                if let Some(sig) = self.find_unary_operator(*op, &ty, dependent) {
                     self.instantiate_pending_method(&sig.mangled_name)?;
                     return Ok(sig.return_type);
                 }
@@ -260,107 +296,6 @@ impl Sema {
                 self.analyze_unary_incdec(op, &ty, *pos)
             }
         }
-    }
-
-    fn analyze_deref(&mut self, ty: &Type, pos: ExprPos) -> Result<Type, CompileError> {
-        if let Some(inner) = ty.deref_type() {
-            Ok(inner.clone())
-        } else if let Some(sig) = self.find_unary_operator(UnaryOp::Deref, ty) {
-            self.instantiate_pending_method(&sig.mangled_name)?;
-            Ok(sig.return_type)
-        } else {
-            Err(CompileError::new(
-                format!("Cannot dereference non-pointer type {}", ty.to_c_type()),
-                pos.line,
-                pos.col,
-            ))
-        }
-    }
-
-    fn analyze_unary_incdec(
-        &mut self,
-        op: &UnaryOp,
-        ty: &Type,
-        pos: ExprPos,
-    ) -> Result<Type, CompileError> {
-        if let Type::Struct(sname) = ty.strip_const() {
-            let m_name = if matches!(op, UnaryOp::PreInc | UnaryOp::PostInc) {
-                "operator++"
-            } else {
-                "operator--"
-            };
-            let count = if matches!(op, UnaryOp::PreInc | UnaryOp::PreDec) {
-                1
-            } else {
-                2
-            };
-            let receiver_const = receiver_is_const_type(ty);
-            if let Some(sig) =
-                self.find_method_with_param_count(sname, m_name, count, receiver_const)
-            {
-                let _ = self.instantiate_pending_method(&sig.mangled_name);
-                return Ok(sig.return_type);
-            }
-            return Err(CompileError::new(
-                format!("no matching '{}' for type '{}'", m_name, ty.to_c_type()),
-                pos.line,
-                pos.col,
-            ));
-        }
-        Ok(ty.clone())
-    }
-
-    /// Finds the operator that a unary operator on `operand` resolves to.
-    ///
-    /// A member operator of the operand's class wins over a free operator
-    /// function.  Only a class operand can name an operator, so the built-in
-    /// operators are never shadowed by an overload.
-    pub(super) fn find_unary_operator(&self, op: UnaryOp, operand: &Type) -> Option<FunctionSig> {
-        let name = match op {
-            UnaryOp::Neg => "operator-",
-            UnaryOp::Not => "operator!",
-            UnaryOp::BitNot => "operator~",
-            UnaryOp::Plus => "operator+",
-            UnaryOp::AddrOf => "operator&",
-            UnaryOp::Deref => "operator*",
-            _ => return None,
-        };
-        let Type::Struct(class_name) = operand.strip_const() else {
-            return None;
-        };
-        let receiver_const = receiver_is_const_type(operand);
-        if let Some(sig) = self.find_method_in_class_for_receiver(class_name, name, receiver_const)
-        {
-            return Some(sig);
-        }
-        self.find_free_operator(name, operand)
-    }
-
-    /// Finds a free operator function whose first parameter binds `operand`.
-    pub(super) fn find_free_operator(&self, name: &str, operand: &Type) -> Option<FunctionSig> {
-        let sigs = self.functions.get(name)?;
-        let mut best: Option<FunctionSig> = None;
-        let mut best_score = usize::MAX;
-        for sig in sigs {
-            let Some(param) = sig.param_types.first() else {
-                continue;
-            };
-            let score = if param.strip_all_const() == operand.strip_all_const() {
-                0
-            } else if param.is_reference()
-                && param.deref_type().map(|d| d.strip_all_const())
-                    == Some(operand.strip_all_const())
-            {
-                1
-            } else {
-                continue;
-            };
-            if score < best_score {
-                best_score = score;
-                best = Some(sig.clone());
-            }
-        }
-        best
     }
 
     pub(super) fn analyze_assign_expr(&mut self, expr: &mut Expr) -> Result<Type, CompileError> {
@@ -451,6 +386,7 @@ impl Sema {
         lty: &Type,
         rty: &Type,
         clean_lty: &Type,
+        dependent: bool,
     ) -> Option<Type> {
         if let Type::Struct(sname) = clean_lty
             && let Some(sig) = self.find_method_in_class(sname, op_str)
@@ -459,7 +395,7 @@ impl Sema {
             return Some(sig.return_type.clone());
         }
         let args = [lty.clone(), rty.clone()];
-        if let Some(sigs) = self.find_call_candidates(op_str, &args)
+        if let Some(sigs) = self.find_call_candidates(op_str, &args, dependent)
             && let Some(sig) = sigs
                 .iter()
                 .find(|s| self.score_call_candidate(s, &args, None).is_ok())

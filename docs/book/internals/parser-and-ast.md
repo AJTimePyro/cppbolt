@@ -37,15 +37,21 @@ The parser transforms the flat token stream into a structured Abstract Syntax Tr
   - `IntLiteral`, `FloatLiteral`, `StringLiteral`, `BoolLiteral`, `Identifier`, `BinaryOp` (including pointer-to-member operators `DotStar` and `ArrowStar`), `UnaryOp`, `Call`, `MemberCall`, `MemberAccess`, `ArraySubscript`, `New`, `Delete`, `Ternary`, `Assign`, `Cast`, `Lambda`.
   - `SizeofPack { name, pos }`: Compile-time `sizeof...(pack)` query returning the number of elements in the parameter pack.
   - `PackExpansion { pattern, pos }`: Pack expansion pattern `pattern...` in function calls, initializers, base classes, and constructor initializers.
+  - `Call { callee, args, pos, dependent }`: Named and indirect function invocations; `dependent` tracks whether substitution changed the callee or arguments, triggering instantiation-time ADL for template calls.
   - `FoldExpr { op, left, right, pos }`: C++17 fold expression over parameter packs covering all 32 fold operators across unary left, unary right, binary left, and binary right shapes (including `FoldOp::DotStar` and `FoldOp::ArrowStar`).
   - `InitializerList { elements, pos }`: Bare braced expression lists `{ a, b, c }`.
   - `TypedInitList { ty, elements, pos }`: Explicitly-typed temporary and direct-list expressions `Type{ a, b, c }`.
   - Every `Expr` variant carries an `ExprPos` (`line`, `col`) recording the position of its leading token.
+- `ast::decl::Decl`: Declarations parsed into the AST:
+  - Functions: `Function(FunctionDecl)`, `FriendFunction { class_name, func }` (friend functions declared in class scope and visible only via ADL).
+  - Types and Aliases: `Struct(StructDecl)`, `TypeAlias(TypeAliasDecl)`, `NamespaceAlias { alias, target, line, col }`, `UsingNamespace { name, line, col }`, `UsingDecl { name, line, col }`.
+  - Templates and Globals: `Template(TemplateDecl)`, `GlobalVar { name, ty, init, line, col }`.
 - `ast::types::Type`: Representation of types:
   - Primitives: `Int`, `LongLong`, `Short`, `Char`, `Float`, `Double`, `Bool`, `Void`, `Nullptr` (`decltype(nullptr)`), and unsigned variants.
   - Compounds: `Pointer(Box<Type>)`, `MemberPointer { class_name, member_type }` (pointers to data members `T C::*` and member functions `R (C::*)(Args...)`), `Reference(Box<Type>)` (lvalue ref `T&`), `RvalueReference(Box<Type>)` (rvalue ref `T&&`), `Array(Box<Type>, usize)`, `DependentArray(Box<Type>, String)`.
   - Variadics: `PackExpansion(Box<Type>)` representing an expanded type pattern `Ts...`.
   - Aggregates and Generics: `Struct(String)`, `Enum(String)`, `TypeParam(String)`, `NonType(i128)`, `TemplateInstance { name, args }`, `Function { return_type, params }`.
+  - Dependent expressions: `Decltype { expr, parenthesized, alias }` stores the operand expression, whether it was parenthesized, and an alias name to isolate namespace alias contexts. `DependentNested(String)` records a qualified type such as `T::type` whose base was substituted.
 
 ---
 
