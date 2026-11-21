@@ -1,11 +1,11 @@
-# `<type_traits>` — LLVM libc++ 23.1.5 Integration
+# `<type_traits>`: LLVM libc++ 23.1.5 Integration
 
 ## Upstream source
 
-- **Tag:** `llvmorg-23.1.5` (libc++ 23.1.5)
-- **Umbrella header:** `libcxx/include/type_traits`
-- **Implementation:** `libcxx/include/__type_traits/*.h`
-- **License:** Apache License v2.0 with LLVM Exceptions (retained in every
+- Tag: `llvmorg-23.1.5` (libc++ 23.1.5)
+- Umbrella header: `libcxx/include/type_traits`
+- Implementation: `libcxx/include/__type_traits/*.h`
+- License: Apache License v2.0 with LLVM Exceptions (retained in every
   imported header; `SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception`).
 
 Upstream `<type_traits>` is not a self-contained header. The umbrella includes
@@ -26,16 +26,14 @@ for a working upstream trait.
    headers. Their include paths were rewritten from `<__type_traits/...>` to
    `<detail/type_traits/...>`, `<__config>` to `<compat/compiler/compiler.h>`,
    and the `<__cstddef/...>` helpers to `<cstddef>`.
-3. `stdlib/detail/type_traits/builtins.h` is **new reusable infrastructure**:
-   it spells the compiler type-query/transform builtins libc++ expects
-   (`__is_same`, `__is_const`, `__remove_pointer`, ...) as ordinary class
-   template partial specializations. The upstream headers see a compiler that
-   "has" those builtins, so their logic is unchanged. Future libc++ integrations
-   can reuse this shim.
-4. `stdlib/compat/compiler/compiler.h` gained the remaining libc++ macros
-   (`_LIBCPP_STD_VER 17`, `_LIBCPP_NO_SPECIALIZATIONS`, diagnostic push/pop,
-   `__has_builtin`/`__has_warning`/`__has_cpp_attribute` → `0`, feature guards
-   for 128-bit integers and wide characters).
+3. `stdlib/detail/type_traits/builtins.h` implements compiler type queries
+   and transform builtins (`__is_same`, `__is_const`, `__remove_pointer`, ...)
+   as class template partial specializations. The upstream headers see a
+   compiler that provides those builtins, keeping their logic unchanged.
+4. `stdlib/compat/compiler/compiler.h` provides libc++ macros (`_LIBCPP_STD_VER 17`,
+   `_LIBCPP_NO_SPECIALIZATIONS`, diagnostic controls,
+   `__has_builtin`/`__has_warning`/`__has_cpp_attribute` evaluating to `0`,
+   and feature guards for 128-bit integers and wide characters).
 
 ### Targeted library adaptations
 
@@ -78,27 +76,27 @@ These live in the compiler, not the library, and benefit future integrations:
 
 Verified against Clang 23.1.5 and GCC 16.2.1 using `-nostdinc++ -I stdlib`:
 
-- **Helper classes:** `integral_constant`, `true_type`, `false_type`,
+- Helper classes: `integral_constant`, `true_type`, `false_type`,
   `bool_constant`, `_BoolConstant`.
-- **SFINAE helpers:** `enable_if` / `enable_if_t`, `void_t`.
-- **Classification:** `is_same`, `is_void`, `is_integral`, `is_floating_point`,
+- SFINAE helpers: `enable_if`, `enable_if_t`, `void_t`.
+- Classification: `is_same`, `is_void`, `is_integral`, `is_floating_point`,
   `is_null_pointer`, `is_array`, `is_pointer`, `is_const`, `is_reference`,
   `is_lvalue_reference`, `is_rvalue_reference`, `is_member_pointer`,
   `is_member_object_pointer`, `is_member_function_pointer`, `is_arithmetic`,
   `is_fundamental`, `is_compound`, plus the `_v` variable templates for these.
-- **Transformations:** `remove_cv`, `remove_const`, `remove_volatile`,
+- Transformations: `remove_cv`, `remove_const`, `remove_volatile`,
   `add_const`, `add_volatile`, `add_cv`, `remove_reference`,
   `add_lvalue_reference`, `add_rvalue_reference`, `remove_pointer`,
   `add_pointer`, `decay`, `remove_extent`, `remove_all_extents`,
   `make_signed`, `make_unsigned` and their `_t` aliases.
-- **Properties:** `rank`, `alignment_of`, `is_signed`, `is_unsigned` and the
+- Properties: `rank`, `alignment_of`, `is_signed`, `is_unsigned` and the
   `_v` aliases.
-- **Logical helpers:** `negation` / `negation_v`.
+- Logical helpers: `negation` / `negation_v`.
 
 ## Known limitations and unsupported functionality
 
-- Traits that need compiler introspection cppbolt does not provide were **not
-  imported**: `is_class`, `is_union`, `is_enum`, `is_function`, `is_object`,
+- Traits that need compiler introspection cppbolt does not provide were not
+  imported: `is_class`, `is_union`, `is_enum`, `is_function`, `is_object`,
   `is_scalar`, `is_final`, `is_aggregate`, `is_empty`, `is_polymorphic`,
   `is_abstract`, `is_trivial`, `is_standard_layout`, `is_trivially_copyable`,
   `is_pod`, `has_virtual_destructor`, `has_unique_object_representations`,

@@ -90,7 +90,7 @@ impl Parser {
             || self.peek() == &TokenKind::Assign
         {
             // An unnamed template parameter such as `typename = void` is
-            // valid; the name is simply never referenced.
+            // valid; the name is not referenced.
             String::new()
         } else {
             return Err(CompileError::new("expected identifier", p_line, p_col));

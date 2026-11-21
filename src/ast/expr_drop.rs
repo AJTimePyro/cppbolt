@@ -14,7 +14,6 @@ impl Drop for Expr {
         take_expr_children(self, &mut stack);
         while let Some(mut expr) = stack.pop() {
             take_expr_children(&mut expr, &mut stack);
-            let _ = std::mem::replace(&mut expr, Expr::BoolLiteral(false));
         }
     }
 }

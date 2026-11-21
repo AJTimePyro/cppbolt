@@ -3,8 +3,8 @@
 //! Instantiation writes layouts, aliases, globals and synthesized
 //! declarations while it builds a specialization, and recursive references
 //! to the same specialization must see those in-progress writes. A failed
-//! instantiation therefore cannot simply defer every write until the end;
-//! instead it snapshots the state it mutates and restores it on error.
+//! instantiation therefore cannot defer every write until the end;
+//! instead it snapshots mutated state and restores it on error.
 //!
 //! The snapshot covers state written from `resolve_instantiation_target`
 //! onward. Side effects of alias-template expansion before that point are

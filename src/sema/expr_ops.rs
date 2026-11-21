@@ -35,27 +35,17 @@ fn unwind_binary_spine(expr: &mut Expr) -> (Expr, Vec<(BinaryOp, Expr, ExprPos)>
     let placeholder = Expr::IntLiteral(0, Type::Int);
     let mut owned = std::mem::replace(expr, placeholder);
     let mut spine = Vec::new();
-    loop {
-        let Some((op, left_owned, right_owned, pos)) = (if let Expr::Binary {
-            op,
-            left,
-            right,
-            pos,
-        } = &mut owned
-        {
-            let op = *op;
-            let pos = *pos;
-            Some((
-                op,
-                std::mem::replace(&mut **left, Expr::BoolLiteral(false)),
-                std::mem::replace(&mut **right, Expr::BoolLiteral(false)),
-                pos,
-            ))
-        } else {
-            None
-        }) else {
-            break;
-        };
+    while let Expr::Binary {
+        op,
+        left,
+        right,
+        pos,
+    } = &mut owned
+    {
+        let op = *op;
+        let pos = *pos;
+        let left_owned = std::mem::replace(&mut **left, Expr::BoolLiteral(false));
+        let right_owned = std::mem::replace(&mut **right, Expr::BoolLiteral(false));
         spine.push((op, right_owned, pos));
         owned = left_owned;
     }
