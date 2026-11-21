@@ -14,6 +14,7 @@ mod atom;
 mod base_classes;
 mod decl;
 mod decl_func;
+mod depth_guards;
 mod enums_operators;
 mod expr;
 mod expr_fold;
@@ -28,6 +29,7 @@ mod structs_nested;
 mod template;
 mod template_helpers;
 mod template_param;
+mod template_params;
 mod types;
 pub(crate) mod types_array;
 mod types_named;
@@ -143,55 +145,6 @@ impl Parser {
             }
         }
         self.pos = saved_pos;
-    }
-
-    /// Reserves one level of the counter of one nesting construct.
-    fn enter_nesting_of(
-        &self,
-        counter: &crate::depth::DepthCounter,
-    ) -> Result<DepthGuard, CompileError> {
-        match counter.enter(self.current().line, self.current().col) {
-            Ok(guard) => Ok(guard),
-            Err(error) => {
-                self.nesting_exceeded.set(true);
-                Err(error)
-            }
-        }
-    }
-
-    /// Reserves one level of the expression counter.
-    fn enter_expression(&self) -> Result<DepthGuard, CompileError> {
-        self.enter_nesting_of(self.nesting.expressions())
-    }
-
-    /// Reserves one level of the parenthesis counter.
-    fn enter_parenthesis(&self) -> Result<DepthGuard, CompileError> {
-        self.enter_nesting_of(self.nesting.parentheses())
-    }
-
-    /// Reserves one level of the call counter.
-    fn enter_call(&self) -> Result<DepthGuard, CompileError> {
-        self.enter_nesting_of(self.nesting.calls())
-    }
-
-    /// Reserves one level of the statement counter.
-    fn enter_statement(&self) -> Result<DepthGuard, CompileError> {
-        self.enter_nesting_of(self.nesting.statements())
-    }
-
-    /// Reserves one level of the block counter.
-    fn enter_block(&self) -> Result<DepthGuard, CompileError> {
-        self.enter_nesting_of(self.nesting.blocks())
-    }
-
-    /// Reserves one level of the declaration counter.
-    fn enter_declaration(&self) -> Result<DepthGuard, CompileError> {
-        self.enter_nesting_of(self.nesting.declarations())
-    }
-
-    /// Reserves one level of the type counter.
-    fn enter_type(&self) -> Result<DepthGuard, CompileError> {
-        self.enter_nesting_of(self.nesting.types())
     }
 
     pub(super) fn current(&self) -> &Token {
@@ -461,7 +414,7 @@ impl Parser {
             return true;
         }
         if name.contains('<') {
-            let stripped = strip_template_args(name);
+            let stripped = template_helpers::strip_template_args(name);
             if self.known_templates.contains(&stripped)
                 || self
                     .known_templates
@@ -478,20 +431,6 @@ impl Parser {
         }
         false
     }
-}
-
-pub(crate) fn strip_template_args(name: &str) -> String {
-    let mut out = String::with_capacity(name.len());
-    let mut depth: usize = 0;
-    for ch in name.chars() {
-        match ch {
-            '<' => depth += 1,
-            '>' => depth = depth.saturating_sub(1),
-            _ if depth == 0 => out.push(ch),
-            _ => {}
-        }
-    }
-    out
 }
 
 impl Parser {

@@ -33,27 +33,7 @@ pub(crate) fn expr_to_dependent_str(expr: &Expr) -> Option<String> {
         } => {
             let l = expr_to_dependent_str(left)?;
             let r = expr_to_dependent_str(right)?;
-            let sym = match op {
-                BinaryOp::Add => "+",
-                BinaryOp::Sub => "-",
-                BinaryOp::Mul => "*",
-                BinaryOp::Div => "/",
-                BinaryOp::Rem => "%",
-                BinaryOp::BitAnd => "&",
-                BinaryOp::BitOr => "|",
-                BinaryOp::BitXor => "^",
-                BinaryOp::Shl => "<<",
-                BinaryOp::Shr => ">>",
-                BinaryOp::Eq => "==",
-                BinaryOp::Ne => "!=",
-                BinaryOp::Lt => "<",
-                BinaryOp::Le => "<=",
-                BinaryOp::Gt => ">",
-                BinaryOp::Ge => ">=",
-                BinaryOp::LogicalAnd => "&&",
-                BinaryOp::LogicalOr => "||",
-                _ => return None,
-            };
+            let sym = binary_dep_symbol(op)?;
             Some(format!("({l} {sym} {r})"))
         }
         Expr::Ternary {
@@ -90,6 +70,30 @@ pub(crate) fn expr_to_dependent_str(expr: &Expr) -> Option<String> {
         },
         _ => None,
     }
+}
+
+fn binary_dep_symbol(op: &BinaryOp) -> Option<&'static str> {
+    Some(match op {
+        BinaryOp::Add => "+",
+        BinaryOp::Sub => "-",
+        BinaryOp::Mul => "*",
+        BinaryOp::Div => "/",
+        BinaryOp::Rem => "%",
+        BinaryOp::BitAnd => "&",
+        BinaryOp::BitOr => "|",
+        BinaryOp::BitXor => "^",
+        BinaryOp::Shl => "<<",
+        BinaryOp::Shr => ">>",
+        BinaryOp::Eq => "==",
+        BinaryOp::Ne => "!=",
+        BinaryOp::Lt => "<",
+        BinaryOp::Le => "<=",
+        BinaryOp::Gt => ">",
+        BinaryOp::Ge => ">=",
+        BinaryOp::LogicalAnd => "&&",
+        BinaryOp::LogicalOr => "||",
+        _ => return None,
+    })
 }
 
 impl Parser {

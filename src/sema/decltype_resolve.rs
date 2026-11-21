@@ -66,35 +66,7 @@ impl Sema {
         match result {
             Ok(ty) => {
                 if !parenthesized {
-                    // C++17 names the declared type of the entity, not the
-                    // type the analyzer gave the expression: a reference
-                    // member stays a reference and a const receiver adds no
-                    // const to the member's declared type.
-                    match &operand {
-                        Expr::Identifier(name) => {
-                            if let Some(var) = probe.lookup_var(name) {
-                                Ok(var.ty.clone())
-                            } else {
-                                Ok(ty)
-                            }
-                        }
-                        Expr::MemberAccess {
-                            object,
-                            member,
-                            is_arrow,
-                            pos,
-                        } => {
-                            let mut obj = (**object).clone();
-                            let obj_ty = probe.analyze_expr(&mut obj)?;
-                            let (class, _) = probe.member_struct_name(&obj_ty, *is_arrow, *pos)?;
-                            if let Some(fld) = probe.find_field_in_class(&class, member) {
-                                Ok(fld.ty.clone())
-                            } else {
-                                Ok(ty)
-                            }
-                        }
-                        _ => Ok(ty),
-                    }
+                    Self::declared_type_of_operand(&mut probe, &operand, ty)
                 } else if operand.is_lvalue() && !ty.is_reference() {
                     Ok(Type::Reference(Box::new(ty)))
                 } else {
@@ -111,6 +83,35 @@ impl Sema {
                     )
                 }
             }
+        }
+    }
+
+    /// C++17 names the declared type of the entity, not the type the analyzer
+    /// gave the expression: a reference member stays a reference and a const
+    /// receiver adds no const to the member's declared type.
+    fn declared_type_of_operand(
+        probe: &mut Sema,
+        operand: &Expr,
+        analyzed: Type,
+    ) -> Result<Type, CompileError> {
+        match operand {
+            Expr::Identifier(name) => Ok(probe
+                .lookup_var(name)
+                .map_or_else(|| analyzed.clone(), |var| var.ty.clone())),
+            Expr::MemberAccess {
+                object,
+                member,
+                is_arrow,
+                pos,
+            } => {
+                let mut obj = (**object).clone();
+                let obj_ty = probe.analyze_expr(&mut obj)?;
+                let (class, _) = probe.member_struct_name(&obj_ty, *is_arrow, *pos)?;
+                Ok(probe
+                    .find_field_in_class(&class, member)
+                    .map_or_else(|| analyzed.clone(), |fld| fld.ty.clone()))
+            }
+            _ => Ok(analyzed),
         }
     }
 }

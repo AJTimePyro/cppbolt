@@ -1,5 +1,6 @@
 use super::call_arity::check_indirect_call_arity;
 use super::constructor::ConstructorCall;
+use super::expr_call_helpers::CallSite;
 use super::overload::CandidateSelection;
 use super::template_deduce::split_template_call_name;
 use super::*;
@@ -56,10 +57,7 @@ impl Sema {
                     check_indirect_call_arity(&ty, args.len(), *pos)?;
                     return Ok(return_type);
                 }
-                if let Type::Struct(sname) = ty.strip_const().strip_reference()
-                    && let Some(ret) =
-                        self.try_functor_call(callee, sname, args, &arg_types, *pos)?
-                {
+                if let Some(ret) = self.try_functor_call(callee, &ty, args, &arg_types, *pos)? {
                     return Ok(ret);
                 }
             } else if let Some(cls) = self.current_class.clone()
@@ -72,22 +70,24 @@ impl Sema {
                     is_arrow: true,
                     pos: *pos,
                 };
-                if let Type::Struct(sname) = fld_ty.strip_const().strip_reference()
-                    && let Some(ret) =
-                        self.try_functor_call(callee, sname, args, &arg_types, *pos)?
-                {
+                if let Some(ret) = self.try_functor_call(callee, &fld_ty, args, &arg_types, *pos)? {
                     return Ok(ret);
                 }
             }
             let dependent = *dependent || self.expression_is_dependent(*pos);
-            return self.resolve_named_call(&name, args, &arg_types, callee, *pos, dependent);
+            return self.resolve_named_call(CallSite {
+                name: &name,
+                args,
+                arg_types: &arg_types,
+                callee,
+                pos: *pos,
+                dependent,
+            });
         }
 
         let callee_ty = self.analyze_expr(callee)?;
         check_indirect_call_arity(&callee_ty, args.len(), *pos)?;
-        if let Type::Struct(sname) = callee_ty.strip_const().strip_reference()
-            && let Some(ret) = self.try_functor_call(callee, sname, args, &arg_types, *pos)?
-        {
+        if let Some(ret) = self.try_functor_call(callee, &callee_ty, args, &arg_types, *pos)? {
             return Ok(ret);
         }
         Ok(function_return_type(&callee_ty).unwrap_or(Type::Int))
@@ -129,11 +129,14 @@ impl Sema {
     fn try_functor_call(
         &mut self,
         callee: &mut Expr,
-        sname: &str,
+        ty: &Type,
         args: &mut Vec<Expr>,
         arg_types: &[Type],
         pos: ExprPos,
     ) -> Result<Option<Type>, CompileError> {
+        let Type::Struct(sname) = ty.strip_const().strip_reference() else {
+            return Ok(None);
+        };
         let plain = QualifiedName::new(sname).plain();
         let has_member_template =
             self.has_functor_template(sname) || self.has_functor_template(plain);
@@ -273,34 +276,8 @@ impl Sema {
             self.instantiate_pending_method(&sig.mangled_name)?;
             return Ok(Some(sig.return_type.clone()));
         }
-        if self
-            .find_method_overloads_in_class(&struct_name, member, false)
-            .is_empty()
-        {
-            let has_member_template = self
-                .member_templates
-                .get(&struct_name)
-                .or_else(|| {
-                    self.member_templates
-                        .get(QualifiedName::new(&struct_name).plain())
-                })
-                .is_some_and(|templates| {
-                    templates
-                        .iter()
-                        .any(|t| QualifiedName::new(&t.name).plain() == member)
-                });
-            if has_member_template {
-                return Err(CompileError::new(
-                    format!("no matching member function for call to '{member}'"),
-                    pos.line,
-                    pos.col,
-                ));
-            }
-            return Err(CompileError::new(
-                format!("No member named '{member}' in struct '{struct_name}'"),
-                pos.line,
-                pos.col,
-            ));
+        if let Some(error) = self.member_call_error(&struct_name, member.as_str(), *pos) {
+            return Err(error);
         }
         self.check_member_arguments(
             (&struct_name, member),
@@ -312,7 +289,7 @@ impl Sema {
         Ok(None)
     }
 
-    fn convert_call_args(
+    pub(super) fn convert_call_args(
         &mut self,
         args: &mut [Expr],
         param_types: &[Type],
@@ -350,42 +327,39 @@ impl Sema {
                 .is_some_and(|(cand, _)| self.instantiated_functions.contains(&cand.mangled_name))
     }
 
-    fn resolve_named_call(
-        &mut self,
-        name: &str,
-        args: &mut Vec<Expr>,
-        arg_types: &[Type],
-        callee: &mut Expr,
-        pos: ExprPos,
-        dependent: bool,
-    ) -> Result<Type, CompileError> {
-        let candidates = self.find_call_candidates(name, arg_types, dependent);
+    fn resolve_named_call(&mut self, mut site: CallSite<'_>) -> Result<Type, CompileError> {
+        let candidates = self.find_call_candidates(site.name, site.arg_types, site.dependent);
         let selection = candidates
             .as_ref()
-            .map(|c| self.select_candidate(c, args, arg_types));
+            .map(|c| self.select_candidate(c, site.args.as_slice(), site.arg_types));
 
         // An instantiated specialization is registered under the template's
         // base name for operator lookup, so a plain named call must re-run
         // deduction instead of binding to an earlier specialization that
         // happens to share the substituted parameter types.
-        let shadowed = self.cached_specialization_shadows(name, &selection);
+        let shadowed = self.cached_specialization_shadows(site.name, &selection);
 
         if !shadowed
             && let Some(sel) = &selection
             && !sel.ambiguous
             && let Some((cand, full_args)) = &sel.best
-            && cand.param_types == arg_types
+            && cand.param_types == site.arg_types
         {
             return self.apply_call_candidate(
                 cand,
                 full_args.clone(),
-                args,
-                arg_types,
-                (callee, pos),
+                &mut *site.args,
+                site.arg_types,
+                (&mut *site.callee, site.pos),
             );
         }
 
-        let tmpl_res = self.try_resolve_function_template_call(name, arg_types, args, pos);
+        let tmpl_res = self.try_resolve_function_template_call(
+            site.name,
+            site.arg_types,
+            site.args.as_slice(),
+            site.pos,
+        );
         // A nested instantiation failure while forming a template candidate is
         // a hard error, even when another overload could serve the call. Only
         // substitution failures may fall through to the other candidates.
@@ -395,33 +369,27 @@ impl Sema {
             return Err(error.clone());
         }
         let tmpl_score = match &tmpl_res {
-            Ok(Some(sig)) => self.score_call_candidate(sig, arg_types, Some(args)).ok(),
+            Ok(Some(sig)) => self
+                .score_call_candidate(sig, site.arg_types, Some(site.args.as_slice()))
+                .ok(),
             _ => None,
         };
 
-        if let Some(sel) = &selection
-            && !sel.ambiguous
-            && let Some((cand, full_args)) = &sel.best
+        if let Some(result) =
+            self.apply_best_candidate(&mut site, &selection, &tmpl_res, tmpl_score, shadowed)
         {
-            if let Some(t_score) = tmpl_score
-                && (t_score < sel.best_score || (t_score == sel.best_score && shadowed))
-                && let Ok(Some(sig)) = &tmpl_res
-            {
-                let full = self.full_arguments(sig, args);
-                return self.apply_call_candidate(sig, full, args, arg_types, (callee, pos));
-            }
-            return self.apply_call_candidate(
-                cand,
-                full_args.clone(),
-                args,
-                arg_types,
-                (callee, pos),
-            );
+            return result;
         }
 
         if let Ok(Some(sig)) = tmpl_res {
-            let full_args = self.full_arguments(&sig, args);
-            return self.apply_call_candidate(&sig, full_args, args, arg_types, (callee, pos));
+            let full_args = self.full_arguments(&sig, site.args.as_slice());
+            return self.apply_call_candidate(
+                &sig,
+                full_args,
+                &mut *site.args,
+                site.arg_types,
+                (&mut *site.callee, site.pos),
+            );
         }
 
         if let Err(e) = tmpl_res
@@ -431,110 +399,11 @@ impl Sema {
         }
 
         Err(self.report_no_matching_call(
-            name,
-            arg_types,
-            args.len(),
+            site.name,
+            site.arg_types,
+            site.args.len(),
             (candidates.as_ref(), selection),
-            pos,
+            site.pos,
         ))
-    }
-
-    fn report_no_matching_call(
-        &self,
-        name: &str,
-        arg_types: &[Type],
-        args_len: usize,
-        sel_cand: (Option<&Vec<FunctionSig>>, Option<CandidateSelection>),
-        pos: ExprPos,
-    ) -> CompileError {
-        let (Some(candidates), Some(selection)) = sel_cand else {
-            return CompileError::unresolved_name(
-                format!("Undefined function '{name}'"),
-                pos.line,
-                pos.col,
-            );
-        };
-        if selection.ambiguous {
-            return self.ambiguous_call(name, arg_types, pos);
-        }
-        if let Some(failure) = selection.conversion_failure {
-            return self.no_matching_conversion(name, &failure, pos);
-        }
-        let cand = &candidates[0];
-        CompileError::new(
-            format!(
-                "No matching function call for '{name}': expected {} arguments, found {}",
-                cand.param_types.len(),
-                args_len
-            ),
-            pos.line,
-            pos.col,
-        )
-    }
-
-    fn apply_call_candidate(
-        &mut self,
-        cand: &FunctionSig,
-        mut full_args: Vec<Expr>,
-        args: &mut Vec<Expr>,
-        arg_types: &[Type],
-        target: (&mut Expr, ExprPos),
-    ) -> Result<Type, CompileError> {
-        let (callee, pos) = target;
-        self.convert_call_args(&mut full_args, &cand.param_types, arg_types, pos)?;
-        let mangled = cand.mangled_name.clone();
-        let ret_type = cand.return_type.clone();
-        self.instantiate_pending_method(&mangled)?;
-        *callee = Expr::Identifier(mangled);
-        *args = full_args;
-        Ok(ret_type)
-    }
-
-    fn try_scalar_call(
-        &mut self,
-        name: &str,
-        args: &mut [Expr],
-        pos: ExprPos,
-    ) -> Result<Option<(Type, Expr)>, CompileError> {
-        let Some(ty) = self
-            .type_aliases
-            .get(name)
-            .cloned()
-            .or_else(|| Type::from_scalar_name(name))
-        else {
-            return Ok(None);
-        };
-        if !ty.is_scalar() {
-            return Ok(None);
-        }
-        if args.len() > 1 {
-            return Err(CompileError::new(
-                "scalar functional cast requires 0 or 1 arguments",
-                pos.line,
-                pos.col,
-            ));
-        }
-        if args.is_empty() {
-            return Ok(Some((ty.clone(), zero_literal_for_type(&ty))));
-        }
-        let mut arg = args[0].clone();
-        let arg_ty = self.analyze_expr(&mut arg)?;
-        if !self.can_assign_expr(&ty, &arg_ty, Some(&arg)) {
-            return Err(CompileError::new(
-                format!(
-                    "cannot convert '{}' to '{}' in functional cast",
-                    arg_ty.to_c_type(),
-                    ty.to_c_type()
-                ),
-                pos.line,
-                pos.col,
-            ));
-        }
-        let cast = Expr::Cast {
-            kind: CastKind::Functional,
-            target_type: ty.clone(),
-            expr: Box::new(arg),
-        };
-        Ok(Some((ty, cast)))
     }
 }

@@ -353,39 +353,9 @@ impl Sema {
                 .unwrap_or(Type::Int);
             *expr = Expr::IntLiteral(val, enum_ty.clone());
             Ok(enum_ty)
-        } else if let Some(cls) = &self.current_class {
-            if let Some(fld) = self.find_field_in_class(cls, name) {
-                *expr = Expr::MemberAccess {
-                    object: Box::new(Expr::This),
-                    member: name.to_string(),
-                    is_arrow: true,
-                    pos: ExprPos::new(self.current_line, self.current_col),
-                };
-                let mut ret_ty = fld.ty.clone();
-                if self.current_func_is_const && !ret_ty.is_reference() && !ret_ty.is_const() {
-                    ret_ty = Type::Const(Box::new(ret_ty));
-                }
-                Ok(ret_ty)
-            } else if let Some(var) = self.lookup_var(&format!("{}::{}", cls, name)) {
-                Ok(var.ty.clone())
-            } else if self.find_method_in_class(cls, name).is_some()
-                || self.functions.contains_key(name)
-                || self
-                    .functions
-                    .contains_key(QualifiedName::new(name).alternate().as_ref())
-            {
-                Ok(Type::Function {
-                    return_type: Box::new(Type::Int),
-                    param_types: Vec::new(),
-                    qualifiers: FunctionQualifiers::default(),
-                })
-            } else {
-                Err(CompileError::unresolved_name(
-                    format!("Undeclared variable or identifier '{}'", name),
-                    self.current_line,
-                    self.current_col,
-                ))
-            }
+        } else if let Some(cls) = self.current_class.clone() {
+            let owned_name = name.clone();
+            self.analyze_class_member_identifier(expr, &cls, &owned_name)
         } else if let Some(sigs) = self.functions.get(name) {
             Ok(Type::Pointer(Box::new(Type::Function {
                 return_type: Box::new(sigs[0].return_type.clone()),
@@ -399,6 +369,48 @@ impl Sema {
                 self.current_col,
             ))
         }
+    }
+
+    /// Resolves an identifier against the current class's members.
+    fn analyze_class_member_identifier(
+        &mut self,
+        expr: &mut Expr,
+        cls: &str,
+        name: &str,
+    ) -> Result<Type, CompileError> {
+        if let Some(fld) = self.find_field_in_class(cls, name) {
+            *expr = Expr::MemberAccess {
+                object: Box::new(Expr::This),
+                member: name.to_string(),
+                is_arrow: true,
+                pos: ExprPos::new(self.current_line, self.current_col),
+            };
+            let mut ret_ty = fld.ty.clone();
+            if self.current_func_is_const && !ret_ty.is_reference() && !ret_ty.is_const() {
+                ret_ty = Type::Const(Box::new(ret_ty));
+            }
+            return Ok(ret_ty);
+        }
+        if let Some(var) = self.lookup_var(&format!("{}::{}", cls, name)) {
+            return Ok(var.ty.clone());
+        }
+        if self.find_method_in_class(cls, name).is_some()
+            || self.functions.contains_key(name)
+            || self
+                .functions
+                .contains_key(QualifiedName::new(name).alternate().as_ref())
+        {
+            return Ok(Type::Function {
+                return_type: Box::new(Type::Int),
+                param_types: Vec::new(),
+                qualifiers: FunctionQualifiers::default(),
+            });
+        }
+        Err(CompileError::unresolved_name(
+            format!("Undeclared variable or identifier '{}'", name),
+            self.current_line,
+            self.current_col,
+        ))
     }
 
     fn analyze_global_identifier(&self, raw: &str, name: &str) -> Result<Type, CompileError> {

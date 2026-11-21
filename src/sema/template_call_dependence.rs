@@ -84,16 +84,7 @@ impl CallScan {
             Expr::Assign { target, value, .. } | Expr::CompoundAssign { target, value, .. } => {
                 self.expr(target) | self.expr(value)
             }
-            Expr::Call {
-                callee, args, pos, ..
-            } => {
-                let dependent =
-                    self.expr(callee) | args.iter().map(|a| self.expr(a)).fold(false, |a, b| a | b);
-                if dependent {
-                    self.dependent_positions.insert((pos.line, pos.col));
-                }
-                dependent
-            }
+            Expr::Call { .. } => self.call_dependence(expr),
             Expr::ArraySubscript { array, index, .. } => self.expr(array) | self.expr(index),
             Expr::Ternary {
                 cond,
@@ -111,18 +102,7 @@ impl CallScan {
                         .map(|e| self.expr(e))
                         .fold(false, |a, b| a | b)
             }
-            Expr::New {
-                ty,
-                args,
-                array_size,
-                placement,
-                ..
-            } => {
-                self.ty(ty)
-                    | args.iter().map(|a| self.expr(a)).fold(false, |a, b| a | b)
-                    | array_size.as_ref().is_some_and(|e| self.expr(e))
-                    | placement.as_ref().is_some_and(|e| self.expr(e))
-            }
+            Expr::New { .. } => self.new_expr_dependence(expr),
             Expr::PackExpansion { pattern, .. } => self.expr(pattern),
             Expr::FoldExpr {
                 left, right, pos, ..
@@ -150,6 +130,44 @@ impl CallScan {
             Expr::SizeofType(ty) | Expr::AlignofType(ty) => self.ty(ty),
             _ => false,
         }
+    }
+
+    /// Classifies a call, recording it when its callee or any argument is dependent.
+    fn call_dependence(&mut self, expr: &Expr) -> bool {
+        let Expr::Call {
+            callee, args, pos, ..
+        } = expr
+        else {
+            return false;
+        };
+        let dependent = self.expr(callee) | self.expr_any(args.iter());
+        if dependent {
+            self.dependent_positions.insert((pos.line, pos.col));
+        }
+        dependent
+    }
+
+    /// Classifies a `new` expression, including its optional size and placement.
+    fn new_expr_dependence(&mut self, expr: &Expr) -> bool {
+        let Expr::New {
+            ty,
+            args,
+            array_size,
+            placement,
+            ..
+        } = expr
+        else {
+            return false;
+        };
+        self.ty(ty)
+            | self.expr_any(args.iter())
+            | array_size.as_ref().is_some_and(|e| self.expr(e))
+            | placement.as_ref().is_some_and(|e| self.expr(e))
+    }
+
+    /// Folds dependence across a slice of expressions (non-short-circuiting).
+    fn expr_any<'a>(&mut self, exprs: impl Iterator<Item = &'a Expr>) -> bool {
+        exprs.fold(false, |acc, e| self.expr(e) | acc)
     }
 
     fn stmt(&mut self, stmt: &Stmt) {

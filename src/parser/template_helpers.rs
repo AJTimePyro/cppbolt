@@ -46,3 +46,17 @@ pub(super) fn has_pack_in_expr(expr: &crate::ast::expr::Expr) -> bool {
         _ => false,
     }
 }
+
+pub(crate) fn strip_template_args(name: &str) -> String {
+    let mut out = String::with_capacity(name.len());
+    let mut depth: usize = 0;
+    for ch in name.chars() {
+        match ch {
+            '<' => depth += 1,
+            '>' => depth = depth.saturating_sub(1),
+            _ if depth == 0 => out.push(ch),
+            _ => {}
+        }
+    }
+    out
+}

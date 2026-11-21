@@ -7,7 +7,7 @@ use super::template_subst_func::{
 };
 use super::*;
 use crate::ast::decl::RefQualifier;
-use crate::diagnostics::{SubstitutionFailure, TemplateFailure};
+use crate::diagnostics::TemplateFailure;
 use crate::sema::pack_expansion::TemplateArg;
 
 pub(crate) fn format_canonical_args(
@@ -45,6 +45,14 @@ pub(crate) fn format_canonical_args(
         }
     }
     pieces.join(", ")
+}
+
+struct CandidateInfo<'a> {
+    decl: &'a FunctionDecl,
+    template_params: &'a [TemplateParam],
+    mapping: HashMap<String, TemplateArg>,
+    prepared: FunctionDecl,
+    active_mapping: HashMap<String, TemplateArg>,
 }
 
 struct ViableCandidate {
@@ -165,25 +173,15 @@ impl Sema {
         pos: ExprPos,
     ) -> Result<Vec<ViableCandidate>, CompileError> {
         let (arg_types, args) = call_args;
-        let mut last_err = None;
-        let mut last_substitution: Option<SubstitutionFailure> = None;
-        let mut rejections: Vec<String> = Vec::new();
+        let mut rejections = super::template_func_helpers::Rejections::default();
         let mut viable = Vec::new();
         for (template_decl, template_params) in candidates {
-            let has_pack = template_decl.params.last().is_some_and(|p| p.is_pack)
-                || template_params.last().is_some_and(|p| p.is_pack);
-            let min_args = template_decl
-                .params
-                .iter()
-                .filter(|p| !p.is_pack && p.default_val.is_none())
-                .count();
-            let max_args = template_decl.params.len();
             let num_args = if args.is_empty() {
                 arg_types.len()
             } else {
                 args.len()
             };
-            if num_args < min_args || (!has_pack && num_args > max_args) {
+            if !Self::candidate_arity_ok(template_decl, template_params, num_args) {
                 continue;
             }
             match deduce_template_arguments(
@@ -204,75 +202,74 @@ impl Sema {
                         Ok(formed) => formed,
                         Err(TemplateFailure::Substitution(failure)) => {
                             let failure = failure.at_call(pos.line, pos.col);
-                            rejections.push(format!("substitution failure: {}", failure.message));
-                            last_substitution = Some(failure);
+                            rejections
+                                .messages
+                                .push(format!("substitution failure: {}", failure.message));
+                            rejections.last_substitution = Some(failure);
                             continue;
                         }
                         Err(TemplateFailure::Hard(error)) => return Err(error),
                     };
                     match self.score_arguments(&sig.param_types, arg_types, Some(args)) {
                         Ok(score) => {
-                            viable.push(ViableCandidate {
-                                decl: template_decl.clone(),
-                                template_params: template_params.clone(),
-                                mapping,
-                                prepared,
-                                active_mapping,
+                            viable.push(Self::make_candidate(
+                                CandidateInfo {
+                                    decl: template_decl,
+                                    template_params,
+                                    mapping,
+                                    prepared,
+                                    active_mapping,
+                                },
                                 score,
-                            });
+                            ));
                         }
                         Err(failure) => {
                             let error =
                                 self.no_matching_conversion(&template_decl.name, &failure, pos);
-                            rejections.push(error.message.clone());
-                            last_err = Some(error);
+                            rejections.messages.push(error.message.clone());
+                            rejections.last_err = Some(error);
                         }
                     }
                 }
                 Err(e) => {
-                    rejections.push(e.message.clone());
-                    last_err = Some(e);
+                    rejections.messages.push(e.message.clone());
+                    rejections.last_err = Some(e);
                 }
             }
         }
         if viable.is_empty() {
-            if rejections.len() > 1 {
-                let name = candidates
-                    .first()
-                    .map(|(decl, _)| decl.name.as_str())
-                    .unwrap_or("template function");
-                return Err(CompileError::new(
-                    format!(
-                        "no matching function for call to '{name}': {} candidates rejected: {}",
-                        rejections.len(),
-                        rejections.join("; ")
-                    ),
-                    pos.line,
-                    pos.col,
-                )
-                .with_kind(crate::diagnostics::ErrorKind::Substitution));
-            }
-            if let Some(mut e) = last_err {
-                e.kind = crate::diagnostics::ErrorKind::Substitution;
-                return Err(e);
-            }
-            if let Some(failure) = last_substitution {
-                let name = candidates
-                    .first()
-                    .map(|(decl, _)| decl.name.as_str())
-                    .unwrap_or("template function");
-                return Err(CompileError::new(
-                    format!(
-                        "no matching function for call to '{name}': substitution failure: {}",
-                        failure.message
-                    ),
-                    failure.line,
-                    failure.col,
-                )
-                .with_kind(crate::diagnostics::ErrorKind::Substitution));
-            }
+            rejections.into_error(candidates, pos)?;
         }
         Ok(viable)
+    }
+
+    /// Assembles a viable candidate from its deduced mapping and scored signature.
+    fn make_candidate(info: CandidateInfo<'_>, score: usize) -> ViableCandidate {
+        ViableCandidate {
+            decl: info.decl.clone(),
+            template_params: info.template_params.to_vec(),
+            mapping: info.mapping,
+            prepared: info.prepared,
+            active_mapping: info.active_mapping,
+            score,
+        }
+    }
+
+    /// Whether a candidate's parameter count can accept `num_args` call arguments.
+    fn candidate_arity_ok(
+        template_decl: &FunctionDecl,
+        template_params: &[TemplateParam],
+        num_args: usize,
+    ) -> bool {
+        let has_pack = template_decl.params.last().is_some_and(|p| p.is_pack)
+            || template_params.last().is_some_and(|p| p.is_pack);
+        let min_args = template_decl
+            .params
+            .iter()
+            .filter(|p| !p.is_pack && p.default_val.is_none())
+            .count();
+        let max_args = template_decl.params.len();
+        !(num_args < min_args || (!has_pack && num_args > max_args))
     }
 
     pub fn substitute_template_function_sig(
@@ -448,14 +445,19 @@ impl Sema {
                 .entry(cand.decl.name.clone())
                 .or_default()
                 .push(sig.clone());
-            if let Some(alias) = QualifiedName::new(&cand.decl.name).implicit_alias() {
-                self.functions
-                    .entry(alias.into_owned())
-                    .or_default()
-                    .push(sig.clone());
-            }
+            self.register_function_template_aliases(&cand.decl.name, &sig);
         }
 
         Ok(sig)
+    }
+
+    /// Registers a specialization under its implicit namespace alias.
+    fn register_function_template_aliases(&mut self, name: &str, sig: &FunctionSig) {
+        if let Some(alias) = QualifiedName::new(name).implicit_alias() {
+            self.functions
+                .entry(alias.into_owned())
+                .or_default()
+                .push(sig.clone());
+        }
     }
 }

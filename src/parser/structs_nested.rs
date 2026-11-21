@@ -51,6 +51,24 @@ impl Parser {
         let decl_res = self.parse_nested_struct(body);
         self.active_type_params.pop();
         let decl = decl_res?;
+        let Some(template_class) = self.nested_template_class_from_decl(decl, &params)? else {
+            return Ok(false);
+        };
+        body.nested_structs.push(Decl::Template(TemplateDecl {
+            params,
+            kind: TemplateKind::Class(template_class),
+            line: t_tok.line,
+            col: t_tok.col,
+        }));
+        Ok(true)
+    }
+
+    /// Builds the class-template payload from a parsed nested struct.
+    fn nested_template_class_from_decl(
+        &mut self,
+        decl: Decl,
+        params: &[TemplateParam],
+    ) -> Result<Option<TemplateClass>, CompileError> {
         let Decl::StructDecl {
             name,
             is_class,
@@ -66,10 +84,10 @@ impl Parser {
             ..
         } = decl
         else {
-            return Ok(false);
+            return Ok(None);
         };
         if !name.contains('<') {
-            template::validate_trailing_pack(&params, "class template")?;
+            template::validate_trailing_pack(params, "class template")?;
         }
         self.register_template_name(&name);
         let pattern_args = self.struct_template_args.get(&name).cloned();
@@ -78,7 +96,7 @@ impl Parser {
             .get(&name)
             .cloned()
             .unwrap_or_default();
-        let template_class = TemplateClass {
+        Ok(Some(TemplateClass {
             name,
             pattern_args,
             is_class,
@@ -93,14 +111,7 @@ impl Parser {
             nested_structs,
             member_aliases,
             alignment,
-        };
-        body.nested_structs.push(Decl::Template(TemplateDecl {
-            params,
-            kind: TemplateKind::Class(template_class),
-            line: t_tok.line,
-            col: t_tok.col,
-        }));
-        Ok(true)
+        }))
     }
 
     fn parse_nested_struct(&mut self, body: &mut StructBody) -> Result<Decl, CompileError> {

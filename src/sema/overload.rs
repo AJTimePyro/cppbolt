@@ -2,156 +2,8 @@
 //! diagnostics of a call that no candidate matches.
 
 use super::*;
-use crate::ast::decl::FunctionDecl;
-use crate::ast::template::TemplateParam;
-use std::collections::HashSet;
-
-/// Associated entities of one argument type, as defined by
-/// [basic.lookup.argdep]. Names and namespaces are de-duplicated.
-#[derive(Default)]
-struct AssociatedEntities {
-    namespaces: Vec<String>,
-    classes: Vec<String>,
-    seen: HashSet<String>,
-}
-
-/// Innermost enclosing namespace of a qualified name. `::` inside template
-/// arguments does not separate namespace components.
-fn namespace_of(name: &str) -> Option<&str> {
-    let bytes = name.as_bytes();
-    let mut depth = 0i32;
-    let mut found = None;
-    for i in 0..bytes.len().saturating_sub(1) {
-        match bytes[i] {
-            b'<' => depth += 1,
-            b'>' => depth -= 1,
-            b':' if bytes[i + 1] == b':' && depth == 0 => found = Some(i),
-            _ => {}
-        }
-    }
-    found.map(|index| &name[..index])
-}
 
 impl Sema {
-    /// Adds a class or enum name and everything associated with it: its
-    /// innermost enclosing namespace, its base classes, and (for a
-    /// specialization) the entities of its template type arguments.
-    fn associate_name(&mut self, name: &str, out: &mut AssociatedEntities) {
-        let plain = QualifiedName::new(name).plain().to_string();
-        let key = self.canonical_class_name(&plain, None);
-        if !out.seen.insert(key.clone()) {
-            return;
-        }
-        if let Some(namespace) = namespace_of(&key)
-            && !out.namespaces.iter().any(|ns| ns == namespace)
-        {
-            out.namespaces.push(namespace.to_string());
-        }
-        out.classes.push(key.clone());
-        let plain = QualifiedName::new(&key).plain().to_string();
-        if plain != key && !out.classes.contains(&plain) {
-            out.classes.push(plain.clone());
-        }
-        if let Some(layout) = self.struct_layouts.get(&key).cloned() {
-            for base in layout.base_classes {
-                self.associate_name(&base, out);
-            }
-        }
-        if let Some((template_class, _)) = self.class_templates.get(&plain).cloned() {
-            for base in template_class.base_classes {
-                self.associate_name(&base, out);
-            }
-        }
-    }
-
-    fn associate_type(&mut self, ty: &Type, out: &mut AssociatedEntities) {
-        match ty {
-            Type::Const(inner)
-            | Type::Pointer(inner)
-            | Type::Reference(inner)
-            | Type::RvalueReference(inner) => self.associate_type(inner, out),
-            Type::Array(inner, _) | Type::DependentArray(inner, _) => {
-                self.associate_type(inner, out)
-            }
-            Type::Struct(name) | Type::Enum(name) => self.associate_name(name, out),
-            Type::TemplateInstance { name, args } => {
-                self.associate_name(name, out);
-                for arg in args {
-                    self.associate_type(arg, out);
-                }
-            }
-            Type::Function {
-                return_type,
-                param_types,
-                ..
-            } => {
-                self.associate_type(return_type, out);
-                for param in param_types {
-                    self.associate_type(param, out);
-                }
-            }
-            Type::MemberPointer { member_type, .. }
-            | Type::BoundMemberFunction { member_type, .. } => {
-                self.associate_type(member_type, out)
-            }
-            _ => {}
-        }
-    }
-
-    fn associated_entities(&mut self, arg_types: &[Type]) -> AssociatedEntities {
-        let mut out = AssociatedEntities::default();
-        for arg in arg_types {
-            self.associate_type(arg, &mut out);
-        }
-        out
-    }
-
-    /// Namespace-scope functions found by ADL for an unqualified call.
-    fn adl_candidates(&mut self, name: &str, arg_types: &[Type]) -> Vec<FunctionSig> {
-        let out = self.associated_entities(arg_types);
-        let mut found = Vec::new();
-        for namespace in out.namespaces {
-            let qualified = format!("{}::{}", namespace, name);
-            if let Some(sigs) = self.functions.get(&qualified).cloned() {
-                found.extend(sigs);
-            }
-        }
-        for class_name in out.classes {
-            if let Some(friends) = self.hidden_friends.get(&class_name).cloned() {
-                found.extend(friends.into_iter().filter(|sig| sig.name == name));
-            }
-        }
-        found
-    }
-
-    /// Friend function templates associated with the argument types, found
-    /// only through ADL. Each specialisation registers its own signature.
-    pub(super) fn adl_friend_templates(
-        &mut self,
-        name: &str,
-        arg_types: &[Type],
-    ) -> Vec<(FunctionDecl, Vec<TemplateParam>)> {
-        let entities = self.associated_entities(arg_types);
-        let mut found: Vec<(FunctionDecl, Vec<TemplateParam>)> = Vec::new();
-        for class in entities.classes {
-            let Some(list) = self.hidden_friend_templates.get(&class).cloned() else {
-                continue;
-            };
-            for item in list {
-                let plain = QualifiedName::new(&item.0.name).plain();
-                if (item.0.name == name || plain == name)
-                    && !found.iter().any(|(decl, _)| {
-                        decl.params == item.0.params && decl.return_type == item.0.return_type
-                    })
-                {
-                    found.push(item);
-                }
-            }
-        }
-        found
-    }
-
-    /// The diagnostic for arguments that match no constructor of a class.
     pub(super) fn no_matching_constructor(&self, class_name: &str, pos: ExprPos) -> CompileError {
         let message = if self.in_initializer {
             format!("no matching constructor for initialization of '{class_name}'")
@@ -374,28 +226,8 @@ impl Sema {
                     .map(|v| v.as_slice())
             })
             .unwrap_or(self.open_namespaces.as_slice());
-        let q1 = name.to_string();
-        let q2 = QualifiedName::new(name).alternate().into_owned();
-        let mut candidates = self
-            .functions
-            .get(&q1)
-            .or_else(|| self.functions.get(&q2))
-            .or_else(|| {
-                if visible_usings.is_some_and(|visible| !visible.contains(name)) {
-                    return None;
-                }
-                let target = alias_vis
-                    .and_then(|vis| vis.using_targets.as_ref())
-                    .and_then(|targets| targets.get(name))
-                    .or_else(|| self.using_decls.get(name));
-                target.and_then(|full| self.functions.get(full))
-            })
-            .or_else(|| {
-                opened
-                    .iter()
-                    .find_map(|ns| self.functions.get(&format!("{}::{}", ns, name)))
-            })
-            .cloned();
+        let mut candidates =
+            self.ordinary_lookup_candidates(name, alias_vis, visible_usings, opened);
         // While re-analyzing a substituted template body, ordinary lookup is
         // limited to the overloads that existed at the template's definition.
         // ADL below is intentionally not filtered: it runs at instantiation.
@@ -421,27 +253,14 @@ impl Sema {
         // with ordinary lookup rather than used as a fallback. Copy the filter
         // only when ADL needs it; the lookup phase above borrows it.
         if !name.contains("::") {
-            let adl_filter = if dependent {
-                None
-            } else {
-                visible_functions.cloned()
-            };
-            let mut adl = self.adl_candidates(name, arg_types);
-            if let Some(visible) = &adl_filter {
-                adl.retain(|sig| visible.contains(&sig.mangled_name));
-            }
-            if !adl.is_empty() {
-                let mut merged: Vec<FunctionSig> = Vec::new();
-                for sig in candidates.into_iter().flatten().chain(adl) {
-                    if !merged
-                        .iter()
-                        .any(|existing| existing.mangled_name == sig.mangled_name)
-                    {
-                        merged.push(sig);
-                    }
-                }
-                candidates = Some(merged);
-            }
+            let visible_functions = visible_functions.cloned();
+            candidates = self.merge_adl_candidates(
+                candidates,
+                name,
+                arg_types,
+                dependent,
+                visible_functions.as_ref(),
+            );
         }
         if candidates.is_none()
             && let Some((class_name, method_name)) = name.rsplit_once("::")
@@ -456,6 +275,70 @@ impl Sema {
             }
         }
         candidates
+    }
+
+    /// Ordinary (non-ADL) lookup at the active declaration position.
+    fn ordinary_lookup_candidates(
+        &self,
+        name: &str,
+        alias_vis: Option<&crate::sema::AliasVisibility>,
+        visible_usings: Option<&std::collections::HashSet<String>>,
+        opened: &[String],
+    ) -> Option<Vec<FunctionSig>> {
+        let q1 = name.to_string();
+        let q2 = QualifiedName::new(name).alternate().into_owned();
+        self.functions
+            .get(&q1)
+            .or_else(|| self.functions.get(&q2))
+            .or_else(|| {
+                if visible_usings.is_some_and(|visible| !visible.contains(name)) {
+                    return None;
+                }
+                let target = alias_vis
+                    .and_then(|vis| vis.using_targets.as_ref())
+                    .and_then(|targets| targets.get(name))
+                    .or_else(|| self.using_decls.get(name));
+                target.and_then(|full| self.functions.get(full))
+            })
+            .or_else(|| {
+                opened
+                    .iter()
+                    .find_map(|ns| self.functions.get(&format!("{}::{}", ns, name)))
+            })
+            .cloned()
+    }
+
+    /// Merges ADL candidates with ordinary lookup, de-duplicating by mangled name.
+    fn merge_adl_candidates(
+        &mut self,
+        candidates: Option<Vec<FunctionSig>>,
+        name: &str,
+        arg_types: &[Type],
+        dependent: bool,
+        visible_functions: Option<&std::collections::HashSet<String>>,
+    ) -> Option<Vec<FunctionSig>> {
+        let adl_filter = if dependent {
+            None
+        } else {
+            visible_functions.cloned()
+        };
+        let mut adl = self.adl_candidates(name, arg_types);
+        if let Some(visible) = &adl_filter {
+            adl.retain(|sig| visible.contains(&sig.mangled_name));
+        }
+        if adl.is_empty() {
+            return candidates;
+        }
+        let mut merged: Vec<FunctionSig> = Vec::new();
+        for sig in candidates.into_iter().flatten().chain(adl) {
+            if !merged
+                .iter()
+                .any(|existing| existing.mangled_name == sig.mangled_name)
+            {
+                merged.push(sig);
+            }
+        }
+        Some(merged)
     }
 }
 

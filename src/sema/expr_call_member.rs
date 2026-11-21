@@ -23,7 +23,14 @@ impl Sema {
                 return Ok(Some(sig));
             }
         }
-        self.try_instantiate_member_template(struct_name, Some(member), arg_types, args, pos, true)
+        self.try_instantiate_member_template(crate::sema::constructor::MemberTemplateCall {
+            class_name: struct_name,
+            method_name: Some(member),
+            arg_types,
+            args,
+            pos,
+            report_rejection: true,
+        })
     }
 
     fn check_ref_qualifier_compatibility(

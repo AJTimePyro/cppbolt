@@ -4,7 +4,6 @@
 
 use super::analyze::this_param;
 use super::constructor_helpers::score_copy_init_param;
-use super::layout_types::element_struct_name;
 use super::template_deduce::{
     deduce_template_arguments, parse_types_list, split_template_call_name,
 };
@@ -12,6 +11,16 @@ use super::template_subst_func::{substitute_function_body, substitute_function_s
 use super::*;
 use crate::ast::decl::RefQualifier;
 use crate::diagnostics::TemplateFailure;
+
+/// Parameters of a member-template instantiation attempt.
+pub(super) struct MemberTemplateCall<'a> {
+    pub(super) class_name: &'a str,
+    pub(super) method_name: Option<&'a str>,
+    pub(super) arg_types: &'a [Type],
+    pub(super) args: &'a [Expr],
+    pub(super) pos: ExprPos,
+    pub(super) report_rejection: bool,
+}
 
 /// The outcome of a call that names a class.
 pub(super) enum ConstructorCall {
@@ -321,13 +330,16 @@ impl Sema {
 
     pub(super) fn try_instantiate_member_template(
         &mut self,
-        class_name: &str,
-        method_name: Option<&str>,
-        arg_types: &[Type],
-        args: &[Expr],
-        pos: ExprPos,
-        report_rejection: bool,
+        call: MemberTemplateCall<'_>,
     ) -> Result<Option<FunctionSig>, CompileError> {
+        let MemberTemplateCall {
+            class_name,
+            method_name,
+            arg_types,
+            args,
+            pos,
+            report_rejection,
+        } = call;
         let Some((templates, short)) = self.resolve_member_template_target(class_name) else {
             return Ok(None);
         };
@@ -350,20 +362,7 @@ impl Sema {
                 } else {
                     None
                 };
-                let signature =
-                    substitute_function_signature(&cand, &mapping, new_name, Some(self))
-                        .map_err(TemplateFailure::from)
-                        .and_then(|(mut func, active_mapping)| {
-                            let saved_identity = self.current_template_identity.take();
-                            self.current_template_identity =
-                                Some(crate::sema::template_registry::function_template_identity(
-                                    &cand.name, cand.line, cand.col,
-                                ));
-                            let result = self.resolve_signature_types(&mut func, pos.line, pos.col);
-                            self.current_template_identity = saved_identity;
-                            result?;
-                            Ok((func, active_mapping))
-                        });
+                let signature = self.form_member_template_signature(&cand, &mapping, new_name, pos);
                 let (mut spec_func, active_mapping) = match signature {
                     Ok(formed) => formed,
                     Err(TemplateFailure::Substitution(failure)) => {
@@ -377,29 +376,7 @@ impl Sema {
                     }
                     Err(TemplateFailure::Hard(error)) => return Err(error),
                 };
-                let qual_name = format!("{}::{}", class_name, spec_func.name);
-                let mut params = spec_func.params.clone();
-                if !spec_func.is_static {
-                    params.insert(0, this_param(class_name, spec_func.is_const));
-                }
-                let mut mangled = self.mangle_name(&qual_name, &params);
-                if spec_func.ref_qualifier == RefQualifier::LValue {
-                    mangled.push_str("_R");
-                } else if spec_func.ref_qualifier == RefQualifier::RValue {
-                    mangled.push_str("_O");
-                }
-
-                let sig = FunctionSig {
-                    qualifiers: FunctionQualifiers::default(),
-                    name: spec_func.name.clone(),
-                    mangled_name: mangled.clone(),
-                    return_type: spec_func.return_type.clone(),
-                    param_types: params.iter().map(|p| p.ty.clone()).collect(),
-                    default_args: params.into_iter().map(|p| p.default_val).collect(),
-                    is_static: spec_func.is_static,
-                    is_explicit: spec_func.is_explicit,
-                    ref_qualifier: spec_func.ref_qualifier,
-                };
+                let (sig, mangled) = self.member_template_sig(class_name, &spec_func);
                 let call_params = if !spec_func.is_static {
                     &sig.param_types[1..]
                 } else {
@@ -426,6 +403,66 @@ impl Sema {
         Ok(None)
     }
 
+    /// Substitutes and resolves the signature of a member template candidate.
+    fn form_member_template_signature(
+        &mut self,
+        cand: &FunctionDecl,
+        mapping: &std::collections::HashMap<String, crate::sema::pack_expansion::TemplateArg>,
+        new_name: Option<String>,
+        pos: ExprPos,
+    ) -> Result<
+        (
+            FunctionDecl,
+            std::collections::HashMap<String, crate::sema::pack_expansion::TemplateArg>,
+        ),
+        TemplateFailure,
+    > {
+        substitute_function_signature(cand, mapping, new_name, Some(self))
+            .map_err(TemplateFailure::from)
+            .and_then(|(mut func, active_mapping)| {
+                let saved_identity = self.current_template_identity.take();
+                self.current_template_identity =
+                    Some(crate::sema::template_registry::function_template_identity(
+                        &cand.name, cand.line, cand.col,
+                    ));
+                let result = self.resolve_signature_types(&mut func, pos.line, pos.col);
+                self.current_template_identity = saved_identity;
+                result?;
+                Ok((func, active_mapping))
+            })
+    }
+
+    /// Builds the signature and mangled name of a substituted member template.
+    fn member_template_sig(
+        &self,
+        class_name: &str,
+        func: &crate::ast::decl::FunctionDecl,
+    ) -> (FunctionSig, String) {
+        let qual_name = format!("{}::{}", class_name, func.name);
+        let mut params = func.params.clone();
+        if !func.is_static {
+            params.insert(0, this_param(class_name, func.is_const));
+        }
+        let mut mangled = self.mangle_name(&qual_name, &params);
+        if func.ref_qualifier == RefQualifier::LValue {
+            mangled.push_str("_R");
+        } else if func.ref_qualifier == RefQualifier::RValue {
+            mangled.push_str("_O");
+        }
+        let sig = FunctionSig {
+            qualifiers: FunctionQualifiers::default(),
+            name: func.name.clone(),
+            mangled_name: mangled.clone(),
+            return_type: func.return_type.clone(),
+            param_types: params.iter().map(|p| p.ty.clone()).collect(),
+            default_args: params.into_iter().map(|p| p.default_val).collect(),
+            is_static: func.is_static,
+            is_explicit: func.is_explicit,
+            ref_qualifier: func.ref_qualifier,
+        };
+        (sig, mangled)
+    }
+
     pub(super) fn try_instantiate_member_template_constructor(
         &mut self,
         class_name: &str,
@@ -433,86 +470,13 @@ impl Sema {
         args: &[Expr],
         pos: ExprPos,
     ) -> Result<Option<FunctionSig>, CompileError> {
-        self.try_instantiate_member_template(class_name, None, arg_types, args, pos, false)
-    }
-
-    pub(super) fn instantiate_constructor_dependencies(
-        &mut self,
-        cls: &str,
-        func: &mut FunctionDecl,
-    ) -> Result<(), CompileError> {
-        let short_cls = cls.split("::").last().unwrap_or(cls).to_string();
-        let has_delegating = func.ctor_initializers.iter().any(|(name, _)| {
-            let canonical = self.canonical_class_name(name, Some(cls));
-            canonical == cls || canonical == short_cls
-        });
-        if has_delegating && func.ctor_initializers.len() > 1 {
-            return Err(CompileError::new(
-                "mem-initializer for delegating constructor cannot be combined with other member or base initializers",
-                func.line,
-                func.col,
-            ));
-        }
-        let mut arg_types_map: HashMap<String, Vec<Type>> = HashMap::new();
-        for (init_name, args) in &mut func.ctor_initializers {
-            let mut tys = Vec::new();
-            for arg in args.iter_mut() {
-                tys.push(self.analyze_expr(arg)?);
-            }
-            let canonical = self.canonical_class_name(init_name, Some(cls));
-            if (canonical == cls || canonical == short_cls)
-                && let Some(sig) = self.find_constructor_for(cls, &tys, Some(args))
-            {
-                self.instantiate_pending_method(&sig.mangled_name)?;
-            }
-            arg_types_map.insert(init_name.clone(), tys);
-        }
-        let Some(layout) = self.struct_layouts.get(cls).cloned() else {
-            return Ok(());
-        };
-        // A mem-initializer must name a direct base, a member, or the class
-        // itself (delegating). Compare via canonical class names so an alias
-        // spelling still matches its specialization, but keep the raw name in
-        // the diagnostic.
-        for (init_name, _) in &func.ctor_initializers {
-            let canonical = self.canonical_class_name(init_name, Some(cls));
-            let is_delegating = canonical == cls || canonical == short_cls;
-            let is_base = layout.base_classes.contains(&canonical);
-            let is_field = layout.fields.iter().any(|f| f.name == *init_name);
-            if !is_delegating && !is_base && !is_field {
-                return Err(CompileError::new(
-                    format!(
-                        "mem-initializer '{}' does not name a base, member, or delegating constructor of '{}'",
-                        init_name, cls
-                    ),
-                    func.line,
-                    func.col,
-                ));
-            }
-        }
-        if has_delegating {
-            return Ok(());
-        }
-        for base in &layout.base_classes {
-            let tys = arg_types_map
-                .iter()
-                .find(|(k, _)| self.canonical_class_name(k, Some(cls)) == *base)
-                .map(|(_, v)| v.as_slice())
-                .unwrap_or(&[]);
-            if let Some(sig) = self.find_constructor_for(base, tys, None) {
-                self.instantiate_pending_method(&sig.mangled_name)?;
-            }
-        }
-        for fld in &layout.fields {
-            if let Some(sname) = element_struct_name(&fld.ty) {
-                let tys = arg_types_map
-                    .get(&fld.name)
-                    .map_or(&[][..], |v| v.as_slice());
-                if let Some(sig) = self.find_constructor_for(sname, tys, None) {
-                    self.instantiate_pending_method(&sig.mangled_name)?;
-                }
-            }
-        }
-        Ok(())
+        self.try_instantiate_member_template(MemberTemplateCall {
+            class_name,
+            method_name: None,
+            arg_types,
+            args,
+            pos,
+            report_rejection: false,
+        })
     }
 }

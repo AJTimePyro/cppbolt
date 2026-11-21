@@ -1,11 +1,12 @@
 //! Semantic analysis: symbols, overloads, record layout, and type checks.
-//!
-//! See the mdBook guide at `docs/book/internals/semantic-analysis.md`.
-
+//! See `docs/book/internals/semantic-analysis.md`.
 mod analyze;
+mod analyze_decls;
 mod analyze_field_init;
+mod analyze_global;
 mod analyze_helpers;
 mod assign;
+mod builtins;
 mod call_arity;
 pub mod constexpr_eval;
 mod constexpr_globals;
@@ -15,11 +16,13 @@ mod decltype_resolve;
 mod expected_type;
 mod expr;
 mod expr_call;
+mod expr_call_helpers;
 mod expr_call_member;
 mod expr_lambda;
 mod expr_lambda_free_vars;
 mod expr_member;
 mod expr_ops;
+mod expr_ops_unary;
 mod expr_subscript;
 pub mod fold_expansion;
 #[cfg(test)]
@@ -44,10 +47,12 @@ mod member_pointer;
 #[cfg(test)]
 mod member_ptr_tests;
 mod overload;
+mod overload_adl;
 pub mod pack_expansion;
 #[cfg(test)]
 mod pack_expansion_tests;
 mod receiver;
+mod sema_state;
 mod sema_types;
 mod stmt;
 mod stmt_decl;
@@ -62,13 +67,22 @@ mod template_call_dependence;
 mod template_deduce;
 mod template_deduce_type;
 mod template_func;
+mod template_func_helpers;
 mod template_match;
+mod template_match_args;
+mod template_match_confirm;
+mod template_match_deduce;
 mod template_name;
 mod template_nested;
+mod template_nested_lookup;
 pub mod template_partial_order;
 mod template_registry;
 mod template_registry_helpers;
+mod template_registry_instantiate;
+mod template_registry_lookup;
 mod template_registry_members;
+mod template_registry_types;
+mod template_registry_variable;
 mod template_spec;
 mod template_state;
 pub mod template_subst;
@@ -82,6 +96,8 @@ mod template_subst_pack;
 mod template_subst_stmt;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_instantiation;
 mod tests_pack;
 
 pub(crate) use expected_type::is_member_pointer_address;
@@ -99,133 +115,10 @@ pub(crate) use function_sig::FunctionSig;
 pub(crate) use layout_types::VTableSlotInfo;
 pub use layout_types::{StructField, StructLayout};
 pub(crate) use receiver::{receiver_is_const_type, sig_receiver_is_const};
+pub use sema_state::{AliasVisibility, Sema};
 pub(crate) use sema_types::{ConversionFailure, DeferredMethod};
 pub use sema_types::{Scope, VarSymbol};
 use std::collections::{HashMap, HashSet};
-
-/// Function, using and variable visibility captured at a namespace alias
-/// declaration. `None` sets mean "unrestricted", used outside alias contexts.
-#[derive(Clone, Debug, Default)]
-pub(super) struct AliasVisibility {
-    pub functions: HashSet<String>,
-    pub usings: HashSet<String>,
-    pub namespaces: Vec<String>,
-    pub variables: Option<HashSet<String>>,
-    pub using_targets: Option<HashMap<String, String>>,
-}
-
-#[derive(Clone)]
-pub struct Sema {
-    pub struct_layouts: HashMap<String, StructLayout>,
-    pub struct_order: Vec<String>,
-    pub enum_values: HashMap<String, i64>,
-    /// Constant values of instantiated static const data members, keyed by
-    /// their fully qualified name. Used when such a member is a non-type
-    /// template argument (e.g. `is_integral<T>::value`).
-    pub static_const_values: HashMap<String, i128>,
-    pub enum_types: HashMap<String, String>,
-    pub scoped_enums: HashSet<String>,
-    pub functions: HashMap<String, Vec<FunctionSig>>,
-    /// Friend functions defined in a class, keyed by that class's name.
-    /// Found only through ADL, never through ordinary lookup.
-    pub hidden_friends: HashMap<String, Vec<FunctionSig>>,
-    /// Friend function templates of concrete class-template specializations,
-    /// keyed by the specialization they are associated with. Found only
-    /// through ADL, never by ordinary unqualified lookup.
-    pub hidden_friend_templates: HashMap<String, Vec<(FunctionDecl, Vec<TemplateParam>)>>,
-    pub global_vars: HashMap<String, VarSymbol>,
-    pub scopes: Vec<Scope>,
-    pub current_func_return_type: Option<Type>,
-    pub current_frame_size: i32,
-    pub struct_sizes: HashMap<String, usize>,
-    pub struct_aligns: HashMap<String, usize>,
-    pub current_line: usize,
-    pub current_col: usize,
-    pub loop_depth: usize,
-    pub switch_depth: usize,
-    pub current_class: Option<String>,
-    pub current_func_name: Option<String>,
-    pub open_namespaces: Vec<String>,
-    pub using_decls: HashMap<String, String>,
-    pub namespace_aliases: HashMap<String, String>,
-    pub type_aliases: HashMap<String, Type>,
-    /// Visibility snapshots for namespace aliases, keyed by alias name.
-    pub alias_visibility: HashMap<String, AliasVisibility>,
-    /// Visibility snapshots for NSDMI expressions, keyed by class name.
-    pub class_field_visibility: HashMap<String, AliasVisibility>,
-    /// Snapshot in force while validating a namespace alias.
-    pub active_alias_visibility: Option<AliasVisibility>,
-    /// Declaration-position contexts of `decltype` aliases, keyed by the
-    /// rendered operand so re-resolution keeps the original bindings.
-    pub decltype_alias_context: HashMap<String, AliasVisibility>,
-    /// True while confirming a partial specialization: nested-type access and
-    /// ambiguity failures are substitution failures in this immediate context.
-    pub in_substitution_context: bool,
-    /// Whether the analysis is inside the initializer of a variable.
-    ///
-    /// A constructor call in an initializer reports an initialization
-    /// diagnostic, while a constructor call in an expression reports a call
-    /// diagnostic.
-    pub in_initializer: bool,
-    /// True while an expression is being analyzed on a disposable clone to
-    /// decide a template candidate's viability.
-    pub speculating: bool,
-    /// Set when a nested instantiation fails during speculative analysis, so
-    /// the failure stays hard instead of rejecting the candidate.
-    pub speculative_hard: bool,
-    /// Parameters of the signature being formed, bound when resolving a
-    /// `decltype` operand that names one of them.
-    pub signature_params: Vec<Param>,
-    /// Target type available at the current expression site (initializer,
-    /// assignment, return, cast). Used to disambiguate overloaded
-    /// `&Class::member` addresses.
-    pub expected_type: Option<Type>,
-    pub range_for_counter: usize,
-    pub lambda_counter: usize,
-    pub synthesized_decls: Vec<Decl>,
-    pub current_func_is_const: bool,
-    pub class_templates: HashMap<String, (TemplateClass, Vec<TemplateParam>)>,
-    pub class_specializations: HashMap<String, TemplateClass>,
-    pub partial_specializations: HashMap<String, Vec<template_match::PartialSpec>>,
-    /// The definition selected when each class-template specialization was
-    /// instantiated. Nested-member validation reads this instead of selecting
-    /// the specialization a second time.
-    pub instantiated_class_definitions: HashMap<String, TemplateClass>,
-    pub function_templates: HashMap<String, Vec<(FunctionDecl, Vec<TemplateParam>)>>,
-    /// Function overloads visible when each function template was defined,
-    /// keyed by `name@line:col`. Ordinary lookup inside an instantiated body
-    /// only sees these, so a later declaration cannot rebind a template name.
-    pub template_definition_functions: HashMap<String, HashSet<String>>,
-    /// Dependent call and operator expression sites inside each template, by
-    /// source position. Substitution preserves positions, so classification
-    /// made on the definition AST still applies to rewritten bodies.
-    pub dependent_calls: HashMap<String, HashSet<(usize, usize)>>,
-    /// Using-declaration names visible at each template's definition.
-    pub template_definition_usings: HashMap<String, HashSet<String>>,
-    /// Namespaces opened by `using namespace` at each template definition.
-    pub template_definition_namespaces: HashMap<String, Vec<String>>,
-    /// Identity of the template whose body (or signature) is being analyzed.
-    /// Set only while re-analyzing substituted template code.
-    pub current_template_identity: Option<String>,
-    pub alias_templates: HashMap<String, (Vec<TemplateParam>, Type)>,
-    /// Variable templates: name -> (params, type, initializer).
-    pub variable_templates: HashMap<String, (Vec<TemplateParam>, Type, Option<Expr>)>,
-    /// Instantiated variable template specializations: rendered name ->
-    /// (type, constant value). Registers each specialization once.
-    pub instantiated_variable_templates: HashMap<String, (Type, Option<i128>)>,
-    pub instantiated_classes: HashSet<String>,
-    pub instantiated_functions: HashSet<String>,
-    pub pending_template_methods: HashMap<String, (String, FunctionDecl)>,
-    pub(crate) deferred_methods: Vec<DeferredMethod>,
-    /// Classes used as complete objects; only their bodies need checking.
-    pub(crate) object_use_classes: HashSet<String>,
-    pub member_templates: HashMap<String, Vec<FunctionDecl>>,
-    pub instantiation_depth: usize,
-    pub instantiation_stack: Vec<String>,
-    pub structs_with_dtor: HashSet<String>,
-    pub structs_with_move: HashSet<String>,
-    depth: crate::depth::DepthCounters,
-}
 
 impl Sema {
     pub(super) fn active_visible_functions(&self) -> Option<&std::collections::HashSet<String>> {
@@ -306,69 +199,6 @@ impl Sema {
 
         sema.register_builtins();
         sema
-    }
-
-    fn register_builtins(&mut self) {
-        // Built-in printf: variadic, mangled as "printf"
-        self.register_function(FunctionSig {
-            qualifiers: FunctionQualifiers::default(),
-            name: "printf".to_string(),
-            mangled_name: "printf".to_string(),
-            return_type: Type::Int,
-            param_types: vec![Type::Pointer(Box::new(Type::Char))],
-            default_args: vec![None],
-            is_static: false,
-            is_explicit: false,
-            ref_qualifier: RefQualifier::None,
-        });
-        self.register_function(FunctionSig {
-            qualifiers: FunctionQualifiers::default(),
-            name: "std::printf".to_string(),
-            mangled_name: "std::printf".to_string(),
-            return_type: Type::Int,
-            param_types: vec![Type::Pointer(Box::new(Type::Char))],
-            default_args: vec![None],
-            is_static: false,
-            is_explicit: false,
-            ref_qualifier: RefQualifier::None,
-        });
-
-        // Built-in malloc & free
-        self.register_function(FunctionSig {
-            qualifiers: FunctionQualifiers::default(),
-            name: "malloc".to_string(),
-            mangled_name: "malloc".to_string(),
-            return_type: Type::Pointer(Box::new(Type::Void)),
-            param_types: vec![Type::Int],
-            default_args: vec![None],
-            is_static: false,
-            is_explicit: false,
-            ref_qualifier: RefQualifier::None,
-        });
-
-        self.register_function(FunctionSig {
-            qualifiers: FunctionQualifiers::default(),
-            name: "free".to_string(),
-            mangled_name: "free".to_string(),
-            return_type: Type::Void,
-            param_types: vec![Type::Pointer(Box::new(Type::Void))],
-            default_args: vec![None],
-            is_static: false,
-            is_explicit: false,
-            ref_qualifier: RefQualifier::None,
-        });
-
-        self.register_function(FunctionSig {
-            qualifiers: FunctionQualifiers::default(),
-            name: "__builtin_wasm_memory_size".to_string(),
-            mangled_name: "__builtin_wasm_memory_size".to_string(),
-            return_type: Type::Int,
-            param_types: vec![Type::Int],
-            default_args: vec![None],
-            is_static: false,
-            is_explicit: false,
-            ref_qualifier: RefQualifier::None,
-        });
     }
 
     /// Registers an overload under its source name, mangled name, and any

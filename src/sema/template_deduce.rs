@@ -1,6 +1,6 @@
 //! Template argument deduction and explicit template argument resolution.
 
-use crate::ast::decl::FunctionDecl;
+use crate::ast::decl::{FunctionDecl, Param};
 use crate::ast::expr::{Expr, ExprPos};
 use crate::ast::template::TemplateParam;
 use crate::ast::types::Type;
@@ -293,21 +293,7 @@ pub fn deduce_template_arguments(
         pos,
     )?;
 
-    for (i, p) in fixed_params.iter().enumerate() {
-        if i >= arg_types.len() {
-            break;
-        }
-        let arg_ty = &arg_types[i];
-        let is_lval = args.get(i).is_some_and(|e| e.is_lvalue()) || arg_ty.is_lvalue_reference();
-        let adjusted_arg_ty = if !p.ty.is_reference() {
-            arg_ty.strip_reference().decay_array()
-        } else {
-            arg_ty.clone()
-        };
-        if type_has_template_param(&p.ty) {
-            deduce_type(&p.ty, &adjusted_arg_ty, &mut deduced, is_lval, pos)?;
-        }
-    }
+    deduce_fixed_params(&fixed_params, (arg_types, args), &mut deduced, pos)?;
 
     let mut result = deduced;
 
@@ -333,6 +319,31 @@ pub fn deduce_template_arguments(
 
     fill_missing_deduced(template_params, &mut result, pos)?;
     Ok(result)
+}
+
+/// Deduces template arguments from the fixed (non-pack) parameters.
+fn deduce_fixed_params(
+    fixed_params: &[&Param],
+    (arg_types, args): (&[Type], &[Expr]),
+    deduced: &mut HashMap<String, TemplateArg>,
+    pos: ExprPos,
+) -> Result<(), CompileError> {
+    for (i, p) in fixed_params.iter().enumerate() {
+        if i >= arg_types.len() {
+            break;
+        }
+        let arg_ty = &arg_types[i];
+        let is_lval = args.get(i).is_some_and(|e| e.is_lvalue()) || arg_ty.is_lvalue_reference();
+        let adjusted_arg_ty = if !p.ty.is_reference() {
+            arg_ty.strip_reference().decay_array()
+        } else {
+            arg_ty.clone()
+        };
+        if type_has_template_param(&p.ty) {
+            deduce_type(&p.ty, &adjusted_arg_ty, deduced, is_lval, pos)?;
+        }
+    }
+    Ok(())
 }
 
 /// Pads missing template arguments from parameter default types.
