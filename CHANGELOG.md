@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Static Assert & Constant Evaluation (C++17)
+- `static_assert` conditions now reject non-constant expressions, including runtime variables and non-constexpr function calls, with an explicit compile error. Diagnostics point to the failing condition expression rather than the keyword token.
+- Qualified static constexpr members and variable template specializations fold into assertion conditions before evaluation.
+
+### Two-Phase Lookup & ADL (C++17)
+- Local variables and references initialized from dependent expressions (`auto x = t;`) are tracked as dependent names, preserving instantiation-time ADL for subsequent calls.
+- Argument-dependent lookup skips enclosing classes of nested types, preventing unqualified calls from invoking static member functions of outer classes.
+- Namespace alias lookup keys visibility snapshots by alias name, preventing collisions when separate aliases share identical `decltype` expressions.
+
+### Architecture & Memory Optimization
+- Iterative expression dropping replaces drained nodes with leaf placeholders before dropping, eliminating redundant allocations and inner drop traversals.
+- Refactored semantic analysis and parser modules to comply with repository census limits (all source files under 500 lines, functions under 80 lines, and at most five parameters).
+
 ### Dependent Nested Types (C++17)
 - Nested-member validation reads the definition recorded by class-template instantiation instead of matching partial specializations a second time. The compiler records each definition's own member aliases, so a typedef on the primary cannot supply a member to a partial specialization that omits it.
 - A missing nested member on a concrete class-template specialization is no

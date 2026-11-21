@@ -24,17 +24,21 @@ The corpus test `tests/diagnostic_positions.rs` compiles every corpus file and e
 
 ## 2. Diagnostic Categories (`ErrorKind`)
 
-The compiler categorizes diagnostics into five distinct kinds:
+The compiler categorizes diagnostics using `ErrorKind`:
 
 ```rust
 pub enum ErrorKind {
-    Lexical,     // Tokenization and preprocessor syntax errors
-    Syntax,      // Parser grammar failures
-    Semantic,    // Type checking, symbol resolution, and layout failures
-    Unsupported, // Features outside the v1 C++ subset
-    Internal,    // Internal compiler invariants or resource limits
+    Lexical,        // Tokenization and preprocessor syntax errors
+    Syntax,         // Parser grammar failures
+    Semantic,       // Type checking, symbol resolution, and layout failures
+    UnresolvedName, // Names deferred for forward references or late templates
+    Substitution,   // Immediate-context SFINAE failure that discards a candidate
+    Unsupported,    // Features outside the supported C++ subset
+    Internal,       // Internal compiler invariants or resource limits
 }
 ```
+
+Template signature substitution wraps immediate-context errors as `SubstitutionFailure` or `TemplateFailure::Substitution`. The compiler drops the failing candidate and continues overload ranking. Hard errors (such as errors inside a selected specialization's body or nested template instantiations) abort compilation immediately.
 
 ---
 
@@ -374,6 +378,41 @@ The following catalog lists diagnostics emitted by the compiler, paired with rea
   ```cpp
   template <int N> struct C {};
   C<1 << 33> c; // error: shift count out of range in constant expression
+  ```
+
+#### `static assertion condition is not a constant expression`
+- **Cause**: Supplying a runtime variable or non-constexpr function call to a `static_assert` condition.
+- **Trigger** (`tests/negative/static_assert_runtime_var.cpp`):
+  ```cpp
+  int x = 1;
+  static_assert(x, "runtime variable condition"); // error: static assertion condition is not a constant expression
+  ```
+
+#### `no matching function for call to '<name>'` (SFINAE Rejection)
+- **Cause**: All candidate function or member templates are rejected during signature substitution. The diagnostic lists each candidate and the reason for rejection.
+- **Trigger** (`tests/negative/sfinae_all_candidates_rejected_reasons.cpp`):
+  ```cpp
+  template <class T> int f(typename T::missing*) { return 1; }
+  int main() {
+      f<int>(0); // error: no matching function for call to 'f': substitution failure: no type named 'missing' in 'int'
+  }
+  ```
+
+#### `template parameter '<param>' cannot be deduced from the partial specialization argument list`
+- **Cause**: A template parameter in a partial specialization appears only in non-deduced contexts, making the specialization unusable.
+- **Trigger** (`tests/negative/partial_spec_nondeducible_alias.cpp`):
+  ```cpp
+  template <class T, class U> struct Pair {};
+  template <class T> using Second = Pair<int, typename T::type>;
+  template <class T> struct S<Second<T>> {}; // error: template parameter 'T' cannot be deduced from the partial specialization argument list
+  ```
+
+#### `unsupported expression in dependent decltype pattern`
+- **Cause**: A `decltype` expression in a partial-specialization pattern contains an AST node (such as a lambda or pack expansion) that cannot be rendered as re-parsable source for confirmation.
+- **Trigger** (`tests/negative/partial_spec_unrenderable_decltype.cpp`):
+  ```cpp
+  template <class T, class = void> struct Check {};
+  template <class T> struct Check<T, decltype([]{})> {}; // error: unsupported expression in dependent decltype pattern
   ```
 
 ---
