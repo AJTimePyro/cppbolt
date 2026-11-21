@@ -10,8 +10,6 @@ use crate::name::QualifiedName;
 use std::collections::HashSet;
 
 impl Sema {
-    /// Resolves a qualified name to its type. Missing nested types yield
-    /// `None`; instantiation errors stay hard.
     /// Splits `Trait<Args...>::member` at the last `::` that is not nested
     /// inside template argument brackets.
     fn split_static_member_name(name: &str) -> Option<(&str, &str)> {
@@ -241,6 +239,8 @@ impl Sema {
         Ok(Some((declarer.clone(), Some(ty))))
     }
 
+    /// Resolves a qualified name to its type. Missing nested types yield
+    /// `None`; instantiation errors stay hard.
     pub(super) fn resolve_nested_type_name(
         &mut self,
         name: &str,

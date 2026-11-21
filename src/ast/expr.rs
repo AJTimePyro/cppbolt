@@ -313,7 +313,6 @@ impl Expr {
         }
     }
 
-    /// Renders a unary expression, handling postfix operators separately.
     fn render_unary(&self) -> String {
         let Expr::Unary { op, expr, .. } = self else {
             return UNRENDERABLE_EXPR.to_string();
@@ -337,7 +336,6 @@ impl Expr {
         format!("{}{}", sym, expr.to_source())
     }
 
-    /// Renders a binary expression with its operator symbol.
     fn render_binary(&self) -> String {
         let Expr::Binary {
             op, left, right, ..

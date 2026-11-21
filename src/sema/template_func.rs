@@ -243,7 +243,6 @@ impl Sema {
         Ok(viable)
     }
 
-    /// Assembles a viable candidate from its deduced mapping and scored signature.
     fn make_candidate(info: CandidateInfo<'_>, score: usize) -> ViableCandidate {
         ViableCandidate {
             decl: info.decl.clone(),
@@ -255,7 +254,6 @@ impl Sema {
         }
     }
 
-    /// Whether a candidate's parameter count can accept `num_args` call arguments.
     fn candidate_arity_ok(
         template_decl: &FunctionDecl,
         template_params: &[TemplateParam],
@@ -451,7 +449,6 @@ impl Sema {
         Ok(sig)
     }
 
-    /// Registers a specialization under its implicit namespace alias.
     fn register_function_template_aliases(&mut self, name: &str, sig: &FunctionSig) {
         if let Some(alias) = QualifiedName::new(name).implicit_alias() {
             self.functions

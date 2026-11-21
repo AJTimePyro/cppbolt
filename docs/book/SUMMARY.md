@@ -22,7 +22,7 @@
 
 # Standard Library
 
-- [`<type_traits>` (LLVM libc++ 23.1.5)](stdlib/type_traits.md)
+- [`<type_traits>`](stdlib/type_traits.md)
 
 # Architecture Decision Records
 

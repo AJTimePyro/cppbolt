@@ -321,7 +321,6 @@ pub fn deduce_template_arguments(
     Ok(result)
 }
 
-/// Deduces template arguments from the fixed (non-pack) parameters.
 fn deduce_fixed_params(
     fixed_params: &[&Param],
     (arg_types, args): (&[Type], &[Expr]),

@@ -68,7 +68,6 @@ impl Sema {
         Ok(())
     }
 
-    /// Analyzes a virtual or destructor body in the specialization's context.
     fn analyze_instantiated_virtual_method(
         &mut self,
         inst_name: &str,

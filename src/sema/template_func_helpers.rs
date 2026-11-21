@@ -48,7 +48,6 @@ pub(super) fn no_viable_template_error(
     Ok(())
 }
 
-/// Accumulates why each template candidate was rejected.
 #[derive(Default)]
 pub(super) struct Rejections {
     pub(super) messages: Vec<String>,

@@ -83,8 +83,6 @@ impl Sema {
         self.finish_class_instantiation(result, &inst_name, snapshot)
     }
 
-    /// Folds non-type template arguments that are static const members before
-    /// argument-kind validation.
     fn resolve_nontype_template_args(
         &mut self,
         params: &[TemplateParam],
@@ -100,7 +98,6 @@ impl Sema {
         Ok(())
     }
 
-    /// Pops the instantiation frame and commits or rolls back the specialization.
     fn finish_class_instantiation(
         &mut self,
         result: Result<(), CompileError>,
@@ -204,7 +201,6 @@ impl Sema {
         Ok(())
     }
 
-    /// Resolves the signatures of an instantiated class's non-template methods.
     fn resolve_instantiated_method_signatures(
         &mut self,
         methods: &mut [FunctionDecl],
@@ -230,7 +226,6 @@ impl Sema {
         Ok(())
     }
 
-    /// Instantiates and registers the friends of a class specialization.
     fn instantiate_friend_functions(
         &mut self,
         template_class: &TemplateClass,

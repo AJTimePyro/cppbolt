@@ -33,7 +33,6 @@ impl Sema {
         Ok(())
     }
 
-    /// Checks and records a global variable and its initializer.
     pub(super) fn analyze_global_var(
         &mut self,
         name: &str,

@@ -49,11 +49,8 @@ pub struct Sema {
     pub using_decls: HashMap<String, String>,
     pub namespace_aliases: HashMap<String, String>,
     pub type_aliases: HashMap<String, Type>,
-    /// Visibility snapshots for namespace aliases, keyed by alias name.
     pub alias_visibility: HashMap<String, AliasVisibility>,
-    /// Visibility snapshots for NSDMI expressions, keyed by class name.
     pub class_field_visibility: HashMap<String, AliasVisibility>,
-    /// Snapshot in force while validating a namespace alias.
     pub active_alias_visibility: Option<AliasVisibility>,
     /// Declaration-position contexts of `decltype` aliases, keyed by the
     /// alias name so re-resolution keeps the original bindings.
@@ -100,15 +97,12 @@ pub struct Sema {
     /// source position. Substitution preserves positions, so classification
     /// made on the definition AST still applies to rewritten bodies.
     pub dependent_calls: HashMap<String, HashSet<(usize, usize)>>,
-    /// Using-declaration names visible at each template's definition.
     pub template_definition_usings: HashMap<String, HashSet<String>>,
-    /// Namespaces opened by `using namespace` at each template definition.
     pub template_definition_namespaces: HashMap<String, Vec<String>>,
     /// Identity of the template whose body (or signature) is being analyzed.
     /// Set only while re-analyzing substituted template code.
     pub current_template_identity: Option<String>,
     pub alias_templates: HashMap<String, (Vec<TemplateParam>, Type)>,
-    /// Variable templates: name -> (params, type, initializer).
     pub variable_templates: HashMap<String, (Vec<TemplateParam>, Type, Option<Expr>)>,
     /// Instantiated variable template specializations: rendered name ->
     /// (type, constant value). Registers each specialization once.

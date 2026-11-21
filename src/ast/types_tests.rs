@@ -1,5 +1,3 @@
-//! Tests for type helpers.
-
 use super::types::Type;
 
 #[test]

@@ -63,7 +63,6 @@ impl Parser {
         Ok(true)
     }
 
-    /// Builds the class-template payload from a parsed nested struct.
     fn nested_template_class_from_decl(
         &mut self,
         decl: Decl,

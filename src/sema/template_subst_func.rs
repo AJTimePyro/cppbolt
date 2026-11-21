@@ -429,7 +429,6 @@ pub fn substitute_function_body(
     substitute_function_body_with_sema(func, mapping, injected_class, None)
 }
 
-/// `substitute_function_body` with Sema-backed resolution in the body.
 pub fn substitute_function_body_with_sema(
     func: &mut FunctionDecl,
     mapping: &HashMap<String, TemplateArg>,
@@ -472,7 +471,6 @@ pub fn substitute_function(
     substitute_function_with_sema(func, mapping, injected_class, new_name, None)
 }
 
-/// `substitute_function` with Sema-backed resolution in the signature and body.
 pub fn substitute_function_with_sema(
     func: &FunctionDecl,
     mapping: &HashMap<String, TemplateArg>,

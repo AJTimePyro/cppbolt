@@ -78,7 +78,7 @@ stdlib/
 ├── string            # std::string implementation
 ├── string.h          # C string declarations
 ├── tuple             # std::tuple, std::make_tuple, std::get
-├── type_traits       # C++17 subset adapted from LLVM libc++ 23.1.5
+├── type_traits       # integral_constant, is_same, enable_if, void_t, type transformations
 ├── utility           # std::move, std::forward, std::pair, std::swap
 ├── vector            # std::vector with move operations and dynamic resizing
 ├── detail/           # Internal headers
@@ -99,9 +99,9 @@ stdlib/
 │   │   └── avl_tree.h # std::detail::AVLTree backing map and set
 │   ├── iterator.h    # Iterator tags, traits, and pointer operations
 │   ├── reverse_iterator.h # std::reverse_iterator adapter
-│   └── type_traits/  # Upstream libc++ 23.1.5 C++17 type trait components
-│       ├── builtins.h # Reusable shims for libc++ type-query/transform builtins
-│       └── ...       # One header per upstream __type_traits component
+│   └── type_traits/  # Internal type trait components
+│       ├── builtins.h # Shims for type-query and transform builtins
+│       └── ...       # Individual trait headers
 └── compat/           # Compiler and platform shims
     ├── compiler/
     │   └── compiler.h # libc++ compatibility macros and warning controls

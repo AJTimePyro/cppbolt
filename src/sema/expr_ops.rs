@@ -1,6 +1,5 @@
 use super::*;
 
-/// Built-in result type for a binary operator whose operands have no overload.
 fn builtin_binary_result_type(op: &BinaryOp, lty: &Type, rty: &Type) -> Type {
     match op {
         BinaryOp::LogicalAnd

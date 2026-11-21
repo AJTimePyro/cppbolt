@@ -86,10 +86,8 @@ impl Sema {
         Ok(ty.clone())
     }
 
-    /// Finds the operator that a unary operator on `operand` resolves to.
-    ///
     /// A member operator of the operand's class wins over a free operator
-    /// function.  Only a class operand can name an operator, so the built-in
+    /// function. Only a class operand can name an operator, so built-in
     /// operators are never shadowed by an overload.
     pub(super) fn find_unary_operator(
         &mut self,

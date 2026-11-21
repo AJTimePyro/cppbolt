@@ -4,7 +4,6 @@ use super::*;
 
 impl Sema {
     pub(super) fn register_builtins(&mut self) {
-        // Built-in printf: variadic, mangled as "printf"
         self.register_function(FunctionSig {
             qualifiers: FunctionQualifiers::default(),
             name: "printf".to_string(),
@@ -28,7 +27,6 @@ impl Sema {
             ref_qualifier: RefQualifier::None,
         });
 
-        // Built-in malloc & free
         self.register_function(FunctionSig {
             qualifiers: FunctionQualifiers::default(),
             name: "malloc".to_string(),

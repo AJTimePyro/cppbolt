@@ -12,7 +12,6 @@ use super::*;
 use crate::ast::decl::RefQualifier;
 use crate::diagnostics::TemplateFailure;
 
-/// Parameters of a member-template instantiation attempt.
 pub(super) struct MemberTemplateCall<'a> {
     pub(super) class_name: &'a str,
     pub(super) method_name: Option<&'a str>,
@@ -403,7 +402,6 @@ impl Sema {
         Ok(None)
     }
 
-    /// Substitutes and resolves the signature of a member template candidate.
     fn form_member_template_signature(
         &mut self,
         cand: &FunctionDecl,
@@ -432,7 +430,6 @@ impl Sema {
             })
     }
 
-    /// Builds the signature and mangled name of a substituted member template.
     fn member_template_sig(
         &self,
         class_name: &str,

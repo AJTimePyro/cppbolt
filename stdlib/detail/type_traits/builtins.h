@@ -14,8 +14,7 @@
 // template partial specializations. The upstream headers are kept unchanged:
 // what they see is a compiler that "has" these builtins.
 //
-// This is intentionally generic infrastructure -- no upstream trait is
-// reimplemented here, only the primitive operations they are built from.
+// Upstream traits are not reimplemented here; only primitive operations.
 
 #ifndef _LIBCPP_DETAIL_TYPE_TRAITS_BUILTINS_H
 #define _LIBCPP_DETAIL_TYPE_TRAITS_BUILTINS_H

@@ -18,8 +18,6 @@ impl Drop for Expr {
     }
 }
 
-/// Returns true when `expr` can contain child expressions that need
-/// iterative dropping.
 #[inline]
 fn has_children(expr: &Expr) -> bool {
     match expr {
@@ -59,7 +57,6 @@ fn has_children(expr: &Expr) -> bool {
     }
 }
 
-/// Moves one child expression out of `child`, leaving a cheap leaf placeholder.
 #[inline]
 fn take_box(child: &mut Box<Expr>, out: &mut Vec<Expr>) {
     let expr = std::mem::replace(&mut **child, Expr::BoolLiteral(false));
