@@ -827,3 +827,36 @@ Addressed review findings in algorithms, iterator primitives, and header lookup.
 - Native oracle gate: all 50 mini_stl tests match native Clang and GCC byte-for-byte.
 - Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
 - Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
+## 2026-11-22: WebAssembly Native Exception Handling and Scope-Aware Unwinding Redesign
+
+Implemented C++17 exception handling (`try`, `catch`, `throw`) in WebAssembly using the native `try_table` proposal and a dynamic 64-bit liveness tracking mask.
+
+### Summary of Work
+
+1. WebAssembly Primitives: Registered exception tag 0 `(i32) -> void` in WebAssembly module section 13 and added `OP_TRY_TABLE` (0x1f), `OP_THROW` (0x08), and `OP_THROW_REF` (0x0a).
+2. Lexer, Parser, and AST: Added `TokenKind::KwTry`, `KwCatch`, `KwThrow`, and `Ellipsis` (`...`). Lowered to `StmtKind::Throw(Option<Expr>)` and `StmtKind::Try { try_body, catch_param, catch_body }` in `src/parser/stmt_try.rs`.
+3. Scope-Aware Unwinding Engine (`src/codegen/unwind.rs`):
+   - Replaced per-call cleanup wrappers with function-level `try_table (catch_all_ref $unwind)` wrapping throwing and calling functions.
+   - Added a 64-bit dynamic liveness bitmask (`cleanup_mask_local: i64`) updated at construction and scope exit so destructors run only for active objects in reverse construction order.
+   - Added a compile-time check rejecting functions with 64 or more cleanup objects.
+   - Wrapped unwinding cleanups in `try_table (catch_all -> unreachable)` to invoke `std::terminate` when a destructor throws during unwinding.
+   - Added AST traversal (`stmt_can_throw_or_call`) to omit unwinding code from leaf functions.
+4. Try/Catch Statement Lowering (`src/codegen/stmt_try.rs`):
+   - Lowered typed catches with payload binding into frame slots.
+   - Supported catch-all (`catch (...)`) with `exnref` capture.
+   - Restricted catch-entry cleanups to objects constructed inside the `try` block, preserving outer local objects.
+   - Lowered `throw;` to rethrow active exceptions (`throw_ref` or `throw 0`), and emitted `unreachable` (`std::terminate`) when evaluated outside catch blocks.
+5. Constructor Failure Handling (`src/codegen/function_lifecycle.rs`):
+   - Registered base and member initializers in the cleanup mask, destroying completed subobjects if a subsequent initializer or constructor body throws.
+6. Shadow Stack Integrity: Restored caller frame pointer on the shadow stack (`global 0`) in the function unwind handler before propagating unhandled exceptions.
+7. Tests: Added 15 integration tests in `tests/exceptions_prototype.rs` covering cross-function unwinding, nested try blocks, loop allocations, throwing destructors, shadow-stack integrity, rethrow termination, and cleanup limits.
+
+### Verification Results
+
+- All 143 unit tests passed (`cargo test --lib`).
+- All 15 exception integration tests passed (`cargo test --test exceptions_prototype`).
+- All 16 C++17 regressions passed (`cargo test --test cxx17_regressions`).
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with > 5 parameters without receiver.

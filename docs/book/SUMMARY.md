@@ -42,6 +42,7 @@
 - [ADR 0013: C++11 Variadic Templates, Parameter Packs, and Partial Ordering](adr/0013-variadic-templates.md)
 - [ADR 0014: C++17 Fold Expressions](adr/0014-cxx17-fold-expressions.md)
 - [ADR 0015: Pointer-to-Member Operators and ABI](adr/0015-pointer-to-member.md)
+- [ADR 0016: WebAssembly Exception Handling](adr/0016-wasm-exception-handling.md)
 
 # Development
 
