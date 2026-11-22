@@ -1304,3 +1304,71 @@ int main() {
     Ok(())
 }
 
+#[test]
+fn test_ternary_conditional_temporaries_normal_exit() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct Widget {
+    int id;
+    Widget(int i) : id(i) { std::printf("C_W:%d ", id); }
+    ~Widget() { std::printf("D_W:%d ", id); }
+};
+
+int consume(const Widget& w) {
+    return w.id;
+}
+
+int main() {
+    int r1 = 1 ? consume(Widget(1)) : consume(Widget(2));
+    std::printf("r1=%d ", r1);
+    int r2 = 0 ? consume(Widget(3)) : consume(Widget(4));
+    std::printf("r2=%d", r2);
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "C_W:1 D_W:1 r1=1 C_W:4 D_W:4 r2=4");
+    Ok(())
+}
+
+#[test]
+fn test_short_circuit_temporaries_with_exceptions() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct Widget {
+    int id;
+    Widget(int i) : id(i) {
+        std::printf("C_W:%d ", id);
+        if (id == 99) {
+            std::printf("Throw_W ");
+            throw 999;
+        }
+    }
+    ~Widget() { std::printf("D_W:%d ", id); }
+};
+
+int consume(const Widget& w) {
+    return w.id;
+}
+
+int main() {
+    try {
+        // false && ... should not evaluate second operand
+        int x = (0 && consume(Widget(1))) ? 10 : (consume(Widget(2)) + consume(Widget(99)));
+        std::printf("x=%d ", x);
+    } catch (int e) {
+        std::printf("Caught:%d", e);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "C_W:2 C_W:99 Throw_W D_W:2 Caught:999");
+    Ok(())
+}
+
+
