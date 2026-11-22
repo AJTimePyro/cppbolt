@@ -21,6 +21,6 @@ pub use expr::{
     zero_literal_for_type,
 };
 pub use fold_op::FoldOp;
-pub use stmt::{Stmt, StmtKind};
+pub use stmt::{CatchClause, Stmt, StmtKind};
 pub use template::{TemplateClass, TemplateDecl, TemplateKind, TemplateParam};
 pub use types::FunctionQualifiers;

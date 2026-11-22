@@ -1410,5 +1410,59 @@ int main() {
     Ok(())
 }
 
+#[test]
+fn test_multiple_catch_clauses_int_then_catch_all() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+int main() {
+    try {
+        std::printf("ThrowingInt ");
+        throw 42;
+    } catch (int e) {
+        std::printf("CaughtInt:%d ", e);
+    } catch (...) {
+        std::printf("CaughtAll ");
+    }
+    std::printf("Done");
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "ThrowingInt CaughtInt:42 Done");
+    Ok(())
+}
+
+#[test]
+fn test_multiple_catch_clauses_rethrow_to_outer_catch() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+int main() {
+    try {
+        try {
+            throw 99;
+        } catch (int e) {
+            std::printf("InnerInt:%d ", e);
+            throw;
+        } catch (...) {
+            std::printf("InnerAll ");
+        }
+    } catch (int e2) {
+        std::printf("OuterInt:%d", e2);
+    } catch (...) {
+        std::printf("OuterAll");
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "InnerInt:99 OuterInt:99");
+    Ok(())
+}
+
+
 
 

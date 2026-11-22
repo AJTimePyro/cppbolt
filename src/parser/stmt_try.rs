@@ -21,29 +21,42 @@ impl Parser {
     pub(super) fn parse_try_stmt(&mut self, line: usize, col: usize) -> Result<Stmt, CompileError> {
         self.advance();
         let try_body = self.parse_stmt()?;
-        self.expect(TokenKind::KwCatch)?;
-        self.expect(TokenKind::LParen)?;
-        let catch_param = if self.peek() == &TokenKind::Ellipsis {
+        let mut catches = Vec::new();
+        while self.peek() == &TokenKind::KwCatch {
             self.advance();
-            None
-        } else {
-            let ty = self.parse_type()?;
-            let name = if let TokenKind::Ident(id) = self.peek() {
-                let n = id.clone();
+            self.expect(TokenKind::LParen)?;
+            let catch_param = if self.peek() == &TokenKind::Ellipsis {
                 self.advance();
-                n
+                None
             } else {
-                String::new()
+                let ty = self.parse_type()?;
+                let name = if let TokenKind::Ident(id) = self.peek() {
+                    let n = id.clone();
+                    self.advance();
+                    n
+                } else {
+                    String::new()
+                };
+                Some((ty, name))
             };
-            Some((ty, name))
-        };
-        self.expect(TokenKind::RParen)?;
-        let catch_body = self.parse_stmt()?;
+            self.expect(TokenKind::RParen)?;
+            let catch_body = self.parse_stmt()?;
+            catches.push(CatchClause {
+                param: catch_param,
+                body: Box::new(catch_body),
+            });
+        }
+        if catches.is_empty() {
+            return Err(CompileError::new(
+                "expected 'catch' after try block",
+                line,
+                col,
+            ));
+        }
         Ok(Stmt::new(
             StmtKind::Try {
                 try_body: Box::new(try_body),
-                catch_param,
-                catch_body: Box::new(catch_body),
+                catches,
             },
             line,
             col,

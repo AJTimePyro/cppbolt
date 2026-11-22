@@ -135,19 +135,16 @@ fn substitute_try_stmt(
     injected_class: Option<(&str, &Type)>,
     mut sema: Option<&mut crate::sema::Sema>,
 ) -> Result<(), CompileError> {
-    let StmtKind::Try {
-        try_body,
-        catch_param,
-        catch_body,
-    } = kind
-    else {
+    let StmtKind::Try { try_body, catches } = kind else {
         return Ok(());
     };
     substitute_stmt_with_sema(try_body, mapping, injected_class, sema.as_deref_mut())?;
-    if let Some((ty, _)) = catch_param {
-        *ty = substitute_type_with_sema(ty, mapping, injected_class, sema.as_deref_mut())?;
+    for clause in catches {
+        if let Some((ty, _)) = &mut clause.param {
+            *ty = substitute_type_with_sema(ty, mapping, injected_class, sema.as_deref_mut())?;
+        }
+        substitute_stmt_with_sema(&mut clause.body, mapping, injected_class, sema.as_deref_mut())?;
     }
-    substitute_stmt_with_sema(catch_body, mapping, injected_class, sema.as_deref_mut())?;
     Ok(())
 }
 

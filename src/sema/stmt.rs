@@ -142,10 +142,9 @@ impl Sema {
             StmtKind::Throw(None) => {}
             StmtKind::Try {
                 try_body,
-                catch_param,
-                catch_body,
+                catches,
             } => {
-                self.analyze_try_stmt(try_body, catch_param, catch_body, stmt.line, stmt.col)?;
+                self.analyze_try_stmt(try_body, catches, stmt.line, stmt.col)?;
             }
             StmtKind::RangeFor { .. } => unreachable!("RangeFor is desugared before dispatch"),
             StmtKind::StructuredBinding { .. } => {
@@ -158,21 +157,22 @@ impl Sema {
     fn analyze_try_stmt(
         &mut self,
         try_body: &mut Stmt,
-        catch_param: &mut Option<(Type, String)>,
-        catch_body: &mut Stmt,
+        catches: &mut [CatchClause],
         line: usize,
         col: usize,
     ) -> Result<(), CompileError> {
         self.analyze_stmt(try_body)?;
-        self.enter_scope();
-        if let Some((ty, name)) = catch_param {
-            self.resolve_and_instantiate_type(ty, line, col)?;
-            if !name.is_empty() {
-                self.declare_local_var(name, ty, line, col)?;
+        for clause in catches.iter_mut() {
+            self.enter_scope();
+            if let Some((ty, name)) = &mut clause.param {
+                self.resolve_and_instantiate_type(ty, line, col)?;
+                if !name.is_empty() {
+                    self.declare_local_var(name, ty, line, col)?;
+                }
             }
+            self.analyze_stmt(&mut clause.body)?;
+            self.exit_scope();
         }
-        self.analyze_stmt(catch_body)?;
-        self.exit_scope();
         Ok(())
     }
 

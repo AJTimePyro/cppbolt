@@ -31,52 +31,66 @@ impl<'a> Codegen<'a> {
     pub(super) fn compile_try_stmt(
         &mut self,
         try_body: &Stmt,
-        catch_param: &Option<(Type, String)>,
-        catch_body: &Stmt,
+        catches: &[CatchClause],
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        if catches.is_empty() {
+            return self.compile_stmt(try_body, ctx, code);
+        }
         let start_clean_idx = ctx.cleanup_entries.len();
+        let num_catches = catches.len();
+
         code.push(OP_BLOCK);
         code.push(0x40);
 
-        let is_catch_all = catch_param.is_none();
-        if is_catch_all {
+        for clause in catches.iter().rev() {
             code.push(OP_BLOCK);
-            code.push(TYPE_EXNREF);
-            code.push(OP_TRY_TABLE);
-            code.push(0x40);
-            code.push(0x01);
-            code.push(0x03); // catch_all_ref
-            write_u32(code, 0);
-        } else {
-            code.push(OP_BLOCK);
-            code.push(TYPE_I32);
-            code.push(OP_TRY_TABLE);
-            code.push(0x40);
-            code.push(0x01);
-            code.push(0x00); // catch tag 0
-            write_u32(code, 0);
-            write_u32(code, 0);
+            if clause.param.is_none() {
+                code.push(TYPE_EXNREF);
+            } else {
+                code.push(TYPE_I32);
+            }
+        }
+
+        code.push(OP_TRY_TABLE);
+        code.push(0x40);
+        write_u32(code, num_catches as u32);
+        for (i, clause) in catches.iter().enumerate() {
+            if clause.param.is_none() {
+                code.push(0x03); // catch_all_ref
+                write_u32(code, i as u32);
+            } else {
+                code.push(0x00); // catch tag 0
+                write_u32(code, 0);
+                write_u32(code, i as u32);
+            }
         }
 
         self.compile_stmt(try_body, ctx, code)?;
 
         code.push(OP_BR);
-        write_u32(code, 2);
+        write_u32(code, (num_catches + 1) as u32);
 
         code.push(OP_END);
         code.push(OP_UNREACHABLE);
-        code.push(OP_END);
 
         let end_clean_idx = ctx.cleanup_entries.len();
-        self.emit_catch_handler(
-            catch_param,
-            catch_body,
-            start_clean_idx..end_clean_idx,
-            ctx,
-            code,
-        )?;
+
+        for (i, clause) in catches.iter().enumerate() {
+            code.push(OP_END);
+            self.emit_catch_handler(
+                &clause.param,
+                &clause.body,
+                start_clean_idx..end_clean_idx,
+                ctx,
+                code,
+            )?;
+            if i + 1 < num_catches {
+                code.push(OP_BR);
+                write_u32(code, (num_catches - 1 - i) as u32);
+            }
+        }
 
         code.push(OP_END);
         Ok(())

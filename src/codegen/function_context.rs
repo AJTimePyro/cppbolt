@@ -68,12 +68,14 @@ pub(super) fn max_catch_depth(stmt: &Stmt, current: u32) -> u32 {
     match &stmt.kind {
         StmtKind::Try {
             try_body,
-            catch_body,
-            ..
+            catches,
         } => {
             let in_try = max_catch_depth(try_body, current);
-            let in_catch = max_catch_depth(catch_body, current + 1);
-            max_d = max_d.max(in_try).max(in_catch);
+            max_d = max_d.max(in_try);
+            for clause in catches {
+                let in_catch = max_catch_depth(&clause.body, current + 1);
+                max_d = max_d.max(in_catch);
+            }
         }
         StmtKind::Compound(stmts) | StmtKind::VarDeclGroup(stmts) => {
             for s in stmts {

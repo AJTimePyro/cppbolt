@@ -44,11 +44,9 @@ impl<'a> Codegen<'a> {
             StmtKind::Continue => self.compile_continue_stmt(ctx, code)?,
             StmtKind::Return { .. } => self.compile_return(stmt, ctx, code)?,
             StmtKind::Throw(expr_opt) => self.compile_throw_stmt(expr_opt, ctx, code)?,
-            StmtKind::Try {
-                try_body,
-                catch_param,
-                catch_body,
-            } => self.compile_try_stmt(try_body, catch_param, catch_body, ctx, code)?,
+            StmtKind::Try { try_body, catches } => {
+                self.compile_try_stmt(try_body, catches, ctx, code)?;
+            }
             _ => {}
         }
         Ok(())

@@ -84,8 +84,13 @@ pub enum StmtKind {
     Throw(Option<Expr>),
     Try {
         try_body: Box<Stmt>,
-        catch_param: Option<(Type, String)>,
-        catch_body: Box<Stmt>,
+        catches: Vec<CatchClause>,
     },
     Empty,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct CatchClause {
+    pub param: Option<(Type, String)>,
+    pub body: Box<Stmt>,
 }
