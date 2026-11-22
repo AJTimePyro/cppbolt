@@ -3,8 +3,8 @@ const fs = require("fs");
 const path = require("path");
 
 async function testBrowserBuild() {
-    const browserMjsPath = path.resolve(__dirname, "../npm/dist/index.browser.mjs");
-    const browserJsPath = path.resolve(__dirname, "../npm/dist/cppbolt.browser.js");
+    const browserMjsPath = path.resolve(__dirname, "../../npm/dist/index.browser.mjs");
+    const browserJsPath = path.resolve(__dirname, "../../npm/dist/cppbolt.browser.js");
 
     assert.ok(fs.existsSync(browserMjsPath), "index.browser.mjs must exist");
     assert.ok(fs.existsSync(browserJsPath), "cppbolt.browser.js must exist");

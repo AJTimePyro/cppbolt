@@ -102,24 +102,12 @@ impl<'a> Codegen<'a> {
         self.compile_lvalue_addr(target, ctx, code)?;
         code.push(OP_LOCAL_SET);
         write_u32(code, ctx.scratch2); // dest addr
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.scratch2);
-        code.push(OP_I32_STORE);
-        write_u32(code, 2);
-        write_u32(code, dest_slot);
+        Self::emit_slot_store(dest_slot, ctx.fp_local, ctx.scratch2, code);
 
         self.compile_lvalue_addr(value, ctx, code)?;
         code.push(OP_LOCAL_SET);
         write_u32(code, ctx.scratch1); // src addr
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.scratch1);
-        code.push(OP_I32_STORE);
-        write_u32(code, 2);
-        write_u32(code, src_slot);
+        Self::emit_slot_store(src_slot, ctx.fp_local, ctx.scratch1, code);
 
         let size = self
             .sema
@@ -130,27 +118,17 @@ impl<'a> Codegen<'a> {
         super::raii::emit_struct_byte_copy(
             size,
             0,
-            |code| {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.fp_local);
-                code.push(OP_I32_LOAD);
-                write_u32(code, 2);
-                write_u32(code, dest_slot);
+            super::raii::ByteCopyAddr::Slot {
+                fp_local: ctx.fp_local,
+                slot: dest_slot,
             },
-            |code| {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.fp_local);
-                code.push(OP_I32_LOAD);
-                write_u32(code, 2);
-                write_u32(code, src_slot);
+            super::raii::ByteCopyAddr::Slot {
+                fp_local: ctx.fp_local,
+                slot: src_slot,
             },
             code,
         );
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_I32_LOAD);
-        write_u32(code, 2);
-        write_u32(code, dest_slot);
+        Self::emit_slot_load(dest_slot, ctx.fp_local, code);
         Ok(())
     }
 
@@ -318,17 +296,9 @@ impl<'a> Codegen<'a> {
         write_u32(code, 2);
         write_u32(code, dest_slot);
 
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_I32_LOAD);
-        write_u32(code, 2);
-        write_u32(code, dest_slot);
+        Self::emit_slot_load(dest_slot, ctx.fp_local, code);
 
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_I32_LOAD);
-        write_u32(code, 2);
-        write_u32(code, dest_slot);
+        Self::emit_slot_load(dest_slot, ctx.fp_local, code);
         self.emit_load(ty, 0, code);
         self.emit_conversion(ty, &arithmetic_ty, code);
         self.compile_expr(value, ctx, code)?;
@@ -347,67 +317,14 @@ impl<'a> Codegen<'a> {
             self.emit_conversion(val_ty, &arithmetic_ty, code);
         }
 
-        emit_compound_operator(op, &arithmetic_ty, code);
+        Self::emit_binary_op(op, &arithmetic_ty, code);
 
         self.emit_conversion(&arithmetic_ty, ty, code);
         self.emit_store(ty, 0, code);
 
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_I32_LOAD);
-        write_u32(code, 2);
-        write_u32(code, dest_slot);
+        Self::emit_slot_load(dest_slot, ctx.fp_local, code);
         self.emit_load(ty, 0, code);
 
         Ok(())
-    }
-}
-
-fn emit_compound_operator(op: &BinaryOp, arithmetic_ty: &Type, code: &mut Vec<u8>) {
-    let unsigned = !arithmetic_ty.is_signed();
-    if *arithmetic_ty == Type::LongLong || *arithmetic_ty == Type::UnsignedLongLong {
-        match op {
-            BinaryOp::Add => code.push(OP_I64_ADD),
-            BinaryOp::Sub => code.push(OP_I64_SUB),
-            BinaryOp::Mul => code.push(OP_I64_MUL),
-            BinaryOp::Div => code.push(if unsigned { OP_I64_DIV_U } else { OP_I64_DIV_S }),
-            BinaryOp::Rem => code.push(if unsigned { OP_I64_REM_U } else { OP_I64_REM_S }),
-            BinaryOp::BitAnd => code.push(OP_I64_AND),
-            BinaryOp::BitOr => code.push(OP_I64_OR),
-            BinaryOp::BitXor => code.push(OP_I64_XOR),
-            BinaryOp::Shl => code.push(OP_I64_SHL),
-            BinaryOp::Shr => code.push(if unsigned { OP_I64_SHR_U } else { OP_I64_SHR_S }),
-            _ => {}
-        }
-    } else if *arithmetic_ty == Type::Double {
-        match op {
-            BinaryOp::Add => code.push(OP_F64_ADD),
-            BinaryOp::Sub => code.push(OP_F64_SUB),
-            BinaryOp::Mul => code.push(OP_F64_MUL),
-            BinaryOp::Div => code.push(OP_F64_DIV),
-            _ => {}
-        }
-    } else if *arithmetic_ty == Type::Float {
-        match op {
-            BinaryOp::Add => code.push(OP_F32_ADD),
-            BinaryOp::Sub => code.push(OP_F32_SUB),
-            BinaryOp::Mul => code.push(OP_F32_MUL),
-            BinaryOp::Div => code.push(OP_F32_DIV),
-            _ => {}
-        }
-    } else {
-        match op {
-            BinaryOp::Add => code.push(OP_I32_ADD),
-            BinaryOp::Sub => code.push(OP_I32_SUB),
-            BinaryOp::Mul => code.push(OP_I32_MUL),
-            BinaryOp::Div => code.push(if unsigned { OP_I32_DIV_U } else { OP_I32_DIV_S }),
-            BinaryOp::Rem => code.push(if unsigned { OP_I32_REM_U } else { OP_I32_REM_S }),
-            BinaryOp::BitAnd => code.push(OP_I32_AND),
-            BinaryOp::BitOr => code.push(OP_I32_OR),
-            BinaryOp::BitXor => code.push(OP_I32_XOR),
-            BinaryOp::Shl => code.push(OP_I32_SHL),
-            BinaryOp::Shr => code.push(if unsigned { OP_I32_SHR_U } else { OP_I32_SHR_S }),
-            _ => {}
-        }
     }
 }

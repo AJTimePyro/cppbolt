@@ -3,4 +3,7 @@
 # the same natively and on the wasm host. The native CLI runs the compiler on a
 # 64 MiB thread (src/main.rs) for the same reason.
 [target.wasm32-unknown-unknown]
-rustflags = ["-C", "link-arg=-zstack-size=8388608"]
+rustflags = [
+    "-C", "link-arg=-zstack-size=8388608",
+    "-C", "opt-level=z",
+]

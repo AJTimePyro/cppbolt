@@ -48,7 +48,7 @@ cargo run --release --bin cppbolt-cli -- path/to/sample.cpp -o output.wasm
 You can run the resulting `.wasm` binary in Node.js using the test runner shim:
 
 ```sh
-node tests/test_wasm_compiler.js output.wasm
+node tests/node/test_wasm_compiler.js output.wasm
 ```
 
 Or test it in the browser playground:

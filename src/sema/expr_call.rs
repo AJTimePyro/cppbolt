@@ -108,7 +108,7 @@ impl Sema {
             *raw_name = resolved;
         }
         let name = raw_name.strip_prefix("::").unwrap_or(raw_name).to_string();
-        if name == "printf" || name == "std::printf" || name.ends_with("::printf") {
+        if crate::name::is_printf(&name) {
             return Ok(Some((Type::Int, None)));
         }
         if let Some((ty, replacement)) = self.try_scalar_call(&name, args, pos)? {

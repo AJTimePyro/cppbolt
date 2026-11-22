@@ -21,56 +21,15 @@ namespace std {
 
     namespace detail {
         template<typename Iter, typename Comp>
-        void insertion_sort(Iter first, Iter last, Comp comp) {
-            for (Iter i = first + 1; i < last; ++i) {
-                auto val = *i;
-                Iter j = i;
-                while (j > first && comp(val, *(j - 1))) {
-                    *j = *(j - 1);
-                    --j;
-                }
-                *j = val;
-            }
-        }
-
-        template<typename Iter, typename Comp>
-        void sift_down(Iter first, ptrdiff_t root, ptrdiff_t bottom, Comp comp) {
-            while (root * 2 + 1 <= bottom) {
-                ptrdiff_t child = root * 2 + 1;
-                if (child + 1 <= bottom && comp(*(first + child), *(first + child + 1))) {
-                    child++;
-                }
-                if (comp(*(first + root), *(first + child))) {
-                    std::swap(*(first + root), *(first + child));
-                    root = child;
-                } else {
-                    return;
-                }
-            }
-        }
-
-        template<typename Iter, typename Comp>
-        void heap_sort(Iter first, Iter last, Comp comp) {
-            ptrdiff_t count = last - first;
-            if (count <= 1) return;
-            for (ptrdiff_t i = (count - 2) / 2; i >= 0; --i) {
-                sift_down(first, i, count - 1, comp);
-            }
-            for (ptrdiff_t i = count - 1; i > 0; --i) {
-                std::swap(*first, *(first + i));
-                sift_down(first, 0, i - 1, comp);
-            }
-        }
-
-        template<typename Iter, typename Comp>
         void introsort_loop(Iter first, Iter last, int depth_limit, Comp comp) {
             ptrdiff_t count = last - first;
             if (count <= 16) {
-                insertion_sort(first, last, comp);
+                detail::__insertion_sort(first, last, comp);
                 return;
             }
             if (depth_limit <= 0) {
-                heap_sort(first, last, comp);
+                std::make_heap(first, last, comp);
+                std::sort_heap(first, last, comp);
                 return;
             }
 

@@ -297,6 +297,8 @@ impl<'a> Codegen<'a> {
 
     fn emit_runtime_bodies(&mut self, plan: &Plan) {
         if plan.need_printf {
+            // Indices 0, 1, and 2 correspond to print_char, print_int, and print_double
+            // imports emitted first in emit_imports, matching hardcoded calls in PRINTF_BODY.
             self.module.codes.push(crate::runtime::emit_printf(0, 1, 2));
         }
         if plan.need_alloc {

@@ -83,7 +83,7 @@ const printMultiWasmBytes = new Uint8Array([
 ]);
 
 async function testNodeWorker() {
-    const pkg = require("../npm/dist/index.js");
+    const pkg = require("../../npm/dist/index.js");
 
     assert.strictEqual(typeof pkg.AsyncCppBoltRunner, "function", "AsyncCppBoltRunner should be exported in Node");
 

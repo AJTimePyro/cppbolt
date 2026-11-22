@@ -263,13 +263,7 @@ impl<'a> Codegen<'a> {
         }
         code.push(OP_LOCAL_SET);
         write_u32(code, ctx.scratch1); // this_ptr
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.scratch1);
-        code.push(OP_I32_STORE);
-        write_u32(code, 2);
-        write_u32(code, this_slot);
+        Self::emit_slot_store(this_slot, ctx.fp_local, ctx.scratch1, code);
         Ok(())
     }
 
@@ -304,17 +298,9 @@ impl<'a> Codegen<'a> {
         )?;
 
         // The implicit `this` argument comes first.
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_I32_LOAD);
-        write_u32(code, 2);
-        write_u32(code, this_slot);
+        Self::emit_slot_load(this_slot, ctx.fp_local, code);
         self.emit_call_arguments(args, &sig.param_types, 1, ctx, code)?;
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_I32_LOAD);
-        write_u32(code, 2);
-        write_u32(code, fn_slot);
+        Self::emit_slot_load(fn_slot, ctx.fp_local, code);
 
         // The indirect call site needs the callee's exact Wasm signature
         // type, including the implicit `this` parameter.
@@ -361,11 +347,7 @@ impl<'a> Codegen<'a> {
     }
 
     fn emit_this_address(&self, site: VTableDispatch, ctx: &FunctionContext, code: &mut Vec<u8>) {
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_I32_LOAD);
-        write_u32(code, 2);
-        write_u32(code, site.this_slot);
+        Self::emit_slot_load(site.this_slot, ctx.fp_local, code);
         if site.vptr_offset != 0 {
             code.push(OP_I32_CONST);
             write_i32(code, site.vptr_offset as i32);
@@ -422,13 +404,7 @@ impl<'a> Codegen<'a> {
         code.push(OP_I32_ADD);
         code.push(OP_LOCAL_SET);
         write_u32(code, ctx.scratch1);
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.scratch1);
-        code.push(OP_I32_STORE);
-        write_u32(code, 2);
-        write_u32(code, site.this_slot);
+        Self::emit_slot_store(site.this_slot, ctx.fp_local, ctx.scratch1, code);
         // Load the covariant-return adjustment for after the call.
         self.emit_vtable_field_store((slot_idx * 12 + 8) as i32, site.ret_adjust_slot, ctx, code);
         Ok(())

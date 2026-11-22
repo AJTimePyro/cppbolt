@@ -1,6 +1,6 @@
 # Runtime & Embedded Standard Library
 
-`cppbolt` provides a self-contained runtime environment comprising an ILP32 linear memory layout, an in-module WebAssembly free-list allocator, an embedded `printf` formatting engine, and compile-time embedded standard library headers.
+`cppbolt` provides a self-contained runtime environment comprising an ILP32 linear memory layout, an in-module WebAssembly free-list allocator, an embedded precompiled `printf` formatting engine, and compile-time embedded standard library headers.
 
 ---
 

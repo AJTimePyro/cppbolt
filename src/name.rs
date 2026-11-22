@@ -15,6 +15,11 @@ pub fn static_local_name(function: &str, line: usize, col: usize, name: &str) ->
     format!("__static_{function}_{line}_{col}_{name}")
 }
 
+/// Returns true if `name` refers to `printf` under any supported qualifier.
+pub fn is_printf(name: &str) -> bool {
+    name == "printf" || name == "std::printf" || name.ends_with("::printf")
+}
+
 /// A name as written in the source, with helpers for the implicit `std`
 /// namespace.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

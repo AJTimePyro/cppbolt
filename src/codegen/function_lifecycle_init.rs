@@ -50,14 +50,8 @@ impl<'a> Codegen<'a> {
             crate::codegen::raii::emit_struct_byte_copy(
                 size,
                 fld_offset as u32,
-                |code| {
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, 0); // this
-                },
-                |code| {
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.scratch1);
-                },
+                crate::codegen::raii::ByteCopyAddr::Local(0), // this
+                crate::codegen::raii::ByteCopyAddr::Local(ctx.scratch1),
                 code,
             );
         } else if let Some(layout) = self.sema.struct_layouts.get(sname).cloned()
@@ -136,14 +130,8 @@ impl<'a> Codegen<'a> {
                 crate::codegen::raii::emit_struct_byte_copy(
                     size,
                     fld.offset as u32,
-                    |code| {
-                        code.push(OP_LOCAL_GET);
-                        write_u32(code, 0);
-                    },
-                    |code| {
-                        code.push(OP_LOCAL_GET);
-                        write_u32(code, ctx.scratch1);
-                    },
+                    crate::codegen::raii::ByteCopyAddr::Local(0),
+                    crate::codegen::raii::ByteCopyAddr::Local(ctx.scratch1),
                     code,
                 );
             }

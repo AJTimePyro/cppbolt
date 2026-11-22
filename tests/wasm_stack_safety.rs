@@ -1,7 +1,7 @@
 //! Node-hosted stack-safety check for the wasm build of the compiler.
 //!
 //! The test builds the wasm compiler into an isolated target directory and
-//! runs `tests/wasm_stack_safety.js`, which compiles wide and deeply nested
+//! runs `tests/node/wasm_stack_safety.js`, which compiles wide and deeply nested
 //! inputs through the wasm ABI and fails on a trap, a wrong outcome, or a
 //! compile slower than ten seconds.
 
@@ -33,7 +33,7 @@ fn wasm_hosted_compiler_stays_within_stack_limits() -> Result<(), Box<dyn std::e
     let limits = root.join("target/wasm-stack-limits.json");
     let limits = write_limits(&limits)?;
     let output = Command::new(node)
-        .arg(root.join("tests/wasm_stack_safety.js"))
+        .arg(root.join("tests/node/wasm_stack_safety.js"))
         .arg(&wasm)
         .arg(&limits)
         .output()?;

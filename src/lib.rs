@@ -140,11 +140,6 @@ pub fn compile_with_provider(
         .map_err(|error| preprocessed.map_error(error))
 }
 
-/// Renders the compiler's record layout report for `source`.
-pub fn dump_record_layouts(source: &str) -> Result<String, CompileError> {
-    dump_record_layouts_with_provider(source, "<input>", &NoIncludes)
-}
-
 /// Renders the record layout report using a caller-supplied include provider.
 pub fn dump_record_layouts_with_provider(
     source: &str,

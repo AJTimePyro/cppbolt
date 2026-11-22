@@ -354,9 +354,7 @@ impl Sema {
 
     pub fn mangle_name(&self, name: &str, params: &[Param]) -> String {
         if name == "main"
-            || name == "printf"
-            || name == "std::printf"
-            || name.ends_with("::printf")
+            || crate::name::is_printf(name)
             || name == "malloc"
             || name == "free"
             || name == "exit"

@@ -41,7 +41,19 @@ Unexpected test failures or manifest discrepancies exit `1`.
 ## 2. Test Categories
 
 ### Main Tests (`tests/<feature>/`)
-Contains hand-written and generated tests covering supported C++ features. Every supported language or library construct must have a corresponding positive test in this directory.
+Contains hand-written and generated tests covering supported C++ features across groups:
+- `c_basics`: Fundamental C types, control flow, functions, pointers, preprocessor, and formatted I/O.
+- `classes_oop`: Object-oriented language constructs, inheritance hierarchies, member pointers, and move semantics.
+- `templates_operators`: Function and class templates, variadics, SFINAE, and operator overloading.
+- `stdlib`: Embedded standard library headers (`<vector>`, `<string>`, `<algorithm>`, `<iostream>`, etc.).
+- `memory_model`: WebAssembly linear memory layout, stack-heap boundaries, and dynamic allocation.
+- `cxx17`: Dedicated C++17 additions including structured bindings and fold expressions.
+- `negative`: Exact compile-time diagnostic checks (`<name>.expected_err`).
+- `runtime_trap`: Unreachable WebAssembly runtime trap assertions.
+
+### Integration & Harness Tests (`tests/*.rs`, `tests/node/`)
+- Cargo integration tests under `tests/` (`browser_flow.rs`, `ffi_lifecycle.rs`, `wasm_stack_safety.rs`, `nesting.rs`, `census_fixture.rs`, `module_tree.rs`, `oracle_gate.rs`) verify compiler limits, ABI stability, and repo invariants.
+- Node.js runner scripts and npm package verification tests reside in `tests/node/` (`tests/node/test_npm_*.js`, `tests/node/ffi_lifecycle.js`, `tests/node/wasm_stack_safety.js`).
 
 ### Anti-Overfitting Variants (`tests/<feature>_variant/`)
 Every main test has a counterpart in a matching `_variant` group. Variants guard against the compiler overfitting to specific test inputs. The runner compares each same-named test pair and enforces:

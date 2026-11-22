@@ -3,6 +3,7 @@
 //! They are dynamically initialized before `main`'s body; their destructors
 //! are queued and run in reverse order.
 
+use super::stmt_var_init::InitCursor;
 use super::*;
 
 impl<'a> Codegen<'a> {
@@ -84,7 +85,7 @@ impl<'a> Codegen<'a> {
             return Ok(());
         };
         let elem_size = elem_ty.size_of(&self.sema.struct_sizes) as u32;
-        let mut cursor = GlobalCursor { list, idx: 0 };
+        let mut cursor = InitCursor { list, idx: 0 };
         for i in 0..*total_count {
             let item_offset = global.offset + (i as u32) * elem_size;
             self.compile_global_field_elided(elem_ty, &mut cursor, item_offset, ctx, code)?;
@@ -213,7 +214,7 @@ impl<'a> Codegen<'a> {
             return Ok(());
         };
         let mut field_idx = 0;
-        let mut cursor = GlobalCursor { list, idx: 0 };
+        let mut cursor = InitCursor { list, idx: 0 };
         for (base_name, base_off) in &layout.base_offsets {
             if let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned()
                 && matches!(
@@ -295,7 +296,7 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let mut sub = GlobalCursor {
+        let mut sub = InitCursor {
             list: elements,
             idx: 0,
         };
@@ -335,7 +336,7 @@ impl<'a> Codegen<'a> {
     fn compile_global_field_elided(
         &mut self,
         target_ty: &Type,
-        cursor: &mut GlobalCursor<'_>,
+        cursor: &mut InitCursor<'_>,
         offset: u32,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
@@ -397,26 +398,5 @@ impl<'a> Codegen<'a> {
             self.emit_store(target_ty, 0, code);
         }
         Ok(())
-    }
-}
-
-struct GlobalCursor<'a> {
-    list: &'a [Expr],
-    idx: usize,
-}
-
-impl<'a> GlobalCursor<'a> {
-    fn is_empty(&self) -> bool {
-        self.idx >= self.list.len()
-    }
-
-    fn peek(&self) -> Option<&'a Expr> {
-        self.list.get(self.idx)
-    }
-
-    fn next(&mut self) -> Option<&'a Expr> {
-        let item = self.list.get(self.idx)?;
-        self.idx += 1;
-        Some(item)
     }
 }

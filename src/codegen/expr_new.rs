@@ -46,11 +46,7 @@ impl<'a> Codegen<'a> {
     ) -> Result<(), CompileError> {
         if let Type::Struct(sname) = ty.strip_const() {
             for (vptr_offset, v_off) in self.vtable_installs(sname) {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.fp_local);
-                code.push(OP_I32_LOAD);
-                write_u32(code, 2);
-                write_u32(code, obj_slot);
+                Self::emit_slot_load(obj_slot, ctx.fp_local, code);
                 code.push(OP_I32_CONST);
                 write_i32(code, v_off as i32);
                 code.push(OP_I32_STORE);
@@ -61,11 +57,7 @@ impl<'a> Codegen<'a> {
             if let Some((ctor_idx, sig)) =
                 self.find_constructor_sig_with_args(sname, &arg_types, Some(args))
             {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.fp_local);
-                code.push(OP_I32_LOAD);
-                write_u32(code, 2);
-                write_u32(code, obj_slot); // this
+                Self::emit_slot_load(obj_slot, ctx.fp_local, code); // this
                 let full_args = self.constructor_arguments(&sig, args);
                 for (i, a) in full_args.iter().enumerate() {
                     let param_ty = sig.param_types.get(i + 1);
@@ -91,17 +83,11 @@ impl<'a> Codegen<'a> {
                 super::raii::emit_struct_byte_copy(
                     size,
                     0,
-                    |code| {
-                        code.push(OP_LOCAL_GET);
-                        write_u32(code, ctx.fp_local);
-                        code.push(OP_I32_LOAD);
-                        write_u32(code, 2);
-                        write_u32(code, obj_slot);
+                    super::raii::ByteCopyAddr::Slot {
+                        fp_local: ctx.fp_local,
+                        slot: obj_slot,
                     },
-                    |code| {
-                        code.push(OP_LOCAL_GET);
-                        write_u32(code, ctx.scratch1);
-                    },
+                    super::raii::ByteCopyAddr::Local(ctx.scratch1),
                     code,
                 );
             } else if let Some(layout) = self.sema.struct_layouts.get(sname).cloned() {
@@ -186,20 +172,10 @@ impl<'a> Codegen<'a> {
         self.compile_expr(place_expr, ctx, code)?;
         code.push(OP_LOCAL_SET);
         write_u32(code, ctx.scratch1); // placement ptr
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.scratch1);
-        code.push(OP_I32_STORE);
-        write_u32(code, 2);
-        write_u32(code, place_slot);
+        Self::emit_slot_store(place_slot, ctx.fp_local, ctx.scratch1, code);
 
         self.emit_construct_object_at(ty, args, place_slot, ctx, code)?;
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_I32_LOAD);
-        write_u32(code, 2);
-        write_u32(code, place_slot);
+        Self::emit_slot_load(place_slot, ctx.fp_local, code);
         Ok(())
     }
 
@@ -223,20 +199,10 @@ impl<'a> Codegen<'a> {
         code.push(OP_LOCAL_SET);
         write_u32(code, ctx.scratch1); // heap obj ptr
         emit_new_null_check(code, ctx.scratch1);
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.scratch1);
-        code.push(OP_I32_STORE);
-        write_u32(code, 2);
-        write_u32(code, obj_slot);
+        Self::emit_slot_store(obj_slot, ctx.fp_local, ctx.scratch1, code);
 
         self.emit_construct_object_at(ty, args, obj_slot, ctx, code)?;
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_I32_LOAD);
-        write_u32(code, 2);
-        write_u32(code, obj_slot);
+        Self::emit_slot_load(obj_slot, ctx.fp_local, code);
         Ok(())
     }
 }

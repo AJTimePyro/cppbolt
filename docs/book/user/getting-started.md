@@ -52,7 +52,7 @@ target/release/cppbolt-cli hello.cpp -o hello.wasm
 The emitted `.wasm` binary imports character, integer, and double output functions along with `exit` from the host environment `env`. You can execute it using the repository's Node.js runner:
 
 ```sh
-node tests/test_wasm_compiler.js hello.wasm
+node tests/node/test_wasm_compiler.js hello.wasm
 ```
 
 Expected output:

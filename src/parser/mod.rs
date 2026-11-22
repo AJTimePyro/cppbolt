@@ -449,8 +449,8 @@ impl Parser {
 }
 
 #[cfg(test)]
+mod fold_tests;
+#[cfg(test)]
+mod member_ptr_tests;
+#[cfg(test)]
 mod tests;
-#[cfg(test)]
-mod tests_fold;
-#[cfg(test)]
-mod tests_member_ptr;

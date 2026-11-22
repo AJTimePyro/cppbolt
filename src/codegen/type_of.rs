@@ -239,22 +239,7 @@ impl<'a> Codegen<'a> {
     ) -> Type {
         let ty = self.get_expr_type(target, ctx);
         let val_ty = self.get_expr_type(value, ctx);
-        let op_name = format!(
-            "operator{}=",
-            match op {
-                BinaryOp::Add => "+",
-                BinaryOp::Sub => "-",
-                BinaryOp::Mul => "*",
-                BinaryOp::Div => "/",
-                BinaryOp::Rem => "%",
-                BinaryOp::BitAnd => "&",
-                BinaryOp::BitOr => "|",
-                BinaryOp::BitXor => "^",
-                BinaryOp::Shl => "<<",
-                BinaryOp::Shr => ">>",
-                _ => "",
-            }
-        );
+        let op_name = format!("operator{}=", op.symbol());
         if let Type::Struct(sname) = ty.strip_const()
             && let Some((_, sig)) = self.find_method(sname, &op_name, std::slice::from_ref(&val_ty))
         {
@@ -283,11 +268,7 @@ impl<'a> Codegen<'a> {
 
     /// The result type of a call through a plain name.
     fn type_of_named_call(&self, name: &str, ctx: &FunctionContext) -> Type {
-        if name == "printf"
-            || name == "std::printf"
-            || name.ends_with("::printf")
-            || name == "__builtin_wasm_memory_size"
-        {
+        if crate::name::is_printf(name) || name == "__builtin_wasm_memory_size" {
             Type::Int
         } else if name == "print_char"
             || name == "print_int"

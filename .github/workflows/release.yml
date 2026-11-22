@@ -79,7 +79,7 @@ jobs:
 
       - name: Verify compiler ABI
         run: |
-          node tests/ffi_lifecycle.js \
+          node tests/node/ffi_lifecycle.js \
             target/wasm32-unknown-unknown/release/cppbolt.wasm
 
       - name: Install npm package dependencies

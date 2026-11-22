@@ -1,7 +1,7 @@
 const assert = require("assert");
 
 async function testOptions() {
-    const pkg = require("../npm/dist/index.js");
+    const pkg = require("../../npm/dist/index.js");
 
     assert.strictEqual(typeof pkg.TimeoutError, "function", "TimeoutError should be exported");
     assert.strictEqual(typeof pkg.AbortError, "function", "AbortError should be exported");

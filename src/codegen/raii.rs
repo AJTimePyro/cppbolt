@@ -5,19 +5,11 @@ impl<'a> Codegen<'a> {
         let temps = std::mem::take(&mut ctx.temp_objects);
         for (sname, temp_slot, should_destroy) in temps.iter().rev() {
             if *should_destroy && let Some(dtor_idx) = self.lookup_struct_dtor(sname) {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.fp_local);
-                code.push(OP_I32_LOAD);
-                write_u32(code, 2);
-                write_u32(code, *temp_slot);
+                Self::emit_slot_load(*temp_slot, ctx.fp_local, code);
                 code.push(OP_CALL);
                 write_u32(code, dtor_idx);
             }
-            code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.fp_local);
-            code.push(OP_I32_LOAD);
-            write_u32(code, 2);
-            write_u32(code, *temp_slot);
+            Self::emit_slot_load(*temp_slot, ctx.fp_local, code);
             code.push(OP_CALL);
             write_u32(code, self.func_indices["free"]);
         }
@@ -94,37 +86,57 @@ impl<'a> Codegen<'a> {
         emit_struct_byte_copy(
             size,
             target_offset,
-            |code| {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.fp_local);
-            },
-            |code| {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.scratch1);
-            },
+            ByteCopyAddr::Local(ctx.fp_local),
+            ByteCopyAddr::Local(ctx.scratch1),
             code,
         );
         Ok(())
     }
 }
 
-/// Copies `size` bytes from the address produced by `emit_src` to the address
-/// produced by `emit_dst`.
-pub(super) fn emit_struct_byte_copy(
+#[derive(Clone, Copy)]
+pub(crate) enum ByteCopyAddr {
+    Local(u32),
+    Slot { fp_local: u32, slot: u32 },
+}
+
+impl ByteCopyAddr {
+    pub fn emit(&self, code: &mut Vec<u8>) {
+        match *self {
+            ByteCopyAddr::Local(loc) => {
+                code.push(OP_LOCAL_GET);
+                write_u32(code, loc);
+            }
+            ByteCopyAddr::Slot { fp_local, slot } => {
+                Codegen::emit_slot_load(slot, fp_local, code);
+            }
+        }
+    }
+}
+
+/// Copies `size` bytes from `src` to `dst` with `dst_offset`.
+pub(crate) fn emit_struct_byte_copy(
     size: usize,
     dst_offset: u32,
-    mut emit_dst: impl FnMut(&mut Vec<u8>),
-    mut emit_src: impl FnMut(&mut Vec<u8>),
+    dst: ByteCopyAddr,
+    src: ByteCopyAddr,
     code: &mut Vec<u8>,
 ) {
-    for i in 0..size {
-        emit_dst(code);
-        emit_src(code);
-        code.push(OP_I32_LOAD8_U);
-        write_u32(code, 0);
-        write_u32(code, i as u32);
-        code.push(OP_I32_STORE8);
-        write_u32(code, 0);
-        write_u32(code, dst_offset + i as u32);
+    if size == 0 {
+        return;
     }
+    dst.emit(code);
+    if dst_offset != 0 {
+        code.push(OP_I32_CONST);
+        write_i32(code, dst_offset as i32);
+        code.push(OP_I32_ADD);
+    }
+    src.emit(code);
+    code.push(OP_I32_CONST);
+    write_i32(code, size as i32);
+    // WebAssembly bulk memory: memory.copy (0xFC 0x0A 0x00 0x00)
+    code.push(0xFC);
+    code.push(0x0A);
+    code.push(0x00);
+    code.push(0x00);
 }

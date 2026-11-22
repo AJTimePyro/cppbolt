@@ -141,58 +141,112 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let ArrayLocal {
-            elem_ty,
-            count,
-            offset,
-            name,
-            init,
-            stmt,
-        } = decl;
-        let elem_size = u32::try_from(elem_ty.size_of(&self.sema.struct_sizes))
-            .map_err(|_| crate::internal_error!(stmt.line, stmt.col, "array is too large"))?;
-        let init_list = match init {
+        if matches!(decl.elem_ty.strip_const(), Type::Struct(_)) {
+            self.compile_array_local_struct(&decl, ctx, code)
+        } else {
+            self.compile_array_local_scalar(&decl, ctx, code)
+        }
+    }
+
+    fn compile_array_local_scalar(
+        &mut self,
+        decl: &ArrayLocal<'_>,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        let elem_size =
+            u32::try_from(decl.elem_ty.size_of(&self.sema.struct_sizes)).map_err(|_| {
+                crate::internal_error!(decl.stmt.line, decl.stmt.col, "array is too large")
+            })?;
+        let init_list = match decl.init {
             Some(Expr::InitializerList { elements, .. })
             | Some(Expr::TypedInitList { elements, .. }) => Some(elements.as_slice()),
             _ => None,
         };
-        let mut scope_entries = Vec::new();
         let mut cursor = init_list.map(|list| InitCursor { list, idx: 0 });
-        for i in 0..count {
-            let elem_offset = offset
+        let total_bytes = (decl.count as u32).checked_mul(elem_size).ok_or_else(|| {
+            crate::internal_error!(decl.stmt.line, decl.stmt.col, "array is too large")
+        })?;
+        let init_len = init_list.map(|l| l.len()).unwrap_or(0);
+        if init_len < decl.count && total_bytes > 0 {
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.fp_local);
+            if decl.offset != 0 {
+                code.push(OP_I32_CONST);
+                write_i32(code, decl.offset as i32);
+                code.push(OP_I32_ADD);
+            }
+            code.push(OP_I32_CONST);
+            write_i32(code, 0);
+            code.push(OP_I32_CONST);
+            write_i32(code, total_bytes as i32);
+            code.push(0xFC);
+            code.push(0x0B);
+            code.push(0x00);
+        }
+        if let Some(cur) = cursor.as_mut() {
+            for i in 0..init_len.min(decl.count) {
+                let elem_offset = decl.offset + (i as u32) * elem_size;
+                self.compile_aggregate_field_elided(decl.elem_ty, cur, elem_offset, ctx, code)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn compile_array_local_struct(
+        &mut self,
+        decl: &ArrayLocal<'_>,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        let elem_size =
+            u32::try_from(decl.elem_ty.size_of(&self.sema.struct_sizes)).map_err(|_| {
+                crate::internal_error!(decl.stmt.line, decl.stmt.col, "array is too large")
+            })?;
+        let init_list = match decl.init {
+            Some(Expr::InitializerList { elements, .. })
+            | Some(Expr::TypedInitList { elements, .. }) => Some(elements.as_slice()),
+            _ => None,
+        };
+        let mut cursor = init_list.map(|list| InitCursor { list, idx: 0 });
+        let sname = match decl.elem_ty.strip_const() {
+            Type::Struct(s) => s.as_str(),
+            _ => "",
+        };
+        let mut scope_entries = Vec::new();
+        for i in 0..decl.count {
+            let elem_offset = decl
+                .offset
                 .checked_add((i as u32).checked_mul(elem_size).ok_or_else(|| {
-                    crate::internal_error!(stmt.line, stmt.col, "array is too large")
+                    crate::internal_error!(decl.stmt.line, decl.stmt.col, "array is too large")
                 })?)
-                .ok_or_else(|| crate::internal_error!(stmt.line, stmt.col, "array is too large"))?;
-            if let Type::Struct(sname) = elem_ty.strip_const() {
-                scope_entries.push((format!("{}[{}]", name, i), elem_ty.clone(), elem_offset));
-                if let Some(cur) = cursor.as_mut()
-                    && !cur.is_empty()
-                {
-                    self.compile_aggregate_field_elided(elem_ty, cur, elem_offset, ctx, code)?;
-                } else if let Some(ci) = self.find_constructor(sname, &[]) {
-                    code.push(OP_LOCAL_GET);
-                    write_u32(code, ctx.fp_local);
-                    code.push(OP_I32_CONST);
-                    write_i32(code, elem_offset as i32);
-                    code.push(OP_I32_ADD);
-                    code.push(OP_CALL);
-                    write_u32(code, ci);
-                } else {
-                    self.emit_zero_local(elem_ty, elem_offset, ctx, code)?;
-                }
-            } else if let Some(cur) = cursor.as_mut()
+                .ok_or_else(|| {
+                    crate::internal_error!(decl.stmt.line, decl.stmt.col, "array is too large")
+                })?;
+            scope_entries.push((
+                format!("{}[{}]", decl.name, i),
+                decl.elem_ty.clone(),
+                elem_offset,
+            ));
+            if let Some(cur) = cursor.as_mut()
                 && !cur.is_empty()
             {
-                self.compile_aggregate_field_elided(elem_ty, cur, elem_offset, ctx, code)?;
+                self.compile_aggregate_field_elided(decl.elem_ty, cur, elem_offset, ctx, code)?;
+            } else if let Some(ci) = self.find_constructor(sname, &[]) {
+                code.push(OP_LOCAL_GET);
+                write_u32(code, ctx.fp_local);
+                code.push(OP_I32_CONST);
+                write_i32(code, elem_offset as i32);
+                code.push(OP_I32_ADD);
+                code.push(OP_CALL);
+                write_u32(code, ci);
             } else {
-                self.emit_zero_local(elem_ty, elem_offset, ctx, code)?;
+                self.emit_zero_local(decl.elem_ty, elem_offset, ctx, code)?;
             }
         }
         if let Some(scope) = ctx.scope_objects.last_mut() {
             scope.extend(scope_entries);
         }
-
         Ok(())
     }
 
@@ -241,6 +295,29 @@ impl<'a> Codegen<'a> {
             write_i32(code, offset as i32);
             code.push(OP_I32_ADD);
         }
+    }
+
+    pub(crate) fn emit_slot_load(slot_offset: u32, fp_local: u32, code: &mut Vec<u8>) {
+        code.push(OP_LOCAL_GET);
+        write_u32(code, fp_local);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, slot_offset);
+    }
+
+    pub(crate) fn emit_slot_store(
+        slot_offset: u32,
+        fp_local: u32,
+        val_local: u32,
+        code: &mut Vec<u8>,
+    ) {
+        code.push(OP_LOCAL_GET);
+        write_u32(code, fp_local);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, val_local);
+        code.push(OP_I32_STORE);
+        write_u32(code, 2);
+        write_u32(code, slot_offset);
     }
 
     /// Stores the vtable pointer at offset zero of a local object.
