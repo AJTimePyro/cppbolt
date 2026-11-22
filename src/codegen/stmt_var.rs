@@ -158,6 +158,37 @@ impl<'a> Codegen<'a> {
         };
         let mut scope_entries = Vec::new();
         let mut cursor = init_list.map(|list| InitCursor { list, idx: 0 });
+
+        if !matches!(elem_ty.strip_const(), Type::Struct(_)) {
+            let total_bytes = (count as u32).checked_mul(elem_size).ok_or_else(|| {
+                crate::internal_error!(stmt.line, stmt.col, "array is too large")
+            })?;
+            let init_len = init_list.map(|l| l.len()).unwrap_or(0);
+            if init_len < count && total_bytes > 0 {
+                code.push(OP_LOCAL_GET);
+                write_u32(code, ctx.fp_local);
+                if offset != 0 {
+                    code.push(OP_I32_CONST);
+                    write_i32(code, offset as i32);
+                    code.push(OP_I32_ADD);
+                }
+                code.push(OP_I32_CONST);
+                write_i32(code, 0);
+                code.push(OP_I32_CONST);
+                write_i32(code, total_bytes as i32);
+                code.push(0xFC);
+                code.push(0x0B);
+                code.push(0x00);
+            }
+            if let Some(cur) = cursor.as_mut() {
+                for i in 0..init_len.min(count) {
+                    let elem_offset = offset + (i as u32) * elem_size;
+                    self.compile_aggregate_field_elided(elem_ty, cur, elem_offset, ctx, code)?;
+                }
+            }
+            return Ok(());
+        }
+
         for i in 0..count {
             let elem_offset = offset
                 .checked_add((i as u32).checked_mul(elem_size).ok_or_else(|| {

@@ -122,14 +122,21 @@ pub(crate) fn emit_struct_byte_copy(
     src: ByteCopyAddr,
     code: &mut Vec<u8>,
 ) {
-    for i in 0..size {
-        dst.emit(code);
-        src.emit(code);
-        code.push(OP_I32_LOAD8_U);
-        write_u32(code, 0);
-        write_u32(code, i as u32);
-        code.push(OP_I32_STORE8);
-        write_u32(code, 0);
-        write_u32(code, dst_offset + i as u32);
+    if size == 0 {
+        return;
     }
+    dst.emit(code);
+    if dst_offset != 0 {
+        code.push(OP_I32_CONST);
+        write_i32(code, dst_offset as i32);
+        code.push(OP_I32_ADD);
+    }
+    src.emit(code);
+    code.push(OP_I32_CONST);
+    write_i32(code, size as i32);
+    // WebAssembly bulk memory: memory.copy (0xFC 0x0A 0x00 0x00)
+    code.push(0xFC);
+    code.push(0x0A);
+    code.push(0x00);
+    code.push(0x00);
 }
