@@ -1,10 +1,10 @@
-
-
-
-
-
-
-
+//===----------------------------------------------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
 
 #ifndef _LIBCPP___TYPE_TRAITS_MAKE_UNSIGNED_H
 #define _LIBCPP___TYPE_TRAITS_MAKE_UNSIGNED_H
@@ -18,14 +18,14 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-
-
-
-
+// cppbolt adaptation: upstream selects the unsigned twin via `__type_list` and
+// `is_enum`, then restores cv with `__copy_cv_t`. cppbolt has no enum base or
+// 128-bit types, so the upstream specializations are written out directly for
+// its integer types.
 template <class _Tp>
 struct __make_unsigned {};
 
-
+// clang-format off
 template <> struct __make_unsigned<bool>               {};
 template <> struct __make_unsigned<char>               {typedef unsigned char     type;};
 template <> struct __make_unsigned<signed char>        {typedef unsigned char     type;};
@@ -38,7 +38,7 @@ template <> struct __make_unsigned<long>               {typedef unsigned long   
 template <> struct __make_unsigned<unsigned long>      {typedef unsigned long      type;};
 template <> struct __make_unsigned<long long>          {typedef unsigned long long type;};
 template <> struct __make_unsigned<unsigned long long> {typedef unsigned long long type;};
-
+// clang-format on
 
 template <class _Tp>
 using __make_unsigned_t = typename __make_unsigned<_Tp>::type;

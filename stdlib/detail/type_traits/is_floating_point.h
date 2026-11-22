@@ -1,10 +1,10 @@
-
-
-
-
-
-
-
+//===----------------------------------------------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
 
 #ifndef _LIBCPP___TYPE_TRAITS_IS_FLOATING_POINT_H
 #define _LIBCPP___TYPE_TRAITS_IS_FLOATING_POINT_H
@@ -18,9 +18,9 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-
-
-
+// cppbolt adaptation: upstream uses explicit specializations of a variable
+// template and strips cv with `__remove_cv_t`. A class template with a const
+// partial specialization is the equivalent expressible in cppbolt's subset.
 template <class _Tp>
 struct __is_floating_point_impl {
   static const bool value = false;

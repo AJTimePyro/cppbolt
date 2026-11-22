@@ -1,10 +1,10 @@
-
-
-
-
-
-
-
+//===----------------------------------------------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
 
 #ifndef _LIBCPP___TYPE_TRAITS_IS_VOID_H
 #define _LIBCPP___TYPE_TRAITS_IS_VOID_H
@@ -18,9 +18,9 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-
-
-
+// cppbolt adaptation: upstream compares `__remove_cv(_Tp)` with `void` through
+// a builtin. Direct partial specializations give the same result without an
+// extra indirection through the builtin shim.
 template <class _Tp>
 struct _LIBCPP_NO_SPECIALIZATIONS is_void : false_type {};
 template <>

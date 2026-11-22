@@ -47,9 +47,9 @@ namespace std {
         return out;
     }
 
-
-
-
+    // Length of the text produced by the double formatter below. Width is
+    // applied before printing, so this must match printf's %f/%g output for
+    // the values the mini standard library formats.
     inline int __mini_stl_double_length(double val, int precision, bool fixed) {
         bool neg = val < 0.0;
         double a = neg ? -val : val;

@@ -69,10 +69,13 @@ const PRINTF_BODY: &[u8] = &[
 
 /// Emits the shared variadic printf implementation.
 pub fn emit_printf(
-    _func_print_char: u32,
-    _func_print_int: u32,
-    _func_print_double: u32,
+    func_print_char: u32,
+    func_print_int: u32,
+    func_print_double: u32,
 ) -> FuncBody {
+    debug_assert_eq!(func_print_char, 0, "printf bytecode assumes func_print_char is index 0");
+    debug_assert_eq!(func_print_int, 1, "printf bytecode assumes func_print_int is index 1");
+    debug_assert_eq!(func_print_double, 2, "printf bytecode assumes func_print_double is index 2");
     (
         vec![(6, TYPE_I32), (1, TYPE_I64), (1, TYPE_F64), (2, TYPE_I32)],
         PRINTF_BODY.to_vec(),

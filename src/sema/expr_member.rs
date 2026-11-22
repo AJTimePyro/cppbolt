@@ -343,12 +343,13 @@ enum ArrowStep {
 }
 
 fn next_arrow_step(ret: &Type) -> ArrowStep {
-    let ret = ret.strip_const();
-    if let Type::Pointer(inner) = ret {
+    let is_const = ret.is_const();
+    let stripped = ret.strip_const();
+    if let Type::Pointer(inner) = stripped {
         if let Type::Struct(target) = inner.strip_reference().strip_const() {
             return ArrowStep::Target(target.clone(), inner.strip_reference().is_const());
         }
-    } else if let Type::Reference(inner) | Type::RvalueReference(inner) = ret {
+    } else if let Type::Reference(inner) | Type::RvalueReference(inner) = stripped {
         let clean = inner.strip_const();
         if let Type::Pointer(ptr_inner) = clean {
             if let Type::Struct(target) = ptr_inner.strip_reference().strip_const() {
@@ -357,8 +358,8 @@ fn next_arrow_step(ret: &Type) -> ArrowStep {
         } else if let Type::Struct(next) = clean {
             return ArrowStep::Next(next.clone(), inner.is_const());
         }
-    } else if let Type::Struct(next) = ret {
-        return ArrowStep::Next(next.clone(), ret.is_const());
+    } else if let Type::Struct(next) = stripped {
+        return ArrowStep::Next(next.clone(), is_const);
     }
     ArrowStep::Invalid
 }
