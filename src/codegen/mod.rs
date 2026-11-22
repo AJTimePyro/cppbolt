@@ -203,6 +203,8 @@ enum VarBinding {
     },
 }
 
+pub type ScopeObjectEntry = (String, Type, u32, Option<usize>);
+
 /// Per-function lowering state.
 ///
 /// Local frame offsets grow monotonically for the whole function, even across
@@ -237,7 +239,7 @@ pub struct FunctionContext {
     /// Bindings shadowed by each active block, innermost last.
     var_scopes: Vec<Vec<VarBinding>>,
     /// Objects to destroy at scope exit, in construction order: (name, ty, offset, cleanup_idx).
-    pub scope_objects: Vec<Vec<(String, Type, u32, Option<usize>)>>,
+    pub scope_objects: Vec<Vec<ScopeObjectEntry>>,
     /// Statement temporaries: `(class, frame slot, needs destructor, cleanup_idx)`.
     pub temp_objects: Vec<(String, u32, bool, Option<usize>)>,
     /// Backing-array elements whose destructors run at full-expression end.

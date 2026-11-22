@@ -590,7 +590,7 @@ int main() {
 }
 
 #[test]
-fn test_exceeding_max_cleanup_objects_errors() {
+fn test_exceeding_max_cleanup_objects_errors() -> Result<(), String> {
     let mut source = String::from("struct S { ~S() {} }; int main() {\n");
     for i in 0..65 {
         source.push_str(&format!("    S s{};\n", i));
@@ -600,10 +600,17 @@ fn test_exceeding_max_cleanup_objects_errors() {
     let includes = RepoIncludes {
         stdlib: root.join("stdlib"),
     };
-    let res = compile_with_provider(&source, "<input>", 256, &includes);
-    assert!(res.is_err(), "must fail compilation when exceeding 64 cleanup objects");
-    let err = res.err().unwrap().to_string();
-    assert!(err.contains("maximum of 64 cleanup objects"));
+    match compile_with_provider(&source, "<input>", 256, &includes) {
+        Err(err) => {
+            let err_str = err.to_string();
+            if err_str.contains("maximum of 64 cleanup objects") {
+                Ok(())
+            } else {
+                Err(format!("unexpected error: {err_str}"))
+            }
+        }
+        Ok(_) => Err("must fail compilation when exceeding 64 cleanup objects".to_string()),
+    }
 }
 
 #[test]
@@ -1485,19 +1492,23 @@ int main() {
 }
 
 #[test]
-fn test_throw_unsupported_64bit_type_errors() {
+fn test_throw_unsupported_64bit_type_errors() -> Result<(), String> {
     let source = "int main() { throw 3.14; }";
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let includes = RepoIncludes {
         stdlib: root.join("stdlib"),
     };
-    let res = compile_with_provider(source, "<input>", 256, &includes);
-    assert!(res.is_err(), "must fail compilation when throwing non-32-bit types");
-    let err = res.err().unwrap().to_string();
-    assert!(
-        err.contains("requires typed exceptions (Phase 4)") || err.contains("unsupported throw type"),
-        "error was: {err}"
-    );
+    match compile_with_provider(source, "<input>", 256, &includes) {
+        Err(err) => {
+            let err_str = err.to_string();
+            if err_str.contains("requires typed exceptions (Phase 4)") {
+                Ok(())
+            } else {
+                Err(format!("unexpected error: {err_str}"))
+            }
+        }
+        Ok(_) => Err("must fail compilation when throwing non-32-bit types".to_string()),
+    }
 }
 
 

@@ -114,7 +114,7 @@ pub fn substitute_stmt_with_sema(
         StmtKind::Throw(Some(expr)) => substitute_expr(expr, mapping, injected_class)?,
         StmtKind::Throw(None) => {}
         StmtKind::Try { .. } => {
-            substitute_try_stmt(&mut stmt.kind, mapping, injected_class, sema.as_deref_mut())?;
+            substitute_try_stmt(&mut stmt.kind, mapping, injected_class, sema)?;
         }
         StmtKind::Return(None)
         | StmtKind::Break
