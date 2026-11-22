@@ -8,7 +8,8 @@ impl<'a> Codegen<'a> {
         class_name: Option<String>,
     ) -> Result<FuncBody, CompileError> {
         let mut code = Vec::new();
-        let (locals, mut ctx) = Self::function_context(f, class_name.as_deref());
+        let max_catch = function_context::max_catch_depth(body, 0);
+        let (locals, mut ctx) = Self::function_context(f, class_name.as_deref(), max_catch);
         self.current_scratch1.set(ctx.scratch1);
         self.current_scratch_i64.set(ctx.scratch_i64);
 

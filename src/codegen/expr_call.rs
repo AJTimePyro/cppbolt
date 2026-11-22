@@ -147,6 +147,38 @@ impl<'a> Codegen<'a> {
         Ok(())
     }
 
+    pub(super) fn compile_call_arguments_and_deactivate_byval(
+        &mut self,
+        args: &[Expr],
+        param_types: &[Type],
+        offset: usize,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        let mut byval_indices = Vec::new();
+        for (i, a) in args.iter().enumerate() {
+            let param_ty = param_types.get(i + offset);
+            let before = ctx.temp_objects.len();
+            self.compile_call_arg(a, param_ty, ctx, code)?;
+            let after = ctx.temp_objects.len();
+            if param_ty
+                .map(|p| matches!(p.strip_const(), Type::Struct(_)))
+                .unwrap_or(false)
+                && after > before
+            {
+                byval_indices.push(after - 1);
+            }
+        }
+        for idx in byval_indices {
+            let clean_idx = ctx.temp_objects[idx].3;
+            ctx.temp_objects[idx].2 = false;
+            if let Some(c_idx) = clean_idx {
+                self.emit_mark_cleanup_inactive(c_idx, ctx, code);
+            }
+        }
+        Ok(())
+    }
+
     fn compile_in_class_call(
         &mut self,
         call: NamedCall<'_>,
@@ -162,10 +194,7 @@ impl<'a> Codegen<'a> {
         if let Some((m_idx, sig)) = self.find_method(cls, name, arg_types) {
             code.push(OP_LOCAL_GET);
             write_u32(code, 0); // this
-            for (i, a) in args.iter().enumerate() {
-                let param_ty = sig.param_types.get(i + 1);
-                self.compile_call_arg(a, param_ty, ctx, code)?;
-            }
+            self.compile_call_arguments_and_deactivate_byval(args, &sig.param_types, 1, ctx, code)?;
             code.push(OP_CALL);
             write_u32(code, m_idx);
             self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
@@ -189,10 +218,7 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        for (i, a) in args.iter().enumerate() {
-            let param_ty = sig.param_types.get(i);
-            self.compile_call_arg(a, param_ty, ctx, code)?;
-        }
+        self.compile_call_arguments_and_deactivate_byval(args, &sig.param_types, 0, ctx, code)?;
         code.push(OP_CALL);
         write_u32(code, func_idx);
         self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
@@ -240,7 +266,8 @@ impl<'a> Codegen<'a> {
         write_u32(code, 2);
         write_u32(code, temp_slot);
 
-        ctx.temp_objects.push((name.to_string(), temp_slot, true));
+        let clean_idx = self.register_and_activate_temp_cleanup(name, temp_slot, ctx, code);
+        ctx.temp_objects.push((name.to_string(), temp_slot, true, clean_idx));
 
         Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
         Ok(())
@@ -300,10 +327,7 @@ impl<'a> Codegen<'a> {
             write_u32(code, 2);
             write_u32(code, temp_ptr_slot); // this
             let full_args = self.constructor_arguments(&sig, args);
-            for (i, a) in full_args.iter().enumerate() {
-                let param_ty = sig.param_types.get(i + 1);
-                self.compile_call_arg(a, param_ty, ctx, code)?;
-            }
+            self.compile_call_arguments_and_deactivate_byval(&full_args, &sig.param_types, 1, ctx, code)?;
             code.push(OP_CALL);
             write_u32(code, ctor_idx);
         } else if self.sema.struct_layouts.contains_key(name) {

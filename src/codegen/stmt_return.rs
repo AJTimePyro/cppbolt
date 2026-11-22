@@ -159,8 +159,11 @@ impl<'a> Codegen<'a> {
         self.compile_expr(expr, ctx, code)?;
         code.push(OP_LOCAL_SET);
         write_u32(code, ctx.ret_temp_i32);
-        if let Some(pos) = ctx.temp_objects.iter().rposition(|(s, _, _)| s == sname) {
-            ctx.temp_objects.remove(pos);
+        if let Some(pos) = ctx.temp_objects.iter().rposition(|(s, _, _, _)| s == sname) {
+            let temp = ctx.temp_objects.remove(pos);
+            if let Some(idx) = temp.3 {
+                self.emit_mark_cleanup_inactive(idx, ctx, code);
+            }
         }
         self.emit_clean_temporaries(ctx, code);
         Ok(())

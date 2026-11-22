@@ -302,6 +302,10 @@ impl<'a> Codegen<'a> {
                     code.push(OP_I32_ADD);
                     code.push(OP_CALL);
                     write_u32(code, ctor_idx);
+                    if let Some(d_idx) = self.lookup_struct_dtor(sname) {
+                        let c_idx = ctx.register_cleanup(sname.to_string(), d_idx, member_offset, true)?;
+                        self.emit_mark_cleanup_active(c_idx, ctx, code);
+                    }
                 }
             } else if let Some(args) = init_args
                 && !args.is_empty()

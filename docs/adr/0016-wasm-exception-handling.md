@@ -78,6 +78,8 @@ Each function context allocates a 64-bit local variable (`cleanup_mask_local: i6
 A `try`/`catch` statement compiles to an inner `try_table` targeting its catch block:
 - Catching tag 0 binds the integer payload into a frame slot if named (`catch (int e)`).
 - Catch-all (`catch (...)`) captures `exnref` for rethrow via `throw_ref`.
+- The compiler runs an AST pre-pass (`max_catch_depth`) to allocate `(max_depth + 1)` `TYPE_EXNREF` locals, giving each nested handler a dedicated local and preventing inner handlers from overwriting outer exception references.
+- Entering an inner catch block preserves the active exception payload in a dedicated frame slot and restores it on exit. This ensures that `throw;` within an outer handler resolves to the outer exception.
 - Only cleanups registered within the `try` block range (`start_clean_idx..end_clean_idx`) are executed when entering the catch block; outer function objects remain untouched and active.
 - `throw;` inside a catch block rethrows the active exception (`throw_ref` or `throw 0`). Outside any catch block (`catch_depth == 0`), `throw;` emits `OP_UNREACHABLE` to trigger `std::terminate()`.
 
@@ -87,6 +89,13 @@ All destructor invocations in `emit_cleanup_range` are enclosed within a `try_ta
 ### 6. Constructor Failure Subobject Cleanup (`src/codegen/function_lifecycle.rs`)
 Constructors register fully initialized base classes and member fields in the function's cleanup mask immediately after construction. If a subsequent member initializer or constructor body throws, completed subobjects are destroyed in reverse order before propagating the exception, and the cleanup mask is zeroed upon successful constructor exit.
 
+### 7. Temporary Object Lifetime and Unwinding (`src/codegen/call_args.rs`, `src/codegen/expr_call.rs`, `src/codegen/raii.rs`)
+Fully constructed temporary objects created during expression evaluation register cleanup entries with the liveness bitmask:
+- If a later argument expression or a called function exits with an exception, completed temporaries run their destructors and free their heap buffers in reverse construction order.
+- When an argument passes by value, the caller deactivates cleanup tracking only for the outer parameter object passed to the callee, leaving intermediate sub-expression temporaries active for full-expression destruction.
+- Reference binding (`const T& ref = ...`) extends the temporary's lifetime by transferring its cleanup entry to the enclosing lexical scope.
+- If a statement contains more than 64 temporaries across chained binary expressions, `register_temp_cleanup` stops allocating mask slots, and the temporaries fall back to normal full-expression reclamation.
+
 ## Consequences
 
 ### Positive
@@ -94,7 +103,8 @@ Constructors register fully initialized base classes and member fields in the fu
 - Uses native WebAssembly instructions without JavaScript runtime trampolines.
 - Emits no unwinding instructions in leaf functions.
 - Destroys active automatic objects in reverse construction order.
+- Supports arbitrary statically nested catch handlers and expression temporary cleanup.
 
 ### Negative / Trade-offs
-- Limits single functions to 64 tracked cleanup objects, checked at compile time.
+- Limits single functions to 64 tracked automatic/local variable cleanup objects, checked at compile time.
 - Uses an integer payload (tag 0); class hierarchies (`std::exception`) with RTTI type matching are deferred to a subsequent milestone.

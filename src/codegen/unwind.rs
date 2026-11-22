@@ -53,20 +53,19 @@ impl<'a> Codegen<'a> {
         code.push(OP_IF);
         code.push(0x40);
 
-        if entry.is_subobject {
-            code.push(OP_LOCAL_GET);
-            write_u32(code, 0); // this
+        if entry.is_temp {
+            self.emit_destroy_and_free_temp(entry.offset, entry.dtor_idx, ctx, code);
         } else {
             code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.fp_local);
+            write_u32(code, if entry.is_subobject { 0 } else { ctx.fp_local });
+            if entry.offset != 0 {
+                code.push(OP_I32_CONST);
+                write_i32(code, entry.offset as i32);
+                code.push(OP_I32_ADD);
+            }
+            code.push(OP_CALL);
+            write_u32(code, entry.dtor_idx);
         }
-        if entry.offset != 0 {
-            code.push(OP_I32_CONST);
-            write_i32(code, entry.offset as i32);
-            code.push(OP_I32_ADD);
-        }
-        code.push(OP_CALL);
-        write_u32(code, entry.dtor_idx);
 
         self.emit_mark_cleanup_inactive(entry.index, ctx, code);
 
@@ -114,7 +113,7 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) {
         code.push(OP_LOCAL_SET);
-        write_u32(code, ctx.exnref_local);
+        write_u32(code, ctx.unwind_exnref_local);
 
         self.emit_cleanup_range(0, ctx.cleanup_entries.len(), ctx, code);
 
@@ -126,7 +125,7 @@ impl<'a> Codegen<'a> {
         write_u32(code, 0);
 
         code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.exnref_local);
+        write_u32(code, ctx.unwind_exnref_local);
         code.push(OP_THROW_REF);
     }
 }

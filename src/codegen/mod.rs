@@ -219,6 +219,8 @@ pub struct FunctionContext {
     pub ret_temp_i64: u32,
     pub ret_temp_f64: u32,
     pub exnref_local: u32,
+    pub unwind_exnref_local: u32,
+    pub max_catch_depth: u32,
     pub cleanup_mask_local: u32,
     pub last_exn_val_local: u32,
     pub cleanup_entries: Vec<function_context::CleanupEntry>,
@@ -236,8 +238,8 @@ pub struct FunctionContext {
     var_scopes: Vec<Vec<VarBinding>>,
     /// Objects to destroy at scope exit, in construction order: (name, ty, offset, cleanup_idx).
     pub scope_objects: Vec<Vec<(String, Type, u32, Option<usize>)>>,
-    /// Statement temporaries: `(class, frame slot, needs destructor)`.
-    pub temp_objects: Vec<(String, u32, bool)>,
+    /// Statement temporaries: `(class, frame slot, needs destructor, cleanup_idx)`.
+    pub temp_objects: Vec<(String, u32, bool, Option<usize>)>,
     /// Backing-array elements whose destructors run at full-expression end.
     pub initializer_list_temps: Vec<(String, u32)>,
     pub current_class: Option<String>,
@@ -264,6 +266,8 @@ impl Default for FunctionContext {
             ret_temp_i64: 7,
             ret_temp_f64: 8,
             exnref_local: 9,
+            unwind_exnref_local: 9,
+            max_catch_depth: 0,
             cleanup_mask_local: 10,
             last_exn_val_local: 11,
             cleanup_entries: Vec::new(),

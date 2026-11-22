@@ -17,7 +17,7 @@ impl<'a> Codegen<'a> {
             code.push(OP_UNREACHABLE);
         } else if ctx.in_catch_all {
             code.push(OP_LOCAL_GET);
-            write_u32(code, ctx.exnref_local);
+            write_u32(code, ctx.current_exnref_local());
             code.push(OP_THROW_REF);
         } else {
             code.push(OP_LOCAL_GET);
@@ -82,6 +82,36 @@ impl<'a> Codegen<'a> {
         Ok(())
     }
 
+    fn emit_save_incoming_exception(
+        &self,
+        is_catch_all: bool,
+        save_val_slot: u32,
+        handler_depth: u32,
+        ctx: &FunctionContext,
+        code: &mut Vec<u8>,
+    ) {
+        if is_catch_all {
+            code.push(OP_LOCAL_SET);
+            write_u32(code, ctx.exnref_local + handler_depth);
+        } else {
+            code.push(OP_LOCAL_SET);
+            write_u32(code, ctx.scratch1);
+        }
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.last_exn_val_local);
+        code.push(OP_I32_STORE);
+        write_u32(code, 2);
+        write_u32(code, save_val_slot);
+        if !is_catch_all {
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.scratch1);
+            code.push(OP_LOCAL_SET);
+            write_u32(code, ctx.last_exn_val_local);
+        }
+    }
+
     fn emit_catch_handler(
         &mut self,
         catch_param: &Option<(Type, String)>,
@@ -91,17 +121,23 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         let is_catch_all = catch_param.is_none();
-        if is_catch_all {
-            code.push(OP_LOCAL_SET);
-            write_u32(code, ctx.exnref_local);
-        } else {
-            code.push(OP_LOCAL_TEE);
-            write_u32(code, ctx.last_exn_val_local);
-            code.push(OP_LOCAL_SET);
-            write_u32(code, ctx.scratch1);
+        let save_val_slot = ctx.alloc_frame(4, 4)?;
+        let handler_depth = ctx.catch_depth as u32;
+        if handler_depth >= ctx.max_catch_depth {
+            return Err(CompileError::new(
+                "function exceeds maximum catch nesting depth",
+                catch_body.line,
+                catch_body.col,
+            ));
         }
+        self.emit_save_incoming_exception(
+            is_catch_all,
+            save_val_slot,
+            handler_depth,
+            ctx,
+            code,
+        );
 
-        // Clean up only objects that were constructed inside the try body
         self.emit_cleanup_range(clean_range.start, clean_range.end, ctx, code);
 
         ctx.enter_scope();
@@ -133,6 +169,14 @@ impl<'a> Codegen<'a> {
         ctx.catch_depth -= 1;
         ctx.in_catch_all = old_in_catch_all;
         ctx.exit_scope();
+
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.fp_local);
+        code.push(OP_I32_LOAD);
+        write_u32(code, 2);
+        write_u32(code, save_val_slot);
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.last_exn_val_local);
         Ok(())
     }
 }

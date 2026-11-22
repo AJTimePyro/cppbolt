@@ -7,6 +7,7 @@ pub struct CleanupEntry {
     pub dtor_idx: u32,
     pub offset: u32,
     pub is_subobject: bool,
+    pub is_temp: bool,
 }
 
 impl FunctionContext {
@@ -31,15 +32,87 @@ impl FunctionContext {
             dtor_idx,
             offset,
             is_subobject,
+            is_temp: false,
         });
         Ok(index)
     }
+
+    pub fn register_temp_cleanup(
+        &mut self,
+        _sname: String,
+        dtor_idx: u32,
+        temp_slot: u32,
+    ) -> Option<usize> {
+        let index = self.cleanup_entries.len();
+        if index >= 64 {
+            return None;
+        }
+        self.cleanup_entries.push(CleanupEntry {
+            index,
+            _sname,
+            dtor_idx,
+            offset: temp_slot,
+            is_subobject: false,
+            is_temp: true,
+        });
+        Some(index)
+    }
+
+    pub fn current_exnref_local(&self) -> u32 {
+        self.exnref_local + self.catch_depth.saturating_sub(1) as u32
+    }
+}
+
+pub(super) fn max_catch_depth(stmt: &Stmt, current: u32) -> u32 {
+    let mut max_d = current;
+    match &stmt.kind {
+        StmtKind::Try {
+            try_body,
+            catch_body,
+            ..
+        } => {
+            let in_try = max_catch_depth(try_body, current);
+            let in_catch = max_catch_depth(catch_body, current + 1);
+            max_d = max_d.max(in_try).max(in_catch);
+        }
+        StmtKind::Compound(stmts) | StmtKind::VarDeclGroup(stmts) => {
+            for s in stmts {
+                max_d = max_d.max(max_catch_depth(s, current));
+            }
+        }
+        StmtKind::If {
+            branches,
+            else_stmt,
+        } => {
+            for (_, body) in branches {
+                max_d = max_d.max(max_catch_depth(body, current));
+            }
+            if let Some(else_s) = else_stmt {
+                max_d = max_d.max(max_catch_depth(else_s, current));
+            }
+        }
+        StmtKind::While { body, .. } | StmtKind::DoWhile { body, .. } => {
+            max_d = max_d.max(max_catch_depth(body, current));
+        }
+        StmtKind::For { init, body, .. } => {
+            if let Some(init_s) = init {
+                max_d = max_d.max(max_catch_depth(init_s, current));
+            }
+            max_d = max_d.max(max_catch_depth(body, current));
+        }
+        StmtKind::Switch { body, .. } => {
+            max_d = max_d.max(max_catch_depth(body, current));
+        }
+        _ => {}
+    }
+    max_d
 }
 
 impl<'a> Codegen<'a> {
     pub(super) fn function_context(
         f: &FunctionDecl,
         class_name: Option<&str>,
+        max_depth: u32,
     ) -> (Vec<(u32, u8)>, FunctionContext) {
         // Non-static methods carry the implicit `this` pointer as parameter 0.
         let num_params = f.params.len() as u32;
@@ -55,13 +128,15 @@ impl<'a> Codegen<'a> {
         let ret_temp_f64 = num_params + 9;
         let scratch_f32 = num_params + 10;
         let exnref_local = num_params + 11;
+        let num_exnrefs = (max_depth + 1).max(1);
+        let unwind_exnref_local = exnref_local + max_depth;
 
         let locals = vec![
             (5, TYPE_I32), // fp_local, scratch1, scratch2, ret_temp_i32, last_exn_val_local
             (3, TYPE_I64), // scratch_i64, ret_temp_i64, cleanup_mask_local
             (2, TYPE_F64), // scratch_f64, ret_temp_f64
             (1, TYPE_F32), // scratch_f32
-            (1, TYPE_EXNREF), // exnref_local
+            (num_exnrefs, TYPE_EXNREF), // exnref_local (all nesting levels + unwind)
         ];
 
         let is_dtor = if let Some(cls) = class_name {
@@ -83,6 +158,8 @@ impl<'a> Codegen<'a> {
             ret_temp_f64,
             scratch_f32,
             exnref_local,
+            unwind_exnref_local,
+            max_catch_depth: max_depth,
             cleanup_entries: Vec::new(),
             in_catch_all: false,
             catch_depth: 0,

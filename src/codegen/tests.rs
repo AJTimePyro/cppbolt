@@ -13,6 +13,8 @@ fn context() -> FunctionContext {
         ret_temp_i64: 7,
         ret_temp_f64: 8,
         exnref_local: 9,
+        unwind_exnref_local: 9,
+        max_catch_depth: 0,
         cleanup_mask_local: 10,
         last_exn_val_local: 11,
         cleanup_entries: Vec::new(),

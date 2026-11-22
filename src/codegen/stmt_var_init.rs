@@ -109,9 +109,7 @@ impl<'a> Codegen<'a> {
         };
         self.emit_local_address(offset, ctx, code);
         let full_args = self.constructor_arguments(&sig, args);
-        for (i, arg) in full_args.iter().enumerate() {
-            self.compile_call_arg(arg, sig.param_types.get(i + 1), ctx, code)?;
-        }
+        self.compile_call_arguments_and_deactivate_byval(&full_args, &sig.param_types, 1, ctx, code)?;
         code.push(OP_CALL);
         write_u32(code, ctor_idx);
         Ok(())
@@ -133,10 +131,7 @@ impl<'a> Codegen<'a> {
             self.find_constructor_sig_with_args(sname, &arg_types, Some(list))
         {
             self.emit_local_address(offset, ctx, code);
-            for (i, item) in list.iter().enumerate() {
-                let param_ty = sig.param_types.get(i + 1);
-                self.compile_call_arg(item, param_ty, ctx, code)?;
-            }
+            self.compile_call_arguments_and_deactivate_byval(list, &sig.param_types, 1, ctx, code)?;
             code.push(OP_CALL);
             write_u32(code, ctor_idx);
             return Ok(());

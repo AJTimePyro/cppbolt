@@ -852,11 +852,39 @@ Implemented C++17 exception handling (`try`, `catch`, `throw`) in WebAssembly us
 5. Constructor Failure Handling (`src/codegen/function_lifecycle.rs`):
    - Registered base and member initializers in the cleanup mask, destroying completed subobjects if a subsequent initializer or constructor body throws.
 6. Shadow Stack Integrity: Restored caller frame pointer on the shadow stack (`global 0`) in the function unwind handler before propagating unhandled exceptions.
-7. Tests: Added 15 integration tests in `tests/exceptions_prototype.rs` covering cross-function unwinding, nested try blocks, loop allocations, throwing destructors, shadow-stack integrity, rethrow termination, and cleanup limits.
+7. Tests: Added 15 integration tests in `tests/exceptions.rs` covering cross-function unwinding, nested try blocks, loop allocations, throwing destructors, shadow-stack integrity, rethrow termination, and cleanup limits.
 
 ### Verification Results
 
 - All 143 unit tests passed (`cargo test --lib`).
-- All 15 exception integration tests passed (`cargo test --test exceptions_prototype`).
+- All 15 exception integration tests passed (`cargo test --test exceptions`).
+- All 16 C++17 regressions passed (`cargo test --test cxx17_regressions`).
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with > 5 parameters without receiver.
+
+---
+
+## 2026-11-22: Arbitrary Nested Catch Depth and Temporary Unwinding Hardening
+
+Hardened the function-level exception unwinding engine by removing the fixed catch-depth clamp and tracking temporary object cleanups across expressions.
+
+### Summary of Work
+
+1. Arbitrary Catch Nesting Depth (`src/codegen/function_context.rs`, `src/codegen/stmt_try.rs`):
+   - Replaced the fixed four-slot `exnref` clamp with an AST pre-pass (`max_catch_depth`) that computes the peak catch nesting depth for each function.
+   - Allocated `(max_depth + 1)` `TYPE_EXNREF` locals to assign dedicated slots to each nested handler, separating the function unwind handler (`unwind_exnref_local`) from active catch scopes.
+   - Saved previous exception payloads on the shadow stack before entering nested handlers and restored them upon handler exit. This ensures that `throw;` correctly rethrows the enclosing handler's exception.
+2. Temporary Object Unwinding (`src/codegen/call_args.rs`, `src/codegen/expr_call.rs`, `src/codegen/raii.rs`, `src/codegen/unwind.rs`):
+   - Added temporary cleanup registration (`register_temp_cleanup`) so fully constructed temporaries run destructors and free heap buffers if a subsequent argument expression or called function throws.
+   - Preserved nested sub-expression temporaries during by-value calls (`compile_call_arguments_and_deactivate_byval`), deactivating only the outer argument passed to the callee.
+   - Supported reference lifetime extension (`stmt_var.rs`) by transferring temporaries bound to references into lexical scope tracking.
+   - Permitted statements with wide chained expressions to compile cleanly by returning `None` from `register_temp_cleanup` when the 64-bit cleanup mask is saturated, relying on normal full-expression destruction.
+3. Test Renaming and Consolidation:
+   - Renamed `tests/exceptions_prototype.rs` to `tests/exceptions.rs` and expanded the suite to 32 tests covering nested catch depth, argument failures, chained temporaries, and lifetime extension.
+
+### Verification Results
+
+- All 143 unit tests passed (`cargo test --lib`).
+- All 32 exception integration tests passed (`cargo test --test exceptions`).
+- All 11 nesting stress tests passed (`cargo test --test nesting`).
 - All 16 C++17 regressions passed (`cargo test --test cxx17_regressions`).
 - Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with > 5 parameters without receiver.

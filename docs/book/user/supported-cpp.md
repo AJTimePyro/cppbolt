@@ -86,7 +86,7 @@ cargo run --bin cppbolt-testrunner -- target/release/cppbolt-cli
 | **Scalar Pseudo-Destructors** | **Done** | No-op pseudo-destructor calls on scalar types (`p->~T()`, `x.~T()`), preserving receiver evaluation and side effects | `tests/c_basics/types/pseudo_destructor_scalar.cpp` |
 | **Destructors via Typedef Aliases** | **Done** | Explicit destructor calls resolved through typedef aliases (`sp->~ClassT()`), verifying target class identity | `tests/classes_oop/constructors_destructors/destructor_via_typedef.cpp` |
 | **Virtual Inheritance** | **Out of Scope** | Single, linear, and multiple inheritance supported; virtual base specifiers are rejected | `tests/negative/virtual_inheritance.cpp` |
-| **Exception Handling (`try`, `catch`, `throw`)** | **Done** | C++17 exception handling via WebAssembly `try_table` unwinding and dynamic 64-bit liveness tracking; typed catches with payload binding, catch-all (`catch (...)`), rethrow (`throw;`), `std::terminate` on unhandled rethrow or throwing destructors, reverse destruction order for automatic objects, constructor subobject cleanup on failure, and shadow-stack frame restoration | `tests/exceptions_prototype.rs` |
+| **Exception Handling (`try`, `catch`, `throw`)** | **Done** | C++17 exception handling via WebAssembly `try_table` unwinding and dynamic 64-bit liveness tracking; typed catches with payload binding, catch-all (`catch (...)`), arbitrary catch nesting depth, rethrow (`throw;`), `std::terminate` on unhandled rethrow or throwing destructors, reverse destruction order for automatic objects, expression temporary cleanup, reference lifetime extension, constructor subobject cleanup on failure, and shadow-stack frame restoration | `tests/exceptions.rs` |
 
 ---
 
