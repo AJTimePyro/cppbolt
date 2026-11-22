@@ -331,7 +331,7 @@ impl<'a> Codegen<'a> {
         }
     }
 
-    fn emit_binary_op(op: &BinaryOp, common_ty: &Type, code: &mut Vec<u8>) {
+    pub(super) fn emit_binary_op(op: &BinaryOp, common_ty: &Type, code: &mut Vec<u8>) {
         if *common_ty == Type::Double {
             Self::emit_f64_binary_op(op, code);
         } else if matches!(common_ty, Type::Float) {

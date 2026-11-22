@@ -88,7 +88,7 @@ impl<'a> Codegen<'a> {
         if let Some(opcode) = math_opcode {
             return self.compile_math_builtin(opcode, name, args, ctx, code);
         }
-        if name == "printf" || name == "std::printf" || name.ends_with("::printf") {
+        if crate::name::is_printf(name) {
             return self.compile_printf_call(args, ctx, code);
         }
         if name == "__builtin_wasm_memory_size" {
@@ -100,7 +100,7 @@ impl<'a> Codegen<'a> {
             return self.compile_struct_value_call(name, args, ctx, code);
         }
         if ctx.var_offsets.contains_key(name) || self.global_offsets.contains_key(name) {
-            return self.compile_function_pointer_call(callee, args, ctx, code);
+            return self.compile_indirect_call(callee, args, ctx, code);
         }
         if let Some(cls) = ctx.current_class.clone()
             && class_name.is_none()
@@ -151,51 +151,6 @@ impl<'a> Codegen<'a> {
         }
         self.compile_expr(&args[0], ctx, code)?;
         code.push(opcode);
-        Ok(())
-    }
-
-    /// Call through a function-pointer variable. Build the call-site
-    /// signature from the actual argument types.
-    fn compile_function_pointer_call(
-        &mut self,
-        callee: &Expr,
-        args: &[Expr],
-        ctx: &mut FunctionContext,
-        code: &mut Vec<u8>,
-    ) -> Result<(), CompileError> {
-        let callee_ty = self.get_expr_type(callee, ctx);
-        let param_types = match callee_ty.strip_const() {
-            Type::Pointer(inner) => match inner.strip_const() {
-                Type::Function { param_types, .. } => Some(param_types.clone()),
-                _ => None,
-            },
-            Type::Function { param_types, .. } => Some(param_types.clone()),
-            _ => None,
-        };
-
-        let mut params_wasm = Vec::new();
-        for (i, a) in args.iter().enumerate() {
-            let aty = self.get_expr_type(a, ctx);
-            let param_ty = param_types.as_ref().and_then(|params| params.get(i));
-            if param_ty.map(|p| p.is_reference()).unwrap_or(false) {
-                self.compile_lvalue_addr(a, ctx, code)?;
-            } else {
-                self.compile_expr(a, ctx, code)?;
-                if let Some(pty) = param_ty {
-                    self.emit_conversion(&aty, pty, code);
-                }
-            }
-            params_wasm.push(wasm_value_type(param_ty.unwrap_or(&aty)));
-        }
-        self.compile_expr(callee, ctx, code)?;
-
-        let ret_ty = callee_return_type(&callee_ty);
-        let results_wasm = wasm_result_types(&ret_ty);
-
-        let type_idx = self.module.add_type(params_wasm, results_wasm);
-        code.push(OP_CALL_INDIRECT);
-        write_u32(code, type_idx);
-        code.push(0);
         Ok(())
     }
 

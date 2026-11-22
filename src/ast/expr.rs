@@ -62,6 +62,48 @@ pub enum BinaryOp {
 }
 
 impl BinaryOp {
+    pub const fn symbol(&self) -> &'static str {
+        match self {
+            BinaryOp::Add => "+",
+            BinaryOp::Sub => "-",
+            BinaryOp::Mul => "*",
+            BinaryOp::Div => "/",
+            BinaryOp::Rem => "%",
+            BinaryOp::BitAnd => "&",
+            BinaryOp::BitOr => "|",
+            BinaryOp::BitXor => "^",
+            BinaryOp::Shl => "<<",
+            BinaryOp::Shr => ">>",
+            BinaryOp::LogicalAnd => "&&",
+            BinaryOp::LogicalOr => "||",
+            BinaryOp::Eq => "==",
+            BinaryOp::Ne => "!=",
+            BinaryOp::Lt => "<",
+            BinaryOp::Le => "<=",
+            BinaryOp::Gt => ">",
+            BinaryOp::Ge => ">=",
+            BinaryOp::Comma => ",",
+            BinaryOp::DotStar => ".*",
+            BinaryOp::ArrowStar => "->*",
+        }
+    }
+
+    pub const fn compound_symbol(&self) -> Option<&'static str> {
+        match self {
+            BinaryOp::Add => Some("+="),
+            BinaryOp::Sub => Some("-="),
+            BinaryOp::Mul => Some("*="),
+            BinaryOp::Div => Some("/="),
+            BinaryOp::Rem => Some("%="),
+            BinaryOp::BitAnd => Some("&="),
+            BinaryOp::BitOr => Some("|="),
+            BinaryOp::BitXor => Some("^="),
+            BinaryOp::Shl => Some("<<="),
+            BinaryOp::Shr => Some(">>="),
+            _ => None,
+        }
+    }
+
     pub fn op_name(&self) -> Option<&'static str> {
         match self {
             BinaryOp::Add => Some("operator+"),
@@ -343,30 +385,7 @@ impl Expr {
         else {
             return UNRENDERABLE_EXPR.to_string();
         };
-        let sym = match op {
-            BinaryOp::Add => "+",
-            BinaryOp::Sub => "-",
-            BinaryOp::Mul => "*",
-            BinaryOp::Div => "/",
-            BinaryOp::Rem => "%",
-            BinaryOp::Eq => "==",
-            BinaryOp::Ne => "!=",
-            BinaryOp::Lt => "<",
-            BinaryOp::Le => "<=",
-            BinaryOp::Gt => ">",
-            BinaryOp::Ge => ">=",
-            BinaryOp::LogicalAnd => "&&",
-            BinaryOp::LogicalOr => "||",
-            BinaryOp::BitAnd => "&",
-            BinaryOp::BitOr => "|",
-            BinaryOp::BitXor => "^",
-            BinaryOp::Shl => "<<",
-            BinaryOp::Shr => ">>",
-            BinaryOp::Comma => ",",
-            BinaryOp::DotStar => ".*",
-            BinaryOp::ArrowStar => "->*",
-        };
-        format!("({} {} {})", left.to_source(), sym, right.to_source())
+        format!("({} {} {})", left.to_source(), op.symbol(), right.to_source())
     }
 
     pub fn is_lvalue(&self) -> bool {

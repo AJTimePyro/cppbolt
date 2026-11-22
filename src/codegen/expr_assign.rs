@@ -317,7 +317,7 @@ impl<'a> Codegen<'a> {
             self.emit_conversion(val_ty, &arithmetic_ty, code);
         }
 
-        emit_compound_operator(op, &arithmetic_ty, code);
+        Self::emit_binary_op(op, &arithmetic_ty, code);
 
         self.emit_conversion(&arithmetic_ty, ty, code);
         self.emit_store(ty, 0, code);
@@ -326,54 +326,5 @@ impl<'a> Codegen<'a> {
         self.emit_load(ty, 0, code);
 
         Ok(())
-    }
-}
-
-fn emit_compound_operator(op: &BinaryOp, arithmetic_ty: &Type, code: &mut Vec<u8>) {
-    let unsigned = !arithmetic_ty.is_signed();
-    if *arithmetic_ty == Type::LongLong || *arithmetic_ty == Type::UnsignedLongLong {
-        match op {
-            BinaryOp::Add => code.push(OP_I64_ADD),
-            BinaryOp::Sub => code.push(OP_I64_SUB),
-            BinaryOp::Mul => code.push(OP_I64_MUL),
-            BinaryOp::Div => code.push(if unsigned { OP_I64_DIV_U } else { OP_I64_DIV_S }),
-            BinaryOp::Rem => code.push(if unsigned { OP_I64_REM_U } else { OP_I64_REM_S }),
-            BinaryOp::BitAnd => code.push(OP_I64_AND),
-            BinaryOp::BitOr => code.push(OP_I64_OR),
-            BinaryOp::BitXor => code.push(OP_I64_XOR),
-            BinaryOp::Shl => code.push(OP_I64_SHL),
-            BinaryOp::Shr => code.push(if unsigned { OP_I64_SHR_U } else { OP_I64_SHR_S }),
-            _ => {}
-        }
-    } else if *arithmetic_ty == Type::Double {
-        match op {
-            BinaryOp::Add => code.push(OP_F64_ADD),
-            BinaryOp::Sub => code.push(OP_F64_SUB),
-            BinaryOp::Mul => code.push(OP_F64_MUL),
-            BinaryOp::Div => code.push(OP_F64_DIV),
-            _ => {}
-        }
-    } else if *arithmetic_ty == Type::Float {
-        match op {
-            BinaryOp::Add => code.push(OP_F32_ADD),
-            BinaryOp::Sub => code.push(OP_F32_SUB),
-            BinaryOp::Mul => code.push(OP_F32_MUL),
-            BinaryOp::Div => code.push(OP_F32_DIV),
-            _ => {}
-        }
-    } else {
-        match op {
-            BinaryOp::Add => code.push(OP_I32_ADD),
-            BinaryOp::Sub => code.push(OP_I32_SUB),
-            BinaryOp::Mul => code.push(OP_I32_MUL),
-            BinaryOp::Div => code.push(if unsigned { OP_I32_DIV_U } else { OP_I32_DIV_S }),
-            BinaryOp::Rem => code.push(if unsigned { OP_I32_REM_U } else { OP_I32_REM_S }),
-            BinaryOp::BitAnd => code.push(OP_I32_AND),
-            BinaryOp::BitOr => code.push(OP_I32_OR),
-            BinaryOp::BitXor => code.push(OP_I32_XOR),
-            BinaryOp::Shl => code.push(OP_I32_SHL),
-            BinaryOp::Shr => code.push(if unsigned { OP_I32_SHR_U } else { OP_I32_SHR_S }),
-            _ => {}
-        }
     }
 }

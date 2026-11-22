@@ -15,9 +15,7 @@ impl<'a> Codegen<'a> {
 
         let has_deleting_dtors = self.has_deleting_dtors();
         let has_new_or_delete = self.has_new_or_delete(&candidates, &reachable);
-        let need_printf = all_reachable_calls.contains("printf")
-            || all_reachable_calls.contains("std::printf")
-            || all_reachable_calls.iter().any(|c| c.ends_with("::printf"));
+        let need_printf = all_reachable_calls.iter().any(|c| crate::name::is_printf(c));
         // Keep the allocator whenever a record exists: synthesized constructors,
         // destructors, and prvalue returns may allocate even without a visible
         // `new`, `malloc`, or `free` call.

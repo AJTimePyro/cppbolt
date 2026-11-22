@@ -58,9 +58,7 @@ impl<'a> Codegen<'a> {
                 Expr::Call { callee, args, .. } => {
                     if let Expr::Identifier(name) = &**callee {
                         if !self.sema.functions.contains_key(name)
-                            && name != "printf"
-                            && name != "std::printf"
-                            && !name.ends_with("::printf")
+                            && !crate::name::is_printf(name)
                             && name != "malloc"
                             && name != "free"
                         {
