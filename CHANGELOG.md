@@ -322,7 +322,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Standard Library**: Supported container iteration via member `.begin()` and `.end()` calls (e.g. `std::string`).
 - **Type Deduction**: Extended local variable type deduction for `auto`, `const auto`, `auto&`, and `const auto&` loop bindings.
 - **Diagnostics**: Added validation error `"range expression must be an array or class with begin() and end()"` for non-iterable types.
-- **Tests**: Added tests for array value iteration and reference mutation (`tests/c_basics/pointers_arrays/range_for_array.cpp`), string iteration (`tests/stdlib/range_for_string.cpp`), RAII cleanups on `break`/`continue`/`return` (`tests/classes_oop/memory_raii/range_for_raii.cpp`), and non-iterable negative diagnostics (`tests/negative/range_for_non_iterable.cpp`).
+- **Tests**: Added tests for array value iteration and reference mutation (`tests/c_basics/pointers_arrays/range_for_array.cpp`), string iteration (`tests/stdlib/string/range_for_string.cpp`), RAII cleanups on `break`/`continue`/`return` (`tests/classes_oop/memory_raii/range_for_raii.cpp`), and non-iterable negative diagnostics (`tests/negative/range_for_non_iterable.cpp`).
 
 ### Comma-Separated Multi-Declarators & Parser Deduplication
 - **Feature**: Added support for comma-separated multi-declarator declarations sharing base specifiers (e.g. `int *p, q = 2;`, `Pair one(1), two(5);`, `static int a = 1, b = 2;`).

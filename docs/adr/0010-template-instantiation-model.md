@@ -52,9 +52,9 @@ Compiling templated standard library headers like `<vector>`, `<utility>`, and `
 ### Positive
 - Reuses existing AST substitution and struct layout routines without separate uninstantiated typing passes (`src/sema/template_subst.rs`, `tests/templates_operators/template_class_basic.cpp`).
 - Unused member methods are neither analyzed nor emitted to WebAssembly, keeping output binaries compact (`tests/templates_operators/template_lazy_member.cpp`).
-- Standard containers like `std::vector` and `std::pair` compile and execute with full RAII semantics, dynamic growth, and range-based for loops (`tests/stdlib/vector_basic.cpp`, `tests/stdlib/iterators_range_for.cpp`).
-- Associative containers `std::map`, `std::set`, and their backing `detail::AVLTree` compile cleanly with full nested node structures, balance rotations, and iterator traversals (`tests/stdlib/map_basic.cpp`, `tests/stdlib/set_basic.cpp`, `tests/stdlib/differential_fuzz.cpp`).
-- Sorting algorithms with default or custom comparators resolve correctly across multiple arities (`tests/stdlib/algorithm_sort.cpp`, `tests/stdlib/sort_comparator.cpp`).
+- Standard containers like `std::vector` and `std::pair` compile and execute with full RAII semantics, dynamic growth, and range-based for loops (`tests/stdlib/vector/vector_basic.cpp`, `tests/stdlib/iterator/iterators_range_for.cpp`).
+- Associative containers `std::map`, `std::set`, and their backing `detail::AVLTree` compile cleanly with full nested node structures, balance rotations, and iterator traversals (`tests/stdlib/map/map_basic.cpp`, `tests/stdlib/set/set_basic.cpp`, `tests/stdlib/map/differential_fuzz.cpp`).
+- Sorting algorithms with default or custom comparators resolve correctly across multiple arities (`tests/stdlib/algorithm/algorithm_sort.cpp`, `tests/stdlib/algorithm/sort_comparator.cpp`).
 
 ### Negative / Trade-offs
 - Ill-formed non-dependent expressions in uninstantiated template bodies do not trigger compile errors unless an instantiation requests them.

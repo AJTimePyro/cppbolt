@@ -166,7 +166,7 @@ Added C++11 variadic template support across the compiler and embedded standard 
    - Added `std::integer_sequence`, `std::index_sequence`, and `std::make_index_sequence` to `stdlib/utility`.
    - Added `stdlib/tuple` implementing `std::tuple`, recursive base-indexed element storage, `std::make_tuple`, and `std::get<I>(tuple)` supporting up to 17 elements (indices 0..16).
 12. Added test coverage:
-    - Positive tests: `tests/templates_operators/variadic_func_basic.cpp`, `variadic_class_tuple.cpp`, `variadic_forwarding.cpp`, `variadic_partial_ordering.cpp`, and mini-STL tests `tests/stdlib/variadic_make_unique.cpp`, `std_tuple_basic.cpp`, `std_tuple_large.cpp`.
+    - Positive tests: `tests/templates_operators/variadic_func_basic.cpp`, `variadic_class_tuple.cpp`, `variadic_forwarding.cpp`, `variadic_partial_ordering.cpp`, and mini-STL tests `tests/stdlib/memory/variadic_make_unique.cpp`, `std_tuple_basic.cpp`, `std_tuple_large.cpp`.
     - Variant tests in `tests/templates_operators_variant/` and `tests/stdlib_variant/`.
     - Negative diagnostic tests in `tests/negative/variadic_ambiguous_call.cpp`, `variadic_unexpanded_pack.cpp`, `variadic_pack_mismatch.cpp`, `variadic_multiple_bases.cpp`.
 
@@ -192,7 +192,7 @@ Addressed review findings across the embedded standard library and the semantic 
 3. Fixed member-call analysis in `src/sema/expr_call.rs` so static member calls no longer assume an implicit `this` parameter, which previously panicked when a static function had no parameters.
 4. Removed a duplicate `std::detail::DefaultLess` definition from `stdlib/algorithm`; the canonical definition remains in `stdlib/detail/algorithms/comp.h`.
 5. Moved C++17 aggregate brace-elision resolution into `src/sema/init_aggregate.rs`, keeping `src/sema/init.rs` within the repository's file and function size limits.
-6. Expanded `tests/stdlib/algorithm_infra.cpp` and `tests/stdlib/algorithm_merge_set_select.cpp` with reverse-iterator typing, out-of-range URBG rejection, and permutation-property coverage that does not depend on a specific shuffle implementation.
+6. Expanded `tests/stdlib/algorithm/algorithm_infra.cpp` and `tests/stdlib/algorithm/algorithm_merge_set_select.cpp` with reverse-iterator typing, out-of-range URBG rejection, and permutation-property coverage that does not depend on a specific shuffle implementation.
 
 ### Verification Results
 
@@ -220,7 +220,7 @@ Implemented compiler-level aggregate brace elision for nested array and aggregat
 8. Added compatibility macros in `stdlib/compat/compiler/compiler.h` and out-of-range diagnostics via `std::__throw_out_of_range` in `stdlib/compat/runtime/runtime.h`.
 9. Fixed free binary operator overload scoring in `src/sema/expr_ops.rs` to validate candidate signatures before bypassing function template resolution.
 10. Resolved all Clippy `-D warnings` lints across the codebase, eliminating direct `.unwrap()` calls on initializer cursors and collapsing redundant conditionals.
-11. Added regression test coverage in `tests/classes_oop/structs/` and differential test suites against native Clang in `tests/stdlib/array_comprehensive.cpp` and `tests/stdlib_variant/array_comprehensive_variant.cpp`.
+11. Added regression test coverage in `tests/classes_oop/structs/` and differential test suites against native Clang in `tests/stdlib/array/array_comprehensive.cpp` and `tests/stdlib_variant/array/array_comprehensive_variant.cpp`.
 
 ### Verification Results
 
@@ -403,7 +403,7 @@ Implemented member function templates, out-of-class template method definitions,
 6. Added constructor conversion for by-value struct arguments in `src/codegen/call_args.rs`, creating managed temporaries when passing arguments such as string literals to struct parameters.
 7. Synthesized copy constructors and copy assignment operators for classes containing non-trivial subobjects in `src/sema/synthesize.rs`, and updated placement new and member initializers in `src/codegen/expr_new.rs` and `src/codegen/function_lifecycle.rs` to copy struct bytes when explicit copy constructors are absent.
 8. Extracted `src/sema/template_func.rs`, `src/sema/synthesize.rs`, and `src/sema/expr_call_member.rs` to maintain repository census compliance.
-9. Added 5 variant tests: `tests/templates_operators_variant/template_class_methods_variant.cpp`, `tests/stdlib_variant/pair_basic.cpp`, `tests/stdlib_variant/vector_basic.cpp`, `tests/stdlib_variant/iterators_range_for_variant.cpp`, `tests/stdlib_variant/algorithm_sort_variant.cpp`, and `tests/stdlib_variant/combined_integration_variant.cpp`.
+9. Added 5 variant tests: `tests/templates_operators_variant/template_class_methods_variant.cpp`, `tests/stdlib_variant/utility/pair_basic.cpp`, `tests/stdlib_variant/vector/vector_basic.cpp`, `tests/stdlib_variant/iterator/iterators_range_for_variant.cpp`, `tests/stdlib_variant/algorithm/algorithm_sort_variant.cpp`, and `tests/stdlib_variant/integration/combined_integration_variant.cpp`.
 
 ### Verification Results
 
@@ -662,7 +662,7 @@ Following completion of the initial compiler subset, work focused on adding high
    - Added `#![warn(missing_docs)]` to `src/lib.rs` and documented public pipeline entry points.
 
 ### Verification
-- Added test coverage in `tests/c_basics/pointers_arrays/range_for_array.cpp`, `tests/stdlib/range_for_string.cpp`, `tests/classes_oop/memory_raii/range_for_raii.cpp`, and `tests/negative/range_for_non_iterable.cpp`.
+- Added test coverage in `tests/c_basics/pointers_arrays/range_for_array.cpp`, `tests/stdlib/string/range_for_string.cpp`, `tests/classes_oop/memory_raii/range_for_raii.cpp`, and `tests/negative/range_for_non_iterable.cpp`.
 - Verified automated mdBook, `cargo doc`, and playground builds in CI.
 
 ---
@@ -724,7 +724,7 @@ Implemented member classes within structs and templates, the `typename` keyword 
 4. Added `select_member_overload` in `src/sema/expr_call_member.rs` to score candidate signatures and resolve calls across receiver constness and value categories.
 5. Added eager constructor dependency resolution in `src/sema/constructor.rs`, instantiating member subobject and array element constructors before body analysis.
 6. Handled scoped destructor lookups in `src/codegen/function_lifecycle.rs` and `src/codegen/raii.rs` via short and qualified names.
-7. Enabled `tests/stdlib/map_basic.cpp`, `tests/stdlib/set_basic.cpp`, and the 20-seed differential fuzzing suite `tests/stdlib/differential_fuzz.cpp` in `tests/PASSING.txt`.
+7. Enabled `tests/stdlib/map/map_basic.cpp`, `tests/stdlib/set/set_basic.cpp`, and the 20-seed differential fuzzing suite `tests/stdlib/map/differential_fuzz.cpp` in `tests/PASSING.txt`.
 
 ### Verification Results
 
@@ -820,7 +820,7 @@ Addressed review findings in algorithms, iterator primitives, and header lookup.
 6. Added `std::less`, `std::greater`, and `std::equal_to` comparators in `stdlib/detail/algorithms/comp.h` and exposed them through `<functional>`.
 7. Updated `std::unique_copy` in `stdlib/detail/algorithms/modifying.h` to store a value copy for single-pass input iterators and advance the output iterator with post-increment.
 8. Refactored `embedded_header` in `src/preprocessor/include.rs` to a static table lookup, reducing function length from 80 lines to 12 lines.
-9. Added tests in `tests/stdlib/algorithm_comprehensive.cpp` for `search_n(..., 1, ...)`, duplicate elements in `minmax_element`, bidirectional iterators, negative `prev`, `const` pointers, and comparator objects.
+9. Added tests in `tests/stdlib/algorithm/algorithm_comprehensive.cpp` for `search_n(..., 1, ...)`, duplicate elements in `minmax_element`, bidirectional iterators, negative `prev`, `const` pointers, and comparator objects.
 
 ### Verification Results
 
