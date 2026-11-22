@@ -28,6 +28,8 @@ pub struct WasmModule {
     pub codes: Vec<FuncBody>,
     /// Active data segments as `(memory offset, bytes)`.
     pub data: Vec<(u32, Vec<u8>)>,
+    /// Exception tags as type indices.
+    pub tags: Vec<u32>,
     /// Linear-memory limits as `(initial pages, maximum pages)`.
     pub memory_pages: (u32, Option<u32>),
 }
@@ -50,6 +52,7 @@ impl WasmModule {
             elements: Vec::new(),
             codes: Vec::new(),
             data: Vec::new(),
+            tags: Vec::new(),
             memory_pages: (2, Some(256)),
         }
     }
@@ -76,6 +79,7 @@ impl WasmModule {
         self.encode_function_section(&mut out);
         self.encode_table_section(&mut out);
         self.encode_memory_section(&mut out);
+        self.encode_tag_section(&mut out);
         self.encode_global_section(&mut out);
         self.encode_export_section(&mut out);
         self.encode_element_section(&mut out);
@@ -157,6 +161,19 @@ impl WasmModule {
             write_u32(&mut section, self.memory_pages.0);
         }
         write_section(out, 5, &section);
+    }
+
+    fn encode_tag_section(&self, out: &mut Vec<u8>) {
+        if self.tags.is_empty() {
+            return;
+        }
+        let mut section = Vec::new();
+        write_u32(&mut section, self.tags.len() as u32);
+        for type_idx in &self.tags {
+            section.push(0x00); // attribute 0 (exception tag)
+            write_u32(&mut section, *type_idx);
+        }
+        write_section(out, 13, &section);
     }
 
     fn encode_global_section(&self, out: &mut Vec<u8>) {

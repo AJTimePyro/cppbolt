@@ -3,6 +3,7 @@ pub const TYPE_I32: u8 = 0x7F;
 pub const TYPE_I64: u8 = 0x7E;
 pub const TYPE_F32: u8 = 0x7D;
 pub const TYPE_F64: u8 = 0x7C;
+pub const TYPE_EXNREF: u8 = 0x69;
 
 // Opcodes
 pub const OP_UNREACHABLE: u8 = 0x00;
@@ -18,6 +19,9 @@ pub const OP_CALL: u8 = 0x10;
 pub const OP_CALL_INDIRECT: u8 = 0x11;
 pub const OP_DROP: u8 = 0x1A;
 pub const OP_SELECT: u8 = 0x1B;
+pub const OP_THROW: u8 = 0x08;
+pub const OP_THROW_REF: u8 = 0x0A;
+pub const OP_TRY_TABLE: u8 = 0x1F;
 
 pub const OP_LOCAL_GET: u8 = 0x20;
 pub const OP_LOCAL_SET: u8 = 0x21;
