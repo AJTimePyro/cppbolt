@@ -1261,3 +1261,46 @@ int main() {
     );
     Ok(())
 }
+
+#[test]
+fn test_byval_parameter_construction_failure_cleans_earlier_parameters() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct ParamA {
+    int id;
+    ParamA(int i) : id(i) { std::printf("C_A:%d ", id); }
+    ~ParamA() { std::printf("D_A:%d ", id); }
+};
+
+struct ParamB {
+    int id;
+    ParamB(int i) : id(i) {
+        std::printf("C_B:%d ", id);
+        if (id == 99) {
+            std::printf("Throw_B ");
+            throw 777;
+        }
+    }
+    ~ParamB() { std::printf("D_B:%d ", id); }
+};
+
+void target(ParamA a, ParamB b) {
+    std::printf("InTarget ");
+}
+
+int main() {
+    try {
+        target(ParamA(1), ParamB(99));
+    } catch (int e) {
+        std::printf("Caught:%d", e);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "C_A:1 C_B:99 Throw_B D_A:1 Caught:777");
+    Ok(())
+}
+
