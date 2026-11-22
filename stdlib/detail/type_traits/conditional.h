@@ -1,10 +1,10 @@
-//===----------------------------------------------------------------------===//
-//
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
+
+
+
+
+
+
+
 
 #ifndef _LIBCPP___TYPE_TRAITS_CONDITIONAL_H
 #define _LIBCPP___TYPE_TRAITS_CONDITIONAL_H
@@ -17,9 +17,9 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-// cppbolt adaptation: upstream selects through a member alias template of a
-// bool-specialized helper. The equivalent partial specialization keeps the
-// upstream `conditional`/`conditional_t` interface unchanged.
+
+
+
 template <bool _Bp, class _IfRes, class _ElseRes>
 struct _LIBCPP_NO_SPECIALIZATIONS conditional {
   using type _LIBCPP_NODEBUG = _IfRes;
@@ -35,7 +35,7 @@ template <bool _Bp, class _IfRes, class _ElseRes>
 using conditional_t _LIBCPP_NODEBUG = typename conditional<_Bp, _IfRes, _ElseRes>::type;
 #endif
 
-// Helper so we can use "conditional_t" in all language versions.
+
 template <bool _Bp, class _If, class _Then>
 using __conditional_t _LIBCPP_NODEBUG = typename conditional<_Bp, _If, _Then>::type;
 

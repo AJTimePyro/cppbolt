@@ -4,7 +4,7 @@
 #include <cstddef>
 
 namespace std {
-    // Declared but never defined: valid only in unevaluated operands.
+
     template<typename T>
     T&& declval();
 

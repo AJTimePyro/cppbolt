@@ -1,10 +1,10 @@
-//===----------------------------------------------------------------------===//
-//
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
+
+
+
+
+
+
+
 
 #ifndef _LIBCPP___TYPE_TRAITS_REMOVE_CV_H
 #define _LIBCPP___TYPE_TRAITS_REMOVE_CV_H
@@ -17,9 +17,9 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-// cppbolt adaptation: upstream forwards to the `__remove_cv` builtin. Direct
-// partial specializations are the classic upstream form and keep this header
-// independent of the builtin shim.
+
+
+
 template <class _Tp>
 struct _LIBCPP_NO_SPECIALIZATIONS remove_cv {
   using type _LIBCPP_NODEBUG = _Tp;

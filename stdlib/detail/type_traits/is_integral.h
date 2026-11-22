@@ -1,10 +1,10 @@
-//===----------------------------------------------------------------------===//
-//
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
+
+
+
+
+
+
+
 
 #ifndef _LIBCPP___TYPE_TRAITS_IS_INTEGRAL_H
 #define _LIBCPP___TYPE_TRAITS_IS_INTEGRAL_H
@@ -18,9 +18,9 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-// cppbolt adaptation: upstream strips cv with `__remove_cv_t` before matching
-// the specializations below. The cv forms are matched directly instead, which
-// gives the same result for cppbolt's types without relying on the shim.
+
+
+
 template <class _Tp>
 struct __libcpp_is_integral {
   static const bool value = false;

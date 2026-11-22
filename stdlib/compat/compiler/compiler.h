@@ -11,7 +11,7 @@
 #define _MINI_STL_CLANG_IGNORE_INLINE_NEW_DELETE
 #endif
 
-// Upstream libc++ compatibility definitions
+
 #ifndef _LIBCPP_HIDE_FROM_ABI
 #define _LIBCPP_HIDE_FROM_ABI
 #endif
@@ -64,7 +64,7 @@
 #define _LIBCPP_END_NAMESPACE_STD }
 #endif
 
-// Additional definitions needed by upstream libc++ type_traits internals.
+
 #ifndef _LIBCPP_STD_VER
 #define _LIBCPP_STD_VER 17
 #endif
@@ -89,14 +89,14 @@
 #define _LIBCPP_CLANG_DIAGNOSTIC_IGNORED(x)
 #endif
 
-// cppbolt has no 128-bit integers, wide characters or char8_t.
+
 #define _LIBCPP_HAS_INT128 0
 #define _LIBCPP_HAS_WIDE_CHARACTERS 0
 #define _LIBCPP_HAS_CHAR8_T 0
 
-// Let upstream headers choose their pure-template fallback branches. The only
-// primitive without an upstream fallback (`remove_reference`) is supplied by
-// detail/type_traits/builtins.h via a cppbolt adaptation of that header.
+
+
+
 #define __has_builtin(x) 0
 #ifndef __has_warning
 #define __has_warning(x) 0

@@ -1,10 +1,10 @@
-//===----------------------------------------------------------------------===//
-//
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
+
+
+
+
+
+
+
 
 #ifndef _LIBCPP___TYPE_TRAITS_IS_ARRAY_H
 #define _LIBCPP___TYPE_TRAITS_IS_ARRAY_H
@@ -39,9 +39,9 @@ _LIBCPP_NO_SPECIALIZATIONS inline constexpr bool is_bounded_array_v = __is_bound
 
 #endif
 
-// cppbolt adaptation: upstream defines the unbounded-array traits here via the
-// `__is_unbounded_array` builtin, which cppbolt does not provide. They are
-// omitted rather than given a wrong answer; this subset targets C++17.
+
+
+
 
 _LIBCPP_END_NAMESPACE_STD
 

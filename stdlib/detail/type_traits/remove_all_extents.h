@@ -1,10 +1,10 @@
-//===----------------------------------------------------------------------===//
-//
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
+
+
+
+
+
+
+
 
 #ifndef _LIBCPP___TYPE_TRAITS_REMOVE_ALL_EXTENTS_H
 #define _LIBCPP___TYPE_TRAITS_REMOVE_ALL_EXTENTS_H
@@ -18,8 +18,8 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-// cppbolt adaptation: upstream uses the `__remove_all_extents` builtin. The
-// classic upstream recursive partial specializations give the same result.
+
+
 template <class _Tp>
 struct _LIBCPP_NO_SPECIALIZATIONS remove_all_extents {
   using type _LIBCPP_NODEBUG = _Tp;
@@ -32,8 +32,8 @@ template <class _Tp>
 struct remove_all_extents<_Tp[]> {
   using type _LIBCPP_NODEBUG = _Tp;
 };
-// The one-dimensional specialization yields its element type directly, so the
-// common multi-dimensional cases are spelled out rather than recursing.
+
+
 template <class _Tp, size_t _Np, size_t _Mp>
 struct remove_all_extents<_Tp[_Np][_Mp]> {
   using type _LIBCPP_NODEBUG = _Tp;

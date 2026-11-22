@@ -1,10 +1,10 @@
-//===----------------------------------------------------------------------===//
-//
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
+
+
+
+
+
+
+
 
 #ifndef _LIBCPP___TYPE_TRAITS_INTEGRAL_CONSTANT_H
 #define _LIBCPP___TYPE_TRAITS_INTEGRAL_CONSTANT_H
@@ -22,8 +22,8 @@ struct _LIBCPP_NO_SPECIALIZATIONS integral_constant {
   static _LIBCPP_CONSTEXPR const _Tp value = __v;
   typedef _Tp value_type;
   typedef integral_constant type;
-  // cppbolt adaptation: the conversion operator names the template parameter
-  // directly; cppbolt does not accept a member typedef as its target type.
+
+
   _LIBCPP_HIDE_FROM_ABI _LIBCPP_CONSTEXPR operator _Tp() const _NOEXCEPT { return value; }
 #if _LIBCPP_STD_VER >= 14
   _LIBCPP_HIDE_FROM_ABI constexpr value_type operator()() const _NOEXCEPT { return value; }

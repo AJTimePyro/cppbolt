@@ -1,10 +1,10 @@
-//===----------------------------------------------------------------------===//
-//
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
+
+
+
+
+
+
+
 
 #ifndef _LIBCPP___TYPE_TRAITS_IS_UNSIGNED_H
 #define _LIBCPP___TYPE_TRAITS_IS_UNSIGNED_H
@@ -18,10 +18,10 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-// cppbolt adaptation: upstream's fallback computes `_Tp(0) < _Tp(-1)` in a
-// variable-template specialization. cppbolt cannot fold that functional cast
-// in a constant initializer, so the upstream result is listed explicitly for
-// its arithmetic types.
+
+
+
+
 template <class _Tp>
 struct __is_unsigned_impl {
   static const bool value = false;

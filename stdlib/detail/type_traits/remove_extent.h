@@ -1,10 +1,10 @@
-//===----------------------------------------------------------------------===//
-//
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
+
+
+
+
+
+
+
 
 #ifndef _LIBCPP___TYPE_TRAITS_REMOVE_EXTENT_H
 #define _LIBCPP___TYPE_TRAITS_REMOVE_EXTENT_H
@@ -18,8 +18,8 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-// cppbolt adaptation: upstream uses the `__remove_extent` builtin. The classic
-// upstream partial specializations give the same result.
+
+
 template <class _Tp>
 struct _LIBCPP_NO_SPECIALIZATIONS remove_extent {
   using type _LIBCPP_NODEBUG = _Tp;

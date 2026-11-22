@@ -1,10 +1,10 @@
-//===----------------------------------------------------------------------===//
-//
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
+
+
+
+
+
+
+
 
 #ifndef _LIBCPP___TYPE_TRAITS_ADD_POINTER_H
 #define _LIBCPP___TYPE_TRAITS_ADD_POINTER_H
@@ -17,9 +17,9 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-// cppbolt adaptation: upstream uses the `__add_pointer` builtin. Direct
-// partial specializations handle the reference-to-void cases from the classic
-// upstream implementation, keeping this header independent of the shim.
+
+
+
 template <class _Tp>
 struct _LIBCPP_NO_SPECIALIZATIONS add_pointer {
   using type _LIBCPP_NODEBUG = _Tp*;

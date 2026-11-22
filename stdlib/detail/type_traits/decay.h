@@ -1,10 +1,10 @@
-//===----------------------------------------------------------------------===//
-//
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
+
+
+
+
+
+
+
 
 #ifndef _LIBCPP___TYPE_TRAITS_DECAY_H
 #define _LIBCPP___TYPE_TRAITS_DECAY_H
@@ -20,10 +20,10 @@
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-// cppbolt adaptation: upstream uses the `__decay` builtin. This is the classic
-// upstream composition (remove reference, then array-to-pointer, then remove
-// cv) expressed with direct specializations. Function types are not distinct
-// in cppbolt, so `is_function` handling does not apply.
+
+
+
+
 template <class _Tp>
 struct _LIBCPP_NO_SPECIALIZATIONS decay {
   using type _LIBCPP_NODEBUG =
