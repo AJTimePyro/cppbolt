@@ -1,7 +1,7 @@
 const assert = require("assert");
 
 async function testCompileAndRunAsync() {
-    const pkg = require("../npm/dist/index.js");
+    const pkg = require("../../npm/dist/index.js");
 
     assert.strictEqual(typeof pkg.compileAndRunAsync, "function", "compileAndRunAsync should be exported");
 

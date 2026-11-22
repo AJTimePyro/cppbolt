@@ -13,7 +13,7 @@ fn abi_lifecycle_keeps_memory_bounded() -> Result<(), Box<dyn std::error::Error>
     let wasm = ensure_wasm_compiler(&root)?;
     let node = std::env::var("NODE").unwrap_or_else(|_| "node".to_string());
     let output = Command::new(node)
-        .arg(root.join("tests/ffi_lifecycle.js"))
+        .arg(root.join("tests/node/ffi_lifecycle.js"))
         .arg(&wasm)
         .output()?;
     if !output.status.success() {

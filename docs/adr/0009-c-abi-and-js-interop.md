@@ -4,7 +4,7 @@
 Accepted (reconstructed) <!-- TODO: confirm with author -->
 
 ## Context
-When running the compiler inside Node.js or a browser Web Worker, JavaScript must pass source strings into the WebAssembly instance and retrieve compiled WebAssembly binaries or error messages without memory leaks (`src/ffi.rs`, `web/playground-worker.js`, `tests/ffi_lifecycle.js`). Furthermore, compiled C++ programs need an execution environment for basic I/O and process exit (`web/host.js`, commit `d23afed`, `tests/browser_flow.rs`).
+When running the compiler inside Node.js or a browser Web Worker, JavaScript must pass source strings into the WebAssembly instance and retrieve compiled WebAssembly binaries or error messages without memory leaks (`src/ffi.rs`, `web/playground-worker.js`, `tests/node/ffi_lifecycle.js`). Furthermore, compiled C++ programs need an execution environment for basic I/O and process exit (`web/host.js`, commit `d23afed`, `tests/browser_flow.rs`).
 
 ## Options Considered
 - **Option 1: Use `wasm-bindgen` with complex JavaScript glue generation**
@@ -29,8 +29,8 @@ When running the compiler inside Node.js or a browser Web Worker, JavaScript mus
 ## Consequences
 ### Positive
 - Zero external build or runtime dependencies; the compiler is a pure `cdylib` (`Cargo.toml`, `src/ffi.rs`).
-- Repeated compilations keep linear memory bounded without leaks, as proven by `tests/ffi_lifecycle.js` (`tests/ffi_lifecycle.rs`).
+- Repeated compilations keep linear memory bounded without leaks, as proven by `tests/node/ffi_lifecycle.js` (`tests/ffi_lifecycle.rs`).
 - Identical `host.js` shim runs in both Node.js test harnesses and browser Web Workers (`web/host.js`, `tests/browser_flow.rs`).
 
 ### Negative / Trade-offs
-- Hosts must adhere strictly to the allocation lifecycle: buffers must be released with their matching deallocation calls (`src/ffi.rs#L30-L70`, `tests/ffi_lifecycle.js`).
+- Hosts must adhere strictly to the allocation lifecycle: buffers must be released with their matching deallocation calls (`src/ffi.rs#L30-L70`, `tests/node/ffi_lifecycle.js`).

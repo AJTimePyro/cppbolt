@@ -59,7 +59,7 @@ if (resultPtr === 0) {
 }
 ```
 
-The error buffer is private static storage owned by the compiler; failed compilations never leak linear memory. Bounded memory consumption across repeated compilations is verified by `tests/ffi_lifecycle.js`.
+The error buffer is private static storage owned by the compiler; failed compilations never leak linear memory. Bounded memory consumption across repeated compilations is verified by `tests/node/ffi_lifecycle.js`.
 
 ---
 
