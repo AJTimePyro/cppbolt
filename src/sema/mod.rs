@@ -31,6 +31,8 @@ mod function_sig;
 mod init;
 mod init_aggregate;
 mod init_list;
+#[cfg(test)]
+mod instantiation_tests;
 mod layout;
 mod layout_dump;
 mod layout_types;
@@ -96,9 +98,6 @@ mod template_subst_pack;
 mod template_subst_stmt;
 #[cfg(test)]
 mod tests;
-#[cfg(test)]
-mod tests_instantiation;
-mod tests_pack;
 
 pub(crate) use expected_type::is_member_pointer_address;
 pub use init::InitContext;

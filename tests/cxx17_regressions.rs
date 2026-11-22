@@ -112,7 +112,7 @@ WebAssembly.instantiate(bytes, host.imports).then(({{ instance }}) => {{
 }
 
 #[test]
-fn issue1_reproducer_structured_binding_in_member_function() -> Result<(), String> {
+fn structured_binding_in_member_function() -> Result<(), String> {
     let source = r#"
 struct Pair {
     int first;
@@ -138,7 +138,7 @@ int main() {
 }
 
 #[test]
-fn issue1_structured_binding_by_reference_in_member_function() -> Result<(), String> {
+fn structured_binding_by_reference_in_member_function() -> Result<(), String> {
     let source = r#"
 struct Pair {
     int first;
@@ -167,7 +167,7 @@ int main() {
 }
 
 #[test]
-fn issue1_structured_binding_free_function_baseline() -> Result<(), String> {
+fn structured_binding_free_function_baseline() -> Result<(), String> {
     let source = r#"
 struct Pair {
     int first;
@@ -190,7 +190,7 @@ int main() {
 }
 
 #[test]
-fn issue2_reproducer_std_sort_array_decay() -> Result<(), String> {
+fn std_sort_array_decay() -> Result<(), String> {
     let source = r#"
 #include <algorithm>
 
@@ -206,7 +206,7 @@ int main() {
 }
 
 #[test]
-fn issue2_user_defined_template_iterator_decay() -> Result<(), String> {
+fn user_defined_template_iterator_decay() -> Result<(), String> {
     let source = r#"
 template <typename Iter>
 int count_elements(Iter first, Iter last) {
@@ -235,7 +235,7 @@ int main() {
 }
 
 #[test]
-fn issue2_template_reference_parameter_retains_array_type() -> Result<(), String> {
+fn template_reference_parameter_retains_array_type() -> Result<(), String> {
     let source = r#"
 template <typename T>
 bool is_same_size(const T& a, const T& b) {
@@ -257,7 +257,7 @@ int main() {
 }
 
 #[test]
-fn issue3_reproducer_range_for_in_member_function_nsdmi() -> Result<(), String> {
+fn range_for_in_member_function_nsdmi() -> Result<(), String> {
     let source = r#"
 struct Container {
     int values[3] = {10, 20, 30};
@@ -284,7 +284,7 @@ int main() {
 }
 
 #[test]
-fn issue3_range_for_in_member_function_ctor_init() -> Result<(), String> {
+fn range_for_in_member_function_ctor_init() -> Result<(), String> {
     let source = r#"
 struct Container {
     int values[3];
@@ -317,7 +317,7 @@ int main() {
 }
 
 #[test]
-fn issue3_range_for_in_member_function_container_iterators() -> Result<(), String> {
+fn range_for_in_member_function_container_iterators() -> Result<(), String> {
     let source = r#"
 #include <vector>
 
@@ -350,7 +350,7 @@ int main() {
 }
 
 #[test]
-fn issue3_range_for_free_function_baseline() -> Result<(), String> {
+fn range_for_free_function_baseline() -> Result<(), String> {
     let source = r#"
 int sum_array() {
     int values[3] = {10, 20, 30};
