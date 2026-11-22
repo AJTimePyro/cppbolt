@@ -1371,4 +1371,44 @@ int main() {
     Ok(())
 }
 
+#[test]
+fn test_reference_binding_ternary_lifetime_extension() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct Widget {
+    int id;
+    Widget(int i) : id(i) { std::printf("C_W:%d ", id); }
+    ~Widget() { std::printf("D_W:%d ", id); }
+};
+
+int main() {
+    std::printf("Start ");
+    {
+        // When cond is true, Widget(1) is constructed, Widget(2) is not.
+        // Widget(1) must stay alive until end of scope.
+        const Widget& w1 = 1 ? Widget(1) : Widget(2);
+        std::printf("Scope1Active ");
+    }
+    std::printf("Scope1End ");
+    {
+        // When cond is false, Widget(4) is constructed, Widget(3) is not.
+        // Widget(4) must stay alive until end of scope.
+        const Widget& w2 = 0 ? Widget(3) : Widget(4);
+        std::printf("Scope2Active ");
+    }
+    std::printf("Scope2End");
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(
+        stdout.trim(),
+        "Start C_W:1 Scope1Active D_W:1 Scope1End C_W:4 Scope2Active D_W:4 Scope2End"
+    );
+    Ok(())
+}
+
+
 

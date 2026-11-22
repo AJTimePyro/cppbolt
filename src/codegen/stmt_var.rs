@@ -31,9 +31,11 @@ impl<'a> Codegen<'a> {
                 let temp_count_before = ctx.temp_objects.len();
                 self.compile_reference_local(init_expr, ty, offset, ctx, code)?;
                 if ctx.temp_objects.len() > temp_count_before {
-                    let (_sname, temp_slot, _, clean_idx) = ctx.temp_objects.pop().unwrap();
+                    let new_temps = ctx.temp_objects.drain(temp_count_before..).collect::<Vec<_>>();
                     if let Some(scope) = ctx.scope_objects.last_mut() {
-                        scope.push((format!("{name}$ref_temp"), ty.clone(), temp_slot, clean_idx));
+                        for (_sname, temp_slot, _, clean_idx) in new_temps {
+                            scope.push((format!("{name}$ref_temp"), ty.clone(), temp_slot, clean_idx));
+                        }
                     }
                 }
             }
