@@ -590,7 +590,7 @@ int main() {
 }
 
 #[test]
-fn test_exceeding_max_cleanup_objects_errors() -> Result<(), String> {
+fn test_exceeding_max_cleanup_objects_errors() {
     let mut source = String::from("struct S { ~S() {} }; int main() {\n");
     for i in 0..65 {
         source.push_str(&format!("    S s{};\n", i));
@@ -601,12 +601,9 @@ fn test_exceeding_max_cleanup_objects_errors() -> Result<(), String> {
         stdlib: root.join("stdlib"),
     };
     let res = compile_with_provider(&source, "<input>", 256, &includes);
-    let err = match res {
-        Err(e) => e.to_string(),
-        Ok(_) => return Err("must fail compilation when exceeding 64 cleanup objects".to_string()),
-    };
+    assert!(res.is_err(), "must fail compilation when exceeding 64 cleanup objects");
+    let err = res.err().unwrap().to_string();
     assert!(err.contains("maximum of 64 cleanup objects"));
-    Ok(())
 }
 
 #[test]

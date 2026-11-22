@@ -30,11 +30,11 @@ impl<'a> Codegen<'a> {
             if let Some(init_expr) = init {
                 let temp_count_before = ctx.temp_objects.len();
                 self.compile_reference_local(init_expr, ty, offset, ctx, code)?;
-                if ctx.temp_objects.len() > temp_count_before
-                    && let Some((_sname, temp_slot, _, clean_idx)) = ctx.temp_objects.pop()
-                    && let Some(scope) = ctx.scope_objects.last_mut()
-                {
-                    scope.push((format!("{name}$ref_temp"), ty.clone(), temp_slot, clean_idx));
+                if ctx.temp_objects.len() > temp_count_before {
+                    let (_sname, temp_slot, _, clean_idx) = ctx.temp_objects.pop().unwrap();
+                    if let Some(scope) = ctx.scope_objects.last_mut() {
+                        scope.push((format!("{name}$ref_temp"), ty.clone(), temp_slot, clean_idx));
+                    }
                 }
             }
         } else if let Type::Struct(sname) = ty.strip_const() {

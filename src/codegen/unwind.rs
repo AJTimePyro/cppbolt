@@ -222,8 +222,10 @@ pub(super) fn stmt_can_throw_or_call(stmt: &Stmt) -> bool {
                 }
                 stack.push(body);
             }
-            StmtKind::Return(Some(e)) if expr_can_throw_or_call(e) => {
-                return true;
+            StmtKind::Return(e) => {
+                if e.as_ref().map(expr_can_throw_or_call).unwrap_or(false) {
+                    return true;
+                }
             }
             _ => {}
         }

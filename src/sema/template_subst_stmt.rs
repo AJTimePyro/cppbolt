@@ -114,7 +114,7 @@ pub fn substitute_stmt_with_sema(
         StmtKind::Throw(Some(expr)) => substitute_expr(expr, mapping, injected_class)?,
         StmtKind::Throw(None) => {}
         StmtKind::Try { .. } => {
-            substitute_try_stmt(&mut stmt.kind, mapping, injected_class, sema)?;
+            substitute_try_stmt(&mut stmt.kind, mapping, injected_class, sema.as_deref_mut())?;
         }
         StmtKind::Return(None)
         | StmtKind::Break
@@ -147,7 +147,7 @@ fn substitute_try_stmt(
     if let Some((ty, _)) = catch_param {
         *ty = substitute_type_with_sema(ty, mapping, injected_class, sema.as_deref_mut())?;
     }
-    substitute_stmt_with_sema(catch_body, mapping, injected_class, sema)?;
+    substitute_stmt_with_sema(catch_body, mapping, injected_class, sema.as_deref_mut())?;
     Ok(())
 }
 
