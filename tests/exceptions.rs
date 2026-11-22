@@ -1511,7 +1511,32 @@ fn test_throw_unsupported_64bit_type_errors() -> Result<(), String> {
     }
 }
 
-
-
-
+#[test]
+fn test_catch_all_not_last_handler_errors() -> Result<(), String> {
+    let source = r#"
+int main() {
+    try {
+        throw 1;
+    } catch (...) {
+    } catch (int e) {
+    }
+    return 0;
+}
+"#;
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let includes = RepoIncludes {
+        stdlib: root.join("stdlib"),
+    };
+    match compile_with_provider(source, "<input>", 256, &includes) {
+        Err(err) => {
+            let err_str = err.to_string();
+            if err_str.contains("catch-all handler (...) must be the last handler") {
+                Ok(())
+            } else {
+                Err(format!("unexpected error: {err_str}"))
+            }
+        }
+        Ok(_) => Err("must fail compilation when catch-all is not last".to_string()),
+    }
+}
 

@@ -137,10 +137,7 @@ impl Sema {
             | StmtKind::Expr(_) => {}
             StmtKind::Return(expr_opt) => self.analyze_return(expr_opt, stmt.line, stmt.col)?,
             StmtKind::Throw(expr_opt) => self.analyze_throw(expr_opt, stmt.line, stmt.col)?,
-            StmtKind::Try {
-                try_body,
-                catches,
-            } => {
+            StmtKind::Try { try_body, catches } => {
                 self.analyze_try_stmt(try_body, catches, stmt.line, stmt.col)?;
             }
             StmtKind::RangeFor { .. } => unreachable!("RangeFor is desugared before dispatch"),
@@ -178,7 +175,15 @@ impl Sema {
         col: usize,
     ) -> Result<(), CompileError> {
         self.analyze_stmt(try_body)?;
-        for clause in catches.iter_mut() {
+        let num_catches = catches.len();
+        for (i, clause) in catches.iter_mut().enumerate() {
+            if clause.param.is_none() && i + 1 < num_catches {
+                return Err(CompileError::new(
+                    "catch-all handler (...) must be the last handler for its try block",
+                    clause.body.line,
+                    clause.body.col,
+                ));
+            }
             self.enter_scope();
             if let Some((ty, name)) = &mut clause.param {
                 self.resolve_and_instantiate_type(ty, line, col)?;
