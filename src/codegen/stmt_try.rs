@@ -46,11 +46,7 @@ impl<'a> Codegen<'a> {
 
         for clause in catches.iter().rev() {
             code.push(OP_BLOCK);
-            if clause.param.is_none() {
-                code.push(TYPE_EXNREF);
-            } else {
-                code.push(TYPE_I32);
-            }
+            code.push(if clause.param.is_none() { TYPE_EXNREF } else { TYPE_I32 });
         }
 
         code.push(OP_TRY_TABLE);
@@ -59,12 +55,11 @@ impl<'a> Codegen<'a> {
         for (i, clause) in catches.iter().enumerate() {
             if clause.param.is_none() {
                 code.push(0x03); // catch_all_ref
-                write_u32(code, i as u32);
             } else {
                 code.push(0x00); // catch tag 0
                 write_u32(code, 0);
-                write_u32(code, i as u32);
             }
+            write_u32(code, i as u32);
         }
 
         self.compile_stmt(try_body, ctx, code)?;

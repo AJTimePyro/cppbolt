@@ -49,10 +49,10 @@ impl<'a> Codegen<'a> {
                 if let Some(idx) = clean_idx {
                     Self::emit_if_cleanup_bit_set(*idx, ctx, code);
                     self.emit_mark_cleanup_inactive(*idx, ctx, code);
-                    Self::emit_destroy_and_free_slot(*temp_slot, dtor_idx, free_idx, ctx.fp_local, code);
+                }
+                Self::emit_destroy_and_free_slot(*temp_slot, dtor_idx, free_idx, ctx.fp_local, code);
+                if clean_idx.is_some() {
                     code.push(OP_END);
-                } else {
-                    Self::emit_destroy_and_free_slot(*temp_slot, dtor_idx, free_idx, ctx.fp_local, code);
                 }
             }
         }
