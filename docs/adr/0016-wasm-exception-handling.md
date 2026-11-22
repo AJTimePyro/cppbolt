@@ -77,6 +77,7 @@ Each function context allocates a 64-bit local variable (`cleanup_mask_local: i6
 ### 4. Scope-Isolated Try/Catch and Rethrow (`src/codegen/stmt_try.rs`)
 A `try` statement compiles to an inner `try_table` targeting its catch handlers:
 - A `try` statement supports multiple sequential `catch` clauses (such as `catch (int)` followed by `catch (...)`). The compiler emits enclosing blocks for each clause and a single `try_table` with corresponding catch targets.
+- ISO C++17 [except.handle] handler ordering is strictly enforced: `catch (...)` must appear last in the handler sequence. If any catch clause follows `catch (...)`, semantic analysis rejects the program with a compile-time error.
 - Catching tag 0 binds the 32-bit integer or pointer payload into a frame slot if named (`catch (int e)` or `catch (const char* msg)`).
 - Catch-all (`catch (...)`) captures `exnref` for rethrow via `throw_ref`.
 - Thrown expressions are validated in semantic analysis (`is_supported_32bit_throw_type`) to ensure they evaluate to 32-bit scalar or pointer types matching WebAssembly tag 0. Unsupported 64-bit and floating-point throw expressions produce a compile error.
@@ -104,6 +105,7 @@ Fully constructed temporary objects created during expression evaluation registe
 ### Positive
 - Matches C++17 exception control flow and RAII lifetime semantics across function boundaries, nested blocks, and loops.
 - Supports multiple catch clauses per try block lowered to WebAssembly `try_table` clauses.
+- Enforces ISO C++17 handler ordering rejecting clauses after `catch (...)`.
 - Uses native WebAssembly instructions without JavaScript runtime trampolines.
 - Emits no unwinding instructions in leaf functions.
 - Destroys active automatic objects in reverse construction order.

@@ -14,6 +14,7 @@ Hardened exception handling across Phase 1 (Infrastructure), Phase 2 (Scope-Awar
    - Updated AST representation to `StmtKind::Try { try_body, catches: Vec<CatchClause> }`.
    - Updated the parser to accept arbitrary sequences of catch handlers (`catch (Type param)` and `catch (...)`).
    - Extended semantic analysis and template instantiation to scope and check each catch clause sequentially.
+   - Enforced ISO C++17 [except.handle] handler ordering: `catch (...)` must appear as the final clause in any try block.
    - Lowered multiple catches to WebAssembly `try_table` clauses with sequential enclosing target blocks, branching to matching handlers and unwinding only local try-scope cleanups.
 2. Guarded normal-path and conditional temporary destruction:
    - Added bitmask and non-null checks in `emit_clean_temporaries` and `emit_destroy_and_free_temp`.
@@ -31,7 +32,7 @@ Hardened exception handling across Phase 1 (Infrastructure), Phase 2 (Scope-Awar
 
 ### Verification Results
 
-- Exception test suite: all 40 tests in `tests/exceptions.rs` pass.
+- Exception test suite: all 41 tests in `tests/exceptions.rs` pass.
 - Census audit: all 7 tests in `tests/census_fixture.rs` pass (all source files under 500 lines, functions under 80 lines, parameters <= 5).
 - Oracle gate: all 909 corpus tests pass against native GCC/Clang compilers.
 

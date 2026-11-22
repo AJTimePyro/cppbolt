@@ -48,6 +48,30 @@ The following catalog lists diagnostics emitted by the compiler, paired with rea
 
 ### Unsupported C++ Features (`ErrorKind::Unsupported`)
 
+#### `catch-all handler (...) must be the last handler for its try block`
+- **Cause**: Placing a typed `catch` clause after a `catch (...)` handler in the same `try` block, violating ISO C++17 [except.handle].
+- **Trigger** (`tests/exceptions.rs`):
+  ```cpp
+  int main() {
+      try {
+          throw 1;
+      } catch (...) {
+      } catch (int x) { // error: catch-all handler (...) must be the last handler for its try block
+      }
+      return 0;
+  }
+  ```
+
+#### `thrown expression must be a 32-bit scalar, enum, or pointer type, but found '<type>'`
+- **Cause**: Throwing a 64-bit scalar (`long long`, `double`) or floating-point type on the 32-bit WebAssembly exception tag ABI.
+- **Trigger** (`tests/exceptions.rs`):
+  ```cpp
+  int main() {
+      throw 3.14; // error: thrown expression must be a 32-bit scalar, enum, or pointer type, but found 'double'
+      return 0;
+  }
+  ```
+
 #### `virtual inheritance is not supported`
 - **Cause**: A base class specifier includes the `virtual` keyword.
 - **Trigger** (`tests/negative/virtual_inheritance.cpp`):
@@ -481,6 +505,16 @@ The following catalog lists diagnostics emitted by the compiler, paired with rea
 ---
 
 ### Resource & Safety Diagnostics (`ErrorKind::Internal`)
+
+#### `cannot allocate cleanup bit: function exceeds maximum limit of 64 tracked RAII objects`
+- **Cause**: A single function declares 64 or more local automatic variables or subobjects with non-trivial destructors, exceeding the 64-bit unwinding bitmask capacity.
+- **Trigger** (`tests/exceptions.rs`):
+  ```cpp
+  struct S { ~S() {} };
+  void f() {
+      S s0; S s1; /* ... */ S s64; // error: cannot allocate cleanup bit: function exceeds maximum limit of 64 tracked RAII objects
+  }
+  ```
 
 #### `Nesting depth exceeds the supported limit`
 - **Cause**: An input program exceeds calibrated recursion depth limits (e.g. >1,600 nested parentheses or >1,599 nested `if` blocks) to protect the WebAssembly shadow stack.

@@ -86,7 +86,7 @@ cargo run --bin cppbolt-testrunner -- target/release/cppbolt-cli
 | **Scalar Pseudo-Destructors** | **Done** | No-op pseudo-destructor calls on scalar types (`p->~T()`, `x.~T()`), preserving receiver evaluation and side effects | `tests/c_basics/types/pseudo_destructor_scalar.cpp` |
 | **Destructors via Typedef Aliases** | **Done** | Explicit destructor calls resolved through typedef aliases (`sp->~ClassT()`), verifying target class identity | `tests/classes_oop/constructors_destructors/destructor_via_typedef.cpp` |
 | **Virtual Inheritance** | **Out of Scope** | Single, linear, and multiple inheritance supported; virtual base specifiers are rejected | `tests/negative/virtual_inheritance.cpp` |
-| **Exception Handling (`try`, `catch`, `throw`)** | **Done** | C++17 exception handling via WebAssembly `try_table` unwinding and dynamic 64-bit liveness tracking; single and multiple catch clauses per `try`, typed catches with 32-bit payload binding (scalars, enums, and pointers), catch-all (`catch (...)`), arbitrary catch nesting depth, rethrow (`throw;`), `std::terminate` on unhandled rethrow or throwing destructors, reverse destruction order for automatic objects, conditional expression temporary cleanup, reference lifetime extension across ternary expressions, constructor subobject cleanup on failure, and shadow-stack frame restoration | `tests/exceptions.rs` |
+| **Exception Handling (`try`, `catch`, `throw`)** | **Done** | C++17 exception handling via WebAssembly `try_table` unwinding and dynamic 64-bit liveness tracking; single and multiple catch clauses per `try`, handler order validation (`catch (...)` last per ISO C++17), typed catches with 32-bit payload binding (scalars, enums, and pointers), catch-all (`catch (...)`), arbitrary catch nesting depth, rethrow (`throw;`), `std::terminate` on unhandled rethrow or throwing destructors, reverse destruction order for automatic objects, conditional expression temporary cleanup, reference lifetime extension across ternary expressions, constructor subobject cleanup on failure, and shadow-stack frame restoration | `tests/exceptions.rs` |
 
 ---
 
@@ -191,6 +191,15 @@ For nested-member checks (`T::type` and multi-level chains), the compiler uses t
   - Instantiation caches record only completed specializations. A specialization still being built stays on the instantiation stack for recursive references. A failed instantiation restores the layouts, aliases, globals, methods and synthesized declarations it wrote, letting a later request retry it. Function templates drop their in-progress marker when body analysis fails; a failed body is never reused as a successful specialization.
 
   - `decltype(expr)` is supported. The operand is resolved after template substitution; a parenthesized lvalue gives `T&` and an unparenthesized id-expression or member access gives the declared type. Trailing return types (`auto f(T x) -> decltype(x.member())`) take part in template signature substitution, so an invalid expression discards only that candidate. See `tests/templates_operators/decltype_value_categories.cpp` and `tests/templates_operators/decltype_sfinae_fallback.cpp`.
+- **Exception Handling Semantics & Unwinding**:
+  - `try`, `catch`, and `throw` compile directly to WebAssembly Phase 4 exception instructions (`try_table`, `throw`, `throw_ref`).
+  - Functions containing calls, throws, or try blocks allocate a 64-bit runtime liveness mask (`cleanup_mask_local: i64`) to track object construction. Single functions are limited to 64 tracked RAII cleanup objects. Functions exceeding this ceiling fail compilation.
+  - When an exception propagates, active automatic variables, subobjects, and completed expression temporaries are destroyed in strict reverse order of construction.
+  - Destructor invocations during stack unwinding are wrapped in `try_table (catch_all -> unreachable)` blocks to immediately invoke `std::terminate()` if a destructor throws during unwinding.
+  - Multiple `catch` clauses per `try` statement are supported. Per ISO C++17 [except.handle], `catch (...)` must appear as the final clause in any try block.
+  - Thrown expressions must evaluate to 32-bit scalars, enums, or pointers matching WebAssembly tag 0 (`(i32) -> void`). 64-bit and floating-point throw expressions are rejected at compile time.
+  - In conditional expressions (`?:`, `&&`, `||`), temporaries in unexecuted branches are not constructed; normal and unwinding cleanups check the liveness mask and non-null slots to prevent double destruction.
+  - Reference binding to conditional expressions (`const T& ref = cond ? T(1) : T(2)`) extends the lifetime of the dynamically constructed temporary until the enclosing lexical scope exits.
 
 ### 2. Nesting Limits per Construct
 
