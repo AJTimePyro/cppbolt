@@ -4,6 +4,39 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-23: Exception Handling Phases 1–3 Hardening: Multiple Catches, Conditional Temporaries, and 32-Bit Payload ABI
+
+Hardened exception handling across Phase 1 (Infrastructure), Phase 2 (Scope-Aware Unwinding), and Phase 3 (Unwinding Correctness):
+
+### Summary of Work
+
+1. Implemented multiple `catch` clauses per `try` statement:
+   - Updated AST representation to `StmtKind::Try { try_body, catches: Vec<CatchClause> }`.
+   - Updated the parser to accept arbitrary sequences of catch handlers (`catch (Type param)` and `catch (...)`).
+   - Extended semantic analysis and template instantiation to scope and check each catch clause sequentially.
+   - Lowered multiple catches to WebAssembly `try_table` clauses with sequential enclosing target blocks, branching to matching handlers and unwinding only local try-scope cleanups.
+2. Guarded normal-path and conditional temporary destruction:
+   - Added bitmask and non-null checks in `emit_clean_temporaries` and `emit_destroy_and_free_temp`.
+   - Guaranteed that unexecuted branches in ternary expressions (`?:`) and short-circuit operators (`&&`, `||`) never invoke destructors or `free()` on unconstructed temporary instances.
+3. Extended reference binding lifetime across conditional expressions:
+   - Transferred all candidate temporaries created in reference initializers (`const T& ref = cond ? T(1) : T(2)`) to the enclosing scope.
+   - Preserved lifetime of whichever instance was dynamically constructed until enclosing scope exit without double-freeing unconstructed instances.
+4. Validated thrown expression types and supported pointer payloads:
+   - Added semantic validation (`is_supported_32bit_throw_type`) enforcing that thrown expressions evaluate to 32-bit scalar, enum, or pointer types matching WebAssembly tag 0 (`(i32) -> void`).
+   - Rejected non-32-bit and floating-point throw expressions with informative diagnostics.
+   - Supported pointer payload passing (`throw "msg"` / `catch (const char* e)`).
+5. Validated 64-cleanup-object architecture:
+   - Confirmed compile-time error enforcement when local cleanup variables reach 64 objects (`test_exceeding_max_cleanup_objects_errors`).
+   - Confirmed graceful fallback for expressions with over 64 chained temporaries (`wide_string_concatenation_compiles`).
+
+### Verification Results
+
+- Exception test suite: all 40 tests in `tests/exceptions.rs` pass.
+- Census audit: all 7 tests in `tests/census_fixture.rs` pass (all source files under 500 lines, functions under 80 lines, parameters <= 5).
+- Oracle gate: all 909 corpus tests pass against native GCC/Clang compilers.
+
+---
+
 ## 2026-11-21: C++17 SFINAE, Two-Phase Lookup, <type_traits>, and Constant Evaluation
 
 Implemented C++17 template substitution failure handling, two-phase name lookup with argument-dependent lookup (ADL), expression SFINAE via `decltype`, LLVM libc++ 23.1.5 `<type_traits>` integration, and constant expression hardening.

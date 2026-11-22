@@ -75,9 +75,11 @@ Each function context allocates a 64-bit local variable (`cleanup_mask_local: i6
 - During unwinding, `emit_cleanup_range` iterates over registered entries in reverse order, executing only those whose bit is set in the liveness mask.
 
 ### 4. Scope-Isolated Try/Catch and Rethrow (`src/codegen/stmt_try.rs`)
-A `try`/`catch` statement compiles to an inner `try_table` targeting its catch block:
-- Catching tag 0 binds the integer payload into a frame slot if named (`catch (int e)`).
+A `try` statement compiles to an inner `try_table` targeting its catch handlers:
+- A `try` statement supports multiple sequential `catch` clauses (such as `catch (int)` followed by `catch (...)`). The compiler emits enclosing blocks for each clause and a single `try_table` with corresponding catch targets.
+- Catching tag 0 binds the 32-bit integer or pointer payload into a frame slot if named (`catch (int e)` or `catch (const char* msg)`).
 - Catch-all (`catch (...)`) captures `exnref` for rethrow via `throw_ref`.
+- Thrown expressions are validated in semantic analysis (`is_supported_32bit_throw_type`) to ensure they evaluate to 32-bit scalar or pointer types matching WebAssembly tag 0. Unsupported 64-bit and floating-point throw expressions produce a compile error.
 - The compiler runs an AST pre-pass (`max_catch_depth`) to allocate `(max_depth + 1)` `TYPE_EXNREF` locals, giving each nested handler a dedicated local and preventing inner handlers from overwriting outer exception references.
 - Entering an inner catch block preserves the active exception payload in a dedicated frame slot and restores it on exit. This ensures that `throw;` within an outer handler resolves to the outer exception.
 - Only cleanups registered within the `try` block range (`start_clean_idx..end_clean_idx`) are executed when entering the catch block; outer function objects remain untouched and active.
@@ -92,19 +94,22 @@ Constructors register fully initialized base classes and member fields in the fu
 ### 7. Temporary Object Lifetime and Unwinding (`src/codegen/call_args.rs`, `src/codegen/expr_call.rs`, `src/codegen/raii.rs`)
 Fully constructed temporary objects created during expression evaluation register cleanup entries with the liveness bitmask:
 - If a later argument expression or a called function exits with an exception, completed temporaries run their destructors and free their heap buffers in reverse construction order.
+- In conditional expressions (`?:`, `&&`, `||`), temporaries in unexecuted branches are never constructed. Normal-path cleanup (`emit_clean_temporaries`) and unwinding cleanup guard destructor and `free` calls with liveness bitmask and non-null checks, preventing double-frees or null pointer dereferences on unconstructed instances.
 - When an argument passes by value, the caller deactivates cleanup tracking only for the outer parameter object passed to the callee, leaving intermediate sub-expression temporaries active for full-expression destruction.
-- Reference binding (`const T& ref = ...`) extends the temporary's lifetime by transferring its cleanup entry to the enclosing lexical scope.
+- Reference binding (`const T& ref = ...`) extends the temporary's lifetime by transferring its cleanup entry to the enclosing lexical scope. When bound to conditional expressions (`const T& ref = cond ? T(1) : T(2)`), all candidate temporaries transfer to the scope, and scope exit destroys only the dynamically constructed instance.
 - If a statement contains more than 64 temporaries across chained binary expressions, `register_temp_cleanup` stops allocating mask slots, and the temporaries fall back to normal full-expression reclamation.
 
 ## Consequences
 
 ### Positive
 - Matches C++17 exception control flow and RAII lifetime semantics across function boundaries, nested blocks, and loops.
+- Supports multiple catch clauses per try block lowered to WebAssembly `try_table` clauses.
 - Uses native WebAssembly instructions without JavaScript runtime trampolines.
 - Emits no unwinding instructions in leaf functions.
 - Destroys active automatic objects in reverse construction order.
 - Supports arbitrary statically nested catch handlers and expression temporary cleanup.
+- Handles conditional expression temporaries and reference binding lifetime extension.
 
 ### Negative / Trade-offs
 - Limits single functions to 64 tracked automatic/local variable cleanup objects, checked at compile time.
-- Uses an integer payload (tag 0); class hierarchies (`std::exception`) with RTTI type matching are deferred to a subsequent milestone.
+- Uses a 32-bit payload (tag 0); class hierarchies (`std::exception`) with RTTI type matching are deferred to Phase 4.
