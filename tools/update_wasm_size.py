@@ -19,23 +19,18 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WASM = os.path.join(ROOT, "target/wasm32-unknown-unknown/release/cppbolt.wasm")
-DOC = os.path.join(ROOT, "docs/architecture.md")
+DOC = os.path.join(ROOT, "docs/book/internals/architecture.md")
 
 # The size baseline the growth is measured against.
 BASELINE_BYTES = 772391
 BASELINE_COMMIT = "45153ff"
 
 # The paragraph that carries the measured size.
-PARAGRAPH = """The release compiler module built for `wasm32-unknown-unknown` is currently
-{raw:,} bytes raw and {gzip:,} bytes with `gzip -9 -n`.  The module has grown {growth:+.1f} %
-from {baseline:,} bytes at commit `{baseline_commit}`.
-"""
+PARAGRAPH = "The release WebAssembly compiler module built for `wasm32-unknown-unknown` is currently {raw:,} bytes raw and {gzip:,} bytes with `gzip -9 -n`."
 
-# The paragraph that the script replaces.
+# The pattern that the script replaces.
 PATTERN = re.compile(
-    r"The release compiler module built for `wasm32-unknown-unknown` is currently\s.*?"
-    r"(?=The core does not spawn processes)",
-    re.S,
+    r"The release WebAssembly compiler module built for `wasm32-unknown-unknown` is currently\s.*?\.",
 )
 
 
@@ -78,9 +73,9 @@ def main():
         return 1
     if args.check:
         if updated != text:
-            print("docs/architecture.md is out of date")
+            print("docs/book/internals/architecture.md is out of date")
             return 1
-        print("docs/architecture.md is up to date")
+        print("docs/book/internals/architecture.md is up to date")
         return 0
     with open(DOC, "w") as fh:
         fh.write(updated)
