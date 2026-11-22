@@ -38,8 +38,8 @@ Standard containers like `std::array<T, N>` and type inspection traits like `std
 
 ## Consequences
 ### Positive
-- Compiles `std::array<T, N>` with full iterator support, index access, bounds queries, and member methods (`tests/mini_stl/array_basic.cpp`).
-- Compiles foundational type traits in `<type_traits>` including `integral_constant`, `true_type`, `false_type`, `is_same`, `remove_reference`, and `remove_reference_t` (`tests/mini_stl/type_traits_basic.cpp`).
+- Compiles `std::array<T, N>` with full iterator support, index access, bounds queries, and member methods (`tests/stdlib/array_basic.cpp`).
+- Compiles foundational type traits in `<type_traits>` including `integral_constant`, `true_type`, `false_type`, `is_same`, `remove_reference`, and `remove_reference_t` (`tests/stdlib/type_traits_basic.cpp`).
 - Evaluates compile-time array bounds expressions cleanly across tests without runtime overhead (`tests/c_basics/pointers_arrays/constexpr_fold_basic.cpp`).
 - Full and partial specializations resolve predictably according to standard C++ partial ordering rules (`tests/templates_operators/template_full_spec.cpp`, `tests/templates_operators/template_partial_spec.cpp`).
 

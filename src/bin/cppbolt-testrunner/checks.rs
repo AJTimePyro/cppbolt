@@ -15,7 +15,7 @@ pub(super) fn check_variant_tests() -> usize {
         ("c_basics_variant", "c_basics"),
         ("classes_oop_variant", "classes_oop"),
         ("memory_model_variant", "memory_model"),
-        ("mini_stl_variant", "mini_stl"),
+        ("stdlib_variant", "stdlib"),
     ];
     let mut failures = 0;
     for (variant, main) in PAIRS {

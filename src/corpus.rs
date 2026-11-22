@@ -22,8 +22,8 @@ pub const FEATURES: &[&str] = &[
     "runtime_trap",
     "templates_operators",
     "templates_operators_variant",
-    "mini_stl",
-    "mini_stl_variant",
+    "stdlib",
+    "stdlib_variant",
     "independent",
     "cxx17",
 ];

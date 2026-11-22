@@ -26,8 +26,8 @@ POSITIVE_DIRS = [
     "memory_model",
     "memory_model_variant",
     "templates_operators",
-    "mini_stl",
-    "mini_stl_variant",
+    "stdlib",
+    "stdlib_variant",
 ]
 
 # These tests intentionally observe the custom WebAssembly allocator, so a
