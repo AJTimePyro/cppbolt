@@ -66,6 +66,9 @@ const PRINTF_BODY: &[u8] = &[
 ];
 
 /// Emits the shared variadic printf implementation.
+///
+/// Assumes host import slots 0, 1, and 2 are print_char, print_int, and print_double
+/// as emitted by `program_emit.rs::emit_imports`.
 pub fn emit_printf(func_print_char: u32, func_print_int: u32, func_print_double: u32) -> FuncBody {
     debug_assert_eq!(
         func_print_char, 0,
