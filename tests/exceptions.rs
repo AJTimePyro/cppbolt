@@ -1463,6 +1463,44 @@ int main() {
     Ok(())
 }
 
+#[test]
+fn test_throw_and_catch_pointer_payload() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+int main() {
+    try {
+        const char* msg = "hello exception";
+        throw msg;
+    } catch (const char* e) {
+        std::printf("Caught:%s", e);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Caught:hello exception");
+    Ok(())
+}
+
+#[test]
+fn test_throw_unsupported_64bit_type_errors() {
+    let source = "int main() { throw 3.14; }";
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let includes = RepoIncludes {
+        stdlib: root.join("stdlib"),
+    };
+    let res = compile_with_provider(source, "<input>", 256, &includes);
+    assert!(res.is_err(), "must fail compilation when throwing non-32-bit types");
+    let err = res.err().unwrap().to_string();
+    assert!(
+        err.contains("requires typed exceptions (Phase 4)") || err.contains("unsupported throw type"),
+        "error was: {err}"
+    );
+}
+
+
 
 
 

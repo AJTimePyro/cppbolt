@@ -115,7 +115,7 @@ pub(crate) use layout_types::VTableSlotInfo;
 pub use layout_types::{StructField, StructLayout};
 pub(crate) use receiver::{receiver_is_const_type, sig_receiver_is_const};
 pub use sema_state::{AliasVisibility, Sema};
-pub(crate) use sema_types::{ConversionFailure, DeferredMethod};
+pub(crate) use sema_types::{is_supported_32bit_throw_type, ConversionFailure, DeferredMethod};
 pub use sema_types::{Scope, VarSymbol};
 use std::collections::{HashMap, HashSet};
 

@@ -136,10 +136,7 @@ impl Sema {
             | StmtKind::StaticAssert { .. }
             | StmtKind::Expr(_) => {}
             StmtKind::Return(expr_opt) => self.analyze_return(expr_opt, stmt.line, stmt.col)?,
-            StmtKind::Throw(Some(expr)) => {
-                self.analyze_expr(expr)?;
-            }
-            StmtKind::Throw(None) => {}
+            StmtKind::Throw(expr_opt) => self.analyze_throw(expr_opt, stmt.line, stmt.col)?,
             StmtKind::Try {
                 try_body,
                 catches,
@@ -149,6 +146,25 @@ impl Sema {
             StmtKind::RangeFor { .. } => unreachable!("RangeFor is desugared before dispatch"),
             StmtKind::StructuredBinding { .. } => {
                 unreachable!("StructuredBinding is desugared before dispatch")
+            }
+        }
+        Ok(())
+    }
+
+    fn analyze_throw(
+        &mut self,
+        expr_opt: &mut Option<Expr>,
+        line: usize,
+        col: usize,
+    ) -> Result<(), CompileError> {
+        if let Some(expr) = expr_opt {
+            let ty = self.analyze_expr(expr)?;
+            if !is_supported_32bit_throw_type(&ty) {
+                return Err(CompileError::new(
+                    "throwing non-32-bit or floating-point type requires typed exceptions (Phase 4)",
+                    line,
+                    col,
+                ));
             }
         }
         Ok(())
