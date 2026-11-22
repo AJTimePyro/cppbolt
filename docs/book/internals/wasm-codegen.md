@@ -11,6 +11,7 @@ The code generation stage lowers the typed AST and semantic symbol table directl
 3. **Fixed-Width LEB128 Patching**: Because the final stack frame size is only known after traversing the entire function body, prologues and epilogues emit 5-byte fixed-width LEB128 placeholders that are patched in place after body lowering.
 4. **Binary Section Assembly**: Packs types, imports, functions, tables, memory, globals, exports, elements, code bodies, and data segments into the standard WebAssembly binary module format (`src/wasm/module.rs`).
 5. **List Initialization Lowering**: Emits zero-fill stores for empty braces (`{}`), lowers aggregate field, base subobject, and brace-elided array/subaggregate stores across local and global scopes (`src/codegen/stmt_var_init.rs`, `src/codegen/function_global_init.rs`), allocates frame slots for typed temporaries (`Type{args...}.member()`), and generates loops for dynamic array initialization (`new T[n]{...}`) in `src/codegen/expr_new_array.rs` to value-initialize trailing elements.
+6. **Bulk Memory Operations**: Lowers struct byte copies to `memory.copy` (`0xFC 0x0A`) and scalar array zero-initialization to `memory.fill` (`0xFC 0x0B`), eliminating repetitive unrolled load/store instructions and closure monomorphization.
 
 ---
 

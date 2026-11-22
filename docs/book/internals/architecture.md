@@ -4,7 +4,7 @@
 
 The core library is entirely OS-agnostic and dependency-free: it performs no direct filesystem I/O, spawns no child processes, and requires no multi-threading runtime. Host environments supply include files through the `IncludeProvider` trait.
 
-The release WebAssembly compiler module built for `wasm32-unknown-unknown` is currently 842,723 bytes raw and 244,401 bytes with `gzip -9 -n`.
+The release WebAssembly compiler module built for `wasm32-unknown-unknown` is currently 1,237,301 bytes raw and 380,025 bytes with `gzip -9 -n`.
 
 ---
 
