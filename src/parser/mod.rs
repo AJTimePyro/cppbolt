@@ -23,6 +23,7 @@ mod prefix;
 mod static_assert;
 mod stmt;
 mod stmt_selection;
+mod stmt_try;
 mod struct_align;
 mod structs;
 mod structs_nested;

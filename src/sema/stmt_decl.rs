@@ -226,7 +226,7 @@ impl Sema {
     }
 
     /// Registers a variable with automatic storage duration.
-    fn declare_local_var(
+    pub(super) fn declare_local_var(
         &mut self,
         name: &str,
         ty: &Type,

@@ -54,6 +54,7 @@ impl Parser {
             }
             TokenKind::KwReturn => self.parse_return_stmt(line, col),
             TokenKind::KwThrow => self.parse_throw_stmt(line, col),
+            TokenKind::KwTry => self.parse_try_stmt(line, col),
             TokenKind::KwStatic => self.parse_static_stmt(),
             TokenKind::KwNamespace => self.parse_local_namespace_alias(line, col),
             _ => self.parse_expr_or_decl_stmt(line, col),
@@ -132,21 +133,6 @@ impl Parser {
         };
         self.expect(TokenKind::Semi)?;
         Ok(Stmt::new(StmtKind::Return(expr), line, col))
-    }
-
-    fn parse_throw_stmt(&mut self, line: usize, col: usize) -> Result<Stmt, CompileError> {
-        self.advance();
-        if self.peek() != &TokenKind::Semi && self.peek() != &TokenKind::Eof {
-            let _ = self.parse_expr()?;
-        }
-        if self.peek() == &TokenKind::Semi {
-            self.advance();
-        }
-        Err(CompileError::new(
-            "C++ exception handling ('throw') is not supported on this WebAssembly target",
-            line,
-            col,
-        ))
     }
 
     fn parse_static_stmt(&mut self) -> Result<Stmt, CompileError> {

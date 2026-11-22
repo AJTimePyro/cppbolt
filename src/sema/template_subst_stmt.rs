@@ -111,6 +111,11 @@ pub fn substitute_stmt_with_sema(
         StmtKind::TypeAlias { ty, .. } => {
             *ty = substitute_type_with_sema(ty, mapping, injected_class, sema)?;
         }
+        StmtKind::Throw(Some(expr)) => substitute_expr(expr, mapping, injected_class)?,
+        StmtKind::Throw(None) => {}
+        StmtKind::Try { .. } => {
+            substitute_try_stmt(&mut stmt.kind, mapping, injected_class, sema.as_deref_mut())?;
+        }
         StmtKind::Return(None)
         | StmtKind::Break
         | StmtKind::Continue
@@ -121,6 +126,28 @@ pub fn substitute_stmt_with_sema(
         | StmtKind::NamespaceAlias { .. }
         | StmtKind::StaticAssert { .. } => {}
     }
+    Ok(())
+}
+
+fn substitute_try_stmt(
+    kind: &mut StmtKind,
+    mapping: &HashMap<String, TemplateArg>,
+    injected_class: Option<(&str, &Type)>,
+    mut sema: Option<&mut crate::sema::Sema>,
+) -> Result<(), CompileError> {
+    let StmtKind::Try {
+        try_body,
+        catch_param,
+        catch_body,
+    } = kind
+    else {
+        return Ok(());
+    };
+    substitute_stmt_with_sema(try_body, mapping, injected_class, sema.as_deref_mut())?;
+    if let Some((ty, _)) = catch_param {
+        *ty = substitute_type_with_sema(ty, mapping, injected_class, sema.as_deref_mut())?;
+    }
+    substitute_stmt_with_sema(catch_body, mapping, injected_class, sema.as_deref_mut())?;
     Ok(())
 }
 

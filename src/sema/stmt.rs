@@ -63,17 +63,22 @@ impl Sema {
         Ok(())
     }
 
-    /// Analyzes one statement.
-    ///
-    /// Every statement kind is handled by its own helper so that this
-    /// function stays a dispatcher.
-    pub(super) fn analyze_stmt(&mut self, stmt: &mut Stmt) -> Result<(), CompileError> {
+    fn desugar_stmt(&mut self, stmt: &mut Stmt) -> Result<(), CompileError> {
         if let StmtKind::RangeFor { .. } = stmt.kind {
             *stmt = self.desugar_range_for(stmt.clone())?;
         }
         if let StmtKind::StructuredBinding { .. } = stmt.kind {
             *stmt = self.desugar_structured_binding(stmt.clone())?;
         }
+        Ok(())
+    }
+
+    /// Analyzes one statement.
+    ///
+    /// Every statement kind is handled by its own helper so that this
+    /// function stays a dispatcher.
+    pub(super) fn analyze_stmt(&mut self, stmt: &mut Stmt) -> Result<(), CompileError> {
+        self.desugar_stmt(stmt)?;
         // A compound block has its own budget, so a nested `if` with its
         // block costs one statement level and one block level.
         if let StmtKind::Compound(stmts) = &mut stmt.kind {
@@ -117,12 +122,8 @@ impl Sema {
             | StmtKind::Switch { .. } => {
                 self.analyze_flow_stmt(&mut stmt.kind, stmt.line, stmt.col)?;
             }
-            StmtKind::Break => {
-                self.analyze_break(stmt.line, stmt.col)?;
-            }
-            StmtKind::Continue => {
-                self.analyze_continue(stmt.line, stmt.col)?;
-            }
+            StmtKind::Break => self.analyze_break(stmt.line, stmt.col)?,
+            StmtKind::Continue => self.analyze_continue(stmt.line, stmt.col)?,
             StmtKind::Case(expr, val) => {
                 *val = self.eval_const_int_expr(expr, stmt.line, stmt.col)?;
             }
@@ -134,14 +135,44 @@ impl Sema {
             | StmtKind::TypeAlias { .. }
             | StmtKind::StaticAssert { .. }
             | StmtKind::Expr(_) => {}
-            StmtKind::Return(expr_opt) => {
-                self.analyze_return(expr_opt, stmt.line, stmt.col)?;
+            StmtKind::Return(expr_opt) => self.analyze_return(expr_opt, stmt.line, stmt.col)?,
+            StmtKind::Throw(Some(expr)) => {
+                self.analyze_expr(expr)?;
+            }
+            StmtKind::Throw(None) => {}
+            StmtKind::Try {
+                try_body,
+                catch_param,
+                catch_body,
+            } => {
+                self.analyze_try_stmt(try_body, catch_param, catch_body, stmt.line, stmt.col)?;
             }
             StmtKind::RangeFor { .. } => unreachable!("RangeFor is desugared before dispatch"),
             StmtKind::StructuredBinding { .. } => {
                 unreachable!("StructuredBinding is desugared before dispatch")
             }
         }
+        Ok(())
+    }
+
+    fn analyze_try_stmt(
+        &mut self,
+        try_body: &mut Stmt,
+        catch_param: &mut Option<(Type, String)>,
+        catch_body: &mut Stmt,
+        line: usize,
+        col: usize,
+    ) -> Result<(), CompileError> {
+        self.analyze_stmt(try_body)?;
+        self.enter_scope();
+        if let Some((ty, name)) = catch_param {
+            self.resolve_and_instantiate_type(ty, line, col)?;
+            if !name.is_empty() {
+                self.declare_local_var(name, ty, line, col)?;
+            }
+        }
+        self.analyze_stmt(catch_body)?;
+        self.exit_scope();
         Ok(())
     }
 

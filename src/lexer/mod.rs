@@ -364,6 +364,8 @@ fn classify_word(word: &str) -> TokenKind {
         "explicit" => TokenKind::KwExplicit,
         "friend" => TokenKind::KwFriend,
         "throw" => TokenKind::KwThrow,
+        "try" => TokenKind::KwTry,
+        "catch" => TokenKind::KwCatch,
         "true" => TokenKind::BoolLiteral(true),
         "false" => TokenKind::BoolLiteral(false),
         _ => TokenKind::Ident(word.to_string()),

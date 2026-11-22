@@ -44,6 +44,14 @@ pub(super) fn collect_static_vars(
         | StmtKind::Switch { body, .. } => {
             collect_static_vars(body, function, out);
         }
+        StmtKind::Try {
+            try_body,
+            catch_body,
+            ..
+        } => {
+            collect_static_vars(try_body, function, out);
+            collect_static_vars(catch_body, function, out);
+        }
         _ => {}
     }
 }

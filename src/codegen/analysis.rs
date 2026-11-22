@@ -86,6 +86,12 @@ pub(super) fn check_stmt_has_new_delete(stmt: &Stmt) -> bool {
             check_expr_has_new_delete(expr) || check_stmt_has_new_delete(body)
         }
         StmtKind::Return(e) => e.as_ref().map(check_expr_has_new_delete).unwrap_or(false),
+        StmtKind::Throw(e) => e.as_ref().map(check_expr_has_new_delete).unwrap_or(false),
+        StmtKind::Try {
+            try_body,
+            catch_body,
+            ..
+        } => check_stmt_has_new_delete(try_body) || check_stmt_has_new_delete(catch_body),
         _ => false,
     }
 }
@@ -208,6 +214,15 @@ pub(super) fn collect_address_taken_stmt(stmt: &Stmt, address_taken: &mut HashSe
             collect_address_taken_stmt(body, address_taken);
         }
         StmtKind::Return(Some(e)) => collect_address_taken_expr(e, address_taken),
+        StmtKind::Throw(Some(e)) => collect_address_taken_expr(e, address_taken),
+        StmtKind::Try {
+            try_body,
+            catch_body,
+            ..
+        } => {
+            collect_address_taken_stmt(try_body, address_taken);
+            collect_address_taken_stmt(catch_body, address_taken);
+        }
         StmtKind::Switch { expr, body } => {
             collect_address_taken_expr(expr, address_taken);
             collect_address_taken_stmt(body, address_taken);
@@ -409,6 +424,15 @@ pub(super) fn collect_stmt_calls(stmt: &Stmt, calls: &mut HashSet<String>) {
             collect_stmt_calls(body, calls);
         }
         StmtKind::Return(Some(e)) => collect_expr_calls(e, calls),
+        StmtKind::Throw(Some(e)) => collect_expr_calls(e, calls),
+        StmtKind::Try {
+            try_body,
+            catch_body,
+            ..
+        } => {
+            collect_stmt_calls(try_body, calls);
+            collect_stmt_calls(catch_body, calls);
+        }
         StmtKind::Switch { expr, body } => {
             collect_expr_calls(expr, calls);
             collect_stmt_calls(body, calls);
