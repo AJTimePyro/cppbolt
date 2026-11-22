@@ -360,22 +360,17 @@ impl Expr {
             return UNRENDERABLE_EXPR.to_string();
         };
         match op {
-            UnaryOp::PostInc => return format!("{}++", expr.to_source()),
-            UnaryOp::PostDec => return format!("{}--", expr.to_source()),
-            _ => {}
+            UnaryOp::PostInc => format!("{}++", expr.to_source()),
+            UnaryOp::PostDec => format!("{}--", expr.to_source()),
+            UnaryOp::PreInc => format!("++{}", expr.to_source()),
+            UnaryOp::PreDec => format!("--{}", expr.to_source()),
+            UnaryOp::Neg => format!("-{}", expr.to_source()),
+            UnaryOp::Plus => format!("+{}", expr.to_source()),
+            UnaryOp::Not => format!("!{}", expr.to_source()),
+            UnaryOp::BitNot => format!("~{}", expr.to_source()),
+            UnaryOp::Deref => format!("*{}", expr.to_source()),
+            UnaryOp::AddrOf => format!("&{}", expr.to_source()),
         }
-        let sym = match op {
-            UnaryOp::Neg => "-",
-            UnaryOp::Plus => "+",
-            UnaryOp::Not => "!",
-            UnaryOp::BitNot => "~",
-            UnaryOp::Deref => "*",
-            UnaryOp::AddrOf => "&",
-            UnaryOp::PreInc => "++",
-            UnaryOp::PreDec => "--",
-            UnaryOp::PostInc | UnaryOp::PostDec => unreachable!(),
-        };
-        format!("{}{}", sym, expr.to_source())
     }
 
     fn render_binary(&self) -> String {
@@ -385,7 +380,12 @@ impl Expr {
         else {
             return UNRENDERABLE_EXPR.to_string();
         };
-        format!("({} {} {})", left.to_source(), op.symbol(), right.to_source())
+        format!(
+            "({} {} {})",
+            left.to_source(),
+            op.symbol(),
+            right.to_source()
+        )
     }
 
     pub fn is_lvalue(&self) -> bool {

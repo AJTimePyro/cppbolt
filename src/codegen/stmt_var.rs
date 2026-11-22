@@ -154,8 +154,10 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let elem_size = u32::try_from(decl.elem_ty.size_of(&self.sema.struct_sizes))
-            .map_err(|_| crate::internal_error!(decl.stmt.line, decl.stmt.col, "array is too large"))?;
+        let elem_size =
+            u32::try_from(decl.elem_ty.size_of(&self.sema.struct_sizes)).map_err(|_| {
+                crate::internal_error!(decl.stmt.line, decl.stmt.col, "array is too large")
+            })?;
         let init_list = match decl.init {
             Some(Expr::InitializerList { elements, .. })
             | Some(Expr::TypedInitList { elements, .. }) => Some(elements.as_slice()),
@@ -197,8 +199,10 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        let elem_size = u32::try_from(decl.elem_ty.size_of(&self.sema.struct_sizes))
-            .map_err(|_| crate::internal_error!(decl.stmt.line, decl.stmt.col, "array is too large"))?;
+        let elem_size =
+            u32::try_from(decl.elem_ty.size_of(&self.sema.struct_sizes)).map_err(|_| {
+                crate::internal_error!(decl.stmt.line, decl.stmt.col, "array is too large")
+            })?;
         let init_list = match decl.init {
             Some(Expr::InitializerList { elements, .. })
             | Some(Expr::TypedInitList { elements, .. }) => Some(elements.as_slice()),
@@ -219,7 +223,11 @@ impl<'a> Codegen<'a> {
                 .ok_or_else(|| {
                     crate::internal_error!(decl.stmt.line, decl.stmt.col, "array is too large")
                 })?;
-            scope_entries.push((format!("{}[{}]", decl.name, i), decl.elem_ty.clone(), elem_offset));
+            scope_entries.push((
+                format!("{}[{}]", decl.name, i),
+                decl.elem_ty.clone(),
+                elem_offset,
+            ));
             if let Some(cur) = cursor.as_mut()
                 && !cur.is_empty()
             {
@@ -297,7 +305,12 @@ impl<'a> Codegen<'a> {
         write_u32(code, slot_offset);
     }
 
-    pub(crate) fn emit_slot_store(slot_offset: u32, fp_local: u32, val_local: u32, code: &mut Vec<u8>) {
+    pub(crate) fn emit_slot_store(
+        slot_offset: u32,
+        fp_local: u32,
+        val_local: u32,
+        code: &mut Vec<u8>,
+    ) {
         code.push(OP_LOCAL_GET);
         write_u32(code, fp_local);
         code.push(OP_LOCAL_GET);
