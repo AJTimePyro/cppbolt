@@ -102,24 +102,12 @@ impl<'a> Codegen<'a> {
         self.compile_lvalue_addr(target, ctx, code)?;
         code.push(OP_LOCAL_SET);
         write_u32(code, ctx.scratch2); // dest addr
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.scratch2);
-        code.push(OP_I32_STORE);
-        write_u32(code, 2);
-        write_u32(code, dest_slot);
+        Self::emit_slot_store(dest_slot, ctx.fp_local, ctx.scratch2, code);
 
         self.compile_lvalue_addr(value, ctx, code)?;
         code.push(OP_LOCAL_SET);
         write_u32(code, ctx.scratch1); // src addr
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.scratch1);
-        code.push(OP_I32_STORE);
-        write_u32(code, 2);
-        write_u32(code, src_slot);
+        Self::emit_slot_store(src_slot, ctx.fp_local, ctx.scratch1, code);
 
         let size = self
             .sema
@@ -130,27 +118,17 @@ impl<'a> Codegen<'a> {
         super::raii::emit_struct_byte_copy(
             size,
             0,
-            |code| {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.fp_local);
-                code.push(OP_I32_LOAD);
-                write_u32(code, 2);
-                write_u32(code, dest_slot);
+            super::raii::ByteCopyAddr::Slot {
+                fp_local: ctx.fp_local,
+                slot: dest_slot,
             },
-            |code| {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.fp_local);
-                code.push(OP_I32_LOAD);
-                write_u32(code, 2);
-                write_u32(code, src_slot);
+            super::raii::ByteCopyAddr::Slot {
+                fp_local: ctx.fp_local,
+                slot: src_slot,
             },
             code,
         );
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_I32_LOAD);
-        write_u32(code, 2);
-        write_u32(code, dest_slot);
+        Self::emit_slot_load(dest_slot, ctx.fp_local, code);
         Ok(())
     }
 
@@ -318,17 +296,9 @@ impl<'a> Codegen<'a> {
         write_u32(code, 2);
         write_u32(code, dest_slot);
 
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_I32_LOAD);
-        write_u32(code, 2);
-        write_u32(code, dest_slot);
+        Self::emit_slot_load(dest_slot, ctx.fp_local, code);
 
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_I32_LOAD);
-        write_u32(code, 2);
-        write_u32(code, dest_slot);
+        Self::emit_slot_load(dest_slot, ctx.fp_local, code);
         self.emit_load(ty, 0, code);
         self.emit_conversion(ty, &arithmetic_ty, code);
         self.compile_expr(value, ctx, code)?;
@@ -352,11 +322,7 @@ impl<'a> Codegen<'a> {
         self.emit_conversion(&arithmetic_ty, ty, code);
         self.emit_store(ty, 0, code);
 
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_I32_LOAD);
-        write_u32(code, 2);
-        write_u32(code, dest_slot);
+        Self::emit_slot_load(dest_slot, ctx.fp_local, code);
         self.emit_load(ty, 0, code);
 
         Ok(())

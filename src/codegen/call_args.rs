@@ -143,19 +143,9 @@ impl<'a> Codegen<'a> {
         write_u32(code, self.func_indices["malloc"]);
         code.push(OP_LOCAL_SET);
         write_u32(code, ctx.scratch1); // temp_ptr
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.scratch1);
-        code.push(OP_I32_STORE);
-        write_u32(code, 2);
-        write_u32(code, temp_ptr_slot);
+        Self::emit_slot_store(temp_ptr_slot, ctx.fp_local, ctx.scratch1, code);
 
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_I32_LOAD);
-        write_u32(code, 2);
-        write_u32(code, temp_ptr_slot);
+        Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
         self.compile_expr(a, ctx, code)?;
         code.push(OP_CALL);
         write_u32(code, ctor_idx);
@@ -163,22 +153,14 @@ impl<'a> Codegen<'a> {
         let temp_slot = ctx.alloc_frame(4, 4)?;
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.fp_local);
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_I32_LOAD);
-        write_u32(code, 2);
-        write_u32(code, temp_ptr_slot);
+        Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
         code.push(OP_I32_STORE);
         write_u32(code, 2);
         write_u32(code, temp_slot);
 
         ctx.temp_objects.push((psname.to_string(), temp_slot, true));
 
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_I32_LOAD);
-        write_u32(code, 2);
-        write_u32(code, temp_ptr_slot);
+        Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
         Ok(())
     }
 
@@ -266,19 +248,9 @@ impl<'a> Codegen<'a> {
         write_u32(code, self.func_indices["malloc"]);
         code.push(OP_LOCAL_SET);
         write_u32(code, ctx.scratch1);
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.scratch1);
-        code.push(OP_I32_STORE);
-        write_u32(code, 2);
-        write_u32(code, temp_ptr_slot);
+        Self::emit_slot_store(temp_ptr_slot, ctx.fp_local, ctx.scratch1, code);
 
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_I32_LOAD);
-        write_u32(code, 2);
-        write_u32(code, temp_ptr_slot);
+        Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
         self.compile_lvalue_addr(a, ctx, code)?;
         code.push(OP_CALL);
         write_u32(code, ctor_idx);
@@ -286,22 +258,14 @@ impl<'a> Codegen<'a> {
         let temp_slot = ctx.alloc_frame(4, 4)?;
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.fp_local);
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_I32_LOAD);
-        write_u32(code, 2);
-        write_u32(code, temp_ptr_slot);
+        Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
         code.push(OP_I32_STORE);
         write_u32(code, 2);
         write_u32(code, temp_slot);
 
         ctx.temp_objects.push((sname.to_string(), temp_slot, false));
 
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_I32_LOAD);
-        write_u32(code, 2);
-        write_u32(code, temp_ptr_slot);
+        Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
         Ok(())
     }
 

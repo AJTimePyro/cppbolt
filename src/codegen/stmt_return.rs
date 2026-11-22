@@ -146,14 +146,8 @@ impl<'a> Codegen<'a> {
                 super::raii::emit_struct_byte_copy(
                     size,
                     0,
-                    |code| {
-                        code.push(OP_LOCAL_GET);
-                        write_u32(code, ctx.ret_temp_i32);
-                    },
-                    |code| {
-                        code.push(OP_LOCAL_GET);
-                        write_u32(code, ctx.scratch1);
-                    },
+                    super::raii::ByteCopyAddr::Local(ctx.ret_temp_i32),
+                    super::raii::ByteCopyAddr::Local(ctx.scratch1),
                     code,
                 );
             } else {
