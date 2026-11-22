@@ -73,6 +73,15 @@ impl<'a> Codegen<'a> {
                 self.collect_strings_stmt(body);
             }
             StmtKind::Return(Some(e)) => self.collect_strings_expr(e),
+            StmtKind::Throw(Some(e)) => self.collect_strings_expr(e),
+            StmtKind::Try {
+                try_body,
+                catch_body,
+                ..
+            } => {
+                self.collect_strings_stmt(try_body);
+                self.collect_strings_stmt(catch_body);
+            }
             _ => {}
         }
     }

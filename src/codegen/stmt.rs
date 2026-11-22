@@ -43,9 +43,12 @@ impl<'a> Codegen<'a> {
             StmtKind::Break => self.compile_break_stmt(ctx, code)?,
             StmtKind::Continue => self.compile_continue_stmt(ctx, code)?,
             StmtKind::Return { .. } => self.compile_return(stmt, ctx, code)?,
-            StmtKind::Throw(_) | StmtKind::Try { .. } => {
-                return Err(self.internal_error("exception code generation not yet implemented"));
-            }
+            StmtKind::Throw(expr_opt) => self.compile_throw_stmt(expr_opt, ctx, code)?,
+            StmtKind::Try {
+                try_body,
+                catch_param,
+                catch_body,
+            } => self.compile_try_stmt(try_body, catch_param, catch_body, ctx, code)?,
             _ => {}
         }
         Ok(())

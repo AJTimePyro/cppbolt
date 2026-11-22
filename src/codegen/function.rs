@@ -18,6 +18,15 @@ impl<'a> Codegen<'a> {
             self.compile_global_initializers(&mut ctx, &mut code)?;
         }
 
+        let needs_unwind = class_name.is_some()
+            || ctx.is_main
+            || f.params.iter().any(|p| matches!(p.ty.strip_const(), Type::Struct(_)))
+            || unwind::stmt_can_throw_or_call(body);
+
+        if needs_unwind {
+            Self::emit_unwind_enter(&mut code);
+        }
+
         self.bind_parameters(f, &mut ctx, &mut code)?;
 
         if let Some(ref cls) = class_name {
@@ -39,8 +48,44 @@ impl<'a> Codegen<'a> {
             self.emit_global_destructors(&mut code);
         }
 
+        if let Some(ref cls) = class_name {
+            let short_cls = QualifiedName::new(cls).class_short_name();
+            if f.name == *cls || f.name == short_cls {
+                code.push(OP_I64_CONST);
+                crate::wasm::write_i64(&mut code, 0);
+                code.push(OP_LOCAL_SET);
+                write_u32(&mut code, ctx.cleanup_mask_local);
+            }
+        }
+
+        if needs_unwind {
+            self.emit_unwind_exit(&mut ctx, &mut code);
+        }
+
         Self::emit_epilogue(f, &mut ctx, &mut code)?;
         Ok((locals, code))
+    }
+
+    fn emit_unwind_enter(code: &mut Vec<u8>) {
+        code.push(OP_BLOCK);
+        code.push(0x40);
+        code.push(OP_BLOCK);
+        code.push(TYPE_EXNREF);
+        code.push(OP_TRY_TABLE);
+        code.push(0x40);
+        code.push(0x01);
+        code.push(0x03); // catch_all_ref
+        write_u32(code, 0);
+    }
+
+    fn emit_unwind_exit(&self, ctx: &mut FunctionContext, code: &mut Vec<u8>) {
+        code.push(OP_BR);
+        write_u32(code, 2);
+        code.push(OP_END);
+        code.push(OP_UNREACHABLE);
+        code.push(OP_END);
+        self.emit_function_unwind_handler(ctx, code);
+        code.push(OP_END);
     }
 
     fn emit_prologue(ctx: &mut FunctionContext, code: &mut Vec<u8>) {
@@ -92,10 +137,17 @@ impl<'a> Codegen<'a> {
                 code.push(OP_LOCAL_SET);
                 write_u32(code, ctx.scratch1);
                 self.emit_copy_struct(sname, offset, ctx, code)?;
+                let clean_idx = if let Some(dtor_idx) = self.lookup_struct_dtor(sname) {
+                    let idx = ctx.register_cleanup(sname.to_string(), dtor_idx, offset, false)?;
+                    self.emit_mark_cleanup_active(idx, ctx, code);
+                    Some(idx)
+                } else {
+                    None
+                };
                 let Some(scope) = ctx.scope_objects.last_mut() else {
                     return Err(self.internal_error("missing object scope"));
                 };
-                scope.push((p.name.clone(), p.ty.clone(), offset));
+                scope.push((p.name.clone(), p.ty.clone(), offset, clean_idx));
             } else {
                 code.push(OP_LOCAL_GET);
                 write_u32(code, ctx.fp_local);

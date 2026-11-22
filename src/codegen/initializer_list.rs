@@ -227,7 +227,7 @@ impl<'a> Codegen<'a> {
             match lifetime {
                 InitializerListLifetime::Local => {
                     if let Some(scope) = ctx.scope_objects.last_mut() {
-                        scope.push((format!("{sname}[{index}]"), elem_ty.clone(), offset));
+                        scope.push((format!("{sname}[{index}]"), elem_ty.clone(), offset, None));
                     }
                 }
                 InitializerListLifetime::Temporary => {

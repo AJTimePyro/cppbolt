@@ -42,10 +42,12 @@ mod raii;
 mod stmt;
 mod stmt_loop;
 mod stmt_return;
+mod stmt_try;
 mod stmt_var;
 mod stmt_var_init;
 mod strings;
 mod type_of;
+mod unwind;
 
 use crate::ast::types::{Type, WasmType};
 use crate::ast::*;
@@ -126,6 +128,9 @@ impl<'a> Codegen<'a> {
         let t_v_i32 = module.add_type(vec![], vec![TYPE_I32]);
         // Type 4: (i32) -> void (exit)
         let t_exit = module.add_type(vec![TYPE_I32], vec![]);
+        // Tag 0: (i32) -> void (C++ exception tag)
+        let t_tag = module.add_type(vec![TYPE_I32], vec![]);
+        module.tags.push(t_tag);
 
         // Host imports
         module
@@ -213,6 +218,12 @@ pub struct FunctionContext {
     pub ret_temp_i32: u32,
     pub ret_temp_i64: u32,
     pub ret_temp_f64: u32,
+    pub exnref_local: u32,
+    pub cleanup_mask_local: u32,
+    pub last_exn_val_local: u32,
+    pub cleanup_entries: Vec<function_context::CleanupEntry>,
+    pub in_catch_all: bool,
+    pub catch_depth: usize,
     pub var_offsets: HashMap<String, u32>,
     pub var_types: HashMap<String, Type>,
     pub static_var_offsets: HashMap<String, (u32, Type)>,
@@ -223,8 +234,8 @@ pub struct FunctionContext {
     pub frame_size_patches: Vec<usize>,
     /// Bindings shadowed by each active block, innermost last.
     var_scopes: Vec<Vec<VarBinding>>,
-    /// Objects to destroy at scope exit, in construction order.
-    pub scope_objects: Vec<Vec<(String, Type, u32)>>,
+    /// Objects to destroy at scope exit, in construction order: (name, ty, offset, cleanup_idx).
+    pub scope_objects: Vec<Vec<(String, Type, u32, Option<usize>)>>,
     /// Statement temporaries: `(class, frame slot, needs destructor)`.
     pub temp_objects: Vec<(String, u32, bool)>,
     /// Backing-array elements whose destructors run at full-expression end.
@@ -252,6 +263,12 @@ impl Default for FunctionContext {
             ret_temp_i32: 6,
             ret_temp_i64: 7,
             ret_temp_f64: 8,
+            exnref_local: 9,
+            cleanup_mask_local: 10,
+            last_exn_val_local: 11,
+            cleanup_entries: Vec::new(),
+            in_catch_all: false,
+            catch_depth: 0,
             var_offsets: HashMap::new(),
             var_types: HashMap::new(),
             static_var_offsets: HashMap::new(),

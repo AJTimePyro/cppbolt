@@ -25,11 +25,11 @@ impl<'a> Codegen<'a> {
 
     pub(super) fn emit_dtor_for_scope(
         &self,
-        objs: &[(String, Type, u32)],
+        objs: &[(String, Type, u32, Option<usize>)],
         ctx: &FunctionContext,
         code: &mut Vec<u8>,
     ) {
-        for (_name, ty, offset) in objs.iter().rev() {
+        for (_name, ty, offset, clean_idx) in objs.iter().rev() {
             if let Type::Struct(sname) = ty.strip_const()
                 && let Some(dtor_idx) = self.lookup_struct_dtor(sname)
             {
@@ -40,6 +40,9 @@ impl<'a> Codegen<'a> {
                 code.push(OP_I32_ADD); // this
                 code.push(OP_CALL);
                 write_u32(code, dtor_idx);
+            }
+            if let Some(idx) = clean_idx {
+                self.emit_mark_cleanup_inactive(*idx, ctx, code);
             }
         }
     }

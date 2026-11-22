@@ -1,5 +1,41 @@
 use super::*;
 
+#[derive(Clone, Debug)]
+pub struct CleanupEntry {
+    pub index: usize,
+    pub _sname: String,
+    pub dtor_idx: u32,
+    pub offset: u32,
+    pub is_subobject: bool,
+}
+
+impl FunctionContext {
+    pub fn register_cleanup(
+        &mut self,
+        _sname: String,
+        dtor_idx: u32,
+        offset: u32,
+        is_subobject: bool,
+    ) -> Result<usize, CompileError> {
+        let index = self.cleanup_entries.len();
+        if index >= 64 {
+            return Err(CompileError::new(
+                "function exceeds maximum of 64 cleanup objects for exception unwinding",
+                self.line,
+                self.col,
+            ));
+        }
+        self.cleanup_entries.push(CleanupEntry {
+            index,
+            _sname,
+            dtor_idx,
+            offset,
+            is_subobject,
+        });
+        Ok(index)
+    }
+}
+
 impl<'a> Codegen<'a> {
     pub(super) fn function_context(
         f: &FunctionDecl,
@@ -11,17 +47,21 @@ impl<'a> Codegen<'a> {
         let scratch1 = num_params + 1;
         let scratch2 = num_params + 2;
         let ret_temp_i32 = num_params + 3;
-        let scratch_i64 = num_params + 4;
-        let ret_temp_i64 = num_params + 5;
-        let scratch_f64 = num_params + 6;
-        let ret_temp_f64 = num_params + 7;
-        let scratch_f32 = num_params + 8;
+        let last_exn_val_local = num_params + 4;
+        let scratch_i64 = num_params + 5;
+        let ret_temp_i64 = num_params + 6;
+        let cleanup_mask_local = num_params + 7;
+        let scratch_f64 = num_params + 8;
+        let ret_temp_f64 = num_params + 9;
+        let scratch_f32 = num_params + 10;
+        let exnref_local = num_params + 11;
 
         let locals = vec![
-            (4, TYPE_I32), // fp_local, scratch1, scratch2, ret_temp_i32
-            (2, TYPE_I64), // scratch_i64, ret_temp_i64
+            (5, TYPE_I32), // fp_local, scratch1, scratch2, ret_temp_i32, last_exn_val_local
+            (3, TYPE_I64), // scratch_i64, ret_temp_i64, cleanup_mask_local
             (2, TYPE_F64), // scratch_f64, ret_temp_f64
             (1, TYPE_F32), // scratch_f32
+            (1, TYPE_EXNREF), // exnref_local
         ];
 
         let is_dtor = if let Some(cls) = class_name {
@@ -34,12 +74,18 @@ impl<'a> Codegen<'a> {
             fp_local,
             scratch1,
             scratch2,
-            scratch_i64,
-            scratch_f64,
-            scratch_f32,
             ret_temp_i32,
+            last_exn_val_local,
+            scratch_i64,
             ret_temp_i64,
+            cleanup_mask_local,
+            scratch_f64,
             ret_temp_f64,
+            scratch_f32,
+            exnref_local,
+            cleanup_entries: Vec::new(),
+            in_catch_all: false,
+            catch_depth: 0,
             var_offsets: HashMap::new(),
             var_types: HashMap::new(),
             static_var_offsets: HashMap::new(),

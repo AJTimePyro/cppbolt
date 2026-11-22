@@ -118,14 +118,7 @@ impl<'a> Codegen<'a> {
             );
         }
         if let Some((func_idx, sig)) = self.find_function_with_args(name, arg_types, Some(args)) {
-            for (i, a) in args.iter().enumerate() {
-                let param_ty = sig.param_types.get(i);
-                self.compile_call_arg(a, param_ty, ctx, code)?;
-            }
-            code.push(OP_CALL);
-            write_u32(code, func_idx);
-            self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
-            return Ok(());
+            return self.emit_direct_call(func_idx, &sig, args, ctx, code);
         }
         Err(CompileError::new(
             format!("Undefined function '{}'", name),
@@ -179,20 +172,31 @@ impl<'a> Codegen<'a> {
             return Ok(());
         }
         if let Some((func_idx, sig)) = self.find_function_with_args(name, arg_types, Some(args)) {
-            for (i, a) in args.iter().enumerate() {
-                let param_ty = sig.param_types.get(i);
-                self.compile_call_arg(a, param_ty, ctx, code)?;
-            }
-            code.push(OP_CALL);
-            write_u32(code, func_idx);
-            self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
-            return Ok(());
+            return self.emit_direct_call(func_idx, &sig, args, ctx, code);
         }
         Err(CompileError::new(
             format!("Undefined function '{}'", name),
             self.current_line,
             self.current_col,
         ))
+    }
+
+    fn emit_direct_call(
+        &mut self,
+        func_idx: u32,
+        sig: &FunctionSig,
+        args: &[Expr],
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        for (i, a) in args.iter().enumerate() {
+            let param_ty = sig.param_types.get(i);
+            self.compile_call_arg(a, param_ty, ctx, code)?;
+        }
+        code.push(OP_CALL);
+        write_u32(code, func_idx);
+        self.register_returned_struct_temp(&sig.return_type, ctx, code)?;
+        Ok(())
     }
 
     pub(super) fn compile_struct_value_call(

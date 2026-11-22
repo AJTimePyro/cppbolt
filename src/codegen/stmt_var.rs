@@ -35,10 +35,15 @@ impl<'a> Codegen<'a> {
                 self.compile_reference_local(init_expr, ty, offset, ctx, code)?;
             }
         } else if let Type::Struct(sname) = ty.strip_const() {
+            let clean_idx = if let Some(dtor_idx) = self.lookup_struct_dtor(sname) {
+                Some(ctx.register_cleanup(sname.to_string(), dtor_idx, offset, false)?)
+            } else {
+                None
+            };
             let Some(scope) = ctx.scope_objects.last_mut() else {
                 return Err(self.internal_error("missing object scope"));
             };
-            scope.push((name.to_string(), ty.clone(), offset));
+            scope.push((name.to_string(), ty.clone(), offset, clean_idx));
 
             // Install the vtable before construction. The constructor will
             // install it again for the most-derived class.
@@ -48,6 +53,9 @@ impl<'a> Codegen<'a> {
                 self.compile_aggregate_local(ty, init_expr, offset, ctx, code)?;
             } else {
                 self.compile_struct_default_constructor(sname, offset, ctx, code);
+            }
+            if let Some(idx) = clean_idx {
+                self.emit_mark_cleanup_active(idx, ctx, code);
             }
         } else if let Type::Array(elem_ty, count) = ty.strip_const() {
             self.compile_array_local(
@@ -223,10 +231,16 @@ impl<'a> Codegen<'a> {
                 .ok_or_else(|| {
                     crate::internal_error!(decl.stmt.line, decl.stmt.col, "array is too large")
                 })?;
+            let clean_idx = if let Some(dtor_idx) = self.lookup_struct_dtor(sname) {
+                Some(ctx.register_cleanup(sname.to_string(), dtor_idx, elem_offset, false)?)
+            } else {
+                None
+            };
             scope_entries.push((
                 format!("{}[{}]", decl.name, i),
                 decl.elem_ty.clone(),
                 elem_offset,
+                clean_idx,
             ));
             if let Some(cur) = cursor.as_mut()
                 && !cur.is_empty()
@@ -242,6 +256,9 @@ impl<'a> Codegen<'a> {
                 write_u32(code, ci);
             } else {
                 self.emit_zero_local(decl.elem_ty, elem_offset, ctx, code)?;
+            }
+            if let Some(idx) = clean_idx {
+                self.emit_mark_cleanup_active(idx, ctx, code);
             }
         }
         if let Some(scope) = ctx.scope_objects.last_mut() {
