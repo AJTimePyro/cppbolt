@@ -12,7 +12,7 @@ impl<'a> Codegen<'a> {
         let candidates = self.build_candidates(program, &address_taken);
         let mut reachable = Self::compute_reachable(&candidates);
         let has_exceptions =
-            Self::mark_exception_destructors_reachable(&candidates, &mut reachable);
+            self.mark_exception_destructors_reachable(&candidates, &mut reachable);
         let all_reachable_calls = Self::collect_reachable_calls(&candidates, &reachable);
         let has_deleting_dtors = self.has_deleting_dtors();
         let has_new_or_delete = self.has_new_or_delete(&candidates, &reachable);
