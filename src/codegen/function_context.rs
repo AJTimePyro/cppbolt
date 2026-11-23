@@ -163,6 +163,7 @@ impl<'a> Codegen<'a> {
             unwind_exnref_local,
             max_catch_depth: max_depth,
             cleanup_entries: Vec::new(),
+            active_exception_slots: Vec::new(),
             in_catch_all: false,
             catch_depth: 0,
             var_offsets: HashMap::new(),

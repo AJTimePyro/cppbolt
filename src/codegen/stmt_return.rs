@@ -22,8 +22,11 @@ impl<'a> Codegen<'a> {
             self.emit_dtor_for_scope(scope, ctx, code);
         }
 
-        if ctx.catch_depth > 0 {
-            self.emit_destroy_exception_if_not_rethrown(ctx.last_exn_val_local, ctx, code);
+        for slot in ctx.active_exception_slots.iter().rev() {
+            Self::emit_slot_load(*slot, ctx.fp_local, code);
+            code.push(OP_LOCAL_SET);
+            write_u32(code, ctx.scratch1);
+            self.emit_destroy_exception_if_not_rethrown(ctx.scratch1, ctx, code);
         }
 
         if ctx.is_main {

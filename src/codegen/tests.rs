@@ -20,6 +20,7 @@ fn context() -> FunctionContext {
         cleanup_entries: Vec::new(),
         in_catch_all: false,
         catch_depth: 0,
+        active_exception_slots: Vec::new(),
         var_offsets: HashMap::new(),
         var_types: HashMap::new(),
         static_var_offsets: HashMap::new(),

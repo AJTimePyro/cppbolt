@@ -2054,3 +2054,78 @@ int main() {
     Ok(())
 }
 
+#[test]
+fn test_exception_destroyed_on_early_exit_return_and_break() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct Tracer {
+    int id;
+    Tracer(int i) : id(i) { std::printf("C:%d ", id); }
+    ~Tracer() { std::printf("D:%d ", id); }
+};
+
+int test_early_return() {
+    try {
+        throw Tracer(10);
+    } catch (Tracer& t) {
+        std::printf("InReturnCatch ");
+        return 77;
+    }
+    return 0;
+}
+
+int main() {
+    int ret = test_early_return();
+    std::printf("RetVal:%d ", ret);
+
+    for (int i = 0; i < 2; i++) {
+        try {
+            throw Tracer(20);
+        } catch (Tracer& t) {
+            std::printf("InBreakCatch ");
+            break;
+        }
+    }
+    std::printf("AfterBreak");
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "C:10 InReturnCatch D:10 RetVal:77 C:20 InBreakCatch D:20 AfterBreak");
+    Ok(())
+}
+
+#[test]
+fn test_exception_thrown_while_handling_another_exception_lifecycle() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct Tracer {
+    int id;
+    Tracer(int i) : id(i) { std::printf("C:%d ", id); }
+    Tracer(const Tracer& o) : id(o.id) { std::printf("Copy:%d ", id); }
+    ~Tracer() { std::printf("D:%d ", id); }
+};
+
+int main() {
+    try {
+        try {
+            throw Tracer(1);
+        } catch (Tracer& t1) {
+            std::printf("InCatch1:%d ", t1.id);
+            throw Tracer(2);
+        }
+    } catch (Tracer& t2) {
+        std::printf("InCatch2:%d ", t2.id);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "C:1 InCatch1:1 C:2 D:1 InCatch2:2 D:2");
+    Ok(())
+}
+

@@ -45,6 +45,7 @@ mod stmt_loop;
 mod stmt_return;
 mod stmt_throw;
 mod stmt_try;
+mod stmt_try_param;
 mod stmt_var;
 mod stmt_var_init;
 mod strings;
@@ -88,7 +89,7 @@ pub struct Codegen<'a> {
     pub next_data_offset: u32,
     pub func_indices: HashMap<String, u32>,
     pub func_printf: u32,
-    pub loop_depths: Vec<(u32, u32, usize)>,
+    pub loop_depths: Vec<(u32, u32, usize, usize)>,
     pub current_block_depth: u32,
     /// Per class: `(vptr_offset_in_object, vtable_data_address)` for every
     /// polymorphic subobject of that class.
@@ -232,6 +233,7 @@ pub struct FunctionContext {
     pub cleanup_entries: Vec<function_context::CleanupEntry>,
     pub in_catch_all: bool,
     pub catch_depth: usize,
+    pub active_exception_slots: Vec<u32>,
     pub var_offsets: HashMap<String, u32>,
     pub var_types: HashMap<String, Type>,
     pub static_var_offsets: HashMap<String, (u32, Type)>,
@@ -279,6 +281,7 @@ impl Default for FunctionContext {
             cleanup_entries: Vec::new(),
             in_catch_all: false,
             catch_depth: 0,
+            active_exception_slots: Vec::new(),
             var_offsets: HashMap::new(),
             var_types: HashMap::new(),
             static_var_offsets: HashMap::new(),

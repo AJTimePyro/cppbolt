@@ -49,6 +49,7 @@ impl<'a> Codegen<'a> {
             break_target_abs,
             continue_target_abs,
             ctx.scope_objects.len(),
+            ctx.active_exception_slots.len(),
         ));
 
         self.compile_stmt(body, ctx, code)?;
@@ -119,7 +120,7 @@ impl<'a> Codegen<'a> {
         self.current_block_depth += 1;
         // `0` means this construct has no continue target.
         self.loop_depths
-            .push((break_target_abs, 0, ctx.scope_objects.len()));
+            .push((break_target_abs, 0, ctx.scope_objects.len(), ctx.active_exception_slots.len()));
 
         ctx.enter_scope();
         ctx.scope_objects.push(Vec::new());
