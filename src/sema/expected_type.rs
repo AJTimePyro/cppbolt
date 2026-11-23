@@ -25,3 +25,32 @@ impl Sema {
         result
     }
 }
+
+pub(crate) fn select_function_sig<'b>(
+    sigs: &'b [FunctionSig],
+    expected: Option<&Type>,
+) -> &'b FunctionSig {
+    if let Some(exp) = expected {
+        let inner = match exp.strip_reference().strip_const() {
+            Type::Pointer(inner) => inner.strip_const(),
+            other => other,
+        };
+        if let Type::Function {
+            return_type,
+            param_types,
+            qualifiers,
+        } = inner
+        {
+            for s in sigs {
+                if s.return_type == **return_type
+                    && s.param_types == *param_types
+                    && (!qualifiers.is_noexcept || s.qualifiers.is_noexcept)
+                {
+                    return s;
+                }
+            }
+        }
+    }
+    &sigs[0]
+}
+

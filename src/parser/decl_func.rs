@@ -180,6 +180,7 @@ impl Parser {
     pub(super) fn is_function_pointer_declarator_ahead(&self) -> bool {
         self.peek() == &TokenKind::LParen
             && (self.peek_ahead(1) == &TokenKind::Star
+                || self.peek_ahead(1) == &TokenKind::Amp
                 || self.is_member_pointer_prefix_ahead_from(1))
     }
 
@@ -210,38 +211,41 @@ impl Parser {
         Ok(fn_params)
     }
 
+    fn parse_declarator_ident(&mut self, name_error: Option<&str>) -> Result<String, CompileError> {
+        match name_error {
+            Some(message) => match self.advance().kind.clone() {
+                TokenKind::Ident(id) => Ok(id),
+                _ => Err(CompileError::new(message, self.current().line, self.current().col)),
+            },
+            None => {
+                if let TokenKind::Ident(id) = self.peek().clone() {
+                    self.advance();
+                    Ok(id)
+                } else {
+                    Ok(String::new())
+                }
+            }
+        }
+    }
+
     pub(super) fn parse_function_pointer_declarator(
         &mut self,
         base_type: Type,
         name_error: Option<&str>,
     ) -> Result<(Type, String), CompileError> {
         self.advance();
+        let mut is_reference = false;
         let class_name = if self.is_member_pointer_prefix_ahead_from(0) {
             Some(self.parse_member_pointer_class_prefix()?)
+        } else if self.peek() == &TokenKind::Amp {
+            self.advance();
+            is_reference = true;
+            None
         } else {
             self.expect(TokenKind::Star)?;
             None
         };
-        let name = match name_error {
-            Some(message) => match self.advance().kind.clone() {
-                TokenKind::Ident(id) => id,
-                _ => {
-                    return Err(CompileError::new(
-                        message,
-                        self.current().line,
-                        self.current().col,
-                    ));
-                }
-            },
-            None => {
-                if let TokenKind::Ident(id) = self.peek().clone() {
-                    self.advance();
-                    id
-                } else {
-                    String::new()
-                }
-            }
-        };
+        let name = self.parse_declarator_ident(name_error)?;
         // `getpmf()` inside `(S::*getpmf())` is the declared function's own
         // parameter list; the suffix after the closing parenthesis belongs to
         // the pointed-to type.
@@ -272,7 +276,13 @@ impl Parser {
                 class_name: cls,
                 member_type: Box::new(inner),
             },
-            None => Type::Pointer(Box::new(inner)),
+            None => {
+                if is_reference {
+                    Type::Reference(Box::new(inner))
+                } else {
+                    Type::Pointer(Box::new(inner))
+                }
+            }
         };
         let entity_type = match entity_params {
             Some(params) => Type::Function {

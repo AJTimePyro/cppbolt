@@ -357,10 +357,11 @@ impl Sema {
             let owned_name = name.clone();
             self.analyze_class_member_identifier(expr, &cls, &owned_name)
         } else if let Some(sigs) = self.functions.get(name) {
+            let sig = expected_type::select_function_sig(sigs, self.expected_type.as_ref());
             Ok(Type::Pointer(Box::new(Type::Function {
-                return_type: Box::new(sigs[0].return_type.clone()),
-                param_types: sigs[0].param_types.clone(),
-                qualifiers: FunctionQualifiers::default(),
+                return_type: Box::new(sig.return_type.clone()),
+                param_types: sig.param_types.clone(),
+                qualifiers: sig.qualifiers,
             })))
         } else {
             Err(CompileError::unresolved_name(
@@ -419,10 +420,11 @@ impl Sema {
         } else if let Some(var) = self.lookup_var(name) {
             Ok(var.ty.clone())
         } else if let Some(sigs) = self.functions.get(name) {
+            let sig = expected_type::select_function_sig(sigs, self.expected_type.as_ref());
             Ok(Type::Pointer(Box::new(Type::Function {
-                return_type: Box::new(sigs[0].return_type.clone()),
-                param_types: sigs[0].param_types.clone(),
-                qualifiers: FunctionQualifiers::default(),
+                return_type: Box::new(sig.return_type.clone()),
+                param_types: sig.param_types.clone(),
+                qualifiers: sig.qualifiers,
             })))
         } else {
             Err(CompileError::unresolved_name(

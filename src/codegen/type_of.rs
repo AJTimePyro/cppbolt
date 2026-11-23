@@ -282,13 +282,14 @@ impl<'a> Codegen<'a> {
         } else if self.sema.struct_layouts.contains_key(name) {
             Type::Struct(name.to_string())
         } else if let Some(ty) = ctx.var_types.get(name) {
-            if let Type::Pointer(inner) = ty.strip_const() {
+            let clean = ty.strip_reference().strip_const();
+            if let Type::Pointer(inner) | Type::Reference(inner) = clean {
                 if let Type::Function { return_type, .. } = &**inner {
                     (**return_type).clone()
                 } else {
                     Type::Int
                 }
-            } else if let Type::Function { return_type, .. } = ty.strip_const() {
+            } else if let Type::Function { return_type, .. } = clean {
                 (**return_type).clone()
             } else {
                 Type::Int

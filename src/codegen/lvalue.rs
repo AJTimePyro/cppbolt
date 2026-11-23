@@ -225,9 +225,7 @@ impl<'a> Codegen<'a> {
             }
             return Ok(());
         }
-        if let Some(&offset) = self.global_offsets.get(name) {
-            code.push(OP_I32_CONST);
-            write_i32(code, offset as i32);
+        if self.compile_lvalue_global_or_func(name, code) {
             return Ok(());
         }
         Err(CompileError::new(
@@ -235,6 +233,25 @@ impl<'a> Codegen<'a> {
             self.current_line,
             self.current_col,
         ))
+    }
+
+    fn compile_lvalue_global_or_func(&self, name: &str, code: &mut Vec<u8>) -> bool {
+        if let Some(&offset) = self.global_offsets.get(name) {
+            code.push(OP_I32_CONST);
+            write_i32(code, offset as i32);
+            return true;
+        }
+        let table_idx = self
+            .func_table_indices
+            .get(name)
+            .or_else(|| self.func_table_indices.get(QualifiedName::new(name).plain()))
+            .copied();
+        if let Some(table_idx) = table_idx {
+            code.push(OP_I32_CONST);
+            write_i32(code, table_idx as i32);
+            return true;
+        }
+        false
     }
 
     fn compile_lvalue_class_member(

@@ -5,9 +5,10 @@ use super::*;
 /// The function type behind a function pointer, member-function pointer, or
 /// bound member function.
 fn indirect_function_type(ty: &Type) -> Option<(&Type, bool)> {
-    match ty.strip_const() {
+    let clean = ty.strip_reference().strip_const();
+    match clean {
         Type::Pointer(inner) => indirect_function_type(inner),
-        Type::Function { .. } => Some((ty.strip_const(), false)),
+        Type::Function { .. } => Some((clean, false)),
         Type::BoundMemberFunction { member_type, .. } => {
             indirect_function_type(member_type).map(|(f, _)| (f, true))
         }
