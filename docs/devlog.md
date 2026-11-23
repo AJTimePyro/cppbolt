@@ -4,6 +4,40 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-24: Exception Test Suite Modular Refactoring
+
+Decomposed the monolithic `tests/exceptions.rs` test suite (5,047 lines, 154 tests) into a modular package directory under `tests/exceptions/`.
+
+### Summary of Work
+
+1. Module partitioning (`tests/exceptions/`):
+   - Created `tests/exceptions/main.rs` as the Cargo integration test crate entrypoint.
+   - Extracted shared test runner and compiler infrastructure (`run_cpp`, `assert_compile_error`, `RepoIncludes`) into `tests/exceptions/common.rs`.
+   - Structured tests into 10 domain directories with 30 focused test modules:
+     - `basic/`: primitive throws, scope nesting, and rethrow behavior.
+     - `unwinding/`: LIFO destruction ordering, loop unwinding, call expressions, array elements, and destructor throw termination.
+     - `temporaries/`: subexpression temporaries, lifetime extension, and cleanup slot budget recycling.
+     - `dispatch/`: clause matching, polymorphic base adjustments, and pointer qualification conversions.
+     - `parameters/`: by-value parameter cleanup and copy requirements on parameter throws.
+     - `function_try/`: function, constructor, and destructor function-try-blocks.
+     - `lifecycle/`: exception object allocation, heap lifecycle, and dead-code elimination.
+     - `copy_move/`: value category dispatch, copy/move constructor accessibility, and semantic rejections.
+     - `noexcept/`: specifications, unevaluated operator expressions, function type subtyping, and runtime traps.
+     - `stdlib/`: `<exception>` hierarchy, `<stdexcept>` derived classes, uncaught counter tracking, and terminate handlers.
+2. Documentation and feature matrix updates:
+   - Updated test trigger references in `docs/book/user/errors.md` and `docs/book/user/supported-cpp.md`.
+
+### Verification Results
+
+- Exception test suite: all 154 tests across all 10 modules pass (`cargo test --test exceptions`).
+- Census audit: all 7 tests in `tests/census_fixture.rs` pass.
+- Unit tests: all 143 unit tests in `cargo test --lib` pass.
+- Clippy: `cargo clippy --all-targets -- -D warnings` clean (0 warnings).
+- Feature matrix: `python3 tools/check_feature_matrix.py` validates all 288 files.
+- mdBook: `mdbook build docs/book` succeeds cleanly.
+
+---
+
 ## 2026-11-24: LIFO Unwinding Order, Destructor Function-Try-Blocks, DCE Refinements, and Foreign Exception Isolation
 
 Hardened C++17 exception handling conformance across unwinding destruction order, destructor function-try-blocks, expression throw dead-code elimination, and runtime counter isolation.

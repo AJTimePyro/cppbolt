@@ -50,7 +50,7 @@ The following catalog lists diagnostics emitted by the compiler, paired with rea
 
 #### `catch-all handler (...) must be the last handler for its try block`
 - **Cause**: Placing a typed `catch` clause after a `catch (...)` handler in the same `try` block, violating ISO C++17 [except.handle].
-- **Trigger** (`tests/exceptions.rs`):
+- **Trigger** (`tests/exceptions/dispatch/matching.rs`):
   ```cpp
   int main() {
       try {
@@ -64,7 +64,7 @@ The following catalog lists diagnostics emitted by the compiler, paired with rea
 
 #### `cannot throw object of abstract class type '<type>'`
 - **Cause**: Attempting to throw an object of an abstract class type, violating ISO C++17 [except.throw] p2.
-- **Trigger** (`tests/exceptions.rs`):
+- **Trigger** (`tests/exceptions/copy_move/negative.rs`):
   ```cpp
   struct Abstract {
       virtual void pure() = 0;
@@ -77,7 +77,7 @@ The following catalog lists diagnostics emitted by the compiler, paired with rea
 
 #### `cannot catch object of abstract class type '<type>' by value`
 - **Cause**: Catching an abstract class by value rather than by reference or pointer, violating ISO C++17 [except.handle] p1.
-- **Trigger** (`tests/exceptions.rs`):
+- **Trigger** (`tests/exceptions/copy_move/negative.rs`):
   ```cpp
   struct Abstract {
       virtual void pure() = 0;
@@ -92,7 +92,7 @@ The following catalog lists diagnostics emitted by the compiler, paired with rea
 
 #### `cannot catch rvalue reference`
 - **Cause**: Declaring a catch handler with an rvalue reference parameter (`catch (T&&)`), violating ISO C++17 [except.handle] p1.
-- **Trigger** (`tests/exceptions.rs`):
+- **Trigger** (`tests/exceptions/copy_move/negative.rs`):
   ```cpp
   int main() {
       try {
@@ -104,7 +104,7 @@ The following catalog lists diagnostics emitted by the compiler, paired with rea
 
 #### `return statements cannot appear in a function-try-block handler of a constructor`
 - **Cause**: Using a `return` statement inside a function-try-block handler attached to a constructor, violating ISO C++17 [except.handle] p17.
-- **Trigger** (`tests/exceptions.rs`):
+- **Trigger** (`tests/exceptions/function_try/constructors.rs`):
   ```cpp
   struct S {
       S() try {} catch (...) { return; } // error: return statements cannot appear in a function-try-block handler of a constructor
@@ -547,7 +547,7 @@ The following catalog lists diagnostics emitted by the compiler, paired with rea
 
 #### `cannot allocate cleanup bit: function exceeds maximum limit of 64 tracked RAII objects`
 - **Cause**: A single function declares 64 or more local automatic variables or subobjects with non-trivial destructors, exceeding the 64-bit unwinding bitmask capacity.
-- **Trigger** (`tests/exceptions.rs`):
+- **Trigger** (`tests/exceptions/temporaries/budget.rs`):
   ```cpp
   struct S { ~S() {} };
   void f() {
