@@ -42,10 +42,14 @@ impl FunctionContext {
         _sname: String,
         dtor_idx: u32,
         temp_slot: u32,
-    ) -> Option<usize> {
+    ) -> Result<usize, CompileError> {
         let index = self.cleanup_entries.len();
         if index >= 64 {
-            return None;
+            return Err(CompileError::new(
+                "function exceeds maximum of 64 cleanup objects for exception unwinding",
+                self.line,
+                self.col,
+            ));
         }
         self.cleanup_entries.push(CleanupEntry {
             index,
@@ -55,7 +59,7 @@ impl FunctionContext {
             is_subobject: false,
             is_temp: true,
         });
-        Some(index)
+        Ok(index)
     }
 
     pub fn current_exnref_local(&self) -> u32 {

@@ -151,9 +151,10 @@ impl<'a> Codegen<'a> {
         write_u32(code, 2);
         write_u32(code, temp_slot);
 
-        let clean_idx = self.register_and_activate_temp_cleanup(psname, temp_slot, ctx, code);
+        let clean_idx = self.register_and_activate_temp_cleanup(psname, temp_slot, ctx, code)?;
 
-        ctx.temp_objects.push((psname.to_string(), temp_slot, true, clean_idx));
+        ctx.temp_objects
+            .push((psname.to_string(), temp_slot, true, clean_idx));
 
         Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
         Ok(())
@@ -258,9 +259,10 @@ impl<'a> Codegen<'a> {
         write_u32(code, 2);
         write_u32(code, temp_slot);
 
-        let clean_idx = self.register_and_activate_temp_cleanup(sname, temp_slot, ctx, code);
+        let clean_idx = self.register_and_activate_temp_cleanup(sname, temp_slot, ctx, code)?;
 
-        ctx.temp_objects.push((sname.to_string(), temp_slot, true, clean_idx));
+        ctx.temp_objects
+            .push((sname.to_string(), temp_slot, true, clean_idx));
 
         Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
         Ok(())

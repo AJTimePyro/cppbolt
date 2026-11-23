@@ -124,8 +124,9 @@ impl<'a> Codegen<'a> {
             code.push(OP_I32_STORE);
             write_u32(code, 2);
             write_u32(code, temp_slot);
-            let clean_idx = self.register_and_activate_temp_cleanup(sname, temp_slot, ctx, code);
-            ctx.temp_objects.push((sname.clone(), temp_slot, true, clean_idx));
+            let clean_idx = self.register_and_activate_temp_cleanup(sname, temp_slot, ctx, code)?;
+            ctx.temp_objects
+                .push((sname.clone(), temp_slot, true, clean_idx));
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.scratch1);
         }
@@ -154,13 +155,13 @@ impl<'a> Codegen<'a> {
         temp_slot: u32,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
-    ) -> Option<usize> {
-        let dtor_idx = self.lookup_struct_dtor(sname)?;
-        let idx = ctx.register_temp_cleanup(sname.to_string(), dtor_idx, temp_slot);
-        if let Some(i) = idx {
-            self.emit_mark_cleanup_active(i, ctx, code);
-        }
-        idx
+    ) -> Result<Option<usize>, CompileError> {
+        let Some(dtor_idx) = self.lookup_struct_dtor(sname) else {
+            return Ok(None);
+        };
+        let idx = ctx.register_temp_cleanup(sname.to_string(), dtor_idx, temp_slot)?;
+        self.emit_mark_cleanup_active(idx, ctx, code);
+        Ok(Some(idx))
     }
 
     pub(super) fn emit_copy_struct(

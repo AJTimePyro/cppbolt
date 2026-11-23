@@ -3410,6 +3410,16 @@ int main() {
 }
 
 #[test]
+fn test_temp_cleanup_overflow_fails_compilation() -> Result<(), String> {
+    let mut source = String::from("struct S { ~S() {} }; void sink(S s) {} int main() {\n");
+    for i in 0..64 {
+        source.push_str(&format!("    S s{i};\n"));
+    }
+    source.push_str("    sink(S());\n    return 0;\n}\n");
+    assert_compile_error(&source, "maximum of 64 cleanup objects")
+}
+
+#[test]
 fn test_noexcept_expression_accounts_for_overloaded_operator() -> Result<(), String> {
     let source = r#"
 struct S {
