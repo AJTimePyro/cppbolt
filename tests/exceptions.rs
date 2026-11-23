@@ -3410,6 +3410,42 @@ int main() {
 }
 
 #[test]
+fn test_outer_local_variable_throw_copies_instead_of_moving() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct S {
+    int v;
+    S(int x) : v(x) {}
+    S(const S& o) : v(o.v) { std::printf("Copy "); }
+    S(S&& o) : v(o.v) { std::printf("Move "); }
+    ~S() {}
+};
+
+int main() {
+    S s(1);
+    try {
+        throw s;
+    } catch (...) {
+        std::printf("Caught ");
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert!(
+        stdout.contains("Copy"),
+        "an outer local must be copied on throw: {stdout}"
+    );
+    assert!(
+        !stdout.contains("Move"),
+        "an outer local must not be moved on throw: {stdout}"
+    );
+    Ok(())
+}
+
+#[test]
 fn test_private_base_catch_is_rejected() -> Result<(), String> {
     let source = r#"
 #include <cstdio>

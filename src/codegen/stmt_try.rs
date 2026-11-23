@@ -29,7 +29,9 @@ impl<'a> Codegen<'a> {
         let has_catch_all = catches.last().map(|c| c.param.is_none()).unwrap_or(false);
         let try_exit_target = self.emit_try_block_prelude(has_catch_all, code);
 
+        ctx.try_depth += 1;
         self.compile_stmt(try_body, ctx, code)?;
+        ctx.try_depth -= 1;
 
         // Normal completion branches out of $try_exit
         code.push(OP_BR);

@@ -197,6 +197,7 @@ enum VarBinding {
         name: String,
         previous_offset: Option<u32>,
         previous_type: Option<Type>,
+        previous_try_depth: Option<u32>,
     },
     Static {
         name: String,
@@ -234,8 +235,12 @@ pub struct FunctionContext {
     pub cleanup_entries: Vec<function_context::CleanupEntry>,
     pub in_catch_all: bool,
     pub catch_depth: usize,
+    /// Number of enclosing try blocks at the current lowering point.
+    pub try_depth: u32,
     pub active_exception_slots: Vec<u32>,
     pub var_offsets: HashMap<String, u32>,
+    /// Try depth at which each local was declared, for throw move-eligibility.
+    pub var_try_depths: HashMap<String, u32>,
     pub var_types: HashMap<String, Type>,
     pub static_var_offsets: HashMap<String, (u32, Type)>,
     pub next_local_offset: u32,
@@ -282,8 +287,10 @@ impl Default for FunctionContext {
             cleanup_entries: Vec::new(),
             in_catch_all: false,
             catch_depth: 0,
+            try_depth: 0,
             active_exception_slots: Vec::new(),
             var_offsets: HashMap::new(),
+            var_try_depths: HashMap::new(),
             var_types: HashMap::new(),
             static_var_offsets: HashMap::new(),
             next_local_offset: 16,
@@ -320,9 +327,11 @@ impl FunctionContext {
                     name,
                     previous_offset,
                     previous_type,
+                    previous_try_depth,
                 } => {
                     restore_binding(&mut self.var_offsets, name.clone(), previous_offset);
-                    restore_binding(&mut self.var_types, name, previous_type);
+                    restore_binding(&mut self.var_types, name.clone(), previous_type);
+                    restore_binding(&mut self.var_try_depths, name, previous_try_depth);
                 }
                 VarBinding::Static {
                     name,
@@ -342,12 +351,14 @@ impl FunctionContext {
 
     pub fn bind_local(&mut self, name: String, offset: u32, ty: Type) {
         let previous_offset = self.var_offsets.insert(name.clone(), offset);
+        let previous_try_depth = self.var_try_depths.insert(name.clone(), self.try_depth);
         let previous_type = self.var_types.insert(name.clone(), ty);
         if let Some(scope) = self.var_scopes.last_mut() {
             scope.push(VarBinding::Local {
                 name,
                 previous_offset,
                 previous_type,
+                previous_try_depth,
             });
         }
     }
