@@ -109,6 +109,7 @@ impl<'a> Codegen<'a> {
 
     pub(super) fn emit_function_unwind_handler(
         &self,
+        is_noexcept: bool,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) {
@@ -124,9 +125,13 @@ impl<'a> Codegen<'a> {
         code.push(OP_GLOBAL_SET);
         write_u32(code, 0);
 
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.unwind_exnref_local);
-        code.push(OP_THROW_REF);
+        if is_noexcept {
+            code.push(OP_UNREACHABLE);
+        } else {
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.unwind_exnref_local);
+            code.push(OP_THROW_REF);
+        }
     }
 }
 

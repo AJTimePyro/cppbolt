@@ -21,6 +21,7 @@ impl<'a> Codegen<'a> {
 
         let needs_unwind = class_name.is_some()
             || ctx.is_main
+            || f.qualifiers.is_noexcept
             || f.params.iter().any(|p| matches!(p.ty.strip_const(), Type::Struct(_)))
             || unwind::stmt_can_throw_or_call(body);
 
@@ -60,7 +61,7 @@ impl<'a> Codegen<'a> {
         }
 
         if needs_unwind {
-            self.emit_unwind_exit(&mut ctx, &mut code);
+            self.emit_unwind_exit(f.qualifiers.is_noexcept, &mut ctx, &mut code);
         }
 
         Self::emit_epilogue(f, &mut ctx, &mut code)?;
@@ -79,13 +80,13 @@ impl<'a> Codegen<'a> {
         write_u32(code, 0);
     }
 
-    fn emit_unwind_exit(&self, ctx: &mut FunctionContext, code: &mut Vec<u8>) {
+    fn emit_unwind_exit(&self, is_noexcept: bool, ctx: &mut FunctionContext, code: &mut Vec<u8>) {
         code.push(OP_BR);
         write_u32(code, 2);
         code.push(OP_END);
         code.push(OP_UNREACHABLE);
         code.push(OP_END);
-        self.emit_function_unwind_handler(ctx, code);
+        self.emit_function_unwind_handler(is_noexcept, ctx, code);
         code.push(OP_END);
     }
 

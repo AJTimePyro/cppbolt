@@ -2459,5 +2459,112 @@ int main() {
     Ok(())
 }
 
+#[test]
+fn test_noexcept_function_throwing_terminates() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+void bad() noexcept {
+    throw 42;
+}
+
+int main() {
+    try {
+        bad();
+    } catch (...) {
+        std::printf("Caught");
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 134, "noexcept function throwing must terminate with exit code 134");
+    assert!(!stdout.contains("Caught"), "exception must not be caught by caller");
+    Ok(())
+}
+
+#[test]
+fn test_noexcept_function_internal_catch_succeeds() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+void safe() noexcept {
+    try {
+        throw 1;
+    } catch (int e) {
+        std::printf("InternalCatch:%d ", e);
+    }
+}
+
+int main() {
+    safe();
+    std::printf("Done");
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "InternalCatch:1 Done");
+    Ok(())
+}
+
+#[test]
+fn test_noexcept_false_function_propagates() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+void prop() noexcept(false) {
+    throw 99;
+}
+
+int main() {
+    try {
+        prop();
+    } catch (int e) {
+        std::printf("Caught:%d", e);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Caught:99");
+    Ok(())
+}
+
+#[test]
+fn test_noexcept_function_cleans_locals_before_terminating() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct Tracer {
+    int id;
+    Tracer(int i) : id(i) { std::printf("C:%d ", id); }
+    ~Tracer() { std::printf("D:%d ", id); }
+};
+
+void bad_with_tracer() noexcept {
+    Tracer t(123);
+    throw 5;
+}
+
+int main() {
+    try {
+        bad_with_tracer();
+    } catch (...) {
+        std::printf("Caught");
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 134, "must terminate with exit code 134");
+    assert!(stdout.contains("C:123"), "Tracer must be constructed");
+    assert!(stdout.contains("D:123"), "Tracer must be destroyed before termination");
+    assert!(!stdout.contains("Caught"), "caller must not catch");
+    Ok(())
+}
+
+
 
 
