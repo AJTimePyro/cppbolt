@@ -159,7 +159,7 @@ impl<'a> Codegen<'a> {
             code.push(0x40);
 
             self.emit_typed_clause_body(clause, ty, name, ctx, code)?;
-            self.emit_destroy_exception_if_not_rethrown(ctx.last_exn_val_local, code);
+            self.emit_destroy_exception_if_not_rethrown(ctx.last_exn_val_local, ctx, code);
 
             Self::emit_slot_load(save_val_slot, ctx.fp_local, code);
             code.push(OP_LOCAL_SET);
@@ -171,7 +171,7 @@ impl<'a> Codegen<'a> {
         } else {
             // catch (...) handles tag 0 exception
             self.emit_catch_clause_body(&clause.body, ctx, code)?;
-            self.emit_destroy_exception_if_not_rethrown(ctx.last_exn_val_local, code);
+            self.emit_destroy_exception_if_not_rethrown(ctx.last_exn_val_local, ctx, code);
 
             Self::emit_slot_load(save_val_slot, ctx.fp_local, code);
             code.push(OP_LOCAL_SET);

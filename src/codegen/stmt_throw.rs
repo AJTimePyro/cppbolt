@@ -190,8 +190,20 @@ impl<'a> Codegen<'a> {
     pub(super) fn emit_destroy_exception_if_not_rethrown(
         &self,
         exn_ptr_local: u32,
+        ctx: &FunctionContext,
         code: &mut Vec<u8>,
     ) {
+        let dtor_local = if exn_ptr_local == ctx.scratch1 {
+            ctx.scratch2
+        } else {
+            ctx.scratch1
+        };
+
+        code.push(OP_LOCAL_GET);
+        write_u32(code, exn_ptr_local);
+        code.push(OP_IF);
+        code.push(0x40);
+
         // Check if dtor_idx != -1
         code.push(OP_LOCAL_GET);
         write_u32(code, exn_ptr_local);
@@ -199,10 +211,10 @@ impl<'a> Codegen<'a> {
         write_u32(code, 2);
         write_u32(code, 4);
         code.push(OP_LOCAL_SET);
-        write_u32(code, self.current_scratch1.get());
+        write_u32(code, dtor_local);
 
         code.push(OP_LOCAL_GET);
-        write_u32(code, self.current_scratch1.get());
+        write_u32(code, dtor_local);
         code.push(OP_I32_CONST);
         write_i32(code, -1);
         code.push(OP_I32_NE);
@@ -214,7 +226,7 @@ impl<'a> Codegen<'a> {
         write_i32(code, 16);
         code.push(OP_I32_ADD); // this = payload
         code.push(OP_LOCAL_GET);
-        write_u32(code, self.current_scratch1.get());
+        write_u32(code, dtor_local);
         code.push(OP_CALL_INDIRECT);
         write_u32(code, self.t_i32_v);
         write_u32(code, 0);
@@ -224,5 +236,7 @@ impl<'a> Codegen<'a> {
         write_u32(code, exn_ptr_local);
         code.push(OP_CALL);
         write_u32(code, self.func_indices["free"]);
+
+        code.push(OP_END);
     }
 }

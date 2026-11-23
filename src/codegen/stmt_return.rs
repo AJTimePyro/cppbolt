@@ -23,7 +23,7 @@ impl<'a> Codegen<'a> {
         }
 
         if ctx.catch_depth > 0 {
-            self.emit_destroy_exception_if_not_rethrown(ctx.last_exn_val_local, code);
+            self.emit_destroy_exception_if_not_rethrown(ctx.last_exn_val_local, ctx, code);
         }
 
         if ctx.is_main {
