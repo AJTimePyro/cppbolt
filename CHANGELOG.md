@@ -9,9 +9,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Exception Handling & C++17 `noexcept`
-- Supported `noexcept`, `noexcept(true)`, `noexcept(false)`, and expression-based `noexcept(expr)` specifications evaluated as constant expressions or substituted during template instantiation.
+- Supported `noexcept`, `noexcept(true)`, `noexcept(false)`, and expression-based `noexcept(expr)` specifications evaluated as constant expressions for normal functions and methods, or substituted during template instantiation.
 - Enforced runtime termination semantics for `noexcept` functions: exceptions attempting to escape unwind local automatic frames, restore the shadow stack, and terminate via WebAssembly `unreachable` (exit code 134).
-- Integrated `noexcept` into the C++17 function type system. Pointers and references to `noexcept` functions convert to potentially-throwing function types, while assigning potentially-throwing functions to `noexcept` targets fails compilation.
+- Integrated `noexcept` into the C++17 function type system. Pointers and references to `noexcept` functions convert to potentially-throwing function types at single indirection depth, while assigning potentially-throwing functions to `noexcept` targets or multi-level conversions fail compilation.
 - Implemented the unevaluated `noexcept(expr)` operator, evaluating to a `bool` constant expression without emitting runtime instructions or evaluating operand side effects.
 - Defaulted class destructors and synthesized default destructors to `noexcept(true)` per C++17 [except.spec] unless explicitly declared `noexcept(false)`.
 
