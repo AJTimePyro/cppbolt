@@ -158,7 +158,9 @@ fn expr_can_throw_or_call(expr: &Expr) -> bool {
     let mut stack = vec![expr];
     while let Some(e) = stack.pop() {
         match e {
-            Expr::Call { .. } | Expr::New { .. } | Expr::Delete { .. } => return true,
+            Expr::Call { .. } | Expr::New { .. } | Expr::Delete { .. } | Expr::Throw(..) => {
+                return true;
+            }
             Expr::Binary { left, right, .. } => stack.extend([left.as_ref(), right.as_ref()]),
             Expr::Unary { expr, .. } | Expr::Cast { expr, .. } => stack.push(expr),
             Expr::MemberAccess { object, .. } => stack.push(object),

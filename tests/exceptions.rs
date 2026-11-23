@@ -4877,7 +4877,35 @@ int main() {
     Ok(())
 }
 
+#[test]
+fn test_expression_throw_triggers_function_unwinding_analysis() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
 
+struct DtorGuard {
+    int id;
+    ~DtorGuard() {
+        std::printf("Dtor:%d ", id);
+    }
+};
 
+int compute(bool fail) {
+    DtorGuard g{1};
+    return fail ? throw 42 : 100;
+}
 
+int main() {
+    try {
+        compute(true);
+    } catch (int val) {
+        std::printf("Caught:%d", val);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Dtor:1 Caught:42");
+    Ok(())
+}
 
