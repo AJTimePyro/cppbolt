@@ -3410,6 +3410,37 @@ int main() {
 }
 
 #[test]
+fn test_noexcept_expression_accounts_for_overloaded_operator() -> Result<(), String> {
+    let source = r#"
+struct S {
+    int v;
+    S operator+(const S& o) const { return *this; }
+};
+
+struct T {
+    T operator+(const T& o) const noexcept { return *this; }
+};
+
+struct U {
+    int operator[](int i) const { return i; }
+};
+
+S a;
+S b;
+T c;
+T d;
+U u;
+static_assert(!noexcept(a + b), "operator+ is not noexcept");
+static_assert(noexcept(c + d), "noexcept operator+ must stay noexcept");
+static_assert(!noexcept(u[0]), "operator[] is not noexcept");
+int main() { return 0; }
+"#;
+    let (code, _) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    Ok(())
+}
+
+#[test]
 fn test_invalid_multilevel_pointer_qualification_rejected() -> Result<(), String> {
     let source = r#"
 #include <cstdio>

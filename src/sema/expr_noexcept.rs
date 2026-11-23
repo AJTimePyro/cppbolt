@@ -33,14 +33,21 @@ impl Sema {
             | Expr::AlignofType(..)
             | Expr::SizeofPack { .. }
             | Expr::Lambda { .. } => false,
-            Expr::Unary { expr: inner, .. }
-            | Expr::Cast { expr: inner, .. }
+            Expr::Cast { expr: inner, .. }
             | Expr::PackExpansion { pattern: inner, .. }
             | Expr::Delete { expr: inner, .. } => {
                 self.is_potentially_throwing_with_types(inner, var_types)
             }
-            Expr::Binary { left, right, .. }
-            | Expr::Assign {
+            Expr::Unary {
+                op, expr: inner, ..
+            } => self.unary_is_potentially_throwing(*op, inner, var_types),
+            Expr::Binary {
+                op, left, right, ..
+            } => self.binary_is_potentially_throwing(op.op_name(), left, right, var_types),
+            Expr::ArraySubscript { array, index, .. } => {
+                self.subscript_is_potentially_throwing(array, index, var_types)
+            }
+            Expr::Assign {
                 target: left,
                 value: right,
                 ..
@@ -48,11 +55,6 @@ impl Sema {
             | Expr::CompoundAssign {
                 target: left,
                 value: right,
-                ..
-            }
-            | Expr::ArraySubscript {
-                array: left,
-                index: right,
                 ..
             } => {
                 self.is_potentially_throwing_with_types(left, var_types)
@@ -75,6 +77,64 @@ impl Sema {
             | Expr::FoldExpr { .. }
             | Expr::Call { .. } => self.is_complex_expr_potentially_throwing(expr, var_types),
         }
+    }
+
+    fn subscript_is_potentially_throwing(
+        &self,
+        array: &Expr,
+        index: &Expr,
+        var_types: Option<&HashMap<String, Type>>,
+    ) -> bool {
+        if self.is_potentially_throwing_with_types(array, var_types)
+            || self.is_potentially_throwing_with_types(index, var_types)
+        {
+            return true;
+        }
+        if self.resolve_object_struct_name(array, var_types).is_none() {
+            return false;
+        }
+        self.operator_is_potentially_throwing("operator[]", &[array, index], var_types)
+    }
+
+    fn unary_is_potentially_throwing(
+        &self,
+        op: crate::ast::expr_ops::UnaryOp,
+        inner: &Expr,
+        var_types: Option<&HashMap<String, Type>>,
+    ) -> bool {
+        if self.is_potentially_throwing_with_types(inner, var_types) {
+            return true;
+        }
+        let Some(name) = unary_operator_name(op) else {
+            return false;
+        };
+        if self.resolve_object_struct_name(inner, var_types).is_none() {
+            return false;
+        }
+        self.operator_is_potentially_throwing(name, &[inner], var_types)
+    }
+
+    fn binary_is_potentially_throwing(
+        &self,
+        name: Option<&str>,
+        left: &Expr,
+        right: &Expr,
+        var_types: Option<&HashMap<String, Type>>,
+    ) -> bool {
+        if self.is_potentially_throwing_with_types(left, var_types)
+            || self.is_potentially_throwing_with_types(right, var_types)
+        {
+            return true;
+        }
+        let Some(name) = name else {
+            return false;
+        };
+        if self.resolve_object_struct_name(left, var_types).is_none()
+            && self.resolve_object_struct_name(right, var_types).is_none()
+        {
+            return false;
+        }
+        self.operator_is_potentially_throwing(name, &[left, right], var_types)
     }
 
     fn is_complex_expr_potentially_throwing(
@@ -203,6 +263,34 @@ impl Sema {
         true
     }
 
+    fn operator_is_potentially_throwing(
+        &self,
+        name: &str,
+        operands: &[&Expr],
+        var_types: Option<&HashMap<String, Type>>,
+    ) -> bool {
+        if let Some(sname) = operands
+            .first()
+            .and_then(|e| self.resolve_object_struct_name(e, var_types))
+            && let Some(sig) = self.find_method_in_class(&sname, name)
+        {
+            return !sig.qualifiers.is_noexcept;
+        }
+        for candidate in [name.to_string(), format!("std::{name}")] {
+            let Some(sigs) = self.functions.get(&candidate) else {
+                continue;
+            };
+            let matching: Vec<_> = sigs
+                .iter()
+                .filter(|sig| sig.param_types.len() == operands.len())
+                .collect();
+            if !matching.is_empty() {
+                return matching.iter().any(|sig| !sig.qualifiers.is_noexcept);
+            }
+        }
+        false
+    }
+
     fn resolve_object_struct_name(
         &self,
         object: &Expr,
@@ -237,6 +325,20 @@ impl Sema {
             _ => None,
         }
     }
+}
+
+fn unary_operator_name(op: crate::ast::expr_ops::UnaryOp) -> Option<&'static str> {
+    use crate::ast::expr_ops::UnaryOp;
+    Some(match op {
+        UnaryOp::Not => "operator!",
+        UnaryOp::Neg => "operator-",
+        UnaryOp::BitNot => "operator~",
+        UnaryOp::Plus => "operator+",
+        UnaryOp::AddrOf => "operator&",
+        UnaryOp::Deref => "operator*",
+        UnaryOp::PreInc | UnaryOp::PostInc => "operator++",
+        UnaryOp::PreDec | UnaryOp::PostDec => "operator--",
+    })
 }
 
 fn extract_struct_name(ty: &Type) -> Option<String> {
