@@ -156,13 +156,7 @@ impl Sema {
     ) -> Result<(), CompileError> {
         if let Some(expr) = expr_opt {
             let ty = self.analyze_expr(expr)?;
-            if !is_supported_32bit_throw_type(&ty) {
-                return Err(CompileError::new(
-                    "throwing non-32-bit or floating-point type requires typed exceptions (Phase 4)",
-                    line,
-                    col,
-                ));
-            }
+            self.validate_throw_type(&ty, line, col)?;
         }
         Ok(())
     }
@@ -187,6 +181,7 @@ impl Sema {
             self.enter_scope();
             if let Some((ty, name)) = &mut clause.param {
                 self.resolve_and_instantiate_type(ty, line, col)?;
+                self.validate_catch_type(ty, line, col)?;
                 if !name.is_empty() {
                     self.declare_local_var(name, ty, line, col)?;
                 }

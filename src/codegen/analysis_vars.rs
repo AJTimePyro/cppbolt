@@ -53,3 +53,33 @@ pub(super) fn collect_static_vars(
         _ => {}
     }
 }
+
+pub(super) fn check_stmt_has_try_throw(stmt: &Stmt) -> bool {
+    let mut stack = vec![stmt];
+    while let Some(s) = stack.pop() {
+        match &s.kind {
+            StmtKind::Throw(_) | StmtKind::Try { .. } => return true,
+            StmtKind::Compound(stmts) | StmtKind::VarDeclGroup(stmts) => {
+                stack.extend(stmts.iter());
+            }
+            StmtKind::If {
+                branches,
+                else_stmt,
+                ..
+            } => {
+                for (_, b) in branches {
+                    stack.push(b);
+                }
+                if let Some(eb) = else_stmt {
+                    stack.push(eb);
+                }
+            }
+            StmtKind::While { body, .. }
+            | StmtKind::DoWhile { body, .. }
+            | StmtKind::For { body, .. }
+            | StmtKind::Switch { body, .. } => stack.push(body),
+            _ => {}
+        }
+    }
+    false
+}

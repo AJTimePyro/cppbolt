@@ -37,22 +37,3 @@ pub(crate) struct DeferredMethod {
     pub(crate) method: FunctionDecl,
 }
 
-pub(crate) fn is_supported_32bit_throw_type(ty: &Type) -> bool {
-    matches!(
-        ty.strip_reference().strip_const(),
-        Type::Bool
-            | Type::Char
-            | Type::SignedChar
-            | Type::UnsignedChar
-            | Type::Short
-            | Type::UnsignedShort
-            | Type::Int
-            | Type::UnsignedInt
-            | Type::Long
-            | Type::UnsignedLong
-            | Type::Nullptr
-            | Type::Pointer(_)
-            | Type::Enum(_)
-    )
-}
-

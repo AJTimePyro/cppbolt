@@ -1312,6 +1312,40 @@ int main() {
 }
 
 #[test]
+fn test_byval_parameter_callee_throw_cleans_parameters() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct Param {
+    int id;
+    Param(int i) : id(i) { std::printf("C:%d ", id); }
+    Param(const Param& o) : id(o.id) { std::printf("Copy:%d ", id); }
+    ~Param() { std::printf("D:%d ", id); }
+};
+
+void target(Param a, Param b) {
+    std::printf("InTarget ");
+    throw 888;
+}
+
+int main() {
+    Param p1(1);
+    Param p2(2);
+    try {
+        target(p1, p2);
+    } catch (int e) {
+        std::printf("Caught:%d ", e);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "C:1 C:2 Copy:1 Copy:2 InTarget D:2 D:1 Caught:888 D:2 D:1");
+    Ok(())
+}
+
+#[test]
 fn test_ternary_conditional_temporaries_normal_exit() -> Result<(), String> {
     let source = r#"
 #include <cstdio>
@@ -1492,8 +1526,28 @@ int main() {
 }
 
 #[test]
-fn test_throw_unsupported_64bit_type_errors() -> Result<(), String> {
-    let source = "int main() { throw 3.14; }";
+fn test_throw_and_catch_double() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+int main() {
+    try {
+        throw 3.14159;
+    } catch (double d) {
+        std::printf("CaughtDouble:%d", (int)(d * 100.0));
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "CaughtDouble:314");
+    Ok(())
+}
+
+#[test]
+fn test_throw_void_fails_compilation() -> Result<(), String> {
+    let source = "void foo() {} int main() { throw foo(); }";
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let includes = RepoIncludes {
         stdlib: root.join("stdlib"),
@@ -1501,13 +1555,13 @@ fn test_throw_unsupported_64bit_type_errors() -> Result<(), String> {
     match compile_with_provider(source, "<input>", 256, &includes) {
         Err(err) => {
             let err_str = err.to_string();
-            if err_str.contains("requires typed exceptions (Phase 4)") {
+            if err_str.contains("cannot throw void expression") {
                 Ok(())
             } else {
                 Err(format!("unexpected error: {err_str}"))
             }
         }
-        Ok(_) => Err("must fail compilation when throwing non-32-bit types".to_string()),
+        Ok(_) => Err("must fail compilation when throwing void".to_string()),
     }
 }
 
@@ -1537,6 +1591,389 @@ int main() {
             }
         }
         Ok(_) => Err("must fail compilation when catch-all is not last".to_string()),
+    }
+}
+
+#[test]
+fn test_throw_and_catch_class_by_value() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct MyError {
+    int code;
+    MyError(int c) : code(c) {}
+};
+
+int main() {
+    try {
+        throw MyError(42);
+    } catch (MyError err) {
+        std::printf("CaughtByValue:%d", err.code);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "CaughtByValue:42");
+    Ok(())
+}
+
+#[test]
+fn test_throw_and_catch_class_by_const_reference() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct MyError {
+    int code;
+    MyError(int c) : code(c) {}
+};
+
+int main() {
+    try {
+        throw MyError(77);
+    } catch (const MyError& err) {
+        std::printf("CaughtByConstRef:%d", err.code);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "CaughtByConstRef:77");
+    Ok(())
+}
+
+#[test]
+fn test_throw_and_catch_class_by_non_const_reference_mutation() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct MyError {
+    int code;
+    MyError(int c) : code(c) {}
+};
+
+int main() {
+    try {
+        try {
+            throw MyError(50);
+        } catch (MyError& err) {
+            std::printf("InnerRef:%d ", err.code);
+            err.code += 25;
+            throw;
+        }
+    } catch (const MyError& err2) {
+        std::printf("OuterRefMutated:%d", err2.code);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "InnerRef:50 OuterRefMutated:75");
+    Ok(())
+}
+
+#[test]
+fn test_derived_exception_caught_by_base_reference_single_inheritance() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct Base {
+    int b;
+    Base(int val) : b(val) {}
+};
+
+struct Derived : public Base {
+    int d;
+    Derived(int b_val, int d_val) : Base(b_val), d(d_val) {}
+};
+
+int main() {
+    try {
+        throw Derived(101, 202);
+    } catch (Base& b) {
+        std::printf("CaughtBaseRef:%d", b.b);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "CaughtBaseRef:101");
+    Ok(())
+}
+
+#[test]
+fn test_derived_exception_caught_by_secondary_base_multiple_inheritance() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct Base1 {
+    int b1;
+    Base1(int x) : b1(x) {}
+};
+
+struct Base2 {
+    int b2;
+    Base2(int y) : b2(y) {}
+};
+
+struct Derived : public Base1, public Base2 {
+    int d;
+    Derived(int x, int y, int z) : Base1(x), Base2(y), d(z) {}
+};
+
+int main() {
+    try {
+        throw Derived(11, 22, 33);
+    } catch (Base2& b2) {
+        std::printf("CaughtBase2Ref:%d", b2.b2);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "CaughtBase2Ref:22");
+    Ok(())
+}
+
+#[test]
+fn test_exact_type_handler_preferred_before_base() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct Base {
+    int b;
+    Base(int val) : b(val) {}
+};
+
+struct Derived : public Base {
+    int d;
+    Derived(int b_val, int d_val) : Base(b_val), d(d_val) {}
+};
+
+int main() {
+    try {
+        throw Derived(10, 20);
+    } catch (Derived& d) {
+        std::printf("CaughtExact:%d", d.d);
+    } catch (Base& b) {
+        std::printf("CaughtBase:%d", b.b);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "CaughtExact:20");
+    Ok(())
+}
+
+#[test]
+fn test_unmatched_exception_propagates_to_outer_try() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct ErrorA {
+    int valA;
+    ErrorA(int v) : valA(v) {}
+};
+
+struct ErrorB {
+    int valB;
+    ErrorB(int v) : valB(v) {}
+};
+
+int main() {
+    try {
+        try {
+            throw ErrorA(999);
+        } catch (ErrorB& b) {
+            std::printf("ShouldNotMatchB ");
+        }
+    } catch (ErrorA& a) {
+        std::printf("CaughtOuterA:%d", a.valA);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "CaughtOuterA:999");
+    Ok(())
+}
+
+#[test]
+fn test_exception_object_destruction_exactly_once() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct Tracer {
+    int id;
+    Tracer(int i) : id(i) { std::printf("C:%d ", id); }
+    ~Tracer() { std::printf("D:%d ", id); }
+};
+
+int main() {
+    try {
+        throw Tracer(42);
+    } catch (Tracer& t) {
+        std::printf("InCatch:%d ", t.id);
+    }
+    std::printf("AfterCatch");
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "C:42 InCatch:42 D:42 AfterCatch");
+    Ok(())
+}
+
+#[test]
+fn test_rethrow_preserves_exception_and_destroys_at_final_catch() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct Tracer {
+    int id;
+    Tracer(int i) : id(i) { std::printf("C:%d ", id); }
+    ~Tracer() { std::printf("D:%d ", id); }
+};
+
+int main() {
+    try {
+        try {
+            throw Tracer(88);
+        } catch (Tracer& t) {
+            std::printf("InnerCatch:%d ", t.id);
+            throw;
+        }
+    } catch (Tracer& t2) {
+        std::printf("OuterCatch:%d ", t2.id);
+    }
+    std::printf("Finished");
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "C:88 InnerCatch:88 OuterCatch:88 D:88 Finished");
+    Ok(())
+}
+
+#[test]
+fn test_exception_thrown_in_catch_block_propagates() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+int main() {
+    try {
+        try {
+            throw 10;
+        } catch (int e1) {
+            std::printf("Catch1:%d ", e1);
+            throw 20;
+        }
+    } catch (int e2) {
+        std::printf("Catch2:%d", e2);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Catch1:10 Catch2:20");
+    Ok(())
+}
+
+#[test]
+fn test_negative_cannot_throw_abstract_class() -> Result<(), String> {
+    let source = r#"
+struct Abstract {
+    virtual void pure() = 0;
+};
+
+int main() {
+    Abstract a;
+    throw a;
+}
+"#;
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let includes = RepoIncludes {
+        stdlib: root.join("stdlib"),
+    };
+    match compile_with_provider(source, "<input>", 256, &includes) {
+        Err(err) => {
+            let err_str = err.to_string();
+            if err_str.contains("abstract class") {
+                Ok(())
+            } else {
+                Err(format!("unexpected error: {err_str}"))
+            }
+        }
+        Ok(_) => Err("must fail compilation when throwing abstract class".to_string()),
+    }
+}
+
+#[test]
+fn test_negative_cannot_catch_abstract_class_by_value() -> Result<(), String> {
+    let source = r#"
+struct Abstract {
+    virtual void pure() = 0;
+};
+
+int main() {
+    try {
+        throw 1;
+    } catch (Abstract a) {
+    }
+}
+"#;
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let includes = RepoIncludes {
+        stdlib: root.join("stdlib"),
+    };
+    match compile_with_provider(source, "<input>", 256, &includes) {
+        Err(err) => {
+            let err_str = err.to_string();
+            if err_str.contains("cannot catch abstract class") {
+                Ok(())
+            } else {
+                Err(format!("unexpected error: {err_str}"))
+            }
+        }
+        Ok(_) => Err("must fail compilation when catching abstract class by value".to_string()),
+    }
+}
+
+#[test]
+fn test_negative_cannot_catch_rvalue_reference() -> Result<(), String> {
+    let source = r#"
+int main() {
+    try {
+        throw 1;
+    } catch (int&& e) {
+    }
+}
+"#;
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let includes = RepoIncludes {
+        stdlib: root.join("stdlib"),
+    };
+    match compile_with_provider(source, "<input>", 256, &includes) {
+        Err(err) => {
+            let err_str = err.to_string();
+            if err_str.contains("rvalue reference") {
+                Ok(())
+            } else {
+                Err(format!("unexpected error: {err_str}"))
+            }
+        }
+        Ok(_) => Err("must fail compilation when catching rvalue reference".to_string()),
     }
 }
 

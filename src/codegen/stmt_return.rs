@@ -22,6 +22,10 @@ impl<'a> Codegen<'a> {
             self.emit_dtor_for_scope(scope, ctx, code);
         }
 
+        if ctx.catch_depth > 0 {
+            self.emit_destroy_exception_if_not_rethrown(ctx.last_exn_val_local, code);
+        }
+
         if ctx.is_main {
             // A return from main still destroys namespace-scope objects.
             self.emit_global_destructors(code);

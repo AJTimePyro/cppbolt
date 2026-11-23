@@ -4,6 +4,49 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-23: Exception Handling Phase 4: Typed Exception Objects and Catch Matching
+
+Implemented C++17 typed exception objects, dynamic catch matching, class inheritance conversions, reference and value bindings, and exception object lifecycle management:
+
+### Summary of Work
+
+1. Implemented typed exception object representation and lifecycle:
+   - Exception objects allocate a heap buffer containing a 16-byte metadata header: `[offset 0: type_id (u32), offset 4: dtor_table_idx (i32), offset 8: flags (u32), offset 12: size (u32)]`, followed by the payload at offset 16.
+   - WebAssembly tag 0 carries the 32-bit pointer to this header.
+   - Thrown class objects initialize the payload via copy constructors or byte copies; throwing rvalue temporaries deactivates temporary cleanup and transfers ownership directly to the exception object.
+   - Registered class destructor table indices in `src/codegen/program_emit.rs` for indirect destructor invocation upon catch completion.
+   - Handlers destroy the exception object exactly once (via `call_indirect` on `dtor_table_idx`) and free the heap buffer when catching finishes normally or returns.
+2. Implemented dynamic catch matching helper (`__cppbolt_can_catch` in `src/codegen/exception_can_catch.rs`):
+   - Compiles a WebAssembly function testing exact type IDs, pointer conversions (`char*` to `const char*`, object pointers to `void*` or `const void*`), and derived-to-base class inheritance.
+   - Returns the non-negative subobject byte offset on a match, or -1 on non-match.
+   - Supports single and multiple inheritance hierarchies, adjusting pointer addresses to base subobjects.
+3. Implemented catch parameter binding and dispatch in `src/codegen/stmt_try.rs`:
+   - Lowered `try_table` clauses to route tag 0 into a typed dispatch block that evaluates each catch clause sequentially.
+   - Catch by reference (`catch (T&)` or `catch (const T&)`): binds the adjusted payload address directly to the local reference slot, enabling zero-copy access and in-place mutation without slicing.
+   - Catch by value (`catch (T)`): allocates local frame storage and invokes the copy constructor (or performs byte copy) from the adjusted payload address, slicing derived objects to base subobjects and destroying the local copy at catch scope exit.
+   - Unmatched clauses in a `try` block propagate the exception by rethrowing tag 0 to the enclosing scope.
+   - Preserved rethrow semantics (`throw;`): rethrows the active exception object pointer without premature destruction.
+4. Added semantic validation in `src/sema/exception_types.rs`:
+   - Validated thrown expressions, rejecting `void`, incomplete types, and abstract classes.
+   - Validated catch parameters, rejecting abstract classes caught by value and rejecting rvalue-reference catch handlers (`catch (T&&)`).
+5. Added end-to-end test coverage in `tests/exceptions.rs`:
+   - Verified throwing and catching classes by value, const reference, and non-const reference with in-place mutation.
+   - Verified single and multiple inheritance conversions with non-zero subobject offset adjustments.
+   - Verified exact-type handler precedence before base-class handlers.
+   - Verified unmatched exception propagation to outer `try` blocks.
+   - Verified single destruction of thrown objects on catch exit and preservation across rethrows (`throw;`).
+   - Verified compile-time diagnostics for invalid throw and catch types.
+
+### Verification Results
+
+- Exception test suite: all 56 tests in `tests/exceptions.rs` pass.
+- Repository test suite: all unittests and integration tests pass, including `tests/oracle_gate.rs` (native GCC/Clang comparisons).
+- Census audit: all 7 tests in `tests/census_fixture.rs` pass (0 files over 500 lines, 0 functions over 80 lines, 0 functions with >5 parameters excluding self).
+- Clippy: `cargo clippy --all-targets -- -D warnings` passes with 0 warnings.
+- Documentation: `mdbook build docs/book` succeeds with 0 errors, and `python3 tools/check_feature_matrix.py` validates all feature matrix test links.
+
+---
+
 ## 2026-11-23: Exception Handling Phases 1–3 Hardening: Multiple Catches, Conditional Temporaries, and 32-Bit Payload ABI
 
 Hardened exception handling across Phase 1 (Infrastructure), Phase 2 (Scope-Aware Unwinding), and Phase 3 (Unwinding Correctness):

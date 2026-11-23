@@ -7,6 +7,7 @@ mod call_types;
 mod cond;
 mod construct;
 mod emit_context;
+mod exception_can_catch;
 mod expr;
 mod expr_assign;
 mod expr_binary;
@@ -42,6 +43,7 @@ mod raii;
 mod stmt;
 mod stmt_loop;
 mod stmt_return;
+mod stmt_throw;
 mod stmt_try;
 mod stmt_var;
 mod stmt_var_init;
@@ -61,7 +63,7 @@ use analysis::{
     FuncCandidate, FuncDeclRef, check_stmt_has_new_delete, collect_address_taken_expr,
     collect_address_taken_stmt, collect_expr_calls, collect_stmt_calls, collect_type_lifecycle,
 };
-use analysis_vars::collect_static_vars;
+use analysis_vars::{check_stmt_has_try_throw, collect_static_vars};
 use emit_context::{
     ArrayLocal, ArrayLoop, ArraySlots, BinaryTypes, CallSite, CtorCall, GlobalInit, MemberAccess,
     NamedCall, ScalarAssign, SwitchSlots,
@@ -97,6 +99,7 @@ pub struct Codegen<'a> {
     pub global_inits: Vec<(String, Type, Option<Expr>)>,
     pub global_dtors: Vec<(String, u32)>,
     pub func_table_indices: HashMap<String, u32>,
+    pub dtor_table_indices: HashMap<String, u32>,
     /// The position of the statement being lowered.
     ///
     /// Lowering errors that cannot name an expression report this position,
@@ -176,6 +179,7 @@ impl<'a> Codegen<'a> {
             global_inits: Vec::new(),
             global_dtors: Vec::new(),
             func_table_indices: HashMap::new(),
+            dtor_table_indices: HashMap::new(),
             current_line: 1,
             current_col: 1,
             current_scratch1: std::cell::Cell::new(0),

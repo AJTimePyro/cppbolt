@@ -74,17 +74,23 @@ Each function context allocates a 64-bit local variable (`cleanup_mask_local: i6
 - Functions registering 64 or more cleanup objects fail compilation with an explicit error.
 - During unwinding, `emit_cleanup_range` iterates over registered entries in reverse order, executing only those whose bit is set in the liveness mask.
 
-### 4. Scope-Isolated Try/Catch and Rethrow (`src/codegen/stmt_try.rs`)
+### 4. Scope-Isolated Try/Catch, Typed Matching, and Object Lifecycle (`src/codegen/stmt_try.rs`, `src/codegen/stmt_throw.rs`, `src/sema/exception_types.rs`)
 A `try` statement compiles to an inner `try_table` targeting its catch handlers:
-- A `try` statement supports multiple sequential `catch` clauses (such as `catch (int)` followed by `catch (...)`). The compiler emits enclosing blocks for each clause and a single `try_table` with corresponding catch targets.
+- A `try` statement supports multiple sequential `catch` clauses (such as `catch (Derived&)`, `catch (Base&)`, and `catch (...)`).
 - ISO C++17 [except.handle] handler ordering is strictly enforced: `catch (...)` must appear last in the handler sequence. If any catch clause follows `catch (...)`, semantic analysis rejects the program with a compile-time error.
-- Catching tag 0 binds the 32-bit integer or pointer payload into a frame slot if named (`catch (int e)` or `catch (const char* msg)`).
-- Catch-all (`catch (...)`) captures `exnref` for rethrow via `throw_ref`.
-- Thrown expressions are validated in semantic analysis (`is_supported_32bit_throw_type`) to ensure they evaluate to 32-bit scalar or pointer types matching WebAssembly tag 0. Unsupported 64-bit and floating-point throw expressions produce a compile error.
-- The compiler runs an AST pre-pass (`max_catch_depth`) to allocate `(max_depth + 1)` `TYPE_EXNREF` locals, giving each nested handler a dedicated local and preventing inner handlers from overwriting outer exception references.
-- Entering an inner catch block preserves the active exception payload in a dedicated frame slot and restores it on exit. This ensures that `throw;` within an outer handler resolves to the outer exception.
-- Only cleanups registered within the `try` block range (`start_clean_idx..end_clean_idx`) are executed when entering the catch block; outer function objects remain untouched and active.
-- `throw;` inside a catch block rethrows the active exception (`throw_ref` or `throw 0`). Outside any catch block (`catch_depth == 0`), `throw;` emits `OP_UNREACHABLE` to trigger `std::terminate()`.
+- Exception objects are heap-allocated with a 16-byte header: `[offset 0: type_id (u32), offset 4: dtor_table_idx (i32), offset 8: flags (u32), offset 12: size (u32)]`, followed by the exception payload at offset 16. WebAssembly exception tag 0 carries the 32-bit pointer to this header.
+- Thrown expressions initialize the payload: class types invoke copy constructors or copy bytes directly into the heap buffer; scalar types and pointers store their raw values.
+- In `try_table`, tag 0 branches to a typed dispatch block that sequentially tests each catch clause using `__cppbolt_can_catch(thrown_id, handler_id)`.
+- `__cppbolt_can_catch` evaluates exact type matches, pointer conversions (`char*` to `const char*`, object pointers to `void*` or `const void*`), and derived-to-base class inheritance. For derived exceptions caught by base handlers, it returns the base subobject byte offset.
+- Catch parameters bind according to declared type:
+  - Catch by reference (`catch (T&)` or `catch (const T&)`): stores the payload address (adjusted for subobject offset) into a local slot, enabling zero-copy access and in-place mutation.
+  - Catch by value (`catch (T)`): allocates a local slot and invokes the copy constructor (or performs a byte copy) from the payload address, destroying the local copy at catch scope exit.
+- When catch handling completes normally or exits via `return`, the compiler invokes the exception destructor (via `call_indirect` on `dtor_table_idx`) and frees the exception header buffer with `free`.
+- Catch-all (`catch (...)`) catches any WebAssembly exception, handling both tag 0 exceptions and foreign `exnref` values.
+- Unmatched exceptions in a `try` block rethrow tag 0 to enclosing scopes.
+- Rethrow (`throw;`) rethrows the active exception object pointer directly. The original object and its metadata remain intact until the final handler completes.
+- Outside any catch block (`catch_depth == 0`), `throw;` emits `OP_UNREACHABLE` to trigger `std::terminate()`.
+- Semantic analysis validates throw and catch types: throwing `void`, incomplete types, or abstract classes fails compilation; catching abstract classes by value or catching rvalue references (`catch (T&&)`) fails compilation.
 
 ### 5. Terminating Destructors (`src/codegen/unwind.rs`)
 All destructor invocations in `emit_cleanup_range` are enclosed within a `try_table (catch_all -> unreachable)` block. If any destructor throws while unwinding an active exception, WebAssembly immediately traps with `unreachable` (`std::terminate`).
@@ -103,8 +109,11 @@ Fully constructed temporary objects created during expression evaluation registe
 ## Consequences
 
 ### Positive
-- Matches C++17 exception control flow and RAII lifetime semantics across function boundaries, nested blocks, and loops.
-- Supports multiple catch clauses per try block lowered to WebAssembly `try_table` clauses.
+- Matches C++17 exception control flow, typed catch matching, and RAII lifetime semantics across function boundaries, nested blocks, and loops.
+- Supports class-type exceptions with dynamic allocation, copy construction, subobject slicing, and destructor cleanup.
+- Supports single and multiple inheritance conversions with non-zero subobject offset adjustments in catch handlers.
+- Supports catching by value, const reference, and non-const reference with in-place mutation.
+- Lowers multiple catch clauses per try block to sequential dispatch blocks with WebAssembly `try_table`.
 - Enforces ISO C++17 handler ordering rejecting clauses after `catch (...)`.
 - Uses native WebAssembly instructions without JavaScript runtime trampolines.
 - Emits no unwinding instructions in leaf functions.
@@ -114,4 +123,4 @@ Fully constructed temporary objects created during expression evaluation registe
 
 ### Negative / Trade-offs
 - Limits single functions to 64 tracked automatic/local variable cleanup objects, checked at compile time.
-- Uses a 32-bit payload (tag 0); class hierarchies (`std::exception`) with RTTI type matching are deferred to Phase 4.
+- Dynamic exception objects allocate heap memory through `malloc` and `free`.

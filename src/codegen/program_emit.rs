@@ -14,6 +14,7 @@ impl<'a> Codegen<'a> {
         let deleting_dtor_structs = self.reserve_deleting_dtors();
         self.emit_vtables(plan);
         self.register_address_taken_table(plan);
+        self.register_destructors_table();
 
         if !self.vtable_func_indices.is_empty() {
             let count = self.vtable_func_indices.len() as u32;
@@ -309,6 +310,17 @@ impl<'a> Codegen<'a> {
             self.module
                 .codes
                 .push(crate::runtime::emit_pure_virtual_trap());
+        }
+        self.emit_can_catch_function();
+    }
+
+    fn register_destructors_table(&mut self) {
+        for name in &self.sema.struct_order.clone() {
+            if let Some(dtor_idx) = self.lookup_struct_dtor(name) {
+                let table_elem_idx = self.vtable_func_indices.len() as u32;
+                self.vtable_func_indices.push(dtor_idx);
+                self.dtor_table_indices.insert(name.clone(), table_elem_idx);
+            }
         }
     }
 

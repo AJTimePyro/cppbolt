@@ -18,6 +18,13 @@ impl<'a> Codegen<'a> {
         let need_printf = all_reachable_calls
             .iter()
             .any(|c| crate::name::is_printf(c));
+        let has_exceptions = reachable.iter().any(|&idx| {
+            let body_opt = match &candidates[idx].decl {
+                FuncDeclRef::Function(f) => f.body.as_ref(),
+                FuncDeclRef::Method(_, m) => m.body.as_ref(),
+            };
+            body_opt.map(check_stmt_has_try_throw).unwrap_or(false)
+        });
         // Keep the allocator whenever a record exists: synthesized constructors,
         // destructors, and prvalue returns may allocate even without a visible
         // `new`, `malloc`, or `free` call.
@@ -25,12 +32,19 @@ impl<'a> Codegen<'a> {
             || all_reachable_calls.contains("free")
             || has_deleting_dtors
             || has_new_or_delete
-            || !self.sema.struct_layouts.is_empty();
+            || !self.sema.struct_layouts.is_empty()
+            || has_exceptions;
         let has_indirect_calls = self.has_indirect_calls(&candidates, &reachable);
         let has_vtables = self.has_vtables();
+        let has_struct_dtors = self
+            .sema
+            .struct_order
+            .iter()
+            .any(|name| self.lookup_struct_dtor(name).is_some());
         // Vtables, function pointers, and indirect calls all need a funcref
         // table. Slot 0 is reserved for the pure-virtual trap.
-        let need_table = has_vtables || !address_taken.is_empty() || has_indirect_calls;
+        let need_table =
+            has_vtables || !address_taken.is_empty() || has_indirect_calls || has_struct_dtors;
 
         let trap_func_idx = self.register_runtime_functions(need_printf, need_alloc, need_table);
         Plan {
@@ -439,18 +453,23 @@ impl<'a> Codegen<'a> {
             self.func_indices.insert("free".to_string(), func_free);
         }
 
-        if need_table {
+        let trap_ret = if need_table {
             let func_trap = (self.module.imports.len() + self.module.functions.len()) as u32;
             let t_trap = self.module.add_type(vec![], vec![]);
             self.module.functions.push(t_trap);
             self.func_indices
                 .insert("__cxa_pure_virtual".to_string(), func_trap);
-            // Table slot 0 points at the trap so an unfilled vtable slot is a
-            // deterministic dynamic error.
             self.vtable_func_indices = vec![func_trap];
             Some(func_trap)
         } else {
             None
-        }
+        };
+
+        let func_can_catch = (self.module.imports.len() + self.module.functions.len()) as u32;
+        let t_can_catch = self.module.add_type(vec![TYPE_I32, TYPE_I32], vec![TYPE_I32]);
+        self.module.functions.push(t_can_catch);
+        self.func_indices
+            .insert("__cppbolt_can_catch".to_string(), func_can_catch);
+        trap_ret
     }
 }
