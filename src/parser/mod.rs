@@ -55,6 +55,7 @@ pub struct Parser {
     /// Member alias names declared by each class definition, keyed by the
     /// definition's name, including partial-specialization arguments.
     pub struct_member_aliases: HashMap<String, Vec<String>>,
+    pub deleted_functions: Vec<String>,
     pub scoped_aliases: Vec<HashMap<String, Type>>,
     pub current_namespace: Vec<String>,
     pub open_namespaces: Vec<String>,
@@ -122,6 +123,7 @@ impl Parser {
             member_types,
             struct_template_args: HashMap::new(),
             struct_member_aliases: HashMap::new(),
+            deleted_functions: Vec::new(),
             scoped_aliases,
             current_namespace: Vec::new(),
             open_namespaces: Vec::new(),
@@ -443,6 +445,7 @@ impl Parser {
         }
         Ok(Program {
             declarations,
+            deleted_functions: std::mem::take(&mut self.deleted_functions),
             type_aliases: self.type_aliases.clone(),
             namespace_type_aliases: self.namespace_type_aliases.clone(),
         })

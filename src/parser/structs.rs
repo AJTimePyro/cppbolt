@@ -12,14 +12,12 @@ impl Parser {
         if !self.active_type_params.is_empty() {
             self.register_template_name(&name);
         }
-
         if self.peek() == &TokenKind::Semi {
             self.advance();
             let mut body = StructBody::new(name.clone(), is_class, is_final, start.line, start.col);
             body.alignment = struct_align;
             return Ok(Self::emit_friends(body, Vec::new()));
         }
-
         let base_classes = self.parse_base_classes(is_class)?;
         self.expect(TokenKind::LBrace)?;
 
@@ -40,7 +38,6 @@ impl Parser {
                 .entry(fname.clone())
                 .or_insert_with(|| fty.clone());
         }
-
         Ok(Self::emit_friends(body, base_classes))
     }
 
@@ -329,6 +326,9 @@ impl Parser {
             )?;
             ctor.is_virtual |= is_virtual;
             ctor.is_explicit = is_explicit;
+            if body.is_private {
+                body.private_members.push(short_name.to_string());
+            }
             body.methods.push(ctor);
             return Ok(true);
         }

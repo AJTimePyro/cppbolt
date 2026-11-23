@@ -3358,6 +3358,57 @@ int main() {
     Ok(())
 }
 
+fn assert_compile_error(source: &str, needle: &str) -> Result<(), String> {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let includes = RepoIncludes {
+        stdlib: root.join("stdlib"),
+    };
+    match compile_with_provider(source, "<input>", 256, &includes) {
+        Err(err) => {
+            let err_str = err.to_string();
+            if err_str.contains(needle) {
+                Ok(())
+            } else {
+                Err(format!("unexpected error: {err_str}"))
+            }
+        }
+        Ok(_) => Err(format!("must fail compilation with '{needle}'")),
+    }
+}
+
+#[test]
+fn test_negative_throw_deleted_copy_ctor() -> Result<(), String> {
+    let source = r#"
+struct NoCopy {
+    NoCopy() {}
+    NoCopy(const NoCopy&) = delete;
+    NoCopy(NoCopy&&) = delete;
+};
+int main() {
+    NoCopy a;
+    try { throw a; } catch (...) {}
+    return 0;
+}
+"#;
+    assert_compile_error(source, "copy constructor")
+}
+
+#[test]
+fn test_negative_catch_private_copy_ctor() -> Result<(), String> {
+    let source = r#"
+struct NoCopy {
+    NoCopy() {}
+private:
+    NoCopy(const NoCopy&) {}
+};
+int main() {
+    try { throw 1; } catch (NoCopy) {}
+    return 0;
+}
+"#;
+    assert_compile_error(source, "copy constructor")
+}
+
 #[test]
 fn test_private_base_catch_is_rejected() -> Result<(), String> {
     let source = r#"

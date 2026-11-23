@@ -146,6 +146,34 @@ impl Sema {
         }
     }
 
+    fn validate_exception_construction(
+        &self,
+        ty: &Type,
+        line: usize,
+        col: usize,
+    ) -> Result<(), CompileError> {
+        let Type::Struct(sname) = ty.strip_reference().strip_const() else {
+            return Ok(());
+        };
+        let short = crate::name::QualifiedName::new(sname).class_short_name();
+        let unavailable = self.deleted_functions.contains(short)
+            || self
+                .struct_layouts
+                .get(sname)
+                .is_some_and(|layout| layout.private_members.contains(short));
+        if unavailable {
+            return Err(CompileError::new(
+                format!(
+                    "copy constructor for exception object of type '{}' is deleted or inaccessible",
+                    sname
+                ),
+                line,
+                col,
+            ));
+        }
+        Ok(())
+    }
+
     pub fn validate_throw_type(
         &self,
         ty: &Type,
@@ -173,7 +201,7 @@ impl Sema {
                 ));
             }
         }
-        Ok(())
+        self.validate_exception_construction(ty, line, col)
     }
 
     pub fn validate_catch_type(
@@ -199,6 +227,9 @@ impl Sema {
                 line,
                 col,
             ));
+        }
+        if !ty.is_reference() {
+            self.validate_exception_construction(ty, line, col)?;
         }
         Ok(())
     }

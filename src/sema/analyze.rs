@@ -3,6 +3,7 @@ use super::*;
 
 impl Sema {
     pub fn analyze_program(&mut self, program: &mut Program) -> Result<(), CompileError> {
+        self.deleted_functions = program.deleted_functions.iter().cloned().collect();
         self.object_use_classes = collect_object_use_classes(program);
         self.attach_out_of_class_methods(program);
         self.seed_lifecycle_types(program);

@@ -140,6 +140,7 @@ impl Sema {
             static_const_values: HashMap::new(),
             enum_types: HashMap::new(),
             scoped_enums: HashSet::new(),
+            deleted_functions: HashSet::new(),
             functions: HashMap::new(),
             hidden_friends: HashMap::new(),
             hidden_friend_templates: HashMap::new(),

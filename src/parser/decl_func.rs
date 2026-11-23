@@ -26,7 +26,10 @@ impl Parser {
         let (is_const, ref_qualifier) = (quals.is_const, quals.ref_qualifier);
         let is_virtual = quals.is_override;
         let ctor_initializers = self.parse_ctor_initializers()?;
-        let (body, is_pure_virtual) = self.parse_function_body(line, col)?;
+        let (body, is_pure_virtual, is_deleted) = self.parse_function_body(line, col)?;
+        if is_deleted {
+            self.deleted_functions.push(name.clone());
+        }
 
         Ok(FunctionDecl {
             qualifiers: quals,
@@ -446,17 +449,21 @@ impl Parser {
         &mut self,
         line: usize,
         col: usize,
-    ) -> Result<(Option<Stmt>, bool), CompileError> {
+    ) -> Result<(Option<Stmt>, bool, bool), CompileError> {
         let mut is_pure_virtual = false;
+        let mut is_deleted = false;
         let body = if self.peek() == &TokenKind::Assign {
             self.advance();
             match self.advance().kind {
                 TokenKind::IntLiteral(0, _) => {
                     is_pure_virtual = true;
                 }
+                TokenKind::KwDelete => {
+                    is_deleted = true;
+                }
                 _ => {
                     return Err(CompileError::new(
-                        "Expected 0 in pure virtual declaration",
+                        "Expected 0 or 'delete' after '=' in function declaration",
                         line,
                         col,
                     ));
@@ -471,6 +478,6 @@ impl Parser {
             None
         };
 
-        Ok((body, is_pure_virtual))
+        Ok((body, is_pure_virtual, is_deleted))
     }
 }

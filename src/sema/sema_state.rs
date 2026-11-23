@@ -28,6 +28,8 @@ pub struct Sema {
     pub static_const_values: HashMap<String, i128>,
     pub enum_types: HashMap<String, String>,
     pub scoped_enums: HashSet<String>,
+    /// Source names of functions declared `= delete`.
+    pub deleted_functions: HashSet<String>,
     pub functions: HashMap<String, Vec<FunctionSig>>,
     /// Friend functions defined in a class, keyed by that class's name.
     /// Found only through ADL, never through ordinary lookup.

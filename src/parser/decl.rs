@@ -415,8 +415,11 @@ impl Parser {
         } = final_ty
         {
             let ctor_initializers = self.parse_ctor_initializers()?;
-            let (body, is_pure_virtual) =
+            let (body, is_pure_virtual, is_deleted) =
                 self.parse_function_body(start_tok.line, start_tok.col)?;
+            if is_deleted {
+                self.deleted_functions.push(name.clone());
+            }
             let params = param_types
                 .into_iter()
                 .map(|ty| Param {

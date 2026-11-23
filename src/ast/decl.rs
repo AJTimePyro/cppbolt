@@ -116,6 +116,9 @@ pub enum Decl {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
     pub declarations: Vec<Decl>,
+    /// Source names of functions declared `= delete`. Used to reject throwing
+    /// or catching class types whose copy or move constructor is deleted.
+    pub deleted_functions: Vec<String>,
     pub type_aliases: HashMap<String, Type>,
     /// Names of type aliases declared at namespace scope, as opposed to member
     /// aliases whose names are qualified by their owning class.
