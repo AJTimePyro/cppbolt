@@ -235,10 +235,15 @@ impl<'a> Codegen<'a> {
 
     fn emit_can_catch_inheritance(&self, code: &mut Vec<u8>) {
         let mut seen = std::collections::HashSet::new();
+        let canonical_names = self.sema.canonical_class_names();
         for (derived_name, layout) in &self.sema.struct_layouts {
-            if let Some(derived_id) = self.sema.get_class_type_id(derived_name) {
+            if let Some(derived_id) =
+                self.sema.class_type_id_from_names(derived_name, &canonical_names)
+            {
                 for (base_name, base_off) in &layout.base_offsets {
-                    if let Some(base_id) = self.sema.get_class_type_id(base_name) {
+                    if let Some(base_id) =
+                        self.sema.class_type_id_from_names(base_name, &canonical_names)
+                    {
                         if !seen.insert((derived_id, base_id, *base_off)) {
                             continue;
                         }

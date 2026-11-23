@@ -184,17 +184,12 @@ impl<'a> Codegen<'a> {
         {
             return Some(idx);
         }
-        let alt = QualifiedName::new(class_name).alternate();
-        if let Some(sig) = find_sig(self.sema, alt.as_ref(), key)
-            && let Some(&idx) = self.func_indices.get(&sig.mangled_name)
-        {
-            return Some(idx);
-        }
         if key.is_destructor()
             && let Some((idx, _)) = self.find_destructor_sig(class_name, "~")
         {
             return Some(idx);
         }
+        let alt = QualifiedName::new(class_name).alternate();
         let layout_opt = self.sema.struct_layouts.get(class_name).or_else(|| {
             self.sema.struct_layouts.get(alt.as_ref())
         });

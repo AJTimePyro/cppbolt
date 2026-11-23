@@ -24,8 +24,7 @@ pub const TYPE_ID_NULLPTR: u32 = 18;
 pub const TYPE_ID_CLASS_BASE: u32 = 1000;
 
 impl Sema {
-    pub fn get_class_type_id(&self, class_name: &str) -> Option<u32> {
-        let plain_target = crate::name::QualifiedName::new(class_name).plain();
+    pub fn canonical_class_names(&self) -> Vec<&str> {
         let mut names: Vec<&str> = self
             .struct_layouts
             .keys()
@@ -34,9 +33,19 @@ impl Sema {
         names.sort_unstable();
         names.dedup();
         names
-            .iter()
-            .position(|k| *k == plain_target)
+    }
+
+    pub fn class_type_id_from_names(&self, class_name: &str, names: &[&str]) -> Option<u32> {
+        let plain_target = crate::name::QualifiedName::new(class_name).plain();
+        names
+            .binary_search(&plain_target)
+            .ok()
             .map(|i| (i as u32) + TYPE_ID_CLASS_BASE)
+    }
+
+    pub fn get_class_type_id(&self, class_name: &str) -> Option<u32> {
+        let names = self.canonical_class_names();
+        self.class_type_id_from_names(class_name, &names)
     }
 
     pub fn get_base_type_id(&self, ty: &Type) -> Option<u32> {

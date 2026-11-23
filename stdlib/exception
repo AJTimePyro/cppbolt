@@ -70,6 +70,7 @@ _LIBCPP_NORETURN _LIBCPP_HIDE_FROM_ABI inline void terminate() _NOEXCEPT {
   abort();
 }
 
+// shortcut: uncaught_exceptions returns 0; in-flight unwinding count requires runtime global tracking
 _LIBCPP_HIDE_FROM_ABI inline bool uncaught_exception() _NOEXCEPT {
   return false;
 }
