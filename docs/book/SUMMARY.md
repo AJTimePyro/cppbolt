@@ -23,6 +23,8 @@
 # Standard Library
 
 - [`<type_traits>`](stdlib/type_traits.md)
+- [`<exception>`](stdlib/exception.md)
+- [`<stdexcept>`](stdlib/stdexcept.md)
 
 # Architecture Decision Records
 
