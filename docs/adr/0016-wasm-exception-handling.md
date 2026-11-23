@@ -82,7 +82,7 @@ A `try` statement compiles to an inner `try_table` targeting its catch handlers:
 - Thrown expressions initialize the payload: class types invoke move constructors for eligible local variables or xvalues, copy constructors, or byte copies directly into the heap buffer; scalar types and pointers store their raw values.
 - If payload construction throws an exception, a `try_table` guard frees the allocated exception buffer before rethrowing the constructor exception.
 - In `try_table`, tag 0 branches to a typed dispatch block that sequentially tests each catch clause using `__cppbolt_can_catch(thrown_id, handler_id)`.
-- `__cppbolt_can_catch` evaluates exact type matches, pointer qualification conversions (`T*` to `const T*`), void pointer matches (`void*` to mutable pointers, `const void*` to any pointer), `nullptr` exceptions to pointer handlers, and derived-to-base class inheritance. Pointer types use distinct type-ID intervals to prevent collisions between unrelated pointer types.
+- `__cppbolt_can_catch` evaluates exact type matches, ISO C++17 [conv.qual] pointer qualification conversions (including multi-level conversions such as `T**` to `const T* const*` and `T* const*`), void pointer matches (`void*` to mutable pointers, `const void*` to any pointer), `nullptr` exceptions to pointer handlers, and derived-to-base class inheritance. Pointer type IDs use a bitfield encoding (bits 0..15 base ID, bits 16..19 indirection depth, bits 20..27 const mask per level) that prevents collisions across different indirection levels and class counts.
 - For derived exceptions caught by base handlers, `__cppbolt_can_catch` returns the base subobject byte offset. For pointer catches, the code applies this offset directly to the dereferenced pointer value while preserving null pointers.
 - Catch parameters bind according to declared type:
   - Catch by reference (`catch (T&)` or `catch (const T&)`): stores the payload address (adjusted for subobject offset) into a local slot, enabling zero-copy access and in-place mutation.
@@ -90,7 +90,7 @@ A `try` statement compiles to an inner `try_table` targeting its catch handlers:
 - Handled exception slots are tracked in `active_exception_slots`. Exiting a catch handler normally, via `return`, or via loop `break` or `continue` invokes the exception destructor (via `call_indirect` on `dtor_table_idx`) and frees the heap allocation with `free`.
 - Catch clause bodies execute inside a nested exception handler. If a new exception propagates out of a catch body, the runtime destroys the currently handled exception object before propagating the new exception. Rethrow (`throw;`) rethrows the active exception object without destroying it.
 - Outside any catch block (`catch_depth == 0`), `throw;` emits `OP_UNREACHABLE` to trigger `std::terminate()`.
-- Dead-code elimination marks all class destructors and their transitive call trees reachable whenever the program uses try blocks or throw statements.
+- Dead-code elimination scans reachable functions to collect classes referenced in `throw` expressions, `catch` parameters, and base subobjects, retaining only those destructors and their call trees rather than marking all program classes reachable indiscriminately.
 - Semantic analysis validates throw and catch types: throwing `void`, incomplete types, or abstract classes fails compilation; catching abstract classes by value or catching rvalue references (`catch (T&&)`) fails compilation.
 
 ### 5. Terminating Destructors (`src/codegen/unwind.rs`)

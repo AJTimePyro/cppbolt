@@ -4,6 +4,32 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-23: Collision-Free Bitfield Pointer Type IDs, Multi-Level Qualification Conversions, and Precise DCE Destructor Retention
+
+Resolved pointer exception type ID collisions, added support for ISO C++17 multi-level pointer qualification conversions, and optimized dead-code elimination destructor retention:
+
+### Summary of Work
+
+1. Collision-free bitfield pointer type IDs (`src/sema/exception_types.rs`, `src/codegen/exception_can_catch.rs`):
+   - Replaced linear pointer type-ID addition with a 32-bit bitfield layout: bits 0..15 encode base type ID, bits 16..19 encode indirection depth (1 for `*`, 2 for `**`, 3 for `***`), and bits 20..27 encode per-level const qualification.
+   - Eliminated type-ID collisions between pointers of different indirection depths (such as `int***` vs `const int**`) and prevented pointer IDs from overlapping with user class IDs.
+2. ISO C++17 multi-level pointer qualification conversions (`src/codegen/exception_can_catch.rs`, `tests/exceptions.rs`):
+   - Implemented catch matching for multi-level qualification conversions per ISO C++17 [conv.qual] / [except.handle]: `T**` matches `const T* const*` and `T* const*`, `const T**` matches `const T* const*`, while `const T**` correctly rejects `T**`.
+   - Verified matching semantics against native Clang and GCC.
+3. Precise dead-code elimination for exception destructors (`src/codegen/program_prepare.rs`, `src/codegen/program_prepare_runtime.rs`, `tests/exceptions.rs`):
+   - Replaced blanket class destructor retention with targeted AST reachability scanning.
+   - Collected classes and base subobjects appearing in `throw` expressions or `catch` parameters across reachable functions, retaining only those destructors and their call trees.
+   - Eliminated unreferenced classes and their destructors from compiled WebAssembly modules.
+
+### Verification Results
+
+- Exception test suite: all 67 tests in `tests/exceptions.rs` pass.
+- Census audit: all 7 tests in `tests/census_fixture.rs` pass (0 files over 500 lines, 0 functions over 80 lines, 0 functions with >5 parameters excluding self).
+- Clippy: `cargo clippy --all-targets -- -D warnings` passes with 0 warnings.
+- Documentation checks: `python3 tools/check_feature_matrix.py` and `mdbook build docs/book` pass without error.
+
+---
+
 ## 2026-11-23: Typed Exception Handling Correctness Audit and Lifecycle Hardening
 
 Audited, verified, and resolved edge cases across typed C++ exception handling:
