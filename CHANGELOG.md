@@ -18,11 +18,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Exception Handling Conformance (C++17)
 - Runtime termination paths now call `std::terminate`, so handlers installed with `std::set_terminate` run on `noexcept` violations, `throw;` without an active exception, throwing destructors during unwinding, and exceptions escaping `main`.
 - Gave enums, function signatures, and member-pointer types distinct exception type IDs, and restricted derived-to-base catch matching to unambiguous public bases. `nullptr` now matches member-pointer handlers.
-- Rejected throwing or catching class types whose copy or move constructor is deleted or private; added `= delete` parsing and signature-based constructor tracking so private or deleted default/converting constructors do not block exception construction.
+- Rejected throwing or catching class types whose copy or move constructor is deleted or private; distinguished value categories so prvalues use guaranteed copy elision, rvalues and move-eligible locals select the move constructor, and lvalues select the copy constructor. Explicit copy or move constructors are rejected in copy-initialization.
 - Enforced C++17 move-eligibility scope rules on thrown locals, multi-level pointer qualification conversions, and overloaded operators inside `noexcept(expr)`.
 - Overflowing the 64-entry cleanup budget is now a compile error instead of silently dropping temporary destructors.
-- Implemented dynamic `std::uncaught_exceptions()` and `std::uncaught_exception()` via a WebAssembly counter.
-- Added function-try-block parsing with automatic rethrow from constructor handlers, member initializer lists after `try`, and raw function-pointer declarators in `catch` clauses.
+- Implemented dynamic `std::uncaught_exceptions()` and `std::uncaught_exception()` via a WebAssembly counter, tracking in-flight exceptions across initial throws, rethrows (`throw;`), and handler entries.
+- Added function-try-block parsing and code generation with automatic rethrow from constructor handlers, member initializer lists after `try`, subobject construction/destruction coverage enclosing the constructor prologue, raw function-pointer declarators in `catch` clauses, and rejection of return statements in constructor handlers.
 - Skipped bodyless methods when declaring the WebAssembly function table, so deleted constructors cannot leave the function/body count mismatched.
 
 ### Static Assert & Constant Evaluation (C++17)

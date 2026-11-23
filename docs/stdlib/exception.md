@@ -25,7 +25,7 @@ Verified against native Clang and GCC using automated test suites:
 - `std::terminate()`: Invokes the active terminate handler or calls `abort()` directly. Runtime terminations (`noexcept` violations, `throw;` with no active exception, a destructor throwing during unwinding, and exceptions escaping `main`) route through the same handler via `__cppbolt_terminate`.
 - `std::set_terminate(handler)`: Installs a custom terminate handler and returns the previous handler. Passing `nullptr` restores the default handler.
 - `std::get_terminate()`: Returns the currently installed terminate handler.
-- `std::uncaught_exceptions()`: Returns the number of exceptions thrown but not yet caught. A mutable WebAssembly global is incremented at `throw` and decremented at catch-handler entry, so destructors running during unwinding observe the active count.
+- `std::uncaught_exceptions()`: Returns the number of exceptions thrown but not yet caught. A mutable WebAssembly global is incremented at `throw` and `throw;` (rethrow), and decremented at catch-handler entry, so destructors running during unwinding observe the active count.
 - `std::uncaught_exception()`: Returns whether `std::uncaught_exceptions()` is nonzero (deprecated in C++17).
 
 ### Compiler requirements
