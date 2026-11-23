@@ -15,6 +15,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Implemented the unevaluated `noexcept(expr)` operator, evaluating to a `bool` constant expression without emitting runtime instructions or evaluating operand side effects.
 - Defaulted class destructors and synthesized default destructors to `noexcept(true)` per C++17 [except.spec] unless explicitly declared `noexcept(false)`.
 
+### Exception Handling Conformance (C++17)
+- Runtime termination paths now call `std::terminate`, so handlers installed with `std::set_terminate` run on `noexcept` violations, `throw;` without an active exception, throwing destructors during unwinding, and exceptions escaping `main`.
+- Gave enums, function signatures, and member-pointer types distinct exception type IDs, and restricted derived-to-base catch matching to unambiguous public bases. `nullptr` now matches member-pointer handlers.
+- Rejected throwing or catching class types whose copy constructor is deleted or private; added `= delete` parsing and private-constructor tracking.
+- Enforced C++17 move-eligibility scope rules on thrown locals, multi-level pointer qualification conversions, and overloaded operators inside `noexcept(expr)`.
+- Overflowing the 64-entry cleanup budget is now a compile error instead of silently dropping temporary destructors.
+- Implemented dynamic `std::uncaught_exceptions()` and `std::uncaught_exception()` via a WebAssembly counter.
+- Added function-try-block parsing with automatic rethrow from constructor handlers, and raw function-pointer declarators in `catch` clauses.
+
 ### Static Assert & Constant Evaluation (C++17)
 - `static_assert` conditions now reject non-constant expressions, including runtime variables and non-constexpr function calls, with an explicit compile error. Diagnostics point to the failing condition expression rather than the keyword token.
 - Qualified static constexpr members and variable template specializations fold into assertion conditions before evaluation.

@@ -35,7 +35,7 @@ WebAssembly Phase 4 Exception Handling adds standard primitives (`try_table`, `c
   - Single enclosing `try_table (catch_all_ref $unwind)` per throwing or calling function.
   - A 64-bit bitmask (`cleanup_mask_local: i64`) tracks object construction and destruction at runtime, running destructors in reverse order only for active instances.
   - Leaf functions without calls or destructors emit no unwinding instructions.
-  - Cleanups wrapped in `try_table (catch_all -> unreachable)` enforce `std::terminate` if a destructor throws during unwinding.
+  - Cleanups wrapped in `try_table (catch_all -> __cppbolt_terminate)` enforce `std::terminate` if a destructor throws during unwinding.
   - Integrates directly with the ILP32 shadow stack (`global 0`).
 - *Cons*:
   - Caps simultaneously tracked cleanup objects in a single function at 64.
@@ -82,19 +82,19 @@ A `try` statement compiles to an inner `try_table` targeting its catch handlers:
 - Thrown expressions initialize the payload: class types invoke move constructors for eligible local variables or xvalues, copy constructors, or byte copies directly into the heap buffer; scalar types and pointers store their raw values.
 - If payload construction throws an exception, a `try_table` guard frees the allocated exception buffer before rethrowing the constructor exception.
 - In `try_table`, tag 0 branches to a typed dispatch block that sequentially tests each catch clause using `__cppbolt_can_catch(thrown_id, handler_id)`.
-- `__cppbolt_can_catch` evaluates exact type matches, ISO C++17 [conv.qual] pointer qualification conversions (including multi-level conversions such as `T**` to `const T* const*` and `T* const*`), void pointer matches (`void*` to mutable pointers, `const void*` to any pointer), `nullptr` exceptions to pointer handlers, and derived-to-base class inheritance. Pointer type IDs use a bitfield encoding (bits 0..15 base ID, bits 16..19 indirection depth, bits 20..27 const mask per level) that prevents collisions across different indirection levels and class counts.
+- `__cppbolt_can_catch` evaluates exact type matches, ISO C++17 [conv.qual] pointer qualification conversions (including multi-level conversions such as `T**` to `const T* const*`), void pointer matches (`void*` to mutable pointers, `const void*` to any pointer), `nullptr` exceptions to pointer and member-pointer handlers, and derived-to-base class inheritance. Base subobject entries are emitted only for unambiguous public bases ([except.handle]). Pointer type IDs use a bitfield encoding (bits 0..15 base ID, bits 16..19 indirection depth, bits 20+ const mask per level) that prevents collisions across different indirection levels and class counts. Distinct partitions of the base-ID field cover classes, enums, function signatures, and member-pointer types.
 - For derived exceptions caught by base handlers, `__cppbolt_can_catch` returns the base subobject byte offset. For pointer catches, the code applies this offset directly to the dereferenced pointer value while preserving null pointers.
 - Catch parameters bind according to declared type:
   - Catch by reference (`catch (T&)` or `catch (const T&)`): stores the payload address (adjusted for subobject offset) into a local slot, enabling zero-copy access and in-place mutation.
   - Catch by value (`catch (T)`): allocates a local slot and invokes the copy constructor (or performs a byte copy) from the payload address, destroying the local copy at catch scope exit even when the parameter is unnamed. Slicing occurs when catching a derived object as a base value.
 - Handled exception slots are tracked in `active_exception_slots`. Exiting a catch handler normally, via `return`, or via loop `break` or `continue` invokes the exception destructor (via `call_indirect` on `dtor_table_idx`) and frees the heap allocation with `free`.
 - Catch clause bodies execute inside a nested exception handler. If a new exception propagates out of a catch body, the runtime destroys the currently handled exception object before propagating the new exception. Rethrow (`throw;`) rethrows the active exception object without destroying it.
-- Outside any catch block (`catch_depth == 0`), `throw;` emits `OP_UNREACHABLE` to trigger `std::terminate()`.
+- Outside any catch block (`catch_depth == 0`), `throw;` calls `__cppbolt_terminate`. The same helper handles `noexcept` violations and exceptions escaping `main`, so handlers installed with `std::set_terminate` run. `std::terminate` is marked reachable whenever exceptions are used, even if the program only installs a handler.
 - Dead-code elimination scans reachable functions to collect classes referenced in `throw` expressions, `catch` parameters, and base subobjects, retaining only those destructors and their call trees rather than marking all program classes reachable indiscriminately.
 - Semantic analysis validates throw and catch types: throwing `void`, incomplete types, or abstract classes fails compilation; catching abstract classes by value or catching rvalue references (`catch (T&&)`) fails compilation.
 
 ### 5. Terminating Destructors (`src/codegen/unwind.rs`)
-All destructor invocations in `emit_cleanup_range` are enclosed within a `try_table (catch_all -> unreachable)` block. If any destructor throws while unwinding an active exception, WebAssembly immediately traps with `unreachable` (`std::terminate`).
+All destructor invocations in `emit_cleanup_range` are enclosed within a `try_table (catch_all -> __cppbolt_terminate)` block. If a destructor throws while unwinding, the runtime calls `std::terminate` rather than trapping.
 
 ### 6. Constructor Failure Subobject Cleanup (`src/codegen/function_lifecycle.rs`)
 Constructors register fully initialized base classes and member fields in the function's cleanup mask immediately after construction. If a subsequent member initializer or constructor body throws, completed subobjects are destroyed in reverse order before propagating the exception, and the cleanup mask is zeroed upon successful constructor exit.
@@ -105,7 +105,7 @@ Fully constructed temporary objects created during expression evaluation registe
 - In conditional expressions (`?:`, `&&`, `||`), temporaries in unexecuted branches are never constructed. Normal-path cleanup (`emit_clean_temporaries`) and unwinding cleanup guard destructor and `free` calls with liveness bitmask and non-null checks, preventing double-frees or null pointer dereferences on unconstructed instances.
 - When an argument passes by value, the caller deactivates cleanup tracking only for the outer parameter object passed to the callee, leaving intermediate sub-expression temporaries active for full-expression destruction.
 - Reference binding (`const T& ref = ...`) extends the temporary's lifetime by transferring its cleanup entry to the enclosing lexical scope. When bound to conditional expressions (`const T& ref = cond ? T(1) : T(2)`), all candidate temporaries transfer to the scope, and scope exit destroys only the dynamically constructed instance.
-- If a statement contains more than 64 temporaries across chained binary expressions, `register_temp_cleanup` stops allocating mask slots, and the temporaries fall back to normal full-expression reclamation.
+- Exceeding the 64 cleanup entries fails compilation. A temporary whose type has no destructor registers nothing; a temporary that needs tracking but has no slot left is a compile error rather than a silent leak.
 
 ## Consequences
 
@@ -125,5 +125,11 @@ Fully constructed temporary objects created during expression evaluation registe
 ### Negative / Trade-offs
 - Limits single functions to 64 tracked automatic/local variable cleanup objects, checked at compile time.
 - Dynamic exception objects allocate heap memory through `malloc` and `free`.
-- Multi-level qualification conversions beyond single-level pointers (such as `const T* const*` catching `T**`) are currently unhandled and will fail to catch.
 - Volatile pointer qualifications are not modeled in AST types and remain unsupported.
+
+### 8. C++17 Conformance Details
+- Throwing an automatic variable uses the move constructor only when the variable was declared inside the innermost enclosing try block; an outer local is copied ([class.copy.elision]).
+- Throwing or catching a class type by value with a deleted or inaccessible copy constructor fails compilation. Function declarations support `= delete`, and private constructor names are recorded for access checks.
+- `std::uncaught_exceptions()` reads mutable WebAssembly global 3. Throws increment it and catch-handler entry decrements it, so destructors running during unwinding observe the active count.
+- Function-try-blocks parse for regular functions and constructors. A constructor handler that falls through implicitly rethrows the handled exception ([except.handle]). Constructor initializer lists after `try` remain unsupported.
+- `noexcept(expr)` accounts for overloaded member and free operators, including `operator[]`, using the operator's own exception specification.
