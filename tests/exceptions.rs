@@ -3602,6 +3602,50 @@ int main() {
 }
 
 #[test]
+fn test_uncaught_exceptions_during_rethrow() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+#include <exception>
+
+struct Tracer {
+    int id;
+    ~Tracer() noexcept {
+        std::printf("Dtor%d:%d ", id, std::uncaught_exceptions());
+    }
+};
+
+void g() {
+    Tracer t{1};
+    throw 42;
+}
+
+void f() {
+    try {
+        g();
+    } catch (int) {
+        std::printf("InCatch1:%d ", std::uncaught_exceptions());
+        Tracer t{2};
+        throw;
+    }
+}
+
+int main() {
+    try {
+        f();
+    } catch (int) {
+        std::printf("InCatch2:%d ", std::uncaught_exceptions());
+    }
+    std::printf("Done:%d", std::uncaught_exceptions());
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Dtor1:1 InCatch1:0 Dtor2:1 InCatch2:0 Done:0");
+    Ok(())
+}
+
+#[test]
 fn test_temp_cleanup_overflow_fails_compilation() -> Result<(), String> {
     let mut source = String::from("struct S { ~S() {} }; void sink(S s) {} int main() {\n");
     for i in 0..64 {

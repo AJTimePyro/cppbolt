@@ -53,10 +53,12 @@ impl<'a> Codegen<'a> {
         } else if ctx.catch_depth == 0 {
             self.emit_terminate_call(code);
         } else if ctx.in_catch_all {
+            self.emit_uncaught_count_change(code, 1);
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.current_exnref_local());
             code.push(OP_THROW_REF);
         } else {
+            self.emit_uncaught_count_change(code, 1);
             self.emit_rethrow_tag0(ctx, code);
         }
         Ok(())
