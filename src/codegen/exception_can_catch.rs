@@ -102,6 +102,34 @@ impl<'a> Codegen<'a> {
         code.push(OP_I32_SHR_U);
         code.push(OP_I32_EQ);
         code.push(OP_I32_AND);
+
+        // [conv.qual]: a const added at pointer level k requires const at every
+        // level below it. The added bits must therefore form a run from bit 0,
+        // i.e. (diff & (diff + 1)) == 0.
+        code.push(OP_LOCAL_GET);
+        write_u32(code, 1);
+        code.push(OP_I32_CONST);
+        write_i32(code, 20);
+        code.push(OP_I32_SHR_U);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, 0);
+        code.push(OP_I32_CONST);
+        write_i32(code, 20);
+        code.push(OP_I32_SHR_U);
+        code.push(OP_I32_CONST);
+        write_i32(code, -1);
+        code.push(OP_I32_XOR);
+        code.push(OP_I32_AND);
+        code.push(OP_LOCAL_TEE);
+        write_u32(code, 2);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, 2);
+        code.push(OP_I32_CONST);
+        write_i32(code, 1);
+        code.push(OP_I32_ADD);
+        code.push(OP_I32_AND);
+        code.push(OP_I32_EQZ);
+        code.push(OP_I32_AND);
     }
 
     fn emit_can_catch_qualification(code: &mut Vec<u8>) {
@@ -304,6 +332,6 @@ impl<'a> Codegen<'a> {
         code.push(OP_RETURN);
         code.push(OP_END);
 
-        self.module.codes.push((vec![], code));
+        self.module.codes.push((vec![(1, TYPE_I32)], code));
     }
 }

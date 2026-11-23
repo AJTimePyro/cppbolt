@@ -3410,6 +3410,35 @@ int main() {
 }
 
 #[test]
+fn test_invalid_multilevel_pointer_qualification_rejected() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+int main() {
+    int val = 42;
+    int* p1 = &val;
+    int** p2 = &p1;
+    int*** p3 = &p2;
+
+    try {
+        throw p3;
+    } catch (const int** const*) {
+        std::printf("WrongInvalid ");
+    } catch (const int* const* const*) {
+        std::printf("CorrectValid:%d", ***p3);
+    } catch (...) {
+        std::printf("Fallback ");
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "CorrectValid:42");
+    Ok(())
+}
+
+#[test]
 fn test_outer_local_variable_throw_copies_instead_of_moving() -> Result<(), String> {
     let source = r#"
 #include <cstdio>
