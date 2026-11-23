@@ -4909,3 +4909,32 @@ int main() {
     Ok(())
 }
 
+#[test]
+fn test_recycled_temporary_slot_zeroed_after_destruction() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct Item {
+    int val;
+    ~Item() {
+        std::printf("~Item(%d) ", val);
+    }
+};
+
+Item make_item(int x) {
+    return Item{x};
+}
+
+int main() {
+    make_item(10);
+    make_item(20);
+    std::printf("Done");
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "~Item(10) ~Item(20) Done");
+    Ok(())
+}
+

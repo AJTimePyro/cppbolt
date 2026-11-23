@@ -33,6 +33,7 @@ impl<'a> Codegen<'a> {
             code.push(OP_CALL);
             write_u32(code, free);
         }
+        Self::emit_slot_zero(slot, fp_local, code);
         code.push(OP_END);
     }
 
