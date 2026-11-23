@@ -391,6 +391,7 @@ fn test_substitute_injected_class_name() -> Result<(), Box<dyn std::error::Error
 fn dummy_func(name: &str, ret: Type, param: Type, is_const: bool) -> FunctionDecl {
     FunctionDecl {
         qualifiers: FunctionQualifiers::default(),
+        noexcept_expr: None,
         name: name.to_string(),
         return_type: ret,
         params: vec![Param {

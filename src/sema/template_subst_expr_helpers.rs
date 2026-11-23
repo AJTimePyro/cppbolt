@@ -4,8 +4,9 @@ use super::pack_expansion::{TemplateArg, expand_expr_list};
 use super::template_name::substitute_template_name;
 use super::template_subst::substitute_type;
 use super::template_subst_pack::has_unexpanded_member_pack;
+use crate::ast::decl::FunctionDecl;
 use crate::ast::expr::Expr;
-use crate::ast::types::Type;
+use crate::ast::types::{FunctionQualifiers, Type};
 use crate::diagnostics::CompileError;
 use std::collections::HashMap;
 
@@ -324,3 +325,33 @@ fn substitute_callee_identifier(
         *name = substitute_template_name(name, mapping);
     }
 }
+
+pub(crate) fn substitute_noexcept_qualifiers(
+    func: &FunctionDecl,
+    mapping: &HashMap<String, TemplateArg>,
+    injected_class: Option<(&str, &Type)>,
+    struct_sizes: Option<&HashMap<String, usize>>,
+) -> FunctionQualifiers {
+    let mut quals = func.qualifiers;
+    if let Some(ref expr) = func.noexcept_expr {
+        let mut subst_expr = expr.clone();
+        if substitute_expr(&mut subst_expr, mapping, injected_class).is_ok() {
+            if let Ok(val) = super::constexpr_eval::eval_constexpr_with_context(
+                &subst_expr,
+                struct_sizes,
+                None,
+                None,
+            ) {
+                quals.is_noexcept = val != 0;
+            } else if let Ok(val) = super::constexpr_eval::eval_constexpr_with_mapping(
+                &subst_expr,
+                struct_sizes,
+                mapping,
+            ) {
+                quals.is_noexcept = val != 0;
+            }
+        }
+    }
+    quals
+}
+

@@ -7,7 +7,6 @@ use super::pack_expansion::{
 use super::template_name::substitute_template_name;
 use super::template_subst::substitute_expr;
 use super::template_subst_stmt::substitute_stmt_with_sema;
-use crate::ast::FunctionQualifiers;
 use crate::ast::decl::{FunctionDecl, Param};
 use crate::ast::expr::Expr;
 use crate::ast::types::Type;
@@ -393,8 +392,14 @@ fn substitute_signature(
         if mark_dependent {
             mark_dependent_nested(&func.return_type, &mut return_type, mapping);
         }
+        let qualifiers = super::template_subst_expr_helpers::substitute_noexcept_qualifiers(
+            func,
+            mapping,
+            injected_class,
+            active_ctx.sema.as_ref().map(|s| &s.struct_sizes),
+        );
         FunctionDecl {
-            qualifiers: FunctionQualifiers::default(),
+            qualifiers,
             name: new_name.unwrap_or_else(|| substitute_func_name(&func.name, injected_class)),
             return_type,
             params: substitute_params(
@@ -412,6 +417,7 @@ fn substitute_signature(
             is_static: func.is_static,
             ctor_initializers: func.ctor_initializers.clone(),
             template_params: remaining_template_params,
+            noexcept_expr: func.noexcept_expr.clone(),
             line: func.line,
             col: func.col,
         }

@@ -152,7 +152,7 @@ impl Sema {
         }
         let mangled = self.mangle_name(&func.name, &func.params);
         let sig = FunctionSig {
-            qualifiers: FunctionQualifiers::default(),
+            qualifiers: func.qualifiers,
             name: func.name.clone(),
             mangled_name: mangled.clone(),
             return_type: func.return_type.clone(),

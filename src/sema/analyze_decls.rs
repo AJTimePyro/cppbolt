@@ -183,7 +183,7 @@ impl Sema {
             ));
         }
         let sig = FunctionSig {
-            qualifiers: FunctionQualifiers::default(),
+            qualifiers: f.qualifiers,
             name: f.name.clone(),
             mangled_name: mangled,
             return_type: f.return_type.clone(),

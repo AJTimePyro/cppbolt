@@ -46,6 +46,7 @@ pub struct FunctionDecl {
     pub ctor_initializers: Vec<(String, Vec<Expr>)>,
     pub template_params: Vec<TemplateParam>,
     pub qualifiers: FunctionQualifiers,
+    pub noexcept_expr: Option<Expr>,
     pub line: usize,
     pub col: usize,
 }

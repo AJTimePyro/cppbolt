@@ -439,6 +439,7 @@ impl Parser {
                 is_static: false,
                 ctor_initializers,
                 template_params: Vec::new(),
+                noexcept_expr: None,
                 line: start_tok.line,
                 col: start_tok.col,
             }));

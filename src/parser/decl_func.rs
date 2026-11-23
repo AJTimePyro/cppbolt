@@ -12,7 +12,7 @@ impl Parser {
     ) -> Result<FunctionDecl, CompileError> {
         self.expect(TokenKind::LParen)?;
         let params = self.parse_function_params()?;
-        let quals = self.parse_function_qualifiers()?;
+        let (quals, noexcept_expr) = self.parse_function_qualifiers()?;
         let return_type = if self.peek() == &TokenKind::Arrow {
             self.advance();
             self.parse_type()?
@@ -38,6 +38,7 @@ impl Parser {
             is_static: false,
             ctor_initializers,
             template_params: Vec::new(),
+            noexcept_expr,
             line,
             col,
         })
@@ -255,7 +256,7 @@ impl Parser {
         // or `(` decides which derivation applies.
         let inner = if self.peek() == &TokenKind::LParen {
             let fn_params = self.parse_abstract_fn_params()?;
-            let qualifiers = self.parse_function_qualifiers()?;
+            let (qualifiers, _) = self.parse_function_qualifiers()?;
             Type::Function {
                 return_type: Box::new(base_type),
                 param_types: fn_params,
@@ -284,8 +285,11 @@ impl Parser {
         Ok((entity_type, name))
     }
 
-    pub(super) fn parse_function_qualifiers(&mut self) -> Result<FunctionQualifiers, CompileError> {
+    pub(super) fn parse_function_qualifiers(
+        &mut self,
+    ) -> Result<(FunctionQualifiers, Option<Expr>), CompileError> {
         let mut quals = FunctionQualifiers::default();
+        let mut noexcept_expr = None;
         while matches!(
             self.peek(),
             TokenKind::KwConst
@@ -336,10 +340,15 @@ impl Parser {
                             {
                                 self.advance();
                             }
-                        } else if self.peek() != &TokenKind::RParen
-                            && let Expr::BoolLiteral(b) = self.parse_expr()?
-                        {
-                            value = b;
+                        } else if self.peek() != &TokenKind::RParen {
+                            let expr = self.parse_expr()?;
+                            match crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None) {
+                                Ok(v) => value = v != 0,
+                                Err(_) => {
+                                    value = true;
+                                    noexcept_expr = Some(expr);
+                                }
+                            }
                         }
                         self.expect(TokenKind::RParen)?;
                     }
@@ -351,7 +360,7 @@ impl Parser {
             }
         }
 
-        Ok(quals)
+        Ok((quals, noexcept_expr))
     }
 
     pub(super) fn parse_ctor_initializers(
