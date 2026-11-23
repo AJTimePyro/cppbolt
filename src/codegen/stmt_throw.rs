@@ -170,6 +170,60 @@ impl<'a> Codegen<'a> {
         write_u32(code, 12);
     }
 
+    fn emit_struct_payload_lvalue(
+        &mut self,
+        expr: &Expr,
+        sname: &str,
+        (payload_ptr_slot, raw_size): (u32, usize),
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        let is_xvalue = self.is_expr_xvalue(expr, ctx);
+        let expr_ty = self.get_expr_type(expr, ctx);
+        let raw_ty = self.get_expr_type_raw(expr, ctx);
+        let is_const = expr_ty.strip_reference().is_const();
+        let is_local_var = if let Expr::Identifier(name) = expr {
+            ctx.var_offsets.contains_key(name) && !raw_ty.is_reference() && !is_const
+        } else {
+            false
+        };
+        let ctor = if is_xvalue || is_local_var {
+            self.find_move_constructor(sname)
+                .or_else(|| self.find_copy_constructor(sname, is_const))
+        } else {
+            self.find_copy_constructor(sname, is_const)
+        };
+        if let Some(ctor_idx) = ctor {
+            Self::emit_slot_load(payload_ptr_slot, ctx.fp_local, code);
+            if is_xvalue {
+                self.compile_expr(expr, ctx, code)?;
+            } else {
+                self.compile_lvalue_addr(expr, ctx, code)?;
+            }
+            code.push(OP_CALL);
+            write_u32(code, ctor_idx);
+        } else {
+            if is_xvalue {
+                self.compile_expr(expr, ctx, code)?;
+            } else {
+                self.compile_lvalue_addr(expr, ctx, code)?;
+            }
+            code.push(OP_LOCAL_SET);
+            write_u32(code, ctx.scratch1);
+            raii::emit_struct_byte_copy(
+                raw_size,
+                0,
+                raii::ByteCopyAddr::Slot {
+                    fp_local: ctx.fp_local,
+                    slot: payload_ptr_slot,
+                },
+                raii::ByteCopyAddr::Local(ctx.scratch1),
+                code,
+            );
+        }
+        Ok(())
+    }
+
     fn compile_struct_payload_init(
         &mut self,
         expr: &Expr,
@@ -188,28 +242,14 @@ impl<'a> Codegen<'a> {
         write_u32(code, ctx.scratch1);
         Self::emit_slot_store(payload_ptr_slot, ctx.fp_local, ctx.scratch1, code);
 
-        if self.is_struct_lvalue(expr, ctx) {
-            let is_const = self.get_expr_type(expr, ctx).strip_reference().is_const();
-            if let Some(ctor_idx) = self.find_copy_constructor(sname, is_const) {
-                Self::emit_slot_load(payload_ptr_slot, ctx.fp_local, code);
-                self.compile_lvalue_addr(expr, ctx, code)?;
-                code.push(OP_CALL);
-                write_u32(code, ctor_idx);
-            } else {
-                self.compile_lvalue_addr(expr, ctx, code)?;
-                code.push(OP_LOCAL_SET);
-                write_u32(code, ctx.scratch1);
-                raii::emit_struct_byte_copy(
-                    raw_size,
-                    0,
-                    raii::ByteCopyAddr::Slot {
-                        fp_local: ctx.fp_local,
-                        slot: payload_ptr_slot,
-                    },
-                    raii::ByteCopyAddr::Local(ctx.scratch1),
-                    code,
-                );
-            }
+        if self.is_struct_lvalue(expr, ctx) || self.is_expr_xvalue(expr, ctx) {
+            self.emit_struct_payload_lvalue(
+                expr,
+                sname,
+                (payload_ptr_slot, raw_size),
+                ctx,
+                code,
+            )?;
         } else {
             let temp_count_before = ctx.temp_objects.len();
             self.compile_expr(expr, ctx, code)?;

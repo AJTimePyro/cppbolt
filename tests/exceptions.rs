@@ -2267,3 +2267,65 @@ int main() {
     Ok(())
 }
 
+#[test]
+fn test_exception_object_move_slicing_and_unnamed_catch() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct MoveTracer {
+    int id;
+    MoveTracer(int i) : id(i) { std::printf("C:%d ", id); }
+    MoveTracer(const MoveTracer& o) : id(o.id) { std::printf("Copy:%d ", id); }
+    MoveTracer(MoveTracer&& o) : id(o.id) { std::printf("Move:%d ", id); }
+    ~MoveTracer() { std::printf("D:%d ", id); }
+};
+
+struct SBase {
+    int b;
+    SBase(int v) : b(v) { std::printf("SBaseC:%d ", b); }
+    SBase(const SBase& o) : b(o.b) { std::printf("SBaseCopy:%d ", b); }
+    virtual ~SBase() { std::printf("SBaseD:%d ", b); }
+};
+struct SDerived : SBase {
+    int d;
+    SDerived(int bv, int dv) : SBase(bv), d(dv) { std::printf("SDerivedC:%d ", d); }
+    SDerived(const SDerived& o) : SBase(o), d(o.d) { std::printf("SDerivedCopy:%d ", d); }
+    ~SDerived() override { std::printf("SDerivedD:%d ", d); }
+};
+
+int main() {
+    // 1. Move constructor preferred when throwing local named variable
+    try {
+        MoveTracer m(42);
+        throw m;
+    } catch (MoveTracer& t) {
+        std::printf("CaughtMove:%d ", t.id);
+    }
+
+    // 2. Unnamed catch-by-value constructs and destroys temporary parameter
+    try {
+        throw MoveTracer(99);
+    } catch (MoveTracer) {
+        std::printf("InCatchUnnamed ");
+    }
+
+    // 3. Catch derived by value as base slices and runs both destructors
+    try {
+        SDerived obj(10, 20);
+        throw obj;
+    } catch (SBase b) {
+        std::printf("Sliced:%d ", b.b);
+    }
+
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(
+        stdout.trim(),
+        "C:42 Move:42 D:42 CaughtMove:42 D:42 C:99 Copy:99 InCatchUnnamed D:99 D:99 SBaseC:10 SDerivedC:20 SBaseCopy:10 SDerivedCopy:20 SDerivedD:20 SBaseD:10 SBaseCopy:10 Sliced:10 SBaseD:10 SDerivedD:20 SBaseD:10"
+    );
+    Ok(())
+}
+
