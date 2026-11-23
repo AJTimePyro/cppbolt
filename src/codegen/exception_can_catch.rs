@@ -3,8 +3,7 @@
 use super::*;
 use crate::runtime::opcodes::*;
 use crate::sema::exception_types::{
-    TYPE_ID_CONST_PTR_BASE, TYPE_ID_CONST_VOID_PTR, TYPE_ID_NULLPTR, TYPE_ID_PTR_BASE,
-    TYPE_ID_VOID_PTR,
+    TYPE_ID_CONST_VOID_PTR, TYPE_ID_NULLPTR, TYPE_ID_VOID_PTR,
 };
 use crate::wasm::{write_i32, write_u32};
 
@@ -23,40 +22,102 @@ impl<'a> Codegen<'a> {
         code.push(OP_END);
     }
 
-    fn emit_can_catch_qualification(code: &mut Vec<u8>) {
-        // T* (20000..30000) matches const T* (30000..40000) when handler == thrown + 10000
+    fn emit_check_same_base_and_depth(code: &mut Vec<u8>) {
+        // Same base ID: (thrown & 0xFFFF) == (handler & 0xFFFF)
         code.push(OP_LOCAL_GET);
         write_u32(code, 0);
         code.push(OP_I32_CONST);
-        write_i32(code, 20000);
-        code.push(OP_I32_GE_U);
-        code.push(OP_LOCAL_GET);
-        write_u32(code, 0);
-        code.push(OP_I32_CONST);
-        write_i32(code, 30000);
-        code.push(OP_I32_LT_U);
+        write_i32(code, 0xFFFF);
         code.push(OP_I32_AND);
-        code.push(OP_IF);
-        code.push(0x40);
         code.push(OP_LOCAL_GET);
         write_u32(code, 1);
+        code.push(OP_I32_CONST);
+        write_i32(code, 0xFFFF);
+        code.push(OP_I32_AND);
+        code.push(OP_I32_EQ);
+
+        // Same depth: ((thrown >> 16) & 0xF) == ((handler >> 16) & 0xF)
         code.push(OP_LOCAL_GET);
         write_u32(code, 0);
         code.push(OP_I32_CONST);
-        write_i32(code, 10000);
-        code.push(OP_I32_ADD);
+        write_i32(code, 16);
+        code.push(OP_I32_SHR_U);
+        code.push(OP_I32_CONST);
+        write_i32(code, 0xF);
+        code.push(OP_I32_AND);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, 1);
+        code.push(OP_I32_CONST);
+        write_i32(code, 16);
+        code.push(OP_I32_SHR_U);
+        code.push(OP_I32_CONST);
+        write_i32(code, 0xF);
+        code.push(OP_I32_AND);
         code.push(OP_I32_EQ);
+        code.push(OP_I32_AND);
+
+        // depth >= 1
+        code.push(OP_LOCAL_GET);
+        write_u32(code, 0);
+        code.push(OP_I32_CONST);
+        write_i32(code, 16);
+        code.push(OP_I32_SHR_U);
+        code.push(OP_I32_CONST);
+        write_i32(code, 0xF);
+        code.push(OP_I32_AND);
+        code.push(OP_I32_CONST);
+        write_i32(code, 0);
+        code.push(OP_I32_GT_U);
+        code.push(OP_I32_AND);
+    }
+
+    fn emit_check_qualification_masks(code: &mut Vec<u8>) {
+        // handler has const at level 1 (bit 20 set)
+        code.push(OP_LOCAL_GET);
+        write_u32(code, 1);
+        code.push(OP_I32_CONST);
+        write_i32(code, 1 << 20);
+        code.push(OP_I32_AND);
+        code.push(OP_I32_CONST);
+        write_i32(code, 0);
+        code.push(OP_I32_NE);
+
+        // (thrown_mask & handler_mask) == thrown_mask
+        code.push(OP_LOCAL_GET);
+        write_u32(code, 0);
+        code.push(OP_I32_CONST);
+        write_i32(code, 20);
+        code.push(OP_I32_SHR_U);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, 1);
+        code.push(OP_I32_CONST);
+        write_i32(code, 20);
+        code.push(OP_I32_SHR_U);
+        code.push(OP_I32_AND);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, 0);
+        code.push(OP_I32_CONST);
+        write_i32(code, 20);
+        code.push(OP_I32_SHR_U);
+        code.push(OP_I32_EQ);
+        code.push(OP_I32_AND);
+    }
+
+    fn emit_can_catch_qualification(code: &mut Vec<u8>) {
+        Self::emit_check_same_base_and_depth(code);
+        Self::emit_check_qualification_masks(code);
+        code.push(OP_I32_AND);
+
         code.push(OP_IF);
         code.push(0x40);
         code.push(OP_I32_CONST);
         write_i32(code, 0);
         code.push(OP_RETURN);
         code.push(OP_END);
-        code.push(OP_END);
     }
 
     fn emit_can_catch_void_pointers(code: &mut Vec<u8>) {
-        // const void* matches any pointer (20000..40000)
+        // const void* matches any pointer (depth >= 1)
         code.push(OP_LOCAL_GET);
         write_u32(code, 1);
         code.push(OP_I32_CONST);
@@ -67,14 +128,14 @@ impl<'a> Codegen<'a> {
         code.push(OP_LOCAL_GET);
         write_u32(code, 0);
         code.push(OP_I32_CONST);
-        write_i32(code, 20000);
-        code.push(OP_I32_GE_U);
-        code.push(OP_LOCAL_GET);
-        write_u32(code, 0);
+        write_i32(code, 16);
+        code.push(OP_I32_SHR_U);
         code.push(OP_I32_CONST);
-        write_i32(code, 40000);
-        code.push(OP_I32_LT_U);
+        write_i32(code, 0xF);
         code.push(OP_I32_AND);
+        code.push(OP_I32_CONST);
+        write_i32(code, 0);
+        code.push(OP_I32_GT_U);
         code.push(OP_IF);
         code.push(0x40);
         code.push(OP_I32_CONST);
@@ -83,7 +144,7 @@ impl<'a> Codegen<'a> {
         code.push(OP_END);
         code.push(OP_END);
 
-        // void* matches only mutable pointers (20000..30000)
+        // void* matches only pointers where level 1 is NOT const
         code.push(OP_LOCAL_GET);
         write_u32(code, 1);
         code.push(OP_I32_CONST);
@@ -94,13 +155,20 @@ impl<'a> Codegen<'a> {
         code.push(OP_LOCAL_GET);
         write_u32(code, 0);
         code.push(OP_I32_CONST);
-        write_i32(code, 20000);
-        code.push(OP_I32_GE_U);
+        write_i32(code, 16);
+        code.push(OP_I32_SHR_U);
+        code.push(OP_I32_CONST);
+        write_i32(code, 0xF);
+        code.push(OP_I32_AND);
+        code.push(OP_I32_CONST);
+        write_i32(code, 0);
+        code.push(OP_I32_GT_U);
         code.push(OP_LOCAL_GET);
         write_u32(code, 0);
         code.push(OP_I32_CONST);
-        write_i32(code, 30000);
-        code.push(OP_I32_LT_U);
+        write_i32(code, 1 << 20);
+        code.push(OP_I32_AND);
+        code.push(OP_I32_EQZ);
         code.push(OP_I32_AND);
         code.push(OP_IF);
         code.push(0x40);
@@ -112,7 +180,7 @@ impl<'a> Codegen<'a> {
     }
 
     fn emit_can_catch_nullptr(code: &mut Vec<u8>) {
-        // nullptr (18) matches any pointer handler (20000..40000)
+        // nullptr (18) matches any pointer handler (depth >= 1)
         code.push(OP_LOCAL_GET);
         write_u32(code, 0);
         code.push(OP_I32_CONST);
@@ -123,14 +191,14 @@ impl<'a> Codegen<'a> {
         code.push(OP_LOCAL_GET);
         write_u32(code, 1);
         code.push(OP_I32_CONST);
-        write_i32(code, 20000);
-        code.push(OP_I32_GE_U);
-        code.push(OP_LOCAL_GET);
-        write_u32(code, 1);
+        write_i32(code, 16);
+        code.push(OP_I32_SHR_U);
         code.push(OP_I32_CONST);
-        write_i32(code, 40000);
-        code.push(OP_I32_LT_U);
+        write_i32(code, 0xF);
         code.push(OP_I32_AND);
+        code.push(OP_I32_CONST);
+        write_i32(code, 0);
+        code.push(OP_I32_GT_U);
         code.push(OP_IF);
         code.push(0x40);
         code.push(OP_I32_CONST);
@@ -171,10 +239,10 @@ impl<'a> Codegen<'a> {
                 for (base_name, base_off) in &layout.base_offsets {
                     if let Some(base_id) = self.sema.get_class_type_id(base_name) {
                         Self::emit_can_catch_pair(derived_id, base_id, *base_off, code);
-                        let d_ptr = TYPE_ID_PTR_BASE + derived_id;
-                        let b_ptr = TYPE_ID_PTR_BASE + base_id;
-                        let d_const = TYPE_ID_CONST_PTR_BASE + derived_id;
-                        let b_const = TYPE_ID_CONST_PTR_BASE + base_id;
+                        let d_ptr = (1 << 16) | derived_id;
+                        let b_ptr = (1 << 16) | base_id;
+                        let d_const = (1 << 16) | (1 << 20) | derived_id;
+                        let b_const = (1 << 16) | (1 << 20) | base_id;
                         Self::emit_can_catch_pair(d_ptr, b_ptr, *base_off, code);
                         Self::emit_can_catch_pair(d_ptr, b_const, *base_off, code);
                         Self::emit_can_catch_pair(d_const, b_const, *base_off, code);

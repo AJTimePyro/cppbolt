@@ -15,14 +15,13 @@ pub const TYPE_ID_LONG_LONG: u32 = 8;
 pub const TYPE_ID_ULONG_LONG: u32 = 9;
 pub const TYPE_ID_FLOAT: u32 = 10;
 pub const TYPE_ID_DOUBLE: u32 = 11;
-pub const TYPE_ID_VOID_PTR: u32 = 20014;
-pub const TYPE_ID_CONST_VOID_PTR: u32 = 30014;
+pub const TYPE_ID_VOID: u32 = 14;
+pub const TYPE_ID_VOID_PTR: u32 = TYPE_ID_VOID | (1 << 16);
+pub const TYPE_ID_CONST_VOID_PTR: u32 = TYPE_ID_VOID | (1 << 16) | (1 << 20);
 pub const TYPE_ID_LONG: u32 = 16;
 pub const TYPE_ID_ULONG: u32 = 17;
 pub const TYPE_ID_NULLPTR: u32 = 18;
 pub const TYPE_ID_CLASS_BASE: u32 = 1000;
-pub const TYPE_ID_PTR_BASE: u32 = 20000;
-pub const TYPE_ID_CONST_PTR_BASE: u32 = 30000;
 
 impl Sema {
     pub fn get_class_type_id(&self, class_name: &str) -> Option<u32> {
@@ -50,34 +49,32 @@ impl Sema {
             Type::UnsignedLongLong => Some(TYPE_ID_ULONG_LONG),
             Type::Float => Some(TYPE_ID_FLOAT),
             Type::Double => Some(TYPE_ID_DOUBLE),
-            Type::Void => Some(14),
+            Type::Void => Some(TYPE_ID_VOID),
             Type::Nullptr => Some(TYPE_ID_NULLPTR),
             Type::Struct(sname) => self.get_class_type_id(sname),
             Type::Enum(_) => Some(TYPE_ID_INT),
-            Type::Pointer(inner) => {
-                let inner_id = self.get_base_type_id(inner)?;
-                if inner.is_const() {
-                    Some(8000 + inner_id)
-                } else {
-                    Some(4000 + inner_id)
-                }
-            }
             _ => None,
         }
     }
 
     pub fn get_exception_type_id(&self, ty: &Type) -> Option<u32> {
-        let clean = ty.strip_reference().strip_const();
-        match clean {
-            Type::Pointer(inner) => {
-                let inner_base_id = self.get_base_type_id(inner)?;
-                if inner.is_const() {
-                    Some(TYPE_ID_CONST_PTR_BASE + inner_base_id)
-                } else {
-                    Some(TYPE_ID_PTR_BASE + inner_base_id)
-                }
+        let mut depth: u32 = 0;
+        let mut const_mask: u32 = 0;
+        let mut curr = ty.strip_reference().strip_const();
+
+        while let Type::Pointer(inner) = curr {
+            if inner.is_const() {
+                const_mask |= 1 << depth;
             }
-            _ => self.get_base_type_id(clean),
+            depth += 1;
+            curr = inner.strip_const();
+        }
+
+        let base_id = self.get_base_type_id(curr)?;
+        if depth == 0 {
+            Some(base_id)
+        } else {
+            Some(base_id | (depth << 16) | (const_mask << 20))
         }
     }
 

@@ -2329,3 +2329,31 @@ int main() {
     Ok(())
 }
 
+#[test]
+fn test_pointer_indirection_depth_type_id_distinct() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+int main() {
+    int val = 42;
+    int* p1 = &val;
+    int** p2 = &p1;
+    int*** p3 = &p2;
+
+    // int*** should NOT be caught by const int**
+    try {
+        throw p3;
+    } catch (const int** p) {
+        std::printf("CollisionError ");
+    } catch (int*** p) {
+        std::printf("CorrectIntTriplePtr:%d", ***p);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "CorrectIntTriplePtr:42");
+    Ok(())
+}
+
