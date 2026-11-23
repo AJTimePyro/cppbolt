@@ -4,6 +4,43 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-24: Exception Handling Hardening, Temporary Slot Recycling, and C++17 Parameter Throw Conformance
+
+Hardened exception handling lowering across allocation safeguards, temporary slot recycling, and ISO C++17 parameter throw conformance.
+
+### Summary of Work
+
+1. Exception payload heap allocation failure handling (`src/codegen/stmt_throw.rs`, `tests/exceptions.rs`):
+   - Added null check after `malloc` in throw lowering.
+   - Per ISO C++17 [except.throw] p4, if the runtime cannot allocate memory for the exception object, lowering emits a branch directly to `__cppbolt_terminate`, invoking `std::terminate`.
+   - Verified through unit tests that simulated OOM triggers `std::terminate`.
+2. Temporary slot and cleanup bitmask index recycling (`src/codegen/raii.rs`, `src/codegen/call_args.rs`, `src/codegen/expr_call.rs`, `src/codegen/unwind.rs`):
+   - Solved cleanup bitmask exhaustion in functions with more than 64 sequential temporaries by recycling inactive temporary frame slots and bitmask indices across sequential full expressions.
+   - Updated unwinding range emission in `emit_cleanup_range` to inspect recycled temporaries active when an exception occurs, preserving reverse construction order.
+   - Enabled functions with arbitrarily many sequential temporaries (e.g. loops or chained statements) to compile and run within the 64-bit liveness mask.
+3. Parameter throw copy requirement per ISO C++17 [class.copy.elision] p3 (`src/sema/sema_types.rs`, `src/sema/stmt.rs`, `src/sema/stmt_decl.rs`, `src/sema/exception_types.rs`, `src/codegen/mod.rs`, `src/codegen/function.rs`, `src/codegen/stmt_try_param.rs`, `src/codegen/stmt_throw.rs`):
+   - Tagged function parameters and catch parameters with `is_param: true` in semantic analysis and code generation.
+   - Enforced ISO C++17 [class.copy.elision] p3, which excludes function and catch parameters from throw move-eligibility.
+   - Throwing a parameter of a move-only type now produces a compile error requiring a copy constructor, and throwing a copyable type invokes the copy constructor instead of the move constructor.
+4. Unevaluated `sizeof(expr)` and loop jump slot zeroing (`src/codegen/unwind.rs`, `src/codegen/stmt.rs`, `src/codegen/stmt_var.rs`):
+   - Removed operand traversal inside `sizeof(expr)` during unwinding analysis, matching `noexcept(expr)` semantics and omitting unwinding wrappers for leaf functions containing `sizeof`.
+   - Zeroed handled exception slots on loop `break` and `continue`, preventing stale pointers from being re-destroyed if subsequent code unwinds or early-returns.
+5. Catch matching dispatch optimization and deduplication (`src/codegen/exception_can_catch.rs`, `src/codegen/stmt_try.rs`, `src/sema/exception_types.rs`):
+   - Cached canonical class names in `Sema` using interior mutability, eliminating re-allocation and re-sorting during type ID resolution.
+   - Filtered `__cppbolt_can_catch` inheritance pairs to classes referenced in `throw` expressions or `catch` clauses across the program, skipping unreferenced classes.
+   - Deduplicated catch clause unwinding code into `emit_clause_unwind_cleanup`.
+
+### Verification Results
+
+- Exception test suite: all 147 tests in `tests/exceptions.rs` pass.
+- Census audit: all 7 tests in `tests/census_fixture.rs` pass (0 files over 500 lines, 0 functions over 80 lines, 0 functions with >5 parameters excluding self).
+- Nesting tests: all 11 tests in `tests/nesting.rs` pass.
+- Unit tests: all 143 unit tests in `cargo test --lib` pass.
+- Clippy: `cargo clippy --all-targets -- -D warnings` passes with 0 warnings.
+- Documentation checks: `python3 tools/check_feature_matrix.py` and `mdbook build docs/book` pass cleanly.
+
+---
+
 ## 2026-11-23: C++17 Exception Handling Conformance, Function-Try-Blocks, and Dynamic Uncaught Exceptions Tracking
 
 Completed ISO C++17 exception handling conformance across function-try-blocks, dynamic `uncaught_exceptions` tracking, throw value-category constructor selection, and resource budget validation:
