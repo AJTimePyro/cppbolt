@@ -2357,3 +2357,65 @@ int main() {
     Ok(())
 }
 
+#[test]
+fn test_multilevel_pointer_qualification_conversions() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+int main() {
+    int val = 42;
+    int* p1 = &val;
+    int** p2 = &p1;
+
+    // 1. int** caught by const int* const* (valid in C++17)
+    try {
+        throw p2;
+    } catch (const int* const* p) {
+        std::printf("CaughtConstIntPtrConstPtr:%d ", **p);
+    } catch (...) {
+        std::printf("FailedPCP ");
+    }
+
+    // 2. int** caught by int* const* (valid in C++17)
+    try {
+        throw p2;
+    } catch (int* const* p) {
+        std::printf("CaughtIntPtrConstPtr:%d ", **p);
+    } catch (...) {
+        std::printf("FailedIPCP ");
+    }
+
+    // 3. int** should NOT be caught by const int** (invalid in C++)
+    try {
+        throw p2;
+    } catch (const int** p) {
+        std::printf("InvalidMatch ");
+    } catch (...) {
+        std::printf("CorrectlyRejectedConstIntPtrPtr ");
+    }
+
+    // 4. const int** caught by const int* const* (valid in C++17)
+    const int cval = 100;
+    const int* cp1 = &cval;
+    const int** cp2 = &cp1;
+    try {
+        throw cp2;
+    } catch (const int* const* p) {
+        std::printf("CaughtCP2ByConstIntPtrConstPtr:%d", **p);
+    } catch (...) {
+        std::printf("FailedCP2 ");
+    }
+
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(
+        stdout.trim(),
+        "CaughtConstIntPtrConstPtr:42 CaughtIntPtrConstPtr:42 CorrectlyRejectedConstIntPtrPtr CaughtCP2ByConstIntPtrConstPtr:100"
+    );
+    Ok(())
+}
+
+
