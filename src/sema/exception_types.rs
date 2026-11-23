@@ -271,6 +271,7 @@ impl Sema {
             let sym = self.lookup_var(name);
             sym.is_some_and(|s| {
                 !s.is_global
+                    && !s.is_param
                     && !s.ty.is_reference()
                     && !s.ty.strip_reference().is_const()
                     && self.var_try_depths.get(name).copied().unwrap_or(0) >= self.try_depth

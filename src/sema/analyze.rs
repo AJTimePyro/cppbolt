@@ -95,13 +95,12 @@ impl Sema {
     /// declared type is refined later by `analyze_global_var`.
     fn seed_global_symbols(&mut self, program: &Program) {
         for decl in &program.declarations {
-            let Decl::GlobalVar { name, ty, .. } = decl else {
-                continue;
-            };
+            let Decl::GlobalVar { name, ty, .. } = decl else { continue; };
             let symbol = VarSymbol {
                 name: name.clone(),
                 ty: ty.clone(),
                 is_global: true,
+                is_param: false,
                 stack_offset: 0,
             };
             self.global_vars.insert(name.clone(), symbol.clone());

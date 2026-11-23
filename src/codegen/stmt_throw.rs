@@ -197,6 +197,7 @@ impl<'a> Codegen<'a> {
         let is_const = expr_ty.strip_reference().is_const();
         let is_local_var = if let Expr::Identifier(name) = expr {
             ctx.var_offsets.contains_key(name)
+                && !ctx.var_is_param.get(name).copied().unwrap_or(false)
                 && !raw_ty.is_reference()
                 && !is_const
                 && ctx.var_try_depths.get(name).copied().unwrap_or(0) >= ctx.try_depth

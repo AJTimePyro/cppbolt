@@ -152,7 +152,7 @@ impl<'a> Codegen<'a> {
                 .unwrap_or(4)
                 .max(4);
             let offset = ctx.alloc_frame(psize, palign)?;
-            ctx.bind_local(p.name.clone(), offset, p.ty.clone());
+            ctx.bind_param(p.name.clone(), offset, p.ty.clone());
 
             if let Type::Struct(sname) = p.ty.strip_const() {
                 code.push(OP_LOCAL_GET);

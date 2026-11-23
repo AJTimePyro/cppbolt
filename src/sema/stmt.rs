@@ -38,14 +38,11 @@ impl Sema {
                 name: param.name.clone(),
                 ty: param.ty.clone(),
                 is_global: false,
+                is_param: true,
                 stack_offset: param_offset,
             };
             let Some(scope) = self.scopes.last_mut() else {
-                return Err(crate::internal_error!(
-                    func.line,
-                    func.col,
-                    "missing function scope"
-                ));
+                return Err(crate::internal_error!(func.line, func.col, "missing function scope"));
             };
             scope.vars.insert(param.name.clone(), sym);
         }
@@ -189,7 +186,7 @@ impl Sema {
                 self.resolve_and_instantiate_type(ty, line, col)?;
                 self.validate_catch_type(ty, line, col)?;
                 if !name.is_empty() {
-                    self.declare_local_var(name, ty, line, col)?;
+                    self.declare_catch_param(name, ty, line, col)?;
                 }
             }
             self.analyze_stmt(&mut clause.body)?;

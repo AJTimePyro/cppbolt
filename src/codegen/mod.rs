@@ -200,6 +200,7 @@ enum VarBinding {
         previous_offset: Option<u32>,
         previous_type: Option<Type>,
         previous_try_depth: Option<u32>,
+        previous_is_param: Option<bool>,
     },
     Static {
         name: String,
@@ -241,6 +242,7 @@ pub struct FunctionContext {
     pub try_depth: u32,
     pub active_exception_slots: Vec<u32>,
     pub var_offsets: HashMap<String, u32>,
+    pub var_is_param: HashMap<String, bool>,
     /// Try depth at which each local was declared, for throw move-eligibility.
     pub var_try_depths: HashMap<String, u32>,
     pub var_types: HashMap<String, Type>,
@@ -292,6 +294,7 @@ impl Default for FunctionContext {
             try_depth: 0,
             active_exception_slots: Vec::new(),
             var_offsets: HashMap::new(),
+            var_is_param: HashMap::new(),
             var_try_depths: HashMap::new(),
             var_types: HashMap::new(),
             static_var_offsets: HashMap::new(),
@@ -330,10 +333,12 @@ impl FunctionContext {
                     previous_offset,
                     previous_type,
                     previous_try_depth,
+                    previous_is_param,
                 } => {
                     restore_binding(&mut self.var_offsets, name.clone(), previous_offset);
                     restore_binding(&mut self.var_types, name.clone(), previous_type);
-                    restore_binding(&mut self.var_try_depths, name, previous_try_depth);
+                    restore_binding(&mut self.var_try_depths, name.clone(), previous_try_depth);
+                    restore_binding(&mut self.var_is_param, name, previous_is_param);
                 }
                 VarBinding::Static {
                     name,
@@ -352,15 +357,25 @@ impl FunctionContext {
     }
 
     pub fn bind_local(&mut self, name: String, offset: u32, ty: Type) {
+        self.bind_var_internal(name, offset, ty, false);
+    }
+
+    pub fn bind_param(&mut self, name: String, offset: u32, ty: Type) {
+        self.bind_var_internal(name, offset, ty, true);
+    }
+
+    fn bind_var_internal(&mut self, name: String, offset: u32, ty: Type, is_param: bool) {
         let previous_offset = self.var_offsets.insert(name.clone(), offset);
         let previous_try_depth = self.var_try_depths.insert(name.clone(), self.try_depth);
         let previous_type = self.var_types.insert(name.clone(), ty);
+        let previous_is_param = self.var_is_param.insert(name.clone(), is_param);
         if let Some(scope) = self.var_scopes.last_mut() {
             scope.push(VarBinding::Local {
                 name,
                 previous_offset,
                 previous_type,
                 previous_try_depth,
+                previous_is_param,
             });
         }
     }

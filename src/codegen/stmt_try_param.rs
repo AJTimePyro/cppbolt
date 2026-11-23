@@ -65,7 +65,7 @@ impl<'a> Codegen<'a> {
                 Self::emit_slot_store(val_slot, ctx.fp_local, ctx.scratch2, code);
 
                 let ref_slot = ctx.alloc_frame(4, 4)?;
-                ctx.bind_local(name.to_string(), ref_slot, ty.clone());
+                ctx.bind_param(name.to_string(), ref_slot, ty.clone());
 
                 code.push(OP_LOCAL_GET);
                 write_u32(code, ctx.fp_local);
@@ -79,7 +79,7 @@ impl<'a> Codegen<'a> {
                 write_u32(code, ref_slot);
             } else {
                 let offset = ctx.alloc_frame(4, 4)?;
-                ctx.bind_local(name.to_string(), offset, ty.clone());
+                ctx.bind_param(name.to_string(), offset, ty.clone());
                 Self::emit_slot_store(offset, ctx.fp_local, ctx.scratch2, code);
             }
         }
@@ -123,7 +123,7 @@ impl<'a> Codegen<'a> {
         if ty.is_reference() {
             if !name.is_empty() {
                 let offset = ctx.alloc_frame(4, 4)?;
-                ctx.bind_local(name.to_string(), offset, ty.clone());
+                ctx.bind_param(name.to_string(), offset, ty.clone());
                 code.push(OP_LOCAL_GET);
                 write_u32(code, ctx.fp_local);
                 Self::emit_slot_load(payload_addr_slot, ctx.fp_local, code);
@@ -139,7 +139,7 @@ impl<'a> Codegen<'a> {
                 .max(4);
             let offset = ctx.alloc_frame(size, align)?;
             if !name.is_empty() {
-                ctx.bind_local(name.to_string(), offset, ty.clone());
+                ctx.bind_param(name.to_string(), offset, ty.clone());
             }
 
             let is_const = ty.is_const();

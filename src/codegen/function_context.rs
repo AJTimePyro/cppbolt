@@ -172,6 +172,7 @@ impl<'a> Codegen<'a> {
             catch_depth: 0,
             try_depth: 0,
             var_offsets: HashMap::new(),
+            var_is_param: HashMap::new(),
             var_try_depths: HashMap::new(),
             var_types: HashMap::new(),
             static_var_offsets: HashMap::new(),

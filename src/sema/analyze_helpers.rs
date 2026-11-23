@@ -271,6 +271,7 @@ impl Sema {
                 name: qual_name.clone(),
                 ty: sf.1.clone(),
                 is_global: true,
+                is_param: false,
                 stack_offset: 0,
             };
             self.global_vars.insert(qual_name.clone(), sym.clone());

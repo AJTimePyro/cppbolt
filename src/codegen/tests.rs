@@ -23,6 +23,7 @@ fn context() -> FunctionContext {
         try_depth: 0,
         active_exception_slots: Vec::new(),
         var_offsets: HashMap::new(),
+        var_is_param: HashMap::new(),
         var_try_depths: HashMap::new(),
         var_types: HashMap::new(),
         static_var_offsets: HashMap::new(),
