@@ -211,6 +211,36 @@ impl<'a> Codegen<'a> {
         self.module.functions.push(t_can_catch);
         self.func_indices
             .insert("__cppbolt_can_catch".to_string(), func_can_catch);
+
+        let func_terminate = (self.module.imports.len() + self.module.functions.len()) as u32;
+        let t_terminate = self.module.add_type(vec![], vec![]);
+        self.module.functions.push(t_terminate);
+        self.func_indices
+            .insert("__cppbolt_terminate".to_string(), func_terminate);
         trap_ret
+    }
+
+    pub(super) fn emit_terminate_call(&self, code: &mut Vec<u8>) {
+        code.push(OP_CALL);
+        write_u32(code, self.func_indices["__cppbolt_terminate"]);
+    }
+
+    pub(super) fn emit_terminate_function(&mut self) {
+        let mut code = Vec::new();
+        if let Some(terminate_idx) = ["std::terminate", "terminate"]
+            .iter()
+            .find_map(|name| self.func_indices.get(*name).copied())
+        {
+            code.push(OP_CALL);
+            write_u32(&mut code, terminate_idx);
+        } else {
+            // Without <exception>, std::terminate is not compiled; abort() is exit(134).
+            code.push(OP_I32_CONST);
+            write_i32(&mut code, 134);
+            code.push(OP_CALL);
+            write_u32(&mut code, self.func_indices["exit"]);
+        }
+        code.push(OP_END);
+        self.module.codes.push((vec![], code));
     }
 }

@@ -3358,14 +3358,127 @@ int main() {
     Ok(())
 }
 
+#[test]
+fn test_noexcept_violation_invokes_custom_terminate_handler() -> Result<(), String> {
+    let source = r#"
+#include <exception>
+#include <cstdio>
+#include <cstdlib>
 
+void my_terminate() {
+    std::printf("CustomTerminateCalled\n");
+    std::exit(42);
+}
 
+void bad() noexcept {
+    throw 7;
+}
 
+int main() {
+    std::set_terminate(my_terminate);
+    bad();
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(
+        code, 42,
+        "noexcept violation must invoke the custom terminate handler"
+    );
+    assert_eq!(stdout.trim(), "CustomTerminateCalled");
+    Ok(())
+}
 
+#[test]
+fn test_throwing_during_unwinding_invokes_custom_terminate_handler() -> Result<(), String> {
+    let source = r#"
+#include <exception>
+#include <cstdio>
+#include <cstdlib>
 
+void my_terminate() {
+    std::printf("CustomTerminateCalled\n");
+    std::exit(42);
+}
 
+struct Bad {
+    ~Bad() noexcept(false) { throw 9; }
+};
 
+void inner() { throw 1; }
+void middle() { Bad b; inner(); }
 
+int main() {
+    std::set_terminate(my_terminate);
+    try {
+        middle();
+    } catch (int) {
+        std::printf("Caught");
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(
+        code, 42,
+        "a throwing destructor during unwinding must invoke the custom terminate handler"
+    );
+    assert_eq!(stdout.trim(), "CustomTerminateCalled");
+    Ok(())
+}
 
+#[test]
+fn test_uncaught_exception_from_main_invokes_custom_terminate_handler() -> Result<(), String> {
+    let source = r#"
+#include <exception>
+#include <cstdio>
+#include <cstdlib>
 
+void my_terminate() {
+    std::printf("CustomTerminateCalled\n");
+    std::exit(42);
+}
 
+int main() {
+    std::set_terminate(my_terminate);
+    throw 5;
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(
+        code, 42,
+        "an uncaught exception escaping main must invoke std::terminate"
+    );
+    assert_eq!(stdout.trim(), "CustomTerminateCalled");
+    Ok(())
+}
+
+#[test]
+fn test_rethrow_without_active_exception_invokes_custom_terminate_handler() -> Result<(), String> {
+    let source = r#"
+#include <exception>
+#include <cstdio>
+#include <cstdlib>
+
+void my_terminate() {
+    std::printf("CustomTerminateCalled\n");
+    std::exit(42);
+}
+
+void foo() { throw; }
+
+int main() {
+    std::set_terminate(my_terminate);
+    foo();
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(
+        code, 42,
+        "throw; without an active exception must invoke the custom terminate handler"
+    );
+    assert_eq!(stdout.trim(), "CustomTerminateCalled");
+    Ok(())
+}

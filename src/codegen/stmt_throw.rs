@@ -50,7 +50,7 @@ impl<'a> Codegen<'a> {
             code.push(OP_THROW);
             write_u32(code, 0);
         } else if ctx.catch_depth == 0 {
-            code.push(OP_UNREACHABLE);
+            self.emit_terminate_call(code);
         } else if ctx.in_catch_all {
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.current_exnref_local());

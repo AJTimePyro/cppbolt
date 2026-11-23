@@ -13,6 +13,9 @@ impl<'a> Codegen<'a> {
         let mut reachable = Self::compute_reachable(&candidates);
         let has_exceptions =
             self.mark_exception_destructors_reachable(&candidates, &mut reachable);
+        if has_exceptions {
+            Self::mark_terminate_reachable(&candidates, &mut reachable);
+        }
         let all_reachable_calls = Self::collect_reachable_calls(&candidates, &reachable);
         let has_deleting_dtors = self.has_deleting_dtors();
         let has_new_or_delete = self.has_new_or_delete(&candidates, &reachable);
@@ -319,6 +322,15 @@ impl<'a> Codegen<'a> {
                 worklist.push(idx);
             }
         }
+        Self::propagate_reachability(candidates, &mut reachable, worklist);
+        reachable
+    }
+
+    fn propagate_reachability(
+        candidates: &[FuncCandidate<'_>],
+        reachable: &mut HashSet<usize>,
+        mut worklist: Vec<usize>,
+    ) {
         while let Some(idx) = worklist.pop() {
             for call_target in &candidates[idx].calls {
                 for (t_idx, t_cand) in candidates.iter().enumerate() {
@@ -337,7 +349,23 @@ impl<'a> Codegen<'a> {
                 }
             }
         }
-        reachable
+    }
+
+    /// Runtime termination paths call `std::terminate` directly. It is inline
+    /// in the stdlib, so mark it reachable even if the program only installs a
+    /// handler and never calls it by name.
+    fn mark_terminate_reachable(candidates: &[FuncCandidate<'_>], reachable: &mut HashSet<usize>) {
+        let Some(idx) = candidates
+            .iter()
+            .position(|c| c.aliases.iter().any(|a| a == "std::terminate"))
+        else {
+            return;
+        };
+        let mut worklist = Vec::new();
+        if reachable.insert(idx) {
+            worklist.push(idx);
+        }
+        Self::propagate_reachability(candidates, reachable, worklist);
     }
 
     fn collect_reachable_calls(

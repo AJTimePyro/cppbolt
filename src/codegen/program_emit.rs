@@ -312,6 +312,7 @@ impl<'a> Codegen<'a> {
                 .push(crate::runtime::emit_pure_virtual_trap());
         }
         self.emit_can_catch_function();
+        self.emit_terminate_function();
     }
 
     fn register_destructors_table(&mut self) {
