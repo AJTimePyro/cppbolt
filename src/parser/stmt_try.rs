@@ -29,13 +29,18 @@ impl Parser {
                 self.advance();
                 None
             } else {
-                let ty = self.parse_type()?;
-                let name = if let TokenKind::Ident(id) = self.peek() {
-                    let n = id.clone();
-                    self.advance();
-                    n
+                let base_type = self.parse_type()?;
+                let (ty, name) = if self.is_function_pointer_declarator_ahead() {
+                    self.parse_function_pointer_declarator(base_type, None)?
                 } else {
-                    String::new()
+                    let name = if let TokenKind::Ident(id) = self.peek() {
+                        let n = id.clone();
+                        self.advance();
+                        n
+                    } else {
+                        String::new()
+                    };
+                    (base_type, name)
                 };
                 Some((ty, name))
             };

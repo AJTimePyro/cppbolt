@@ -3410,6 +3410,31 @@ int main() {
 }
 
 #[test]
+fn test_catch_raw_function_pointer_syntax() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+void target() {}
+
+int main() {
+    try {
+        throw target;
+    } catch (void (*fp)()) {
+        fp();
+        std::printf("CaughtFuncPtr");
+    } catch (...) {
+        std::printf("Fallback");
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "CaughtFuncPtr");
+    Ok(())
+}
+
+#[test]
 fn test_regular_function_try_block() -> Result<(), String> {
     let source = r#"
 #include <cstdio>
