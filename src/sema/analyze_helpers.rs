@@ -3,16 +3,51 @@
 use super::analyze::this_param;
 use super::*;
 
+fn stmt_contains_return(s: &Stmt) -> Option<(usize, usize)> {
+    match &s.kind {
+        StmtKind::Return(_) => Some((s.line, s.col)),
+        StmtKind::Compound(stmts) | StmtKind::VarDeclGroup(stmts) => {
+            stmts.iter().find_map(stmt_contains_return)
+        }
+        StmtKind::If {
+            branches,
+            else_stmt,
+        } => branches
+            .iter()
+            .find_map(|(_, b)| stmt_contains_return(b))
+            .or_else(|| else_stmt.as_deref().and_then(stmt_contains_return)),
+        StmtKind::While { body, .. }
+        | StmtKind::DoWhile { body, .. }
+        | StmtKind::For { body, .. }
+        | StmtKind::RangeFor { body, .. }
+        | StmtKind::Switch { body, .. } => stmt_contains_return(body),
+        StmtKind::Try { try_body, catches } => stmt_contains_return(try_body)
+            .or_else(|| catches.iter().find_map(|c| stmt_contains_return(&c.body))),
+        _ => None,
+    }
+}
+
 /// Falling off the end of a constructor function-try-block handler rethrows
-/// the handled exception ([except.handle]).
-pub(super) fn desugar_function_try_block(is_ctor: bool, body: &mut Stmt) {
+/// the handled exception ([except.handle]). Return statements in a constructor
+/// function-try-block handler are forbidden by [except.handle] p17.
+pub(super) fn desugar_function_try_block(
+    is_ctor: bool,
+    body: &mut Stmt,
+) -> Result<(), CompileError> {
     if !is_ctor {
-        return;
+        return Ok(());
     }
     let StmtKind::Try { catches, .. } = &mut body.kind else {
-        return;
+        return Ok(());
     };
     for clause in catches {
+        if let Some((line, col)) = stmt_contains_return(&clause.body) {
+            return Err(CompileError::new(
+                "return statements cannot appear in a function-try-block handler of a constructor",
+                line,
+                col,
+            ));
+        }
         let (line, col) = (clause.body.line, clause.body.col);
         let rethrow = Stmt::new(StmtKind::Throw(None), line, col);
         if let StmtKind::Compound(stmts) = &mut clause.body.kind {
@@ -28,6 +63,7 @@ pub(super) fn desugar_function_try_block(is_ctor: bool, body: &mut Stmt) {
             stmts.insert(0, handler);
         }
     }
+    Ok(())
 }
 
 pub(super) fn method_matches_out_of_class(

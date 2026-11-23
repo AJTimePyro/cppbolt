@@ -62,7 +62,7 @@ impl Sema {
             func.name == cls || func.name == short
         });
         if let Some(body) = &mut func.body {
-            super::analyze_helpers::desugar_function_try_block(is_ctor, body);
+            super::analyze_helpers::desugar_function_try_block(is_ctor, body)?;
             self.analyze_stmt(body)?;
         }
         Ok(())

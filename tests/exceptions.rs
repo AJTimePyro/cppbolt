@@ -3570,6 +3570,111 @@ int main() {
 }
 
 #[test]
+fn test_constructor_function_try_block_member_throw() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct Member {
+    int id;
+    Member(int id) : id(id) {
+        std::printf("MInit:%d ", id);
+        if (id == 2) throw 99;
+    }
+    ~Member() {
+        std::printf("MDtor:%d ", id);
+    }
+};
+
+struct Base {
+    Base() { std::printf("BInit "); }
+    ~Base() { std::printf("BDtor "); }
+};
+
+struct Target : Base {
+    Member m1;
+    Member m2;
+    Member m3;
+    Target() try : Base(), m1(1), m2(2), m3(3) {
+        std::printf("TargetBody ");
+    } catch (int e) {
+        std::printf("TargetHandler:%d ", e);
+    }
+};
+
+int main() {
+    try {
+        Target t;
+    } catch (int e) {
+        std::printf("MainCaught:%d", e);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(
+        stdout.trim(),
+        "BInit MInit:1 MInit:2 MDtor:1 BDtor TargetHandler:99 MainCaught:99"
+    );
+    Ok(())
+}
+
+#[test]
+fn test_constructor_function_try_block_body_throw_destroys_subobjects() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct Member {
+    int id;
+    Member(int id) : id(id) { std::printf("MInit:%d ", id); }
+    ~Member() { std::printf("MDtor:%d ", id); }
+};
+
+struct Target {
+    Member m1;
+    Member m2;
+    Target() try : m1(1), m2(2) {
+        std::printf("TargetBody ");
+        throw 77;
+    } catch (int e) {
+        std::printf("Handler:%d ", e);
+    }
+};
+
+int main() {
+    try {
+        Target t;
+    } catch (int e) {
+        std::printf("MainCaught:%d", e);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(
+        stdout.trim(),
+        "MInit:1 MInit:2 TargetBody MDtor:2 MDtor:1 Handler:77 MainCaught:77"
+    );
+    Ok(())
+}
+
+#[test]
+fn test_constructor_function_try_block_rejects_return() -> Result<(), String> {
+    let source = r#"
+struct A {
+    int x;
+    A() try : x(1) {
+    } catch (...) {
+        return;
+    }
+};
+int main() { return 0; }
+"#;
+    assert_compile_error(source, "return statements cannot appear in a function-try-block handler")
+}
+
+#[test]
 fn test_uncaught_exceptions_during_unwinding() -> Result<(), String> {
     let source = r#"
 #include <cstdio>

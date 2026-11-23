@@ -31,11 +31,28 @@ impl<'a> Codegen<'a> {
 
         self.bind_parameters(f, &mut ctx, &mut code)?;
 
-        if let Some(ref cls) = class_name {
-            self.compile_constructor_prologue(f, cls, &mut ctx, &mut code)?;
-        }
+        let is_ctor = class_name.as_deref().is_some_and(|cls| {
+            let short = QualifiedName::new(cls).class_short_name();
+            f.name == *cls || f.name == short
+        });
 
-        self.compile_stmt(body, &mut ctx, &mut code)?;
+        if let Some(ref cls) = class_name {
+            if is_ctor && let StmtKind::Try { try_body, catches } = &body.kind {
+                self.compile_constructor_function_try_block(
+                    f,
+                    cls,
+                    try_body,
+                    catches,
+                    &mut ctx,
+                    &mut code,
+                )?;
+            } else {
+                self.compile_constructor_prologue(f, cls, &mut ctx, &mut code)?;
+                self.compile_stmt(body, &mut ctx, &mut code)?;
+            }
+        } else {
+            self.compile_stmt(body, &mut ctx, &mut code)?;
+        }
 
         // Destroy locals still live in the body's root scope.
         let root_objs = ctx.scope_objects.pop().unwrap_or_default();

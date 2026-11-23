@@ -15,22 +15,25 @@ struct ClauseDispatchCtx<'a> {
 }
 
 impl<'a> Codegen<'a> {
-    pub(super) fn compile_try_stmt(
+    fn compile_try_block_with<F>(
         &mut self,
-        try_body: &Stmt,
         catches: &[CatchClause],
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
-    ) -> Result<(), CompileError> {
+        emit_guarded_body: F,
+    ) -> Result<(), CompileError>
+    where
+        F: FnOnce(&mut Self, &mut FunctionContext, &mut Vec<u8>) -> Result<(), CompileError>,
+    {
         if catches.is_empty() {
-            return self.compile_stmt(try_body, ctx, code);
+            return emit_guarded_body(self, ctx, code);
         }
         let start_clean_idx = ctx.cleanup_entries.len();
         let has_catch_all = catches.last().map(|c| c.param.is_none()).unwrap_or(false);
         let try_exit_target = self.emit_try_block_prelude(has_catch_all, code);
 
         ctx.try_depth += 1;
-        self.compile_stmt(try_body, ctx, code)?;
+        emit_guarded_body(self, ctx, code)?;
         ctx.try_depth -= 1;
 
         // Normal completion branches out of $try_exit
@@ -70,6 +73,33 @@ impl<'a> Codegen<'a> {
         code.push(OP_END); // end $try_exit
         self.current_block_depth -= 1;
         Ok(())
+    }
+
+    pub(super) fn compile_try_stmt(
+        &mut self,
+        try_body: &Stmt,
+        catches: &[CatchClause],
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        self.compile_try_block_with(catches, ctx, code, |this, ctx, code| {
+            this.compile_stmt(try_body, ctx, code)
+        })
+    }
+
+    pub(super) fn compile_constructor_function_try_block(
+        &mut self,
+        f: &FunctionDecl,
+        cls: &str,
+        try_body: &Stmt,
+        catches: &[CatchClause],
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        self.compile_try_block_with(catches, ctx, code, |this, ctx, code| {
+            this.compile_constructor_prologue(f, cls, ctx, code)?;
+            this.compile_stmt(try_body, ctx, code)
+        })
     }
 
     fn emit_try_block_prelude(&mut self, has_catch_all: bool, code: &mut Vec<u8>) -> u32 {
