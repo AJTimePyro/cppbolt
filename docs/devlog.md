@@ -4,6 +4,40 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-24: LIFO Unwinding Order, Destructor Function-Try-Blocks, DCE Refinements, and Foreign Exception Isolation
+
+Hardened C++17 exception handling conformance across unwinding destruction order, destructor function-try-blocks, expression throw dead-code elimination, and runtime counter isolation.
+
+### Summary of Work
+
+1. Unwinding temporary destruction order (`src/codegen/unwind.rs`, `tests/exceptions.rs`):
+   - Inverted the cleanup sequence in `emit_cleanup_range` so that active recycled statement temporaries in `..start` are destroyed before the local scope variables in `start..end`.
+   - Guaranteed strict C++17 LIFO unwinding order when subexpression temporaries are created in the presence of local variables.
+2. Destructor function-try-block implicit rethrow per ISO C++17 [except.handle] p15 (`src/sema/analyze_helpers.rs`, `src/sema/stmt.rs`, `tests/exceptions.rs`):
+   - Extended `desugar_function_try_block` to recognize class destructors and append an implicit `throw;` to each catch clause handler.
+   - Guaranteed that falling off the end of a destructor function-try-block handler rethrows the exception rather than swallowing it.
+3. Expression throw dead-code elimination and DCE streamlining (`src/ast/types.rs`, `src/codegen/expr.rs`, `src/codegen/analysis_vars.rs`, `src/codegen/program_prepare_runtime.rs`, `tests/exceptions.rs`):
+   - Added `expr_contains_throw` to identify `Expr::Throw` within subexpressions (including conditional ternary operators `cond ? val : throw Ex()`).
+   - Updated `conditional_result_type` in `src/ast/types.rs` so that `void`-typed throw expressions in conditional operators yield the type of the non-void branch per ISO C++17 [expr.cond] p2.
+   - Streamlined `collect_reachable_exception_classes` to read `self.sema.thrown_classes` and `self.sema.caught_classes` directly, eliminating ~80 lines of duplicate, syntactic AST pattern matching.
+4. Foreign exception uncaught count isolation (`src/codegen/stmt_try.rs`, `src/codegen/stmt_throw.rs`, `tests/exceptions.rs`):
+   - Removed the uncaught count decrement from `emit_catch_all_handler` and the rethrow increment from foreign exception rethrow (`throw;` in `catch (...)`).
+   - Prevented non-C++ foreign WebAssembly exceptions caught via `catch_all_ref` from driving `std::uncaught_exceptions()` negative.
+5. Noexcept and main unwinding termination (`src/codegen/unwind.rs`, `tests/exceptions.rs`):
+   - Emitted `OP_UNREACHABLE` immediately after `__cppbolt_terminate` in `emit_function_unwind_handler`.
+   - Removed dead terminate calls between `try_table` end and catch blocks in `emit_cleanup_range`.
+
+### Verification Results
+
+- Exception test suite: all 152 tests in `tests/exceptions.rs` pass.
+- Census audit: all 7 tests in `tests/census_fixture.rs` pass (all files <= 500 lines, functions <= 80 lines, <= 5 parameters).
+- Unit tests: all 143 unit tests in `cargo test --lib` pass.
+- Clippy: `cargo clippy --all-targets -- -D warnings` clean (0 warnings).
+- Feature matrix: `python3 tools/check_feature_matrix.py` clean (288 files valid).
+- mdBook: `mdbook build docs/book` succeeds without errors.
+
+---
+
 ## 2026-11-24: Exception Handling Hardening, Temporary Slot Recycling, and C++17 Parameter Throw Conformance
 
 Hardened exception handling lowering across allocation safeguards, temporary slot recycling, and ISO C++17 parameter throw conformance.

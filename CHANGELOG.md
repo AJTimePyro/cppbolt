@@ -29,6 +29,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Defaulted class destructors and synthesized default destructors to `noexcept(true)` per C++17 [except.spec] unless explicitly declared `noexcept(false)`.
 
 ### Exception Handling Conformance (C++17)
+- Inverted unwinding cleanup loops to destroy active statement temporaries before enclosing local scope variables, preserving strict C++17 LIFO destruction order.
+- Enforced ISO C++17 [except.handle] p15 implicit rethrow when control reaches the end of a destructor function-try-block handler.
+- Retained exception destructors for exceptions thrown from expressions (including conditional ternary expressions) during dead-code elimination, and streamlined DCE class collection.
+- Preserved `std::uncaught_exceptions()` count when catching foreign exceptions in `catch (...)`, avoiding counter underflow.
+- Appended `OP_UNREACHABLE` after `std::terminate` in unwinding handlers for `noexcept` functions and `main`, and eliminated dead terminate calls in cleanup ranges.
 - Runtime termination paths now call `std::terminate`, so handlers installed with `std::set_terminate` run on `noexcept` violations, `throw;` without an active exception, throwing destructors during unwinding, and exceptions escaping `main`.
 - Gave enums, function signatures, and member-pointer types distinct exception type IDs, and restricted derived-to-base catch matching to unambiguous public bases. `nullptr` now matches member-pointer handlers.
 - Rejected throwing or catching class types whose copy or move constructor is deleted or private; distinguished value categories so prvalues use guaranteed copy elision, rvalues (including `std::move` calls) and move-eligible locals select the move constructor, and lvalues select the copy constructor. Copy-initialization bypasses explicit move constructors in favour of the copy constructor, rejects explicit copy constructors, and accounts for implicit copy-ctor suppression by user-declared move constructors and const/rvalue binding rules.
