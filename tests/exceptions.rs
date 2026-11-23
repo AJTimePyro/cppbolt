@@ -4694,3 +4694,29 @@ int main() {
     assert_eq!(code, 0);
     Ok(())
 }
+
+#[test]
+fn test_loop_break_and_continue_from_catch_clears_slot() -> Result<(), String> {
+    let source = r#"
+static int dtor_count = 0;
+struct Tracker {
+    int id;
+    Tracker(int i) : id(i) {}
+    ~Tracker() { dtor_count++; }
+};
+int main() {
+    for (int i = 0; i < 3; i++) {
+        try {
+            throw Tracker(i);
+        } catch (Tracker& t) {
+            if (t.id == 0) continue;
+            break;
+        }
+    }
+    return dtor_count == 2 ? 0 : 1;
+}
+"#;
+    let (code, _) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    Ok(())
+}

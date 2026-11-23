@@ -226,6 +226,7 @@ impl<'a> Codegen<'a> {
                 code.push(OP_LOCAL_SET);
                 write_u32(code, ctx.scratch1);
                 self.emit_destroy_exception_if_not_rethrown(ctx.scratch1, ctx, code);
+                Self::emit_slot_zero(*slot, ctx.fp_local, code);
             }
             code.push(OP_BR);
             write_u32(code, self.current_block_depth - 1 - break_target_abs);
@@ -253,6 +254,7 @@ impl<'a> Codegen<'a> {
                 code.push(OP_LOCAL_SET);
                 write_u32(code, ctx.scratch1);
                 self.emit_destroy_exception_if_not_rethrown(ctx.scratch1, ctx, code);
+                Self::emit_slot_zero(*slot, ctx.fp_local, code);
             }
             code.push(OP_BR);
             write_u32(code, self.current_block_depth - 1 - continue_target_abs);

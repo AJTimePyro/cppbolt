@@ -366,6 +366,16 @@ impl<'a> Codegen<'a> {
         write_u32(code, slot_offset);
     }
 
+    pub(crate) fn emit_slot_zero(slot_offset: u32, fp_local: u32, code: &mut Vec<u8>) {
+        code.push(OP_LOCAL_GET);
+        write_u32(code, fp_local);
+        code.push(OP_I32_CONST);
+        write_i32(code, 0);
+        code.push(OP_I32_STORE);
+        write_u32(code, 2);
+        write_u32(code, slot_offset);
+    }
+
     /// Stores the vtable pointer at offset zero of a local object.
     fn emit_vtable_install(
         &self,
