@@ -146,6 +146,14 @@ impl Sema {
         class_name: &str,
         mut func: FunctionDecl,
     ) -> Result<(String, FunctionDecl), CompileError> {
+        if let Some(ref expr) = func.noexcept_expr {
+            let val = crate::sema::constexpr_eval::eval_constexpr_with_sema(
+                expr,
+                self,
+                Some(&self.static_const_values),
+            )?;
+            func.qualifiers.is_noexcept = val != 0;
+        }
         self.resolve_and_instantiate_type(&mut func.return_type, func.line, func.col)?;
         for p in &mut func.params {
             self.resolve_and_instantiate_type(&mut p.ty, func.line, func.col)?;
@@ -222,6 +230,14 @@ impl Sema {
                         .push(m.clone());
                 }
                 continue;
+            }
+            if let Some(ref expr) = m.noexcept_expr {
+                let val = crate::sema::constexpr_eval::eval_constexpr_with_sema(
+                    expr,
+                    self,
+                    Some(&self.static_const_values),
+                )?;
+                m.qualifiers.is_noexcept = val != 0;
             }
             self.resolve_and_instantiate_type(&mut m.return_type, m.line, m.col)?;
             for param in &mut m.params {

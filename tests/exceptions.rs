@@ -2902,6 +2902,35 @@ int main() {
     Ok(())
 }
 
+#[test]
+fn test_non_template_noexcept_specification_evaluation() -> Result<(), String> {
+    let source = r#"
+void throwing_func() { throw 42; }
+void non_throwing() noexcept {}
+
+void f_throw() noexcept(noexcept(throwing_func())) {}
+void f_nothrow() noexcept(noexcept(non_throwing())) {}
+
+struct S {
+    void m_throw() noexcept(noexcept(throwing_func())) {}
+    void m_nothrow() noexcept(noexcept(non_throwing())) {}
+};
+
+int main() {
+    if (noexcept(f_throw())) return 1;
+    if (!noexcept(f_nothrow())) return 2;
+    S s;
+    if (noexcept(s.m_throw())) return 3;
+    if (!noexcept(s.m_nothrow())) return 4;
+    return 0;
+}
+"#;
+    let (code, _) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    Ok(())
+}
+
+
 
 
 
