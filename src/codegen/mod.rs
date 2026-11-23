@@ -39,6 +39,7 @@ mod overload;
 mod program;
 mod program_emit;
 mod program_prepare;
+mod program_prepare_runtime;
 mod raii;
 mod stmt;
 mod stmt_loop;

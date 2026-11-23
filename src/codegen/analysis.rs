@@ -299,7 +299,13 @@ fn collect_call_node<'a>(expr: &'a Expr, calls: &mut HashSet<String>, stack: &mu
             stack.extend(args.iter());
         }
         Expr::Delete { expr, .. } => stack.push(expr),
-        Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } => {
+        Expr::TypedInitList { ty, elements, .. } => {
+            if let Type::Struct(sname) = ty.strip_const() {
+                insert_lifecycle_calls(sname, calls);
+            }
+            stack.extend(elements.iter());
+        }
+        Expr::InitializerList { elements, .. } => {
             stack.extend(elements.iter());
         }
         Expr::PackExpansion { pattern, .. } => stack.push(pattern),
@@ -425,6 +431,9 @@ pub(super) fn collect_stmt_calls(stmt: &Stmt, calls: &mut HashSet<String>) {
         StmtKind::Try { try_body, catches } => {
             collect_stmt_calls(try_body, calls);
             for c in catches {
+                if let Some((ty, _)) = &c.param {
+                    collect_type_lifecycle(ty, calls);
+                }
                 collect_stmt_calls(&c.body, calls);
             }
         }

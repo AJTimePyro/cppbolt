@@ -10,21 +10,15 @@ impl<'a> Codegen<'a> {
         let address_taken = Self::collect_address_taken(program);
         self.lay_out_globals(program);
         let candidates = self.build_candidates(program, &address_taken);
-        let reachable = Self::compute_reachable(&candidates);
+        let mut reachable = Self::compute_reachable(&candidates);
+        let has_exceptions =
+            Self::mark_exception_destructors_reachable(&candidates, &mut reachable);
         let all_reachable_calls = Self::collect_reachable_calls(&candidates, &reachable);
-
         let has_deleting_dtors = self.has_deleting_dtors();
         let has_new_or_delete = self.has_new_or_delete(&candidates, &reachable);
         let need_printf = all_reachable_calls
             .iter()
             .any(|c| crate::name::is_printf(c));
-        let has_exceptions = reachable.iter().any(|&idx| {
-            let body_opt = match &candidates[idx].decl {
-                FuncDeclRef::Function(f) => f.body.as_ref(),
-                FuncDeclRef::Method(_, m) => m.body.as_ref(),
-            };
-            body_opt.map(check_stmt_has_try_throw).unwrap_or(false)
-        });
         // Keep the allocator whenever a record exists: synthesized constructors,
         // destructors, and prvalue returns may allocate even without a visible
         // `new`, `malloc`, or `free` call.
@@ -421,55 +415,5 @@ impl<'a> Codegen<'a> {
                 .map(|l| l.has_vtable)
                 .unwrap_or(false)
         })
-    }
-
-    fn register_runtime_functions(
-        &mut self,
-        need_printf: bool,
-        need_alloc: bool,
-        need_table: bool,
-    ) -> Option<u32> {
-        if need_printf {
-            let func_idx = (self.module.imports.len() + self.module.functions.len()) as u32;
-            let t_printf = self
-                .module
-                .add_type(vec![TYPE_I32, TYPE_I32], vec![TYPE_I32]);
-            self.module.functions.push(t_printf);
-            self.func_indices.insert("printf".to_string(), func_idx);
-            self.func_indices
-                .insert("std::printf".to_string(), func_idx);
-            self.func_printf = func_idx;
-        }
-
-        if need_alloc {
-            let func_malloc = (self.module.imports.len() + self.module.functions.len()) as u32;
-            let t_malloc = self.module.add_type(vec![TYPE_I32], vec![TYPE_I32]);
-            self.module.functions.push(t_malloc);
-            self.func_indices.insert("malloc".to_string(), func_malloc);
-
-            let func_free = (self.module.imports.len() + self.module.functions.len()) as u32;
-            let t_free = self.module.add_type(vec![TYPE_I32], vec![]);
-            self.module.functions.push(t_free);
-            self.func_indices.insert("free".to_string(), func_free);
-        }
-
-        let trap_ret = if need_table {
-            let func_trap = (self.module.imports.len() + self.module.functions.len()) as u32;
-            let t_trap = self.module.add_type(vec![], vec![]);
-            self.module.functions.push(t_trap);
-            self.func_indices
-                .insert("__cxa_pure_virtual".to_string(), func_trap);
-            self.vtable_func_indices = vec![func_trap];
-            Some(func_trap)
-        } else {
-            None
-        };
-
-        let func_can_catch = (self.module.imports.len() + self.module.functions.len()) as u32;
-        let t_can_catch = self.module.add_type(vec![TYPE_I32, TYPE_I32], vec![TYPE_I32]);
-        self.module.functions.push(t_can_catch);
-        self.func_indices
-            .insert("__cppbolt_can_catch".to_string(), func_can_catch);
-        trap_ret
     }
 }
