@@ -62,14 +62,53 @@ The following catalog lists diagnostics emitted by the compiler, paired with rea
   }
   ```
 
-#### `thrown expression must be a 32-bit scalar, enum, or pointer type, but found '<type>'`
-- **Cause**: Throwing a 64-bit scalar (`long long`, `double`) or floating-point type on the 32-bit WebAssembly exception tag ABI.
+#### `cannot throw object of abstract class type '<type>'`
+- **Cause**: Attempting to throw an object of an abstract class type, violating ISO C++17 [except.throw] p2.
+- **Trigger** (`tests/exceptions.rs`):
+  ```cpp
+  struct Abstract {
+      virtual void pure() = 0;
+  };
+  int main() {
+      Abstract a;
+      throw a; // error: cannot throw object of abstract class type 'Abstract'
+  }
+  ```
+
+#### `cannot catch object of abstract class type '<type>' by value`
+- **Cause**: Catching an abstract class by value rather than by reference or pointer, violating ISO C++17 [except.handle] p1.
+- **Trigger** (`tests/exceptions.rs`):
+  ```cpp
+  struct Abstract {
+      virtual void pure() = 0;
+  };
+  int main() {
+      try {
+          throw 1;
+      } catch (Abstract a) { // error: cannot catch object of abstract class type 'Abstract' by value
+      }
+  }
+  ```
+
+#### `cannot catch rvalue reference`
+- **Cause**: Declaring a catch handler with an rvalue reference parameter (`catch (T&&)`), violating ISO C++17 [except.handle] p1.
 - **Trigger** (`tests/exceptions.rs`):
   ```cpp
   int main() {
-      throw 3.14; // error: thrown expression must be a 32-bit scalar, enum, or pointer type, but found 'double'
-      return 0;
+      try {
+          throw 1;
+      } catch (int&& e) { // error: cannot catch rvalue reference
+      }
   }
+  ```
+
+#### `return statements cannot appear in a function-try-block handler of a constructor`
+- **Cause**: Using a `return` statement inside a function-try-block handler attached to a constructor, violating ISO C++17 [except.handle] p17.
+- **Trigger** (`tests/exceptions.rs`):
+  ```cpp
+  struct S {
+      S() try {} catch (...) { return; } // error: return statements cannot appear in a function-try-block handler of a constructor
+  };
   ```
 
 #### `virtual inheritance is not supported`

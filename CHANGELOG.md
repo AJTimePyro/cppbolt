@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### WebAssembly Exception Handling & Unwinding
+- Implemented native WebAssembly Phase 4 exception handling (`try_table`, `throw`, `throw_ref`) with 64-bit dynamic liveness bitmask tracking for automatic variables, member subobjects, and expression temporaries.
+- Enforced strict reverse-destruction ordering across normal scope exit, `return`, `break`, `continue`, and stack unwinding.
+- Implemented typed exception object representation with a 16-byte metadata header on the heap and indirect destructor invocation through vtables.
+- Implemented dynamic polymorphic catch matching (`__cppbolt_can_catch`) supporting exact types, single and multiple inheritance conversions with non-zero subobject offset adjustments, pointer qualification conversions, `void*` and `nullptr` matching.
+- Supported catching by reference (zero-copy with in-place mutation) and catching by value (copy constructor or byte copy with slicing and local lifetime management).
+- Enforced ISO C++17 handler ordering: `catch (...)` must appear as the final clause in any try block. Supported arbitrary static nesting depth for `try`/`catch` blocks and expression temporary cleanups.
+- Preserved exception objects across rethrow (`throw;`), and ensured destructors throwing during unwinding invoke `std::terminate`.
+
+### Standard Library Exception Hierarchy (`<exception>`, `<stdexcept>`)
+- Integrated C++17 `<exception>` header adapted from LLVM libc++ 23.1.5, providing `std::exception`, `std::bad_exception`, and custom terminate handler controls (`std::set_terminate`, `std::get_terminate`, `std::terminate`).
+- Integrated C++17 `<stdexcept>` header declaring complete standard exception hierarchy (`std::logic_error`, `std::runtime_error`, and all derived classes) with string and C-string message constructors, heap message buffer ownership, and virtual `what()` dispatch.
+
 ### Exception Handling & C++17 `noexcept`
 - Supported `noexcept`, `noexcept(true)`, `noexcept(false)`, and expression-based `noexcept(expr)` specifications evaluated as constant expressions for normal functions and methods, or substituted during template instantiation.
 - Enforced runtime termination semantics for `noexcept` functions: exceptions attempting to escape unwind local automatic frames, restore the shadow stack, and terminate via WebAssembly `unreachable` (exit code 134).

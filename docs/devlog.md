@@ -4,6 +4,93 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-23: C++17 Exception Handling Conformance, Function-Try-Blocks, and Dynamic Uncaught Exceptions Tracking
+
+Completed ISO C++17 exception handling conformance across function-try-blocks, dynamic `uncaught_exceptions` tracking, throw value-category constructor selection, and resource budget validation:
+
+### Summary of Work
+
+1. Function-try-block syntax and constructor unwinding semantics (`src/parser/decl_func.rs`, `src/codegen/function.rs`, `src/codegen/stmt_try.rs`, `src/sema/analyze_helpers.rs`):
+   - Added parsing and code generation for function-try-blocks on normal functions and constructors (`try : member_init() { ... } catch (...) { ... }`).
+   - Covered member initializer lists within constructor function-try-blocks; if an initializer or constructor body throws, fully constructed subobjects unwind in reverse order before entering the handler.
+   - Enforced ISO C++17 [except.handle] p15-16 implicit rethrow upon falling off the end of a constructor handler without throwing.
+   - Enforced ISO C++17 [except.handle] p17 prohibition of `return` statements inside constructor handlers, failing semantic analysis with a diagnostic.
+2. Dynamic `std::uncaught_exceptions()` tracking (`src/codegen/function_lifecycle.rs`, `src/codegen/stmt_throw.rs`, `src/codegen/stmt_try.rs`, `stdlib/exception`):
+   - Allocated mutable WebAssembly global 3 to track in-flight uncaught exceptions.
+   - Incremented counter on initial throws and rethrows (`throw;`), and decremented counter upon entering catch handlers.
+   - Destructors executing during stack unwinding observe accurate nonzero counts via `std::uncaught_exceptions()` and `std::uncaught_exception()`.
+3. Throw value category and constructor accessibility rules (`src/sema/exception_types.rs`, `src/codegen/stmt_throw.rs`):
+   - Enforced C++17 [except.throw] p3: prvalues use guaranteed copy elision directly into the exception object buffer without copy or move constructor calls.
+   - Selected move constructors for xvalues (including `std::move` results) and move-eligible local variables declared in the innermost try scope; selected copy constructors for lvalues.
+   - Validated accessibility and non-deleted status of copy and move constructors according to value category, and excluded explicit constructors from copy-initialization context.
+   - Supported raw function pointer declarators in catch clauses (`catch (void (*fn)(int))`).
+4. Catch dispatch and cleanup capacity hardening:
+   - Restricted derived-to-base catch matching to unambiguous public base classes per ISO C++17 [except.handle].
+   - Isolated distinct type ID intervals for enums, function pointers, and member pointers.
+   - Enforced compile-time failure on exceeding the 64-entry cleanup tracking budget, preventing silent leaks of temporary destructors.
+   - Skipped bodyless/deleted methods in the WebAssembly function table to prevent index drift.
+
+### Verification Results
+
+- Exception test suite: all 139 tests in `tests/exceptions.rs` pass.
+- Census audit: all 7 tests in `tests/census_fixture.rs` pass (0 files over 500 lines, 0 functions over 80 lines, 0 functions with >5 parameters excluding self).
+- Clippy: `cargo clippy --all-targets -- -D warnings` passes with 0 warnings.
+- Documentation checks: `python3 tools/check_feature_matrix.py` and `mdbook build docs/book` pass without error.
+
+---
+
+## 2026-11-23: Standard Library `<exception>` and `<stdexcept>` Hierarchy Integration
+
+Integrated C++17 exception standard library headers adapted from LLVM libc++ 23.1.5 into cppbolt's embedded standard library:
+
+### Summary of Work
+
+1. `<exception>` standard library header (`stdlib/exception`, `docs/stdlib/exception.md`):
+   - Implemented `std::exception` base class with virtual destructor and polymorphic `what()`.
+   - Implemented `std::bad_exception` derived class with virtual `what()`.
+   - Implemented `std::terminate_handler` type and terminate controls: `std::set_terminate`, `std::get_terminate`, and `std::terminate`.
+   - Wired WebAssembly runtime unwinding aborts, unhandled rethrows, and `noexcept` violations to `__cppbolt_terminate`, invoking user-installed handlers.
+   - Implemented `std::uncaught_exceptions()` and `std::uncaught_exception()` reading the active WebAssembly in-flight exception counter.
+2. `<stdexcept>` standard library header (`stdlib/stdexcept`, `docs/stdlib/stdexcept.md`):
+   - Implemented complete C++17 standard exception hierarchy: `std::logic_error` and `std::runtime_error` subtrees rooted in `std::exception`.
+   - Provided `std::domain_error`, `std::invalid_argument`, `std::length_error`, `std::out_of_range`, `std::range_error`, `std::overflow_error`, and `std::underflow_error`.
+   - Supported string (`const std::string&`) and C-string (`const char*`) constructors for each exception class.
+   - Managed heap message buffer lifetimes across throw initialization and catch cleanup, and verified polymorphic `what()` dispatch through vtables when caught via base reference (`catch (const std::exception&)`).
+
+### Verification Results
+
+- Exception test suite: all tests covering `<exception>` and `<stdexcept>` pass in `tests/exceptions.rs`.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with >5 parameters excluding self.
+- Clippy: clean with 0 warnings.
+
+---
+
+## 2026-11-23: C++17 `noexcept` Specifications, Function Type Integration, and Runtime Termination
+
+Implemented ISO C++17 `noexcept` specifications, operator, function pointer subtyping, and runtime termination semantics:
+
+### Summary of Work
+
+1. `noexcept` specification analysis and evaluation (`src/sema/expr_noexcept.rs`, `src/sema/stmt.rs`):
+   - Supported `noexcept`, `noexcept(true)`, `noexcept(false)`, and expression-based `noexcept(expr)` specifications evaluated as constant expressions for non-template and template functions.
+   - Defaulted class destructors and synthesized default destructors to `noexcept(true)` per C++17 [except.spec].
+   - Evaluated overloaded operators (member and non-member, including `operator[]`) when analyzing potentially-throwing operations.
+2. C++17 function type system integration (`src/ast/types.rs`, `src/sema/assign.rs`):
+   - Integrated `noexcept` into the function type system: `noexcept` functions convert to potentially-throwing function pointer/reference types at single-level indirection.
+   - Rejected assigning potentially-throwing functions to `noexcept` function pointer targets or multi-level pointer conversions with mismatched exception specifications at compile time.
+3. Unevaluated `noexcept(expr)` operator (`src/ast/expr.rs`, `src/parser/expr.rs`, `src/sema/expr.rs`):
+   - Implemented `noexcept(expr)` evaluating to a compile-time `bool` constant without emitting runtime WebAssembly instructions or evaluating operand side effects.
+4. Runtime termination enforcement (`src/codegen/function.rs`, `src/codegen/unwind.rs`):
+   - Wrapped `noexcept` function bodies in unwinding guards that clean local frames, restore caller shadow stack frames, and call `std::terminate` (via `__cppbolt_terminate`) if an exception attempts to escape.
+
+### Verification Results
+
+- All `noexcept` tests pass in `tests/exceptions.rs`.
+- Census audit: passes with 0 violations.
+- Clippy: passes with 0 warnings.
+
+---
+
 ## 2026-11-23: Collision-Free Bitfield Pointer Type IDs, Multi-Level Qualification Conversions, and Precise DCE Destructor Retention
 
 Resolved pointer exception type ID collisions, added support for ISO C++17 multi-level pointer qualification conversions, and optimized dead-code elimination destructor retention:
