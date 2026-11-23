@@ -62,8 +62,8 @@ impl<'a> Codegen<'a> {
             write_u32(code, 0);
         } else if ctx.catch_depth == 0 {
             self.emit_terminate_call(code);
+            code.push(OP_UNREACHABLE);
         } else if ctx.in_catch_all {
-            self.emit_uncaught_count_change(code, 1);
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.current_exnref_local());
             code.push(OP_THROW_REF);

@@ -4822,5 +4822,29 @@ int main() {
     Ok(())
 }
 
+#[test]
+fn test_catch_all_foreign_exception_does_not_underflow_uncaught_count() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+#include <exception>
+
+int main() {
+    std::printf("Before:%d ", std::uncaught_exceptions());
+    try {
+        // A catch(...) block that catches or finishes should not corrupt uncaught count
+    } catch (...) {
+        std::printf("InCatch:%d ", std::uncaught_exceptions());
+    }
+    std::printf("After:%d ", std::uncaught_exceptions());
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Before:0 After:0");
+    Ok(())
+}
+
+
 
 

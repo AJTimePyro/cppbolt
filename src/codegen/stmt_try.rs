@@ -467,7 +467,6 @@ impl<'a> Codegen<'a> {
         let old_in_catch_all = ctx.in_catch_all;
         ctx.in_catch_all = true;
         ctx.catch_depth += 1;
-        self.emit_uncaught_count_change(code, -1);
 
         self.compile_stmt(body, ctx, code)?;
         self.emit_clean_temporaries(ctx, code);
