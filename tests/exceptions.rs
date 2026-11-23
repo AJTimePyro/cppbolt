@@ -3410,6 +3410,59 @@ int main() {
 }
 
 #[test]
+fn test_regular_function_try_block() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+void f() try {
+    std::printf("Body ");
+    throw 7;
+} catch (int e) {
+    std::printf("Caught:%d ", e);
+}
+
+int main() {
+    f();
+    std::printf("Done");
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Body Caught:7 Done");
+    Ok(())
+}
+
+#[test]
+fn test_constructor_function_try_block_rethrows() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct A {
+    A() try {
+        std::printf("Ctor ");
+        throw 42;
+    } catch (...) {
+        std::printf("Handler ");
+    }
+};
+
+int main() {
+    try {
+        A a;
+    } catch (int e) {
+        std::printf("Caught:%d", e);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Ctor Handler Caught:42");
+    Ok(())
+}
+
+#[test]
 fn test_uncaught_exceptions_during_unwinding() -> Result<(), String> {
     let source = r#"
 #include <cstdio>

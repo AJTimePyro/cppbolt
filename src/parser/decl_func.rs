@@ -473,6 +473,8 @@ impl Parser {
             None
         } else if self.peek() == &TokenKind::LBrace {
             Some(self.parse_compound_stmt()?)
+        } else if self.peek() == &TokenKind::KwTry {
+            Some(self.parse_try_stmt(line, col)?)
         } else {
             self.expect(TokenKind::Semi)?;
             None

@@ -3,6 +3,33 @@
 use super::analyze::this_param;
 use super::*;
 
+/// Falling off the end of a constructor function-try-block handler rethrows
+/// the handled exception ([except.handle]).
+pub(super) fn desugar_function_try_block(is_ctor: bool, body: &mut Stmt) {
+    if !is_ctor {
+        return;
+    }
+    let StmtKind::Try { catches, .. } = &mut body.kind else {
+        return;
+    };
+    for clause in catches {
+        let (line, col) = (clause.body.line, clause.body.col);
+        let rethrow = Stmt::new(StmtKind::Throw(None), line, col);
+        if let StmtKind::Compound(stmts) = &mut clause.body.kind {
+            stmts.push(rethrow);
+        } else {
+            let handler = std::mem::replace(
+                clause.body.as_mut(),
+                Stmt::new(StmtKind::Compound(vec![rethrow]), line, col),
+            );
+            let StmtKind::Compound(stmts) = &mut clause.body.kind else {
+                unreachable!();
+            };
+            stmts.insert(0, handler);
+        }
+    }
+}
+
 pub(super) fn method_matches_out_of_class(
     m: &FunctionDecl,
     short_method: &str,
