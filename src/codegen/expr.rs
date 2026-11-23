@@ -20,7 +20,12 @@ impl<'a> Codegen<'a> {
             | Expr::This
             | Expr::SizeofType(..)
             | Expr::AlignofType(..)
-            | Expr::SizeofExpr(..) => self.compile_literal(expr, ctx, code)?,
+            | Expr::SizeofExpr(..)
+            | Expr::Noexcept(..) => self.compile_literal(expr, ctx, code)?,
+            Expr::Throw(inner, _) => {
+                let expr_ref = inner.as_deref().cloned();
+                self.compile_throw_stmt(&expr_ref, ctx, code)?;
+            }
             Expr::Identifier { .. } => self.compile_identifier(expr, ctx, code)?,
             Expr::Binary {
                 op: BinaryOp::LogicalAnd,
@@ -241,6 +246,12 @@ impl<'a> Codegen<'a> {
                 let size = ty.size_of(&self.sema.struct_sizes) as i32;
                 code.push(OP_I32_CONST);
                 write_i32(code, size);
+            }
+            Expr::Noexcept(inner, _) => {
+                let throws = self.sema.is_potentially_throwing(inner);
+                let val = if throws { 0 } else { 1 };
+                code.push(OP_I32_CONST);
+                write_i32(code, val);
             }
             _ => {}
         }

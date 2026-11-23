@@ -64,7 +64,8 @@ impl<'a> Codegen<'a> {
             Expr::TypedInitList { ty, .. } => ty.clone(),
             Expr::InitializerList { .. } => Type::Void,
             Expr::New { ty, .. } => Type::Pointer(Box::new(ty.clone())),
-            Expr::Delete { .. } => Type::Void,
+            Expr::Delete { .. } | Expr::Throw(..) => Type::Void,
+            Expr::Noexcept(..) => Type::Bool,
             _ => Type::Int,
         }
     }

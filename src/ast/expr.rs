@@ -3,6 +3,8 @@ use super::fold_op::FoldOp;
 use super::stmt::Stmt;
 use super::types::Type;
 
+pub use super::expr_ops::{BinaryOp, CastKind, UnaryOp};
+
 /// The default capture mode of a lambda expression.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DefaultCapture {
@@ -34,121 +36,6 @@ impl ExprPos {
     pub const fn new(line: usize, col: usize) -> Self {
         Self { line, col }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BinaryOp {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Rem,
-    BitAnd,
-    BitOr,
-    BitXor,
-    Shl,
-    Shr,
-    LogicalAnd,
-    LogicalOr,
-    Eq,
-    Ne,
-    Lt,
-    Le,
-    Gt,
-    Ge,
-    Comma,
-    DotStar,
-    ArrowStar,
-}
-
-impl BinaryOp {
-    pub const fn symbol(&self) -> &'static str {
-        match self {
-            BinaryOp::Add => "+",
-            BinaryOp::Sub => "-",
-            BinaryOp::Mul => "*",
-            BinaryOp::Div => "/",
-            BinaryOp::Rem => "%",
-            BinaryOp::BitAnd => "&",
-            BinaryOp::BitOr => "|",
-            BinaryOp::BitXor => "^",
-            BinaryOp::Shl => "<<",
-            BinaryOp::Shr => ">>",
-            BinaryOp::LogicalAnd => "&&",
-            BinaryOp::LogicalOr => "||",
-            BinaryOp::Eq => "==",
-            BinaryOp::Ne => "!=",
-            BinaryOp::Lt => "<",
-            BinaryOp::Le => "<=",
-            BinaryOp::Gt => ">",
-            BinaryOp::Ge => ">=",
-            BinaryOp::Comma => ",",
-            BinaryOp::DotStar => ".*",
-            BinaryOp::ArrowStar => "->*",
-        }
-    }
-
-    pub const fn compound_symbol(&self) -> Option<&'static str> {
-        match self {
-            BinaryOp::Add => Some("+="),
-            BinaryOp::Sub => Some("-="),
-            BinaryOp::Mul => Some("*="),
-            BinaryOp::Div => Some("/="),
-            BinaryOp::Rem => Some("%="),
-            BinaryOp::BitAnd => Some("&="),
-            BinaryOp::BitOr => Some("|="),
-            BinaryOp::BitXor => Some("^="),
-            BinaryOp::Shl => Some("<<="),
-            BinaryOp::Shr => Some(">>="),
-            _ => None,
-        }
-    }
-
-    pub fn op_name(&self) -> Option<&'static str> {
-        match self {
-            BinaryOp::Add => Some("operator+"),
-            BinaryOp::Sub => Some("operator-"),
-            BinaryOp::Mul => Some("operator*"),
-            BinaryOp::Div => Some("operator/"),
-            BinaryOp::Rem => Some("operator%"),
-            BinaryOp::BitAnd => Some("operator&"),
-            BinaryOp::BitOr => Some("operator|"),
-            BinaryOp::BitXor => Some("operator^"),
-            BinaryOp::Shl => Some("operator<<"),
-            BinaryOp::Shr => Some("operator>>"),
-            BinaryOp::Eq => Some("operator=="),
-            BinaryOp::Ne => Some("operator!="),
-            BinaryOp::Lt => Some("operator<"),
-            BinaryOp::Le => Some("operator<="),
-            BinaryOp::Gt => Some("operator>"),
-            BinaryOp::Ge => Some("operator>="),
-            BinaryOp::Comma => Some("operator,"),
-            BinaryOp::ArrowStar => Some("operator->*"),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UnaryOp {
-    Neg,
-    Plus,
-    Not,
-    BitNot,
-    Deref,
-    AddrOf,
-    PreInc,
-    PreDec,
-    PostInc,
-    PostDec,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CastKind {
-    Static,
-    Reinterpret,
-    CStyle,
-    Functional,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -257,6 +144,8 @@ pub enum Expr {
         right: Option<Box<Expr>>,
         pos: ExprPos,
     },
+    Noexcept(Box<Expr>, ExprPos),
+    Throw(Option<Box<Expr>>, ExprPos),
 }
 
 /// Marker emitted by `Expr::to_source` when an expression form cannot be
@@ -280,7 +169,9 @@ impl Expr {
             | Expr::Lambda { pos, .. }
             | Expr::SizeofPack { pos, .. }
             | Expr::PackExpansion { pos, .. }
-            | Expr::FoldExpr { pos, .. } => *pos,
+            | Expr::FoldExpr { pos, .. }
+            | Expr::Noexcept(_, pos)
+            | Expr::Throw(_, pos) => *pos,
             Expr::Ternary { cond, .. } => cond.pos(),
             Expr::Cast { expr, .. } | Expr::SizeofExpr(expr) => expr.pos(),
             _ => ExprPos::default(),
@@ -349,6 +240,11 @@ impl Expr {
             Expr::SizeofType(ty) => format!("sizeof({})", ty.to_c_type()),
             Expr::AlignofType(ty) => format!("alignof({})", ty.to_c_type()),
             Expr::SizeofExpr(expr) => format!("sizeof({})", expr.to_source()),
+            Expr::Noexcept(expr, _) => format!("noexcept({})", expr.to_source()),
+            Expr::Throw(expr, _) => match expr {
+                Some(e) => format!("throw {}", e.to_source()),
+                None => "throw".to_string(),
+            },
             Expr::Unary { .. } => self.render_unary(),
             Expr::Binary { .. } => self.render_binary(),
             _ => UNRENDERABLE_EXPR.to_string(),

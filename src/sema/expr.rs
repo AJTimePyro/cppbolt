@@ -69,16 +69,44 @@ impl Sema {
                 target_type,
                 expr,
             } => self.analyze_cast(*kind, target_type, expr),
+            Expr::SizeofType(..)
+            | Expr::SizeofExpr(..)
+            | Expr::Noexcept(..)
+            | Expr::Throw(..)
+            | Expr::AlignofType(..)
+            | Expr::SizeofPack { .. } => self.analyze_type_query_expr(expr),
+            Expr::InitializerList { .. } | Expr::TypedInitList { .. } => {
+                self.analyze_initializer(expr)
+            }
+            Expr::Lambda { .. } => self.analyze_lambda(expr),
+            Expr::PackExpansion { pos, .. } | Expr::FoldExpr { pos, .. } => Err(CompileError::new(
+                "pack expansion does not contain any unexpanded parameter packs",
+                pos.line,
+                pos.col,
+            )),
+        }
+    }
+
+    fn analyze_type_query_expr(&mut self, expr: &mut Expr) -> Result<Type, CompileError> {
+        match expr {
             Expr::SizeofType(ty) => {
                 self.resolve_and_instantiate_type(ty, self.current_line, self.current_col)?;
                 Ok(Type::UnsignedInt)
             }
             Expr::SizeofExpr(expr) => {
-                // The operand is unevaluated but still type-checked, so an
-                // invalid expression must surface here and propagate through
-                // speculative analysis instead of being silently ignored.
                 self.analyze_expr(expr)?;
                 Ok(Type::UnsignedInt)
+            }
+            Expr::Noexcept(expr, _) => {
+                self.analyze_expr(expr)?;
+                Ok(Type::Bool)
+            }
+            Expr::Throw(expr_opt, pos) => {
+                if let Some(inner) = expr_opt {
+                    let ty = self.analyze_expr(inner)?;
+                    self.validate_throw_type(&ty, pos.line, pos.col)?;
+                }
+                Ok(Type::Void)
             }
             Expr::AlignofType(ty) => {
                 self.resolve_and_instantiate_type(ty, self.current_line, self.current_col)?;
@@ -89,14 +117,10 @@ impl Sema {
                 pos.line,
                 pos.col,
             )),
-            Expr::InitializerList { .. } | Expr::TypedInitList { .. } => {
-                self.analyze_initializer(expr)
-            }
-            Expr::Lambda { .. } => self.analyze_lambda(expr),
-            Expr::PackExpansion { pos, .. } | Expr::FoldExpr { pos, .. } => Err(CompileError::new(
-                "pack expansion does not contain any unexpanded parameter packs",
-                pos.line,
-                pos.col,
+            _ => Err(crate::internal_error!(
+                self.current_line,
+                self.current_col,
+                "unexpected type query expression"
             )),
         }
     }

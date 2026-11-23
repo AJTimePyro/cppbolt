@@ -307,6 +307,7 @@ impl Parser {
                 | TokenKind::Amp
                 | TokenKind::AndAnd
                 | TokenKind::KwThrow
+                | TokenKind::KwNoexcept
         ) || matches!(self.peek(), TokenKind::Ident(id) if id == "noexcept" || id == "volatile" || id == "final")
         {
             match self.peek().clone() {
@@ -334,36 +335,13 @@ impl Parser {
                     self.advance();
                     quals.is_final = true;
                 }
-                TokenKind::KwThrow | TokenKind::Ident(_) => {
-                    let is_noexcept =
-                        matches!(&self.peek(), TokenKind::Ident(id) if id == "noexcept");
-                    let is_throw = matches!(self.peek(), TokenKind::KwThrow);
-                    self.advance();
-                    let mut value = true;
-                    if self.peek() == &TokenKind::LParen {
-                        self.advance();
-                        if is_throw {
-                            // Dynamic exception specifications are not a type
-                            // qualifier; skip their (possibly dependent) list.
-                            while self.peek() != &TokenKind::RParen
-                                && self.peek() != &TokenKind::Eof
-                            {
-                                self.advance();
-                            }
-                        } else if self.peek() != &TokenKind::RParen {
-                            let expr = self.parse_expr()?;
-                            match crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None) {
-                                Ok(v) => value = v != 0,
-                                Err(_) => {
-                                    value = true;
-                                    noexcept_expr = Some(expr);
-                                }
-                            }
-                        }
-                        self.expect(TokenKind::RParen)?;
-                    }
+                TokenKind::KwThrow | TokenKind::KwNoexcept | TokenKind::Ident(_) => {
+                    let (is_noexcept, value, expr_opt) = self.parse_exception_spec()?;
                     if is_noexcept {
                         quals.is_noexcept = value;
+                    }
+                    if expr_opt.is_some() {
+                        noexcept_expr = expr_opt;
                     }
                 }
                 _ => break,
@@ -371,6 +349,37 @@ impl Parser {
         }
 
         Ok((quals, noexcept_expr))
+    }
+
+    fn parse_exception_spec(&mut self) -> Result<(bool, bool, Option<Expr>), CompileError> {
+        let is_noexcept = match self.peek() {
+            TokenKind::KwNoexcept => true,
+            TokenKind::Ident(id) => id == "noexcept",
+            _ => false,
+        };
+        let is_throw = matches!(self.peek(), TokenKind::KwThrow);
+        self.advance();
+        let mut value = true;
+        let mut noexcept_expr = None;
+        if self.peek() == &TokenKind::LParen {
+            self.advance();
+            if is_throw {
+                while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
+                    self.advance();
+                }
+            } else if self.peek() != &TokenKind::RParen {
+                let expr = self.parse_expr()?;
+                match crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None) {
+                    Ok(v) => value = v != 0,
+                    Err(_) => {
+                        value = true;
+                        noexcept_expr = Some(expr);
+                    }
+                }
+            }
+            self.expect(TokenKind::RParen)?;
+        }
+        Ok((is_noexcept, value, noexcept_expr))
     }
 
     pub(super) fn parse_ctor_initializers(

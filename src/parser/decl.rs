@@ -339,6 +339,7 @@ impl Parser {
                 | TokenKind::Colon
                 | TokenKind::KwConst
                 | TokenKind::KwOverride
+                | TokenKind::KwNoexcept
                 | TokenKind::Amp
                 | TokenKind::AndAnd
                 | TokenKind::Arrow

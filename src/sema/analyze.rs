@@ -363,11 +363,10 @@ impl Sema {
         col: usize,
         all_constants: &HashMap<String, i128>,
     ) -> Result<(), CompileError> {
-        let value = crate::sema::constexpr_eval::eval_constexpr_with_context(
+        let value = crate::sema::constexpr_eval::eval_constexpr_with_sema(
             condition,
-            Some(&self.struct_sizes),
+            self,
             Some(all_constants),
-            None,
         );
         // The pre-pass snapshot misses class static members folded
         // later and variable templates not yet instantiated. Render

@@ -2744,6 +2744,73 @@ int main() {
     Ok(())
 }
 
+#[test]
+fn test_noexcept_operator_primitive_operations() -> Result<(), String> {
+    let source = r#"
+static_assert(noexcept(1 + 2), "1 + 2 does not throw");
+static_assert(noexcept(true && false), "logical ops do not throw");
+int main() {
+    return 0;
+}
+"#;
+    let (code, _) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    Ok(())
+}
+
+#[test]
+fn test_noexcept_operator_function_calls() -> Result<(), String> {
+    let source = r#"
+void non_throwing() noexcept;
+void throwing();
+static_assert(noexcept(non_throwing()), "non_throwing() is noexcept");
+static_assert(!noexcept(throwing()), "throwing() is not noexcept");
+static_assert(!noexcept(throw 1), "throw 1 is potentially throwing");
+int main() {
+    return 0;
+}
+"#;
+    let (code, _) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    Ok(())
+}
+
+#[test]
+fn test_noexcept_operator_nested() -> Result<(), String> {
+    let source = r#"
+void throwing();
+static_assert(noexcept(noexcept(throwing())), "noexcept operator itself never throws");
+int main() {
+    return 0;
+}
+"#;
+    let (code, _) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    Ok(())
+}
+
+#[test]
+fn test_noexcept_operator_unevaluated_operand() -> Result<(), String> {
+    let source = r#"
+int counter = 0;
+int inc() {
+    counter++;
+    return 42;
+}
+
+int main() {
+    bool b = noexcept(inc());
+    if (counter != 0) return 1;
+    if (b) return 2;
+    return 0;
+}
+"#;
+    let (code, _) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    Ok(())
+}
+
+
 
 
 

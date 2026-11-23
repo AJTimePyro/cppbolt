@@ -22,6 +22,7 @@ mod expr_call_member;
 mod expr_lambda;
 mod expr_lambda_free_vars;
 mod expr_member;
+mod expr_noexcept;
 mod expr_ops;
 mod expr_ops_unary;
 mod expr_subscript;

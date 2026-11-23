@@ -42,6 +42,7 @@ pub fn evaluate_dependent_array_size(
         constants: None,
         pack_lengths: None,
         struct_aligns: sema.as_ref().map(|s| &s.struct_aligns),
+        sema: sema.as_deref(),
     };
     match crate::sema::constexpr_eval::eval_integral_constexpr_with_env(&expr, env) {
         Ok(val) if val >= 0 => Ok(val as usize),

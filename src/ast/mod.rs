@@ -5,6 +5,7 @@
 pub mod decl;
 pub mod expr;
 mod expr_drop;
+pub mod expr_ops;
 pub mod fold_op;
 pub mod stmt;
 pub mod template;
