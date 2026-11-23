@@ -259,24 +259,19 @@ impl<'a> Codegen<'a> {
         let clean_start = ctx.cleanup_entries.len();
         let clause_exit_target = self.emit_clause_try_table_prelude(code);
 
-        // Bind catch parameter if present
         if let Some((ty, name)) = dctx.param {
             self.bind_catch_param_dispatch(name, ty, handled_slot, ctx, code)?;
         }
 
-        // Execute catch clause body
         self.compile_stmt(&dctx.clause.body, ctx, code)?;
         self.emit_clean_temporaries(ctx, code);
 
-        // Run destructors for objects in catch scope
         let catch_objs = ctx.scope_objects.pop().unwrap_or_default();
         self.emit_dtor_for_scope(&catch_objs, ctx, code);
 
-        // Normal completion: branch to $clause_exit
         code.push(OP_BR);
         write_u32(code, self.current_block_depth - 1 - clause_exit_target);
 
-        // End try_table
         code.push(OP_END);
         self.current_block_depth -= 1;
         code.push(OP_UNREACHABLE);
