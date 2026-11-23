@@ -104,7 +104,7 @@ impl Sema {
             Expr::Throw(expr_opt, pos) => {
                 if let Some(inner) = expr_opt {
                     let ty = self.analyze_expr(inner)?;
-                    self.validate_throw_type(&ty, pos.line, pos.col)?;
+                    self.validate_throw_expr(inner, &ty, pos.line, pos.col)?;
                 }
                 Ok(Type::Void)
             }

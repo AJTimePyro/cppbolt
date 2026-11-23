@@ -3544,6 +3544,235 @@ int main() {
 }
 
 #[test]
+fn test_throw_private_move_ctor_lvalue_copies_successfully() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct PrivMove {
+    int v;
+    PrivMove(int x) : v(x) {}
+    PrivMove(const PrivMove& o) : v(o.v) { std::printf("Copy "); }
+private:
+    PrivMove(PrivMove&&);
+};
+
+PrivMove global_obj(123);
+
+void f(PrivMove& ref) {
+    throw ref;
+}
+
+int main() {
+    try {
+        f(global_obj);
+    } catch (const PrivMove& e) {
+        std::printf("Caught:%d", e.v);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Copy Caught:123");
+    Ok(())
+}
+
+#[test]
+fn test_throw_private_move_ctor_local_variable_fails() -> Result<(), String> {
+    let source = r#"
+struct PrivMove {
+    int v;
+    PrivMove(int x) : v(x) {}
+    PrivMove(const PrivMove& o) : v(o.v) {}
+private:
+    PrivMove(PrivMove&&);
+};
+
+void f() {
+    PrivMove local_obj(123);
+    throw local_obj;
+}
+
+int main() { return 0; }
+"#;
+    assert_compile_error(source, "move constructor for exception object of type 'PrivMove' is inaccessible")
+}
+
+#[test]
+fn test_throw_deleted_copy_ctor_prvalue_and_move_eligible_local() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct MoveOnly {
+    int v;
+    MoveOnly(int x) : v(x) {}
+    MoveOnly(const MoveOnly&) = delete;
+    MoveOnly(MoveOnly&& o) : v(o.v) { std::printf("Move "); }
+};
+
+void throw_prvalue() {
+    throw MoveOnly(456);
+}
+
+void throw_local() {
+    try {
+        MoveOnly m(789);
+        throw m;
+    } catch (MoveOnly& caught) {
+        std::printf("CaughtLocal:%d ", caught.v);
+    }
+}
+
+int main() {
+    try {
+        throw_prvalue();
+    } catch (MoveOnly& caught) {
+        std::printf("CaughtPrvalue:%d ", caught.v);
+    }
+    throw_local();
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "CaughtPrvalue:456 Move CaughtLocal:789");
+    Ok(())
+}
+
+#[test]
+fn test_throw_deleted_copy_ctor_non_move_eligible_lvalue_fails() -> Result<(), String> {
+    let source = r#"
+struct MoveOnly {
+    int v;
+    MoveOnly(int x) : v(x) {}
+    MoveOnly(const MoveOnly&) = delete;
+    MoveOnly(MoveOnly&& o) : v(o.v) {}
+};
+
+MoveOnly global_m(1);
+
+void f(MoveOnly& ref) {
+    throw ref;
+}
+
+int main() { return 0; }
+"#;
+    assert_compile_error(source, "copy constructor for exception object of type 'MoveOnly' is deleted")
+}
+
+#[test]
+fn test_throw_deleted_move_ctor_lvalue_copies_successfully() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct DelMove {
+    int v;
+    DelMove(int x) : v(x) {}
+    DelMove(const DelMove& o) : v(o.v) { std::printf("Copy "); }
+    DelMove(DelMove&&) = delete;
+};
+
+DelMove global_m(321);
+
+void f(DelMove& ref) {
+    throw ref;
+}
+
+int main() {
+    try {
+        f(global_m);
+    } catch (const DelMove& e) {
+        std::printf("Caught:%d", e.v);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Copy Caught:321");
+    Ok(())
+}
+
+#[test]
+fn test_throw_deleted_move_ctor_local_variable_fails() -> Result<(), String> {
+    let source = r#"
+struct DelMove {
+    int v;
+    DelMove(int x) : v(x) {}
+    DelMove(const DelMove& o) : v(o.v) {}
+    DelMove(DelMove&&) = delete;
+};
+
+void f() {
+    DelMove m(1);
+    throw m;
+}
+
+int main() { return 0; }
+"#;
+    assert_compile_error(source, "move constructor for exception object of type 'DelMove' is deleted")
+}
+
+#[test]
+fn test_explicit_copy_constructor_rejected_on_throw_and_catch_by_value() -> Result<(), String> {
+    let source_throw = r#"
+struct ExpCopy {
+    int v;
+    ExpCopy(int x) : v(x) {}
+    explicit ExpCopy(const ExpCopy& o) : v(o.v) {}
+};
+
+ExpCopy global_e(1);
+
+void f() {
+    throw global_e;
+}
+
+int main() { return 0; }
+"#;
+    let _ = assert_compile_error(source_throw, "explicit copy constructor");
+
+    let source_catch = r#"
+struct ExpCopy {
+    int v;
+    ExpCopy(int x) : v(x) {}
+    explicit ExpCopy(const ExpCopy& o) : v(o.v) {}
+};
+
+int main() {
+    try {
+    } catch (ExpCopy e) {
+    }
+    return 0;
+}
+"#;
+    let _ = assert_compile_error(source_catch, "copy constructor");
+
+    let source_catch_ref = r#"
+#include <cstdio>
+
+struct ExpCopy {
+    int v;
+    ExpCopy(int x) : v(x) {}
+    explicit ExpCopy(const ExpCopy& o) : v(o.v) {}
+};
+
+int main() {
+    try {
+        throw ExpCopy(99);
+    } catch (const ExpCopy& e) {
+        std::printf("CaughtRef:%d", e.v);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source_catch_ref)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "CaughtRef:99");
+    Ok(())
+}
+
+#[test]
 fn test_constructor_function_try_block_with_member_initializers() -> Result<(), String> {
     let source = r#"
 #include <cstdio>

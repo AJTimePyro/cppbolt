@@ -33,8 +33,10 @@ impl Parser {
             self.parse_function_body(line, col)?
         };
         if is_deleted {
-            let key = if crate::ast::decl::is_copy_or_move_ctor(&name, &params) {
+            let key = if crate::ast::decl::is_copy_ctor(&name, &params) {
                 crate::name::copy_ctor_key(&name)
+            } else if crate::ast::decl::is_move_ctor(&name, &params) {
+                crate::name::move_ctor_key(&name)
             } else {
                 name.clone()
             };

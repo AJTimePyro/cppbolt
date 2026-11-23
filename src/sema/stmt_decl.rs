@@ -222,6 +222,7 @@ impl Sema {
             .with_kind(crate::diagnostics::ErrorKind::Internal));
         };
         scope.vars.insert(name.to_string(), sym);
+        self.var_try_depths.insert(name.to_string(), self.try_depth);
         Ok(())
     }
 
@@ -250,6 +251,7 @@ impl Sema {
             .with_kind(crate::diagnostics::ErrorKind::Internal));
         };
         scope.vars.insert(name.to_string(), sym);
+        self.var_try_depths.insert(name.to_string(), self.try_depth);
         Ok(())
     }
 }

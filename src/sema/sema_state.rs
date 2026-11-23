@@ -48,6 +48,8 @@ pub struct Sema {
     pub current_col: usize,
     pub loop_depth: usize,
     pub switch_depth: usize,
+    pub try_depth: u32,
+    pub var_try_depths: HashMap<String, u32>,
     pub current_class: Option<String>,
     pub current_func_name: Option<String>,
     pub open_namespaces: Vec<String>,

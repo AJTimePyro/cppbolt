@@ -62,8 +62,12 @@ impl Sema {
             func.name == cls || func.name == short
         });
         if let Some(body) = &mut func.body {
+            let old_try_depth = self.try_depth;
+            self.try_depth = 0;
             super::analyze_helpers::desugar_function_try_block(is_ctor, body)?;
-            self.analyze_stmt(body)?;
+            let res = self.analyze_stmt(body);
+            self.try_depth = old_try_depth;
+            res?;
         }
         Ok(())
     }
@@ -161,7 +165,7 @@ impl Sema {
     ) -> Result<(), CompileError> {
         if let Some(expr) = expr_opt {
             let ty = self.analyze_expr(expr)?;
-            self.validate_throw_type(&ty, line, col)?;
+            self.validate_throw_expr(expr, &ty, line, col)?;
         }
         Ok(())
     }
@@ -173,7 +177,10 @@ impl Sema {
         line: usize,
         col: usize,
     ) -> Result<(), CompileError> {
-        self.analyze_stmt(try_body)?;
+        self.try_depth += 1;
+        let res = self.analyze_stmt(try_body);
+        self.try_depth = self.try_depth.saturating_sub(1);
+        res?;
         let num_catches = catches.len();
         for (i, clause) in catches.iter_mut().enumerate() {
             if clause.param.is_none() && i + 1 < num_catches {

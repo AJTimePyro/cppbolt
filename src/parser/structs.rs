@@ -326,9 +326,25 @@ impl Parser {
             )?;
             ctor.is_virtual |= is_virtual;
             ctor.is_explicit = is_explicit;
-            if body.is_private && crate::ast::decl::is_copy_or_move_ctor(short_name, &ctor.params) {
-                body.private_members
-                    .push(crate::name::copy_ctor_key(short_name));
+            if body.is_private {
+                if crate::ast::decl::is_copy_ctor(short_name, &ctor.params) {
+                    body.private_members
+                        .push(crate::name::copy_ctor_key(short_name));
+                } else if crate::ast::decl::is_move_ctor(short_name, &ctor.params) {
+                    body.private_members
+                        .push(crate::name::move_ctor_key(short_name));
+                } else {
+                    body.private_members.push(short_name.to_string());
+                }
+            }
+            if ctor.is_explicit {
+                if crate::ast::decl::is_copy_ctor(short_name, &ctor.params) {
+                    body.private_members
+                        .push(crate::name::explicit_copy_ctor_key(short_name));
+                } else if crate::ast::decl::is_move_ctor(short_name, &ctor.params) {
+                    body.private_members
+                        .push(crate::name::explicit_move_ctor_key(short_name));
+                }
             }
             body.methods.push(ctor);
             return Ok(true);

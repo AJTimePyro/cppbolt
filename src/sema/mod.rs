@@ -154,6 +154,8 @@ impl Sema {
             current_col: 1,
             loop_depth: 0,
             switch_depth: 0,
+            try_depth: 0,
+            var_try_depths: HashMap::new(),
             range_for_counter: 0,
             lambda_counter: 0,
             synthesized_decls: Vec::new(),
