@@ -2161,3 +2161,109 @@ int main() {
     Ok(())
 }
 
+#[test]
+fn test_pointer_exception_conversions_and_null_pointer() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct Base1 { int b1; Base1() : b1(100) {} };
+struct Base2 { int b2; Base2() : b2(200) {} };
+struct DerivedMI : Base1, Base2 { int d; DerivedMI() : d(300) {} };
+
+int main() {
+    int val = 42;
+    int* p = &val;
+
+    // 1. int* should NOT match double* (no type collision)
+    try {
+        throw p;
+    } catch (double* pd) {
+        std::printf("ErrorDouble ");
+    } catch (int* pi) {
+        std::printf("IntPtr:%d ", *pi);
+    }
+
+    // 2. Multiple inheritance pointer adjustment for Base2*
+    DerivedMI obj;
+    try {
+        throw &obj;
+    } catch (Base2* pb2) {
+        std::printf("MI_Base2:%d ", pb2->b2);
+    }
+
+    // 3. Null pointer matching Base2* remains null (0)
+    try {
+        DerivedMI* null_d = nullptr;
+        throw null_d;
+    } catch (Base2* pb2) {
+        std::printf("NullMI:%s ", pb2 == nullptr ? "null" : "non-null");
+    }
+
+    // 4. nullptr exception caught by pointer handler
+    try {
+        throw nullptr;
+    } catch (int* pi) {
+        std::printf("NullptrCaught:%s", pi == nullptr ? "null" : "non-null");
+    }
+
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "IntPtr:42 MI_Base2:200 NullMI:null NullptrCaught:null");
+    Ok(())
+}
+
+#[test]
+fn test_catch_handler_selection_source_order_and_multiple_inheritance() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct B1 { int b1; B1(int v) : b1(v) {} };
+struct B2 { int b2; B2(int v) : b2(v) {} };
+struct D : B1, B2 {
+    int d;
+    D() : B1(10), B2(20), d(30) {}
+};
+
+int main() {
+    // 1. Base before Derived handler: base handler is selected per C++17 source order
+    try {
+        D obj;
+        throw obj;
+    } catch (B1& b) {
+        std::printf("Base1First:%d ", b.b1);
+    } catch (D& d) {
+        std::printf("ErrorDerived ");
+    }
+
+    // 2. Derived before Base handler: derived handler is selected
+    try {
+        D obj;
+        throw obj;
+    } catch (D& d) {
+        std::printf("DerivedFirst:%d ", d.d);
+    } catch (B1& b) {
+        std::printf("ErrorBase ");
+    }
+
+    // 3. Multiple inheritance: B2 before B1 selects B2 and adjusts subobject offset
+    try {
+        D obj;
+        throw obj;
+    } catch (B2& b) {
+        std::printf("B2First:%d ", b.b2);
+    } catch (B1& b) {
+        std::printf("ErrorB1 ");
+    }
+
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Base1First:10 DerivedFirst:30 B2First:20");
+    Ok(())
+}
+

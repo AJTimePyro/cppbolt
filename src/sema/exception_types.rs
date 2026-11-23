@@ -15,15 +15,14 @@ pub const TYPE_ID_LONG_LONG: u32 = 8;
 pub const TYPE_ID_ULONG_LONG: u32 = 9;
 pub const TYPE_ID_FLOAT: u32 = 10;
 pub const TYPE_ID_DOUBLE: u32 = 11;
-pub const TYPE_ID_CONST_CHAR_PTR: u32 = 12;
-pub const TYPE_ID_CHAR_PTR: u32 = 13;
-pub const TYPE_ID_VOID_PTR: u32 = 14;
-pub const TYPE_ID_CONST_VOID_PTR: u32 = 15;
+pub const TYPE_ID_VOID_PTR: u32 = 20014;
+pub const TYPE_ID_CONST_VOID_PTR: u32 = 30014;
 pub const TYPE_ID_LONG: u32 = 16;
 pub const TYPE_ID_ULONG: u32 = 17;
+pub const TYPE_ID_NULLPTR: u32 = 18;
 pub const TYPE_ID_CLASS_BASE: u32 = 1000;
-pub const TYPE_ID_PTR_CLASS_BASE: u32 = 20000;
-pub const TYPE_ID_CONST_PTR_CLASS_BASE: u32 = 30000;
+pub const TYPE_ID_PTR_BASE: u32 = 20000;
+pub const TYPE_ID_CONST_PTR_BASE: u32 = 30000;
 
 impl Sema {
     pub fn get_class_type_id(&self, class_name: &str) -> Option<u32> {
@@ -35,7 +34,7 @@ impl Sema {
             .map(|i| (i as u32) + TYPE_ID_CLASS_BASE)
     }
 
-    pub fn get_exception_type_id(&self, ty: &Type) -> Option<u32> {
+    pub fn get_base_type_id(&self, ty: &Type) -> Option<u32> {
         let clean = ty.strip_reference().strip_const();
         match clean {
             Type::Int => Some(TYPE_ID_INT),
@@ -51,40 +50,34 @@ impl Sema {
             Type::UnsignedLongLong => Some(TYPE_ID_ULONG_LONG),
             Type::Float => Some(TYPE_ID_FLOAT),
             Type::Double => Some(TYPE_ID_DOUBLE),
-            Type::Pointer(inner) => match inner.strip_const() {
-                Type::Char => {
-                    if inner.is_const() {
-                        Some(TYPE_ID_CONST_CHAR_PTR)
-                    } else {
-                        Some(TYPE_ID_CHAR_PTR)
-                    }
-                }
-                Type::Void => {
-                    if inner.is_const() {
-                        Some(TYPE_ID_CONST_VOID_PTR)
-                    } else {
-                        Some(TYPE_ID_VOID_PTR)
-                    }
-                }
-                Type::Struct(sname) => self.get_class_type_id(sname).map(|id| {
-                    let base = if inner.is_const() {
-                        TYPE_ID_CONST_PTR_CLASS_BASE
-                    } else {
-                        TYPE_ID_PTR_CLASS_BASE
-                    };
-                    id - TYPE_ID_CLASS_BASE + base
-                }),
-                _ => {
-                    if inner.is_const() {
-                        Some(TYPE_ID_CONST_VOID_PTR)
-                    } else {
-                        Some(TYPE_ID_VOID_PTR)
-                    }
-                }
-            },
+            Type::Void => Some(14),
+            Type::Nullptr => Some(TYPE_ID_NULLPTR),
             Type::Struct(sname) => self.get_class_type_id(sname),
             Type::Enum(_) => Some(TYPE_ID_INT),
+            Type::Pointer(inner) => {
+                let inner_id = self.get_base_type_id(inner)?;
+                if inner.is_const() {
+                    Some(8000 + inner_id)
+                } else {
+                    Some(4000 + inner_id)
+                }
+            }
             _ => None,
+        }
+    }
+
+    pub fn get_exception_type_id(&self, ty: &Type) -> Option<u32> {
+        let clean = ty.strip_reference().strip_const();
+        match clean {
+            Type::Pointer(inner) => {
+                let inner_base_id = self.get_base_type_id(inner)?;
+                if inner.is_const() {
+                    Some(TYPE_ID_CONST_PTR_BASE + inner_base_id)
+                } else {
+                    Some(TYPE_ID_PTR_BASE + inner_base_id)
+                }
+            }
+            _ => self.get_base_type_id(clean),
         }
     }
 
