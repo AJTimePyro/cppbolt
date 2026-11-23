@@ -133,6 +133,7 @@ impl Sema {
 
     pub fn new() -> Self {
         let mut sema = Self {
+            aux_exception_type_ids: std::cell::RefCell::new(HashMap::new()),
             struct_layouts: HashMap::new(),
             struct_order: Vec::new(),
             enum_values: HashMap::new(),

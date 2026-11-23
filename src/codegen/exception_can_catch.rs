@@ -3,7 +3,8 @@
 use super::*;
 use crate::runtime::opcodes::*;
 use crate::sema::exception_types::{
-    TYPE_ID_CONST_VOID_PTR, TYPE_ID_NULLPTR, TYPE_ID_VOID_PTR,
+    TYPE_ID_AUX_SPAN, TYPE_ID_CONST_VOID_PTR, TYPE_ID_MEMBER_PTR_BASE, TYPE_ID_NULLPTR,
+    TYPE_ID_VOID_PTR,
 };
 use crate::wasm::{write_i32, write_u32};
 
@@ -180,7 +181,8 @@ impl<'a> Codegen<'a> {
     }
 
     fn emit_can_catch_nullptr(code: &mut Vec<u8>) {
-        // nullptr (18) matches any pointer handler (depth >= 1)
+        // nullptr (18) matches pointer handlers (depth >= 1) and member-pointer
+        // handlers, whose base ID lives in its own reserved range.
         code.push(OP_LOCAL_GET);
         write_u32(code, 0);
         code.push(OP_I32_CONST);
@@ -188,6 +190,7 @@ impl<'a> Codegen<'a> {
         code.push(OP_I32_EQ);
         code.push(OP_IF);
         code.push(0x40);
+
         code.push(OP_LOCAL_GET);
         write_u32(code, 1);
         code.push(OP_I32_CONST);
@@ -199,6 +202,26 @@ impl<'a> Codegen<'a> {
         code.push(OP_I32_CONST);
         write_i32(code, 0);
         code.push(OP_I32_GT_U);
+
+        code.push(OP_LOCAL_GET);
+        write_u32(code, 1);
+        code.push(OP_I32_CONST);
+        write_i32(code, 0xFFFF);
+        code.push(OP_I32_AND);
+        code.push(OP_I32_CONST);
+        write_i32(code, TYPE_ID_MEMBER_PTR_BASE as i32);
+        code.push(OP_I32_GE_U);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, 1);
+        code.push(OP_I32_CONST);
+        write_i32(code, 0xFFFF);
+        code.push(OP_I32_AND);
+        code.push(OP_I32_CONST);
+        write_i32(code, (TYPE_ID_MEMBER_PTR_BASE + TYPE_ID_AUX_SPAN) as i32);
+        code.push(OP_I32_LT_U);
+        code.push(OP_I32_AND);
+        code.push(OP_I32_OR);
+
         code.push(OP_IF);
         code.push(0x40);
         code.push(OP_I32_CONST);

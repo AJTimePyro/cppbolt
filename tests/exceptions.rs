@@ -3359,6 +3359,119 @@ int main() {
 }
 
 #[test]
+fn test_enum_exception_type_id_is_distinct() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+enum class Color { Red, Green };
+enum class Fruit { Apple };
+
+int main() {
+    try {
+        throw Color::Red;
+    } catch (int) {
+        std::printf("WrongInt ");
+    } catch (Fruit) {
+        std::printf("WrongFruit ");
+    } catch (Color c) {
+        std::printf("CorrectColor:%d", (int)c);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "CorrectColor:0");
+    Ok(())
+}
+
+#[test]
+fn test_function_pointer_exception_type_ids_are_distinct() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+using VA = void(*)();
+using IA = int(*)(int);
+void foo() {}
+
+int main() {
+    VA p = &foo;
+    try {
+        throw p;
+    } catch (IA) {
+        std::printf("WrongSignature ");
+    } catch (VA) {
+        std::printf("CorrectVA");
+    } catch (...) {
+        std::printf("Fallback");
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "CorrectVA");
+    Ok(())
+}
+
+#[test]
+fn test_member_pointer_exception_type_id_is_distinct() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct S { int x; };
+using MP = int S::*;
+using FP = void(*)();
+void foo() {}
+
+int main() {
+    MP p = &S::x;
+    try {
+        throw p;
+    } catch (FP) {
+        std::printf("WrongFP ");
+    } catch (MP) {
+        std::printf("CorrectMP");
+    } catch (...) {
+        std::printf("Fallback");
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "CorrectMP");
+    Ok(())
+}
+
+#[test]
+fn test_nullptr_matches_member_pointer_handler() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct S { int x; };
+using MP = int S::*;
+
+int main() {
+    try {
+        throw nullptr;
+    } catch (int) {
+        std::printf("WrongInt ");
+    } catch (MP) {
+        std::printf("CorrectNullMP");
+    } catch (...) {
+        std::printf("Fallback");
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "CorrectNullMP");
+    Ok(())
+}
+
+#[test]
 fn test_noexcept_violation_invokes_custom_terminate_handler() -> Result<(), String> {
     let source = r#"
 #include <exception>

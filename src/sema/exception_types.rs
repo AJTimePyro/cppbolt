@@ -22,6 +22,12 @@ pub const TYPE_ID_LONG: u32 = 16;
 pub const TYPE_ID_ULONG: u32 = 17;
 pub const TYPE_ID_NULLPTR: u32 = 18;
 pub const TYPE_ID_CLASS_BASE: u32 = 1000;
+// Type IDs keep their base in the low 16 bits; the upper bits encode pointer
+// depth and const masks. These bases must stay below 1 << 16.
+pub const TYPE_ID_ENUM_BASE: u32 = 50000;
+pub const TYPE_ID_FUNCTION_BASE: u32 = 55000;
+pub const TYPE_ID_MEMBER_PTR_BASE: u32 = 60000;
+pub const TYPE_ID_AUX_SPAN: u32 = 5000;
 
 impl Sema {
     pub fn canonical_class_names(&self) -> Vec<&str> {
@@ -48,6 +54,33 @@ impl Sema {
         self.class_type_id_from_names(class_name, &names)
     }
 
+    pub fn canonical_enum_names(&self) -> Vec<&str> {
+        let mut names: Vec<&str> = self
+            .scoped_enums
+            .iter()
+            .map(String::as_str)
+            .chain(self.enum_types.values().map(String::as_str))
+            .map(|name| crate::name::QualifiedName::new(name).plain())
+            .collect();
+        names.sort_unstable();
+        names.dedup();
+        names
+    }
+
+    pub fn aux_exception_type_id(&self, key: &str, base: u32) -> u32 {
+        let mut ids = self.aux_exception_type_ids.borrow_mut();
+        if let Some(&id) = ids.get(key) {
+            return id;
+        }
+        let used = ids
+            .values()
+            .filter(|&&id| id >= base && id < base + TYPE_ID_AUX_SPAN)
+            .count() as u32;
+        let id = base + used;
+        ids.insert(key.to_string(), id);
+        id
+    }
+
     pub fn get_base_type_id(&self, ty: &Type) -> Option<u32> {
         let clean = ty.strip_reference().strip_const();
         match clean {
@@ -67,7 +100,27 @@ impl Sema {
             Type::Void => Some(TYPE_ID_VOID),
             Type::Nullptr => Some(TYPE_ID_NULLPTR),
             Type::Struct(sname) => self.get_class_type_id(sname),
-            Type::Enum(_) => Some(TYPE_ID_INT),
+            Type::Enum(ename) => {
+                let names = self.canonical_enum_names();
+                let plain = crate::name::QualifiedName::new(ename).plain();
+                names
+                    .binary_search(&plain)
+                    .ok()
+                    .map(|i| TYPE_ID_ENUM_BASE + i as u32)
+            }
+            Type::Function { .. } => {
+                Some(self.aux_exception_type_id(&format!("F|{:?}", clean), TYPE_ID_FUNCTION_BASE))
+            }
+            Type::MemberPointer {
+                class_name,
+                member_type,
+            } => {
+                let plain = crate::name::QualifiedName::new(class_name).plain();
+                Some(self.aux_exception_type_id(
+                    &format!("M|{}|{:?}", plain, member_type),
+                    TYPE_ID_MEMBER_PTR_BASE,
+                ))
+            }
             _ => None,
         }
     }

@@ -16,6 +16,9 @@ pub struct AliasVisibility {
 
 #[derive(Clone)]
 pub struct Sema {
+    /// Stable IDs for function and member-pointer exception types, assigned on
+    /// first use because those types have no separate declaration registry.
+    pub aux_exception_type_ids: std::cell::RefCell<HashMap<String, u32>>,
     pub struct_layouts: HashMap<String, StructLayout>,
     pub struct_order: Vec<String>,
     pub enum_values: HashMap<String, i64>,
