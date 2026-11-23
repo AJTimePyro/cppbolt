@@ -180,26 +180,7 @@ impl Sema {
         arg_count: usize,
         var_types: Option<&HashMap<String, Type>>,
     ) -> bool {
-        let struct_name = if let Expr::Identifier(obj_name) = object {
-            var_types
-                .and_then(|vt| vt.get(obj_name))
-                .and_then(extract_struct_name)
-                .or_else(|| {
-                    self.lookup_var(obj_name)
-                        .or_else(|| self.global_vars.get(obj_name))
-                        .and_then(|v| extract_struct_name(&v.ty))
-                })
-        } else if matches!(object, Expr::This) {
-            self.current_class.clone()
-        } else {
-            let mut probe = self.clone();
-            probe.speculating = true;
-            let mut obj_clone = object.clone();
-            probe
-                .analyze_expr(&mut obj_clone)
-                .ok()
-                .and_then(|t| extract_struct_name(&t))
-        };
+        let struct_name = self.resolve_object_struct_name(object, var_types);
         if let Some(sname) = struct_name {
             let overloads = self.find_method_overloads_in_class(&sname, member, false);
             if !overloads.is_empty() {
@@ -220,6 +201,41 @@ impl Sema {
             }
         }
         true
+    }
+
+    fn resolve_object_struct_name(
+        &self,
+        object: &Expr,
+        var_types: Option<&HashMap<String, Type>>,
+    ) -> Option<String> {
+        match object {
+            Expr::Identifier(obj_name) => var_types
+                .and_then(|vt| vt.get(obj_name))
+                .and_then(extract_struct_name)
+                .or_else(|| {
+                    self.lookup_var(obj_name)
+                        .or_else(|| self.global_vars.get(obj_name))
+                        .and_then(|v| extract_struct_name(&v.ty))
+                }),
+            Expr::This => self.current_class.clone(),
+            Expr::Cast { target_type, .. } => extract_struct_name(target_type),
+            Expr::Call { callee, .. } => {
+                if let Expr::Identifier(fn_name) = callee.as_ref() {
+                    self.functions
+                        .get(fn_name)
+                        .and_then(|sigs| sigs.first())
+                        .and_then(|sig| extract_struct_name(&sig.return_type))
+                } else {
+                    None
+                }
+            }
+            Expr::Unary {
+                op: crate::ast::expr_ops::UnaryOp::Deref,
+                expr,
+                ..
+            } => self.resolve_object_struct_name(expr, var_types),
+            _ => None,
+        }
     }
 }
 
