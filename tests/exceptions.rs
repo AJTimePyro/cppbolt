@@ -3488,6 +3488,62 @@ int main() {
 }
 
 #[test]
+fn test_throw_with_private_default_ctor_and_public_copy_ctor() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct MyException {
+private:
+    MyException() {}
+public:
+    MyException(int v) : value(v) {}
+    MyException(const MyException& o) : value(o.value) {}
+    int value;
+};
+
+int main() {
+    try {
+        throw MyException(7);
+    } catch (MyException e) {
+        std::printf("Caught:%d", e.value);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Caught:7");
+    Ok(())
+}
+
+#[test]
+fn test_throw_with_deleted_default_ctor_and_public_copy_ctor() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct MyException {
+    MyException() = delete;
+    MyException(int v) : value(v) {}
+    MyException(const MyException& o) : value(o.value) {}
+    int value;
+};
+
+int main() {
+    try {
+        throw MyException(7);
+    } catch (MyException e) {
+        std::printf("Caught:%d", e.value);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Caught:7");
+    Ok(())
+}
+
+#[test]
 fn test_uncaught_exceptions_during_unwinding() -> Result<(), String> {
     let source = r#"
 #include <cstdio>

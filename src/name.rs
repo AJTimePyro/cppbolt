@@ -15,6 +15,13 @@ pub fn static_local_name(function: &str, line: usize, col: usize, name: &str) ->
     format!("__static_{function}_{line}_{col}_{name}")
 }
 
+/// Table key for an explicitly declared copy or move constructor. Constructors
+/// share the class name, so the bare name cannot tell an unrelated private or
+/// deleted constructor from an unavailable copy constructor.
+pub fn copy_ctor_key(class_name: &str) -> String {
+    format!("{class_name}#copy")
+}
+
 /// Returns true if `name` refers to `printf` under any supported qualifier.
 pub fn is_printf(name: &str) -> bool {
     name == "printf" || name == "std::printf" || name.ends_with("::printf")

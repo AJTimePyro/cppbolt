@@ -2,6 +2,16 @@
 
 use super::*;
 
+/// A copy/move constructor takes a reference to its own class; other ctors
+/// share the name but not this signature.
+pub(super) fn is_copy_or_move_ctor(name: &str, params: &[Param]) -> bool {
+    let Some(first) = params.first() else { return false; };
+    first.ty.is_reference()
+        && matches!(first.ty.clean_type(), Type::Struct(ty)
+            if crate::name::QualifiedName::new(ty).class_short_name() == name)
+        && params.iter().skip(1).all(|p| p.default_val.is_some())
+}
+
 impl Parser {
     pub(super) fn parse_function_tail(
         &mut self,
@@ -28,7 +38,12 @@ impl Parser {
         let ctor_initializers = self.parse_ctor_initializers()?;
         let (body, is_pure_virtual, is_deleted) = self.parse_function_body(line, col)?;
         if is_deleted {
-            self.deleted_functions.push(name.clone());
+            let key = if is_copy_or_move_ctor(&name, &params) {
+                crate::name::copy_ctor_key(&name)
+            } else {
+                name.clone()
+            };
+            self.deleted_functions.push(key);
         }
 
         Ok(FunctionDecl {

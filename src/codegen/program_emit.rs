@@ -106,6 +106,9 @@ impl<'a> Codegen<'a> {
     }
 
     fn declare_method(&mut self, name: &str, m: &FunctionDecl) {
+        if m.body.is_none() {
+            return;
+        }
         let mut params = m.params.clone();
         if !m.is_static {
             let this_inner = if m.is_const {

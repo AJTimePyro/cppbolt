@@ -156,11 +156,12 @@ impl Sema {
             return Ok(());
         };
         let short = crate::name::QualifiedName::new(sname).class_short_name();
-        let unavailable = self.deleted_functions.contains(short)
+        let key = crate::name::copy_ctor_key(short);
+        let unavailable = self.deleted_functions.contains(&key)
             || self
                 .struct_layouts
                 .get(sname)
-                .is_some_and(|layout| layout.private_members.contains(short));
+                .is_some_and(|layout| layout.private_members.contains(&key));
         if unavailable {
             return Err(CompileError::new(
                 format!(
