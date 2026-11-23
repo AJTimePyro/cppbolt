@@ -78,7 +78,7 @@ WebAssembly.instantiate(bytes, host.imports).then(({{ instance }}) => {{
         ret = instance.exports.main ? instance.exports.main() : instance.exports._start();
     }} catch (e) {{
         process.stdout.write(host.getStdout());
-        console.error("WASM_TRAP: " + e.message);
+        console.error("WASM_TRAP: " + (e.stack || e));
         process.exit(134);
     }}
     process.stdout.write(host.getStdout());
@@ -103,6 +103,9 @@ WebAssembly.instantiate(bytes, host.imports).then(({{ instance }}) => {{
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let code = output.status.code().unwrap_or(-1);
+    if code != 0 && !output.stderr.is_empty() {
+        eprintln!("NODE_STDERR: {}", String::from_utf8_lossy(&output.stderr));
+    }
     Ok((code, stdout))
 }
 
@@ -2945,6 +2948,170 @@ int main() {
     let res = run_cpp(source);
     assert!(res.is_err());
 }
+
+#[test]
+fn test_std_exception_base_what() -> Result<(), String> {
+    let source = r#"
+#include <exception>
+#include <cstdio>
+
+int main() {
+    try {
+        throw std::exception();
+    } catch (const std::exception& e) {
+        std::printf("Caught:%s", e.what());
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Caught:std::exception");
+    Ok(())
+}
+
+#[test]
+fn test_std_bad_exception_polymorphic_catch() -> Result<(), String> {
+    let source = r#"
+#include <exception>
+#include <cstdio>
+
+void do_throw() {
+    throw std::bad_exception();
+}
+
+int main() {
+    try {
+        do_throw();
+    } catch (const std::exception& e) {
+        std::printf("Polymorphic:%s", e.what());
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Polymorphic:std::bad_exception");
+    Ok(())
+}
+
+#[test]
+fn test_std_terminate_custom_handler() -> Result<(), String> {
+    let source = r#"
+#include <exception>
+#include <cstdio>
+#include <cstdlib>
+
+void my_terminate() {
+    std::printf("CustomTerminateCalled\n");
+    std::exit(42);
+}
+
+int main() {
+    std::set_terminate(my_terminate);
+    std::terminate();
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 42);
+    assert_eq!(stdout.trim(), "CustomTerminateCalled");
+    Ok(())
+}
+
+#[test]
+fn test_std_uncaught_exceptions_query() -> Result<(), String> {
+    let source = r#"
+#include <exception>
+#include <cstdio>
+
+int main() {
+    int u = std::uncaught_exceptions();
+    bool b = std::uncaught_exception();
+    std::printf("Uncaught:%d,%d", u, (int)b);
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Uncaught:0,0");
+    Ok(())
+}
+
+#[test]
+fn test_std_exception_copy_and_slicing() -> Result<(), String> {
+    let source = r#"
+#include <exception>
+#include <cstdio>
+
+int main() {
+    std::exception e1;
+    std::exception e2 = e1;
+    std::exception e3;
+    e3 = e2;
+
+    try {
+        throw std::bad_exception();
+    } catch (std::exception sliced) {
+        // Slicing occurs when caught by value
+        std::printf("Sliced:%s ", sliced.what());
+    }
+
+    try {
+        throw std::bad_exception();
+    } catch (const std::exception& ref) {
+        // Virtual dispatch preserved when caught by reference
+        std::printf("Ref:%s", ref.what());
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Sliced:std::exception Ref:std::bad_exception");
+    Ok(())
+}
+
+#[test]
+fn test_std_exception_derived_custom_virtual_dtor() -> Result<(), String> {
+    let source = r#"
+#include <exception>
+#include <cstdio>
+
+static int dtor_count = 0;
+
+class MyCustomException : public std::exception {
+public:
+    MyCustomException() noexcept {}
+    virtual ~MyCustomException() noexcept {
+        dtor_count++;
+    }
+    virtual const char* what() const noexcept {
+        return "custom exception message";
+    }
+};
+
+void throw_custom() {
+    throw MyCustomException();
+}
+
+int main() {
+    try {
+        throw_custom();
+    } catch (const std::exception& e) {
+        std::printf("CaughtCustom:%s ", e.what());
+    }
+    std::printf("DtorCount:%d", dtor_count);
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "CaughtCustom:custom exception message DtorCount:1");
+    Ok(())
+}
+
+
 
 
 

@@ -25,11 +25,17 @@ pub const TYPE_ID_CLASS_BASE: u32 = 1000;
 
 impl Sema {
     pub fn get_class_type_id(&self, class_name: &str) -> Option<u32> {
-        let mut names: Vec<&String> = self.struct_layouts.keys().collect();
-        names.sort();
+        let plain_target = crate::name::QualifiedName::new(class_name).plain();
+        let mut names: Vec<&str> = self
+            .struct_layouts
+            .keys()
+            .map(|k| crate::name::QualifiedName::new(k).plain())
+            .collect();
+        names.sort_unstable();
+        names.dedup();
         names
             .iter()
-            .position(|k| *k == class_name)
+            .position(|k| *k == plain_target)
             .map(|i| (i as u32) + TYPE_ID_CLASS_BASE)
     }
 

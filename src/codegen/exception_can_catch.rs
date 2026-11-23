@@ -234,10 +234,14 @@ impl<'a> Codegen<'a> {
     }
 
     fn emit_can_catch_inheritance(&self, code: &mut Vec<u8>) {
+        let mut seen = std::collections::HashSet::new();
         for (derived_name, layout) in &self.sema.struct_layouts {
             if let Some(derived_id) = self.sema.get_class_type_id(derived_name) {
                 for (base_name, base_off) in &layout.base_offsets {
                     if let Some(base_id) = self.sema.get_class_type_id(base_name) {
+                        if !seen.insert((derived_id, base_id, *base_off)) {
+                            continue;
+                        }
                         Self::emit_can_catch_pair(derived_id, base_id, *base_off, code);
                         let d_ptr = (1 << 16) | derived_id;
                         let b_ptr = (1 << 16) | base_id;
