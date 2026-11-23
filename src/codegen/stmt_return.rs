@@ -22,6 +22,13 @@ impl<'a> Codegen<'a> {
             self.emit_dtor_for_scope(scope, ctx, code);
         }
 
+        for slot in ctx.active_exception_slots.iter().rev() {
+            Self::emit_slot_load(*slot, ctx.fp_local, code);
+            code.push(OP_LOCAL_SET);
+            write_u32(code, ctx.scratch1);
+            self.emit_destroy_exception_if_not_rethrown(ctx.scratch1, ctx, code);
+        }
+
         if ctx.is_main {
             // A return from main still destroys namespace-scope objects.
             self.emit_global_destructors(code);
@@ -130,7 +137,7 @@ impl<'a> Codegen<'a> {
                 false
             };
             let ctor = if is_xvalue || is_local_var {
-                self.find_move_constructor(sname)
+                self.find_move_constructor(sname, true)
                     .or_else(|| self.find_copy_constructor(sname, is_const))
             } else {
                 self.find_copy_constructor(sname, is_const)
@@ -159,8 +166,11 @@ impl<'a> Codegen<'a> {
         self.compile_expr(expr, ctx, code)?;
         code.push(OP_LOCAL_SET);
         write_u32(code, ctx.ret_temp_i32);
-        if let Some(pos) = ctx.temp_objects.iter().rposition(|(s, _, _)| s == sname) {
-            ctx.temp_objects.remove(pos);
+        if let Some(pos) = ctx.temp_objects.iter().rposition(|(s, _, _, _)| s == sname) {
+            let temp = ctx.temp_objects.remove(pos);
+            if let Some(idx) = temp.3 {
+                self.emit_mark_cleanup_inactive(idx, ctx, code);
+            }
         }
         self.emit_clean_temporaries(ctx, code);
         Ok(())

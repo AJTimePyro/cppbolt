@@ -25,6 +25,7 @@ fn has_children(expr: &Expr) -> bool {
         | Expr::Unary { .. }
         | Expr::Cast { .. }
         | Expr::SizeofExpr(..)
+        | Expr::Noexcept(..)
         | Expr::Assign { .. }
         | Expr::CompoundAssign { .. }
         | Expr::ArraySubscript { .. }
@@ -32,6 +33,7 @@ fn has_children(expr: &Expr) -> bool {
         | Expr::Ternary { .. }
         | Expr::Delete { .. }
         | Expr::PackExpansion { .. } => true,
+        Expr::Throw(e, _) => e.is_some(),
         Expr::Call { .. } => true,
         Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } => {
             !elements.is_empty()
@@ -73,8 +75,16 @@ fn take_expr_children(expr: &mut Expr, out: &mut Vec<Expr>) {
             take_box(left, out);
             take_box(right, out);
         }
-        Expr::Unary { expr, .. } | Expr::Cast { expr, .. } | Expr::SizeofExpr(expr) => {
+        Expr::Unary { expr, .. }
+        | Expr::Cast { expr, .. }
+        | Expr::SizeofExpr(expr)
+        | Expr::Noexcept(expr, ..) => {
             take_box(expr, out);
+        }
+        Expr::Throw(expr, ..) => {
+            if let Some(e) = expr {
+                take_box(e, out);
+            }
         }
         Expr::Assign { target, value, .. } | Expr::CompoundAssign { target, value, .. } => {
             take_box(target, out);
@@ -101,6 +111,26 @@ fn take_expr_children(expr: &mut Expr, out: &mut Vec<Expr>) {
         Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } => {
             out.extend(elements.drain(..).filter(has_children));
         }
+        Expr::New { .. } | Expr::Lambda { .. } | Expr::FoldExpr { .. } => {
+            take_complex_children(expr, out);
+        }
+        Expr::Delete { expr, .. } => take_box(expr, out),
+        Expr::PackExpansion { pattern, .. } => take_box(pattern, out),
+        Expr::SizeofPack { .. }
+        | Expr::IntLiteral(..)
+        | Expr::FloatLiteral(..)
+        | Expr::BoolLiteral(_)
+        | Expr::CharLiteral(_)
+        | Expr::StringLiteral(_)
+        | Expr::Identifier(_)
+        | Expr::This
+        | Expr::SizeofType(_)
+        | Expr::AlignofType(_) => {}
+    }
+}
+
+fn take_complex_children(expr: &mut Expr, out: &mut Vec<Expr>) {
+    match expr {
         Expr::New {
             args,
             array_size,
@@ -115,7 +145,6 @@ fn take_expr_children(expr: &mut Expr, out: &mut Vec<Expr>) {
                 take_box(place, out);
             }
         }
-        Expr::Delete { expr, .. } => take_box(expr, out),
         Expr::Lambda { params, .. } => {
             for p in params {
                 if let Some(def) = p.default_val.take()
@@ -125,7 +154,6 @@ fn take_expr_children(expr: &mut Expr, out: &mut Vec<Expr>) {
                 }
             }
         }
-        Expr::PackExpansion { pattern, .. } => take_box(pattern, out),
         Expr::FoldExpr { left, right, .. } => {
             if let Some(l) = left {
                 take_box(l, out);
@@ -134,15 +162,6 @@ fn take_expr_children(expr: &mut Expr, out: &mut Vec<Expr>) {
                 take_box(r, out);
             }
         }
-        Expr::SizeofPack { .. }
-        | Expr::IntLiteral(..)
-        | Expr::FloatLiteral(..)
-        | Expr::BoolLiteral(_)
-        | Expr::CharLiteral(_)
-        | Expr::StringLiteral(_)
-        | Expr::Identifier(_)
-        | Expr::This
-        | Expr::SizeofType(_)
-        | Expr::AlignofType(_) => {}
+        _ => {}
     }
 }

@@ -43,6 +43,10 @@ impl<'a> Codegen<'a> {
             StmtKind::Break => self.compile_break_stmt(ctx, code)?,
             StmtKind::Continue => self.compile_continue_stmt(ctx, code)?,
             StmtKind::Return { .. } => self.compile_return(stmt, ctx, code)?,
+            StmtKind::Throw(expr_opt) => self.compile_throw_stmt(expr_opt, ctx, code)?,
+            StmtKind::Try { try_body, catches } => {
+                self.compile_try_stmt(try_body, catches, ctx, code)?;
+            }
             _ => {}
         }
         Ok(())
@@ -133,6 +137,7 @@ impl<'a> Codegen<'a> {
             break_target_abs,
             continue_target_abs,
             ctx.scope_objects.len(),
+            ctx.active_exception_slots.len(),
         ));
 
         self.compile_cond(cond, ctx, code)?;
@@ -182,6 +187,7 @@ impl<'a> Codegen<'a> {
             break_target_abs,
             continue_target_abs,
             ctx.scope_objects.len(),
+            ctx.active_exception_slots.len(),
         ));
 
         self.compile_stmt(body, ctx, code)?;
@@ -209,9 +215,18 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        if let Some(&(break_target_abs, _, loop_scope_depth)) = self.loop_depths.last() {
+        if let Some(&(break_target_abs, _, loop_scope_depth, loop_exn_depth)) =
+            self.loop_depths.last()
+        {
             for scope in ctx.scope_objects[loop_scope_depth..].iter().rev() {
                 self.emit_dtor_for_scope(scope, ctx, code);
+            }
+            for slot in ctx.active_exception_slots[loop_exn_depth..].iter().rev() {
+                Self::emit_slot_load(*slot, ctx.fp_local, code);
+                code.push(OP_LOCAL_SET);
+                write_u32(code, ctx.scratch1);
+                self.emit_destroy_exception_if_not_rethrown(ctx.scratch1, ctx, code);
+                Self::emit_slot_zero(*slot, ctx.fp_local, code);
             }
             code.push(OP_BR);
             write_u32(code, self.current_block_depth - 1 - break_target_abs);
@@ -224,15 +239,22 @@ impl<'a> Codegen<'a> {
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
-        if let Some((_, continue_target_abs, loop_scope_depth)) = self
+        if let Some((_, continue_target_abs, loop_scope_depth, loop_exn_depth)) = self
             .loop_depths
             .iter()
             .rev()
             .copied()
-            .find(|(_, target, _)| *target != 0)
+            .find(|(_, target, _, _)| *target != 0)
         {
             for scope in ctx.scope_objects[loop_scope_depth..].iter().rev() {
                 self.emit_dtor_for_scope(scope, ctx, code);
+            }
+            for slot in ctx.active_exception_slots[loop_exn_depth..].iter().rev() {
+                Self::emit_slot_load(*slot, ctx.fp_local, code);
+                code.push(OP_LOCAL_SET);
+                write_u32(code, ctx.scratch1);
+                self.emit_destroy_exception_if_not_rethrown(ctx.scratch1, ctx, code);
+                Self::emit_slot_zero(*slot, ctx.fp_local, code);
             }
             code.push(OP_BR);
             write_u32(code, self.current_block_depth - 1 - continue_target_abs);

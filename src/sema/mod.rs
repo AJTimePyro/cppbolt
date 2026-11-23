@@ -13,6 +13,7 @@ mod constexpr_globals;
 mod constructor;
 mod constructor_helpers;
 mod decltype_resolve;
+pub mod exception_types;
 mod expected_type;
 mod expr;
 mod expr_call;
@@ -21,6 +22,7 @@ mod expr_call_member;
 mod expr_lambda;
 mod expr_lambda_free_vars;
 mod expr_member;
+mod expr_noexcept;
 mod expr_ops;
 mod expr_ops_unary;
 mod expr_subscript;
@@ -131,12 +133,17 @@ impl Sema {
 
     pub fn new() -> Self {
         let mut sema = Self {
+            aux_exception_type_ids: std::cell::RefCell::new(HashMap::new()),
+            canonical_class_cache: std::cell::RefCell::new(None),
+            thrown_classes: std::cell::RefCell::new(HashSet::new()),
+            caught_classes: std::cell::RefCell::new(HashSet::new()),
             struct_layouts: HashMap::new(),
             struct_order: Vec::new(),
             enum_values: HashMap::new(),
             static_const_values: HashMap::new(),
             enum_types: HashMap::new(),
             scoped_enums: HashSet::new(),
+            deleted_functions: HashSet::new(),
             functions: HashMap::new(),
             hidden_friends: HashMap::new(),
             hidden_friend_templates: HashMap::new(),
@@ -150,6 +157,8 @@ impl Sema {
             current_col: 1,
             loop_depth: 0,
             switch_depth: 0,
+            try_depth: 0,
+            var_try_depths: HashMap::new(),
             range_for_counter: 0,
             lambda_counter: 0,
             synthesized_decls: Vec::new(),

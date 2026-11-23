@@ -14,6 +14,7 @@ impl<'a> Codegen<'a> {
         let deleting_dtor_structs = self.reserve_deleting_dtors();
         self.emit_vtables(plan);
         self.register_address_taken_table(plan);
+        self.register_destructors_table();
 
         if !self.vtable_func_indices.is_empty() {
             let count = self.vtable_func_indices.len() as u32;
@@ -47,6 +48,9 @@ impl<'a> Codegen<'a> {
         self.module.exports.push(("__heap_base".to_string(), 3, 1));
 
         // Global 2: Free list head pointer (starts at 0)
+        self.module.globals.push((TYPE_I32, true, 0));
+
+        // Global 3: count of exceptions thrown but not yet caught
         self.module.globals.push((TYPE_I32, true, 0));
 
         // Memory export: calculate needed pages covering stack, data, BSS
@@ -102,6 +106,9 @@ impl<'a> Codegen<'a> {
     }
 
     fn declare_method(&mut self, name: &str, m: &FunctionDecl) {
+        if m.body.is_none() {
+            return;
+        }
         let mut params = m.params.clone();
         if !m.is_static {
             let this_inner = if m.is_const {
@@ -309,6 +316,18 @@ impl<'a> Codegen<'a> {
             self.module
                 .codes
                 .push(crate::runtime::emit_pure_virtual_trap());
+        }
+        self.emit_can_catch_function();
+        self.emit_terminate_function();
+    }
+
+    fn register_destructors_table(&mut self) {
+        for name in &self.sema.struct_order.clone() {
+            if let Some(dtor_idx) = self.lookup_struct_dtor(name) {
+                let table_elem_idx = self.vtable_func_indices.len() as u32;
+                self.vtable_func_indices.push(dtor_idx);
+                self.dtor_table_indices.insert(name.clone(), table_elem_idx);
+            }
         }
     }
 

@@ -12,7 +12,10 @@ impl Parser {
     ) -> Result<FunctionDecl, CompileError> {
         self.expect(TokenKind::LParen)?;
         let params = self.parse_function_params()?;
-        let quals = self.parse_function_qualifiers()?;
+        let (mut quals, noexcept_expr, has_exception_spec) = self.parse_function_qualifiers()?;
+        if !has_exception_spec && (name.starts_with('~') || name.contains("::~")) {
+            quals.is_noexcept = true;
+        }
         let return_type = if self.peek() == &TokenKind::Arrow {
             self.advance();
             self.parse_type()?
@@ -21,8 +24,24 @@ impl Parser {
         };
         let (is_const, ref_qualifier) = (quals.is_const, quals.ref_qualifier);
         let is_virtual = quals.is_override;
+        let function_try = self.peek() == &TokenKind::KwTry;
         let ctor_initializers = self.parse_ctor_initializers()?;
-        let (body, is_pure_virtual) = self.parse_function_body(line, col)?;
+        let (body, is_pure_virtual, is_deleted) = if function_try {
+            let b = self.parse_try_body_and_catches(line, col)?;
+            (Some(b), false, false)
+        } else {
+            self.parse_function_body(line, col)?
+        };
+        if is_deleted {
+            let key = if crate::ast::decl::is_copy_ctor(&name, &params) {
+                crate::name::copy_ctor_key(&name)
+            } else if crate::ast::decl::is_move_ctor(&name, &params) {
+                crate::name::move_ctor_key(&name)
+            } else {
+                name.clone()
+            };
+            self.deleted_functions.push(key);
+        }
 
         Ok(FunctionDecl {
             qualifiers: quals,
@@ -38,6 +57,7 @@ impl Parser {
             is_static: false,
             ctor_initializers,
             template_params: Vec::new(),
+            noexcept_expr,
             line,
             col,
         })
@@ -179,6 +199,7 @@ impl Parser {
     pub(super) fn is_function_pointer_declarator_ahead(&self) -> bool {
         self.peek() == &TokenKind::LParen
             && (self.peek_ahead(1) == &TokenKind::Star
+                || self.peek_ahead(1) == &TokenKind::Amp
                 || self.is_member_pointer_prefix_ahead_from(1))
     }
 
@@ -209,38 +230,45 @@ impl Parser {
         Ok(fn_params)
     }
 
+    fn parse_declarator_ident(&mut self, name_error: Option<&str>) -> Result<String, CompileError> {
+        match name_error {
+            Some(message) => match self.advance().kind.clone() {
+                TokenKind::Ident(id) => Ok(id),
+                _ => Err(CompileError::new(
+                    message,
+                    self.current().line,
+                    self.current().col,
+                )),
+            },
+            None => {
+                if let TokenKind::Ident(id) = self.peek().clone() {
+                    self.advance();
+                    Ok(id)
+                } else {
+                    Ok(String::new())
+                }
+            }
+        }
+    }
+
     pub(super) fn parse_function_pointer_declarator(
         &mut self,
         base_type: Type,
         name_error: Option<&str>,
     ) -> Result<(Type, String), CompileError> {
         self.advance();
+        let mut is_reference = false;
         let class_name = if self.is_member_pointer_prefix_ahead_from(0) {
             Some(self.parse_member_pointer_class_prefix()?)
+        } else if self.peek() == &TokenKind::Amp {
+            self.advance();
+            is_reference = true;
+            None
         } else {
             self.expect(TokenKind::Star)?;
             None
         };
-        let name = match name_error {
-            Some(message) => match self.advance().kind.clone() {
-                TokenKind::Ident(id) => id,
-                _ => {
-                    return Err(CompileError::new(
-                        message,
-                        self.current().line,
-                        self.current().col,
-                    ));
-                }
-            },
-            None => {
-                if let TokenKind::Ident(id) = self.peek().clone() {
-                    self.advance();
-                    id
-                } else {
-                    String::new()
-                }
-            }
-        };
+        let name = self.parse_declarator_ident(name_error)?;
         // `getpmf()` inside `(S::*getpmf())` is the declared function's own
         // parameter list; the suffix after the closing parenthesis belongs to
         // the pointed-to type.
@@ -255,7 +283,7 @@ impl Parser {
         // or `(` decides which derivation applies.
         let inner = if self.peek() == &TokenKind::LParen {
             let fn_params = self.parse_abstract_fn_params()?;
-            let qualifiers = self.parse_function_qualifiers()?;
+            let (qualifiers, _, _) = self.parse_function_qualifiers()?;
             Type::Function {
                 return_type: Box::new(base_type),
                 param_types: fn_params,
@@ -271,6 +299,7 @@ impl Parser {
                 class_name: cls,
                 member_type: Box::new(inner),
             },
+            None if is_reference => Type::Reference(Box::new(inner)),
             None => Type::Pointer(Box::new(inner)),
         };
         let entity_type = match entity_params {
@@ -284,8 +313,12 @@ impl Parser {
         Ok((entity_type, name))
     }
 
-    pub(super) fn parse_function_qualifiers(&mut self) -> Result<FunctionQualifiers, CompileError> {
+    pub(super) fn parse_function_qualifiers(
+        &mut self,
+    ) -> Result<(FunctionQualifiers, Option<Expr>, bool), CompileError> {
         let mut quals = FunctionQualifiers::default();
+        let mut noexcept_expr = None;
+        let mut has_exception_spec = false;
         while matches!(
             self.peek(),
             TokenKind::KwConst
@@ -293,6 +326,7 @@ impl Parser {
                 | TokenKind::Amp
                 | TokenKind::AndAnd
                 | TokenKind::KwThrow
+                | TokenKind::KwNoexcept
         ) || matches!(self.peek(), TokenKind::Ident(id) if id == "noexcept" || id == "volatile" || id == "final")
         {
             match self.peek().clone() {
@@ -320,43 +354,61 @@ impl Parser {
                     self.advance();
                     quals.is_final = true;
                 }
-                TokenKind::KwThrow | TokenKind::Ident(_) => {
-                    let is_noexcept =
-                        matches!(&self.peek(), TokenKind::Ident(id) if id == "noexcept");
-                    let is_throw = matches!(self.peek(), TokenKind::KwThrow);
-                    self.advance();
-                    let mut value = true;
-                    if self.peek() == &TokenKind::LParen {
-                        self.advance();
-                        if is_throw {
-                            // Dynamic exception specifications are not a type
-                            // qualifier; skip their (possibly dependent) list.
-                            while self.peek() != &TokenKind::RParen
-                                && self.peek() != &TokenKind::Eof
-                            {
-                                self.advance();
-                            }
-                        } else if self.peek() != &TokenKind::RParen
-                            && let Expr::BoolLiteral(b) = self.parse_expr()?
-                        {
-                            value = b;
-                        }
-                        self.expect(TokenKind::RParen)?;
-                    }
+                TokenKind::KwThrow | TokenKind::KwNoexcept | TokenKind::Ident(_) => {
+                    let (is_noexcept, value, expr_opt) = self.parse_exception_spec()?;
+                    has_exception_spec = true;
                     if is_noexcept {
                         quals.is_noexcept = value;
+                    }
+                    if expr_opt.is_some() {
+                        noexcept_expr = expr_opt;
                     }
                 }
                 _ => break,
             }
         }
 
-        Ok(quals)
+        Ok((quals, noexcept_expr, has_exception_spec))
+    }
+
+    fn parse_exception_spec(&mut self) -> Result<(bool, bool, Option<Expr>), CompileError> {
+        let is_noexcept = match self.peek() {
+            TokenKind::KwNoexcept => true,
+            TokenKind::Ident(id) => id == "noexcept",
+            _ => false,
+        };
+        let is_throw = matches!(self.peek(), TokenKind::KwThrow);
+        self.advance();
+        let mut value = true;
+        let mut noexcept_expr = None;
+        if self.peek() == &TokenKind::LParen {
+            self.advance();
+            if is_throw {
+                while self.peek() != &TokenKind::RParen && self.peek() != &TokenKind::Eof {
+                    self.advance();
+                }
+            } else if self.peek() != &TokenKind::RParen {
+                let expr = self.parse_expr()?;
+                match crate::sema::constexpr_eval::eval_integral_constexpr(&expr, None) {
+                    Ok(v) => value = v != 0,
+                    Err(_) => {
+                        value = true;
+                        noexcept_expr = Some(expr);
+                    }
+                }
+            }
+            self.expect(TokenKind::RParen)?;
+        }
+        Ok((is_noexcept, value, noexcept_expr))
     }
 
     pub(super) fn parse_ctor_initializers(
         &mut self,
     ) -> Result<Vec<(String, Vec<Expr>)>, CompileError> {
+        // A function-try-block puts `try` before the member initializer list.
+        if self.peek() == &TokenKind::KwTry {
+            self.advance();
+        }
         let mut ctor_initializers = Vec::new();
         if self.peek() == &TokenKind::Colon {
             self.advance();
@@ -412,17 +464,21 @@ impl Parser {
         &mut self,
         line: usize,
         col: usize,
-    ) -> Result<(Option<Stmt>, bool), CompileError> {
+    ) -> Result<(Option<Stmt>, bool, bool), CompileError> {
         let mut is_pure_virtual = false;
+        let mut is_deleted = false;
         let body = if self.peek() == &TokenKind::Assign {
             self.advance();
             match self.advance().kind {
                 TokenKind::IntLiteral(0, _) => {
                     is_pure_virtual = true;
                 }
+                TokenKind::KwDelete => {
+                    is_deleted = true;
+                }
                 _ => {
                     return Err(CompileError::new(
-                        "Expected 0 in pure virtual declaration",
+                        "Expected 0 or 'delete' after '=' in function declaration",
                         line,
                         col,
                     ));
@@ -437,6 +493,6 @@ impl Parser {
             None
         };
 
-        Ok((body, is_pure_virtual))
+        Ok((body, is_pure_virtual, is_deleted))
     }
 }

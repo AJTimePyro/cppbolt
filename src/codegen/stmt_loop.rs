@@ -49,6 +49,7 @@ impl<'a> Codegen<'a> {
             break_target_abs,
             continue_target_abs,
             ctx.scope_objects.len(),
+            ctx.active_exception_slots.len(),
         ));
 
         self.compile_stmt(body, ctx, code)?;
@@ -100,55 +101,30 @@ impl<'a> Codegen<'a> {
 
         let (target_slot, matched_slot, any_match_slot) =
             self.emit_switch_slots(switch_is_wide, ctx, code)?;
+        let slots = SwitchSlots {
+            target_slot,
+            matched_slot,
+            any_match_slot,
+            switch_is_wide,
+        };
 
-        self.emit_switch_default_scan(
-            body,
-            SwitchSlots {
-                target_slot,
-                matched_slot,
-                any_match_slot,
-                switch_is_wide,
-            },
-            ctx,
-            code,
-        );
+        self.emit_switch_default_scan(body, slots, ctx, code);
 
         code.push(OP_BLOCK);
         code.push(0x40); // break block
         let break_target_abs = self.current_block_depth;
         self.current_block_depth += 1;
         // `0` means this construct has no continue target.
-        self.loop_depths
-            .push((break_target_abs, 0, ctx.scope_objects.len()));
+        self.loop_depths.push((
+            break_target_abs,
+            0,
+            ctx.scope_objects.len(),
+            ctx.active_exception_slots.len(),
+        ));
 
         ctx.enter_scope();
         ctx.scope_objects.push(Vec::new());
-        if let StmtKind::Compound(stmts) = &body.kind {
-            for s in stmts {
-                match &s.kind {
-                    StmtKind::Case(_, val) => {
-                        self.emit_switch_case(
-                            s,
-                            *val,
-                            SwitchSlots {
-                                target_slot,
-                                matched_slot,
-                                any_match_slot,
-                                switch_is_wide,
-                            },
-                            ctx,
-                            code,
-                        )?;
-                    }
-                    StmtKind::Default => {
-                        self.emit_switch_default(s, matched_slot, any_match_slot, ctx, code)?;
-                    }
-                    _ => {
-                        self.emit_switch_fallthrough(s, matched_slot, ctx, code)?;
-                    }
-                }
-            }
-        }
+        self.emit_switch_body(body, slots, ctx, code)?;
 
         self.loop_depths.pop();
         if let Some(scope) = ctx.scope_objects.pop() {
@@ -158,6 +134,37 @@ impl<'a> Codegen<'a> {
         self.current_block_depth -= 1;
         ctx.exit_scope();
 
+        Ok(())
+    }
+
+    fn emit_switch_body(
+        &mut self,
+        body: &Stmt,
+        slots: SwitchSlots,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        if let StmtKind::Compound(stmts) = &body.kind {
+            for s in stmts {
+                match &s.kind {
+                    StmtKind::Case(_, val) => {
+                        self.emit_switch_case(s, *val, slots, ctx, code)?;
+                    }
+                    StmtKind::Default => {
+                        self.emit_switch_default(
+                            s,
+                            slots.matched_slot,
+                            slots.any_match_slot,
+                            ctx,
+                            code,
+                        )?;
+                    }
+                    _ => {
+                        self.emit_switch_fallthrough(s, slots.matched_slot, ctx, code)?;
+                    }
+                }
+            }
+        }
         Ok(())
     }
 

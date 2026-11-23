@@ -4,6 +4,311 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-24: LIFO Unwinding Order, Destructor Function-Try-Blocks, DCE Refinements, and Foreign Exception Isolation
+
+Hardened C++17 exception handling conformance across unwinding destruction order, destructor function-try-blocks, expression throw dead-code elimination, and runtime counter isolation.
+
+### Summary of Work
+
+1. Unwinding temporary destruction order (`src/codegen/unwind.rs`, `tests/exceptions.rs`):
+   - Inverted the cleanup sequence in `emit_cleanup_range` so that active recycled statement temporaries in `..start` are destroyed before the local scope variables in `start..end`.
+   - Guaranteed strict C++17 LIFO unwinding order when subexpression temporaries are created in the presence of local variables.
+2. Destructor function-try-block implicit rethrow per ISO C++17 [except.handle] p15 (`src/sema/analyze_helpers.rs`, `src/sema/stmt.rs`, `tests/exceptions.rs`):
+   - Extended `desugar_function_try_block` to recognize class destructors and append an implicit `throw;` to each catch clause handler.
+   - Guaranteed that falling off the end of a destructor function-try-block handler rethrows the exception rather than swallowing it.
+3. Expression throw dead-code elimination and DCE streamlining (`src/ast/types.rs`, `src/codegen/expr.rs`, `src/codegen/analysis_vars.rs`, `src/codegen/program_prepare_runtime.rs`, `tests/exceptions.rs`):
+   - Added `expr_contains_throw` to identify `Expr::Throw` within subexpressions (including conditional ternary operators `cond ? val : throw Ex()`).
+   - Updated `conditional_result_type` in `src/ast/types.rs` so that `void`-typed throw expressions in conditional operators yield the type of the non-void branch per ISO C++17 [expr.cond] p2.
+   - Streamlined `collect_reachable_exception_classes` to read `self.sema.thrown_classes` and `self.sema.caught_classes` directly, eliminating ~80 lines of duplicate, syntactic AST pattern matching.
+4. Foreign exception uncaught count isolation (`src/codegen/stmt_try.rs`, `src/codegen/stmt_throw.rs`, `tests/exceptions.rs`):
+   - Removed the uncaught count decrement from `emit_catch_all_handler` and the rethrow increment from foreign exception rethrow (`throw;` in `catch (...)`).
+   - Prevented non-C++ foreign WebAssembly exceptions caught via `catch_all_ref` from driving `std::uncaught_exceptions()` negative.
+5. Noexcept and main unwinding termination (`src/codegen/unwind.rs`, `tests/exceptions.rs`):
+   - Emitted `OP_UNREACHABLE` immediately after `__cppbolt_terminate` in `emit_function_unwind_handler`.
+   - Removed dead terminate calls between `try_table` end and catch blocks in `emit_cleanup_range`.
+6. Expression throw unwinding reachability (`src/codegen/unwind.rs`, `tests/exceptions.rs`):
+   - Added `Expr::Throw` to `expr_can_throw_or_call`, ensuring functions with local objects that throw inside subexpressions generate unwind tables and invoke destructors.
+7. Recycled temporary slot zeroing (`src/codegen/raii.rs`, `tests/exceptions.rs`):
+   - Zeroed stack frame slots immediately in `emit_destroy_and_free_slot` after freeing temporary objects, preventing recycled slots from retaining dangling pointers to freed heap memory.
+
+### Verification Results
+
+- Exception test suite: all 154 tests in `tests/exceptions.rs` pass.
+- Census audit: all 7 tests in `tests/census_fixture.rs` pass (all files <= 500 lines, functions <= 80 lines, <= 5 parameters).
+- Unit tests: all 143 unit tests in `cargo test --lib` pass.
+- Clippy: `cargo clippy --all-targets -- -D warnings` clean (0 warnings).
+- Feature matrix: `python3 tools/check_feature_matrix.py` clean (288 files valid).
+- mdBook: `mdbook build docs/book` succeeds without errors.
+
+---
+
+## 2026-11-24: Exception Handling Hardening, Temporary Slot Recycling, and C++17 Parameter Throw Conformance
+
+Hardened exception handling lowering across allocation safeguards, temporary slot recycling, and ISO C++17 parameter throw conformance.
+
+### Summary of Work
+
+1. Exception payload heap allocation failure handling (`src/codegen/stmt_throw.rs`, `tests/exceptions.rs`):
+   - Added null check after `malloc` in throw lowering.
+   - Per ISO C++17 [except.throw] p4, if the runtime cannot allocate memory for the exception object, lowering emits a branch directly to `__cppbolt_terminate`, invoking `std::terminate`.
+   - Verified through unit tests that simulated OOM triggers `std::terminate`.
+2. Temporary slot and cleanup bitmask index recycling (`src/codegen/raii.rs`, `src/codegen/call_args.rs`, `src/codegen/expr_call.rs`, `src/codegen/unwind.rs`):
+   - Solved cleanup bitmask exhaustion in functions with more than 64 sequential temporaries by recycling inactive temporary frame slots and bitmask indices across sequential full expressions.
+   - Updated unwinding range emission in `emit_cleanup_range` to inspect recycled temporaries active when an exception occurs, preserving reverse construction order.
+   - Enabled functions with arbitrarily many sequential temporaries (e.g. loops or chained statements) to compile and run within the 64-bit liveness mask.
+3. Parameter throw copy requirement per ISO C++17 [class.copy.elision] p3 (`src/sema/sema_types.rs`, `src/sema/stmt.rs`, `src/sema/stmt_decl.rs`, `src/sema/exception_types.rs`, `src/codegen/mod.rs`, `src/codegen/function.rs`, `src/codegen/stmt_try_param.rs`, `src/codegen/stmt_throw.rs`):
+   - Tagged function parameters and catch parameters with `is_param: true` in semantic analysis and code generation.
+   - Enforced ISO C++17 [class.copy.elision] p3, which excludes function and catch parameters from throw move-eligibility.
+   - Throwing a parameter of a move-only type now produces a compile error requiring a copy constructor, and throwing a copyable type invokes the copy constructor instead of the move constructor.
+4. Unevaluated `sizeof(expr)` and loop jump slot zeroing (`src/codegen/unwind.rs`, `src/codegen/stmt.rs`, `src/codegen/stmt_var.rs`):
+   - Removed operand traversal inside `sizeof(expr)` during unwinding analysis, matching `noexcept(expr)` semantics and omitting unwinding wrappers for leaf functions containing `sizeof`.
+   - Zeroed handled exception slots on loop `break` and `continue`, preventing stale pointers from being re-destroyed if subsequent code unwinds or early-returns.
+5. Catch matching dispatch optimization and deduplication (`src/codegen/exception_can_catch.rs`, `src/codegen/stmt_try.rs`, `src/sema/exception_types.rs`):
+   - Cached canonical class names in `Sema` using interior mutability, eliminating re-allocation and re-sorting during type ID resolution.
+   - Filtered `__cppbolt_can_catch` inheritance pairs to classes referenced in `throw` expressions or `catch` clauses across the program, skipping unreferenced classes.
+   - Deduplicated catch clause unwinding code into `emit_clause_unwind_cleanup`.
+
+### Verification Results
+
+- Exception test suite: all 147 tests in `tests/exceptions.rs` pass.
+- Census audit: all 7 tests in `tests/census_fixture.rs` pass (0 files over 500 lines, 0 functions over 80 lines, 0 functions with >5 parameters excluding self).
+- Nesting tests: all 11 tests in `tests/nesting.rs` pass.
+- Unit tests: all 143 unit tests in `cargo test --lib` pass.
+- Clippy: `cargo clippy --all-targets -- -D warnings` passes with 0 warnings.
+- Documentation checks: `python3 tools/check_feature_matrix.py` and `mdbook build docs/book` pass cleanly.
+
+---
+
+## 2026-11-23: C++17 Exception Handling Conformance, Function-Try-Blocks, and Dynamic Uncaught Exceptions Tracking
+
+Completed ISO C++17 exception handling conformance across function-try-blocks, dynamic `uncaught_exceptions` tracking, throw value-category constructor selection, and resource budget validation:
+
+### Summary of Work
+
+1. Function-try-block syntax and constructor unwinding semantics (`src/parser/decl_func.rs`, `src/codegen/function.rs`, `src/codegen/stmt_try.rs`, `src/sema/analyze_helpers.rs`):
+   - Added parsing and code generation for function-try-blocks on normal functions and constructors (`try : member_init() { ... } catch (...) { ... }`).
+   - Covered member initializer lists within constructor function-try-blocks; if an initializer or constructor body throws, fully constructed subobjects unwind in reverse order before entering the handler.
+   - Enforced ISO C++17 [except.handle] p15-16 implicit rethrow upon falling off the end of a constructor handler without throwing.
+   - Enforced ISO C++17 [except.handle] p17 prohibition of `return` statements inside constructor handlers, failing semantic analysis with a diagnostic.
+2. Dynamic `std::uncaught_exceptions()` tracking (`src/codegen/function_lifecycle.rs`, `src/codegen/stmt_throw.rs`, `src/codegen/stmt_try.rs`, `stdlib/exception`):
+   - Allocated mutable WebAssembly global 3 to track in-flight uncaught exceptions.
+   - Incremented counter on initial throws and rethrows (`throw;`), and decremented counter upon entering catch handlers.
+   - Destructors executing during stack unwinding observe accurate nonzero counts via `std::uncaught_exceptions()` and `std::uncaught_exception()`.
+3. Throw value category and constructor accessibility rules (`src/sema/exception_types.rs`, `src/codegen/stmt_throw.rs`):
+   - Enforced C++17 [except.throw] p3: prvalues use guaranteed copy elision directly into the exception object buffer without copy or move constructor calls.
+   - Selected move constructors for xvalues (including `std::move` results) and move-eligible local variables declared in the innermost try scope; selected copy constructors for lvalues.
+   - Validated accessibility and non-deleted status of copy and move constructors according to value category, and excluded explicit constructors from copy-initialization context.
+   - Supported raw function pointer declarators in catch clauses (`catch (void (*fn)(int))`).
+4. Catch dispatch and cleanup capacity hardening:
+   - Restricted derived-to-base catch matching to unambiguous public base classes per ISO C++17 [except.handle].
+   - Isolated distinct type ID intervals for enums, function pointers, and member pointers.
+   - Enforced compile-time failure on exceeding the 64-entry cleanup tracking budget, preventing silent leaks of temporary destructors.
+   - Skipped bodyless/deleted methods in the WebAssembly function table to prevent index drift.
+
+### Verification Results
+
+- Exception test suite: all 139 tests in `tests/exceptions.rs` pass.
+- Census audit: all 7 tests in `tests/census_fixture.rs` pass (0 files over 500 lines, 0 functions over 80 lines, 0 functions with >5 parameters excluding self).
+- Clippy: `cargo clippy --all-targets -- -D warnings` passes with 0 warnings.
+- Documentation checks: `python3 tools/check_feature_matrix.py` and `mdbook build docs/book` pass without error.
+
+---
+
+## 2026-11-23: Standard Library `<exception>` and `<stdexcept>` Hierarchy Integration
+
+Integrated C++17 exception standard library headers adapted from LLVM libc++ 23.1.5 into cppbolt's embedded standard library:
+
+### Summary of Work
+
+1. `<exception>` standard library header (`stdlib/exception`, `docs/stdlib/exception.md`):
+   - Implemented `std::exception` base class with virtual destructor and polymorphic `what()`.
+   - Implemented `std::bad_exception` derived class with virtual `what()`.
+   - Implemented `std::terminate_handler` type and terminate controls: `std::set_terminate`, `std::get_terminate`, and `std::terminate`.
+   - Wired WebAssembly runtime unwinding aborts, unhandled rethrows, and `noexcept` violations to `__cppbolt_terminate`, invoking user-installed handlers.
+   - Implemented `std::uncaught_exceptions()` and `std::uncaught_exception()` reading the active WebAssembly in-flight exception counter.
+2. `<stdexcept>` standard library header (`stdlib/stdexcept`, `docs/stdlib/stdexcept.md`):
+   - Implemented complete C++17 standard exception hierarchy: `std::logic_error` and `std::runtime_error` subtrees rooted in `std::exception`.
+   - Provided `std::domain_error`, `std::invalid_argument`, `std::length_error`, `std::out_of_range`, `std::range_error`, `std::overflow_error`, and `std::underflow_error`.
+   - Supported string (`const std::string&`) and C-string (`const char*`) constructors for each exception class.
+   - Managed heap message buffer lifetimes across throw initialization and catch cleanup, and verified polymorphic `what()` dispatch through vtables when caught via base reference (`catch (const std::exception&)`).
+
+### Verification Results
+
+- Exception test suite: all tests covering `<exception>` and `<stdexcept>` pass in `tests/exceptions.rs`.
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with >5 parameters excluding self.
+- Clippy: clean with 0 warnings.
+
+---
+
+## 2026-11-23: C++17 `noexcept` Specifications, Function Type Integration, and Runtime Termination
+
+Implemented ISO C++17 `noexcept` specifications, operator, function pointer subtyping, and runtime termination semantics:
+
+### Summary of Work
+
+1. `noexcept` specification analysis and evaluation (`src/sema/expr_noexcept.rs`, `src/sema/stmt.rs`):
+   - Supported `noexcept`, `noexcept(true)`, `noexcept(false)`, and expression-based `noexcept(expr)` specifications evaluated as constant expressions for non-template and template functions.
+   - Defaulted class destructors and synthesized default destructors to `noexcept(true)` per C++17 [except.spec].
+   - Evaluated overloaded operators (member and non-member, including `operator[]`) when analyzing potentially-throwing operations.
+2. C++17 function type system integration (`src/ast/types.rs`, `src/sema/assign.rs`):
+   - Integrated `noexcept` into the function type system: `noexcept` functions convert to potentially-throwing function pointer/reference types at single-level indirection.
+   - Rejected assigning potentially-throwing functions to `noexcept` function pointer targets or multi-level pointer conversions with mismatched exception specifications at compile time.
+3. Unevaluated `noexcept(expr)` operator (`src/ast/expr.rs`, `src/parser/expr.rs`, `src/sema/expr.rs`):
+   - Implemented `noexcept(expr)` evaluating to a compile-time `bool` constant without emitting runtime WebAssembly instructions or evaluating operand side effects.
+4. Runtime termination enforcement (`src/codegen/function.rs`, `src/codegen/unwind.rs`):
+   - Wrapped `noexcept` function bodies in unwinding guards that clean local frames, restore caller shadow stack frames, and call `std::terminate` (via `__cppbolt_terminate`) if an exception attempts to escape.
+
+### Verification Results
+
+- All `noexcept` tests pass in `tests/exceptions.rs`.
+- Census audit: passes with 0 violations.
+- Clippy: passes with 0 warnings.
+
+---
+
+## 2026-11-23: Collision-Free Bitfield Pointer Type IDs, Multi-Level Qualification Conversions, and Precise DCE Destructor Retention
+
+Resolved pointer exception type ID collisions, added support for ISO C++17 multi-level pointer qualification conversions, and optimized dead-code elimination destructor retention:
+
+### Summary of Work
+
+1. Collision-free bitfield pointer type IDs (`src/sema/exception_types.rs`, `src/codegen/exception_can_catch.rs`):
+   - Replaced linear pointer type-ID addition with a 32-bit bitfield layout: bits 0..15 encode base type ID, bits 16..19 encode indirection depth (1 for `*`, 2 for `**`, 3 for `***`), and bits 20..27 encode per-level const qualification.
+   - Eliminated type-ID collisions between pointers of different indirection depths (such as `int***` vs `const int**`) and prevented pointer IDs from overlapping with user class IDs.
+2. ISO C++17 multi-level pointer qualification conversions (`src/codegen/exception_can_catch.rs`, `tests/exceptions.rs`):
+   - Implemented catch matching for multi-level qualification conversions per ISO C++17 [conv.qual] / [except.handle]: `T**` matches `const T* const*` and `T* const*`, `const T**` matches `const T* const*`, while `const T**` correctly rejects `T**`.
+   - Verified matching semantics against native Clang and GCC.
+3. Precise dead-code elimination for exception destructors (`src/codegen/program_prepare.rs`, `src/codegen/program_prepare_runtime.rs`, `tests/exceptions.rs`):
+   - Replaced blanket class destructor retention with targeted AST reachability scanning.
+   - Collected classes and base subobjects appearing in `throw` expressions or `catch` parameters across reachable functions, retaining only those destructors and their call trees.
+   - Eliminated unreferenced classes and their destructors from compiled WebAssembly modules.
+
+### Verification Results
+
+- Exception test suite: all 67 tests in `tests/exceptions.rs` pass.
+- Census audit: all 7 tests in `tests/census_fixture.rs` pass (0 files over 500 lines, 0 functions over 80 lines, 0 functions with >5 parameters excluding self).
+- Clippy: `cargo clippy --all-targets -- -D warnings` passes with 0 warnings.
+- Documentation checks: `python3 tools/check_feature_matrix.py` and `mdbook build docs/book` pass without error.
+
+---
+
+## 2026-11-23: Typed Exception Handling Correctness Audit and Lifecycle Hardening
+
+Audited, verified, and resolved edge cases across typed C++ exception handling:
+
+### Summary of Work
+
+1. Resolved exception destruction and scratch register corruption (`src/codegen/stmt_throw.rs`):
+   - Fixed `emit_destroy_exception_if_not_rethrown` to avoid clobbering `scratch1` when it holds the exception pointer, routing destructor table index loads to `scratch2`.
+   - Added null-pointer check before loading metadata or calling `free`.
+2. Handled nested exceptions and early catch exits (`src/codegen/stmt_try.rs`, `src/codegen/stmt_return.rs`, `src/codegen/stmt.rs`, `src/codegen/stmt_loop.rs`):
+   - Wrapped catch clause bodies in an inner exception handler. When a newly thrown exception exits a catch block, the runtime destroys the handled exception object before propagating the new exception, while preserving it on `throw;`.
+   - Tracked active handled exception slots in `FunctionContext::active_exception_slots`.
+   - Destroyed active exception objects when exiting catch blocks via `return`, `break`, or `continue`.
+   - Maintained `current_block_depth` across try and catch blocks so control flow jumps target the correct block depth.
+3. Cleaned up allocations on constructor failure (`src/codegen/stmt_throw.rs`):
+   - Enclosed payload construction in a `try_table` guard. If a copy or move constructor throws during exception initialization, the allocated heap buffer is freed before propagating the constructor's exception.
+4. Preserved exception destructors during dead-code elimination (`src/codegen/analysis.rs`, `src/codegen/program_prepare.rs`, `src/codegen/program_prepare_runtime.rs`):
+   - Retained class destructors and their transitive call trees when programs contain try blocks or throw statements, ensuring indirect calls through the exception destructor table do not trap.
+   - Collected lifecycle references for catch-by-value parameters and typed initializer lists.
+5. Resolved pointer type collisions and multiple inheritance pointer adjustments (`src/sema/exception_types.rs`, `src/codegen/exception_can_catch.rs`, `src/codegen/stmt_try_param.rs`):
+   - Replaced overlapping primitive pointer IDs with distinct type intervals, preventing accidental matches across unrelated pointer types (such as `int*` and `double*`).
+   - Supported `nullptr` catch matching for pointer handlers.
+   - Adjusted dereferenced pointer values directly for multiple inheritance base conversions rather than adjusting the payload buffer address, preserving null pointers.
+6. Implemented move-constructor selection and unnamed catch parameters (`src/codegen/stmt_throw.rs`, `src/codegen/stmt_try_param.rs`):
+   - Preferred move constructors when throwing automatic non-const local variables or xvalues per ISO C++17 [class.copy.elision].
+   - Constructed temporary parameters, performed slicing, and scheduled destructors for unnamed catch-by-value parameters.
+7. Verified architectural boundaries:
+   - Confirmed `volatile` qualification is absent from AST `Type` representations and deferred until general cv-qualification improvements.
+   - Verified that multi-level pointer qualification conversions correctly reject invalid conversions (such as `T**` to `const T**`) while documenting that `const T* const*` catching `T**` remains unsupported.
+
+### Verification Results
+
+- Exception test suite: all 64 tests in `tests/exceptions.rs` pass.
+- Full test suite: unit tests, integration tests, nesting checks, and `tests/oracle_gate.rs` pass.
+- Census audit: all 7 tests in `tests/census_fixture.rs` pass (0 files over 500 lines, 0 functions over 80 lines, 0 functions with >5 parameters excluding self).
+- Clippy: `cargo clippy --all-targets -- -D warnings` passes with 0 warnings.
+- Documentation checks: `python3 tools/check_feature_matrix.py` and `mdbook build docs/book` pass without error.
+
+---
+
+## 2026-11-23: Exception Handling Phase 4: Typed Exception Objects and Catch Matching
+
+Implemented C++17 typed exception objects, dynamic catch matching, class inheritance conversions, reference and value bindings, and exception object lifecycle management:
+
+### Summary of Work
+
+1. Implemented typed exception object representation and lifecycle:
+   - Exception objects allocate a heap buffer containing a 16-byte metadata header: `[offset 0: type_id (u32), offset 4: dtor_table_idx (i32), offset 8: flags (u32), offset 12: size (u32)]`, followed by the payload at offset 16.
+   - WebAssembly tag 0 carries the 32-bit pointer to this header.
+   - Thrown class objects initialize the payload via copy constructors or byte copies; throwing rvalue temporaries deactivates temporary cleanup and transfers ownership directly to the exception object.
+   - Registered class destructor table indices in `src/codegen/program_emit.rs` for indirect destructor invocation upon catch completion.
+   - Handlers destroy the exception object exactly once (via `call_indirect` on `dtor_table_idx`) and free the heap buffer when catching finishes normally or returns.
+2. Implemented dynamic catch matching helper (`__cppbolt_can_catch` in `src/codegen/exception_can_catch.rs`):
+   - Compiles a WebAssembly function testing exact type IDs, pointer conversions (`char*` to `const char*`, object pointers to `void*` or `const void*`), and derived-to-base class inheritance.
+   - Returns the non-negative subobject byte offset on a match, or -1 on non-match.
+   - Supports single and multiple inheritance hierarchies, adjusting pointer addresses to base subobjects.
+3. Implemented catch parameter binding and dispatch in `src/codegen/stmt_try.rs`:
+   - Lowered `try_table` clauses to route tag 0 into a typed dispatch block that evaluates each catch clause sequentially.
+   - Catch by reference (`catch (T&)` or `catch (const T&)`): binds the adjusted payload address directly to the local reference slot, enabling zero-copy access and in-place mutation without slicing.
+   - Catch by value (`catch (T)`): allocates local frame storage and invokes the copy constructor (or performs byte copy) from the adjusted payload address, slicing derived objects to base subobjects and destroying the local copy at catch scope exit.
+   - Unmatched clauses in a `try` block propagate the exception by rethrowing tag 0 to the enclosing scope.
+   - Preserved rethrow semantics (`throw;`): rethrows the active exception object pointer without premature destruction.
+4. Added semantic validation in `src/sema/exception_types.rs`:
+   - Validated thrown expressions, rejecting `void`, incomplete types, and abstract classes.
+   - Validated catch parameters, rejecting abstract classes caught by value and rejecting rvalue-reference catch handlers (`catch (T&&)`).
+5. Added end-to-end test coverage in `tests/exceptions.rs`:
+   - Verified throwing and catching classes by value, const reference, and non-const reference with in-place mutation.
+   - Verified single and multiple inheritance conversions with non-zero subobject offset adjustments.
+   - Verified exact-type handler precedence before base-class handlers.
+   - Verified unmatched exception propagation to outer `try` blocks.
+   - Verified single destruction of thrown objects on catch exit and preservation across rethrows (`throw;`).
+   - Verified compile-time diagnostics for invalid throw and catch types.
+
+### Verification Results
+
+- Exception test suite: all 56 tests in `tests/exceptions.rs` pass.
+- Repository test suite: all unittests and integration tests pass, including `tests/oracle_gate.rs` (native GCC/Clang comparisons).
+- Census audit: all 7 tests in `tests/census_fixture.rs` pass (0 files over 500 lines, 0 functions over 80 lines, 0 functions with >5 parameters excluding self).
+- Clippy: `cargo clippy --all-targets -- -D warnings` passes with 0 warnings.
+- Documentation: `mdbook build docs/book` succeeds with 0 errors, and `python3 tools/check_feature_matrix.py` validates all feature matrix test links.
+
+---
+
+## 2026-11-23: Exception Handling Phases 1–3 Hardening: Multiple Catches, Conditional Temporaries, and 32-Bit Payload ABI
+
+Hardened exception handling across Phase 1 (Infrastructure), Phase 2 (Scope-Aware Unwinding), and Phase 3 (Unwinding Correctness):
+
+### Summary of Work
+
+1. Implemented multiple `catch` clauses per `try` statement:
+   - Updated AST representation to `StmtKind::Try { try_body, catches: Vec<CatchClause> }`.
+   - Updated the parser to accept arbitrary sequences of catch handlers (`catch (Type param)` and `catch (...)`).
+   - Extended semantic analysis and template instantiation to scope and check each catch clause sequentially.
+   - Enforced ISO C++17 [except.handle] handler ordering: `catch (...)` must appear as the final clause in any try block.
+   - Lowered multiple catches to WebAssembly `try_table` clauses with sequential enclosing target blocks, branching to matching handlers and unwinding only local try-scope cleanups.
+2. Guarded normal-path and conditional temporary destruction:
+   - Added bitmask and non-null checks in `emit_clean_temporaries` and `emit_destroy_and_free_temp`.
+   - Guaranteed that unexecuted branches in ternary expressions (`?:`) and short-circuit operators (`&&`, `||`) never invoke destructors or `free()` on unconstructed temporary instances.
+3. Extended reference binding lifetime across conditional expressions:
+   - Transferred all candidate temporaries created in reference initializers (`const T& ref = cond ? T(1) : T(2)`) to the enclosing scope.
+   - Preserved lifetime of whichever instance was dynamically constructed until enclosing scope exit without double-freeing unconstructed instances.
+4. Validated thrown expression types and supported pointer payloads:
+   - Added semantic validation (`is_supported_32bit_throw_type`) enforcing that thrown expressions evaluate to 32-bit scalar, enum, or pointer types matching WebAssembly tag 0 (`(i32) -> void`).
+   - Rejected non-32-bit and floating-point throw expressions with informative diagnostics.
+   - Supported pointer payload passing (`throw "msg"` / `catch (const char* e)`).
+5. Validated 64-cleanup-object architecture:
+   - Confirmed compile-time error enforcement when local cleanup variables reach 64 objects (`test_exceeding_max_cleanup_objects_errors`).
+   - Confirmed graceful fallback for expressions with over 64 chained temporaries (`wide_string_concatenation_compiles`).
+
+### Verification Results
+
+- Exception test suite: all 41 tests in `tests/exceptions.rs` pass.
+- Census audit: all 7 tests in `tests/census_fixture.rs` pass (all source files under 500 lines, functions under 80 lines, parameters <= 5).
+- Oracle gate: all 909 corpus tests pass against native GCC/Clang compilers.
+
+---
+
 ## 2026-11-21: C++17 SFINAE, Two-Phase Lookup, <type_traits>, and Constant Evaluation
 
 Implemented C++17 template substitution failure handling, two-phase name lookup with argument-dependent lookup (ADL), expression SFINAE via `decltype`, LLVM libc++ 23.1.5 `<type_traits>` integration, and constant expression hardening.
@@ -827,3 +1132,64 @@ Addressed review findings in algorithms, iterator primitives, and header lookup.
 - Native oracle gate: all 50 mini_stl tests match native Clang and GCC byte-for-byte.
 - Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with more than 5 parameters excluding self.
 - Clippy: 0 warnings with `-D warnings` across all targets.
+
+---
+
+## 2026-11-22: WebAssembly Native Exception Handling and Scope-Aware Unwinding Redesign
+
+Implemented C++17 exception handling (`try`, `catch`, `throw`) in WebAssembly using the native `try_table` proposal and a dynamic 64-bit liveness tracking mask.
+
+### Summary of Work
+
+1. WebAssembly Primitives: Registered exception tag 0 `(i32) -> void` in WebAssembly module section 13 and added `OP_TRY_TABLE` (0x1f), `OP_THROW` (0x08), and `OP_THROW_REF` (0x0a).
+2. Lexer, Parser, and AST: Added `TokenKind::KwTry`, `KwCatch`, `KwThrow`, and `Ellipsis` (`...`). Lowered to `StmtKind::Throw(Option<Expr>)` and `StmtKind::Try { try_body, catch_param, catch_body }` in `src/parser/stmt_try.rs`.
+3. Scope-Aware Unwinding Engine (`src/codegen/unwind.rs`):
+   - Replaced per-call cleanup wrappers with function-level `try_table (catch_all_ref $unwind)` wrapping throwing and calling functions.
+   - Added a 64-bit dynamic liveness bitmask (`cleanup_mask_local: i64`) updated at construction and scope exit so destructors run only for active objects in reverse construction order.
+   - Added a compile-time check rejecting functions with 64 or more cleanup objects.
+   - Wrapped unwinding cleanups in `try_table (catch_all -> unreachable)` to invoke `std::terminate` when a destructor throws during unwinding.
+   - Added AST traversal (`stmt_can_throw_or_call`) to omit unwinding code from leaf functions.
+4. Try/Catch Statement Lowering (`src/codegen/stmt_try.rs`):
+   - Lowered typed catches with payload binding into frame slots.
+   - Supported catch-all (`catch (...)`) with `exnref` capture.
+   - Restricted catch-entry cleanups to objects constructed inside the `try` block, preserving outer local objects.
+   - Lowered `throw;` to rethrow active exceptions (`throw_ref` or `throw 0`), and emitted `unreachable` (`std::terminate`) when evaluated outside catch blocks.
+5. Constructor Failure Handling (`src/codegen/function_lifecycle.rs`):
+   - Registered base and member initializers in the cleanup mask, destroying completed subobjects if a subsequent initializer or constructor body throws.
+6. Shadow Stack Integrity: Restored caller frame pointer on the shadow stack (`global 0`) in the function unwind handler before propagating unhandled exceptions.
+7. Tests: Added 15 integration tests in `tests/exceptions.rs` covering cross-function unwinding, nested try blocks, loop allocations, throwing destructors, shadow-stack integrity, rethrow termination, and cleanup limits.
+
+### Verification Results
+
+- All 143 unit tests passed (`cargo test --lib`).
+- All 15 exception integration tests passed (`cargo test --test exceptions`).
+- All 16 C++17 regressions passed (`cargo test --test cxx17_regressions`).
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with > 5 parameters without receiver.
+
+---
+
+## 2026-11-22: Arbitrary Nested Catch Depth and Temporary Unwinding Hardening
+
+Hardened the function-level exception unwinding engine by removing the fixed catch-depth clamp and tracking temporary object cleanups across expressions.
+
+### Summary of Work
+
+1. Arbitrary Catch Nesting Depth (`src/codegen/function_context.rs`, `src/codegen/stmt_try.rs`):
+   - Replaced the fixed four-slot `exnref` clamp with an AST pre-pass (`max_catch_depth`) that computes the peak catch nesting depth for each function.
+   - Allocated `(max_depth + 1)` `TYPE_EXNREF` locals to assign dedicated slots to each nested handler, separating the function unwind handler (`unwind_exnref_local`) from active catch scopes.
+   - Saved previous exception payloads on the shadow stack before entering nested handlers and restored them upon handler exit. This ensures that `throw;` correctly rethrows the enclosing handler's exception.
+2. Temporary Object Unwinding (`src/codegen/call_args.rs`, `src/codegen/expr_call.rs`, `src/codegen/raii.rs`, `src/codegen/unwind.rs`):
+   - Added temporary cleanup registration (`register_temp_cleanup`) so fully constructed temporaries run destructors and free heap buffers if a subsequent argument expression or called function throws.
+   - Preserved nested sub-expression temporaries during by-value calls (`compile_call_arguments_and_deactivate_byval`), deactivating only the outer argument passed to the callee.
+   - Supported reference lifetime extension (`stmt_var.rs`) by transferring temporaries bound to references into lexical scope tracking.
+   - Permitted statements with wide chained expressions to compile cleanly by returning `None` from `register_temp_cleanup` when the 64-bit cleanup mask is saturated, relying on normal full-expression destruction.
+3. Test Renaming and Consolidation:
+   - Renamed `tests/exceptions_prototype.rs` to `tests/exceptions.rs` and expanded the suite to 32 tests covering nested catch depth, argument failures, chained temporaries, and lifetime extension.
+
+### Verification Results
+
+- All 143 unit tests passed (`cargo test --lib`).
+- All 32 exception integration tests passed (`cargo test --test exceptions`).
+- All 11 nesting stress tests passed (`cargo test --test nesting`).
+- All 16 C++17 regressions passed (`cargo test --test cxx17_regressions`).
+- Census audit: 0 files over 500 lines, 0 functions over 80 lines, 0 functions with > 5 parameters without receiver.

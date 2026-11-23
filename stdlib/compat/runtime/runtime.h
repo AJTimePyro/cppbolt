@@ -14,6 +14,10 @@ extern "C" {
     int read_char(void);
 }
 
+inline void abort() {
+    exit(134);
+}
+
 inline void* memcpy(void* dest, const void* src, size_t n) {
     char* d = (char*)dest;
     const char* s = (const char*)src;
@@ -68,6 +72,7 @@ extern "C" {
     void* malloc(size_t);
     void free(void*);
     void exit(int);
+    void abort();
     void* memcpy(void*, const void*, size_t);
     void* memmove(void*, const void*, size_t);
     void* memset(void*, int, size_t);

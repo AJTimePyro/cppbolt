@@ -210,6 +210,7 @@ impl Sema {
             name: global_name.clone(),
             ty: ty.clone(),
             is_global: true,
+            is_param: false,
             stack_offset: 0,
         };
         self.global_vars.insert(global_name.clone(), sym.clone());
@@ -222,14 +223,36 @@ impl Sema {
             .with_kind(crate::diagnostics::ErrorKind::Internal));
         };
         scope.vars.insert(name.to_string(), sym);
+        self.var_try_depths.insert(name.to_string(), self.try_depth);
         Ok(())
     }
 
     /// Registers a variable with automatic storage duration.
-    fn declare_local_var(
+    pub(super) fn declare_catch_param(
         &mut self,
         name: &str,
         ty: &Type,
+        line: usize,
+        col: usize,
+    ) -> Result<(), CompileError> {
+        self.declare_local_var_with_param(name, ty, true, line, col)
+    }
+
+    pub(super) fn declare_local_var(
+        &mut self,
+        name: &str,
+        ty: &Type,
+        line: usize,
+        col: usize,
+    ) -> Result<(), CompileError> {
+        self.declare_local_var_with_param(name, ty, false, line, col)
+    }
+
+    fn declare_local_var_with_param(
+        &mut self,
+        name: &str,
+        ty: &Type,
+        is_param: bool,
         line: usize,
         col: usize,
     ) -> Result<(), CompileError> {
@@ -239,6 +262,7 @@ impl Sema {
             name: name.to_string(),
             ty: ty.clone(),
             is_global: false,
+            is_param,
             stack_offset: -self.current_frame_size,
         };
         let Some(scope) = self.scopes.last_mut() else {
@@ -250,6 +274,7 @@ impl Sema {
             .with_kind(crate::diagnostics::ErrorKind::Internal));
         };
         scope.vars.insert(name.to_string(), sym);
+        self.var_try_depths.insert(name.to_string(), self.try_depth);
         Ok(())
     }
 }

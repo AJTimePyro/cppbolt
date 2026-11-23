@@ -10,9 +10,12 @@ impl<'a> Codegen<'a> {
         let address_taken = Self::collect_address_taken(program);
         self.lay_out_globals(program);
         let candidates = self.build_candidates(program, &address_taken);
-        let reachable = Self::compute_reachable(&candidates);
+        let mut reachable = Self::compute_reachable(&candidates);
+        let has_exceptions = self.mark_exception_destructors_reachable(&candidates, &mut reachable);
+        if has_exceptions {
+            Self::mark_terminate_reachable(&candidates, &mut reachable);
+        }
         let all_reachable_calls = Self::collect_reachable_calls(&candidates, &reachable);
-
         let has_deleting_dtors = self.has_deleting_dtors();
         let has_new_or_delete = self.has_new_or_delete(&candidates, &reachable);
         let need_printf = all_reachable_calls
@@ -25,12 +28,19 @@ impl<'a> Codegen<'a> {
             || all_reachable_calls.contains("free")
             || has_deleting_dtors
             || has_new_or_delete
-            || !self.sema.struct_layouts.is_empty();
+            || !self.sema.struct_layouts.is_empty()
+            || has_exceptions;
         let has_indirect_calls = self.has_indirect_calls(&candidates, &reachable);
         let has_vtables = self.has_vtables();
+        let has_struct_dtors = self
+            .sema
+            .struct_order
+            .iter()
+            .any(|name| self.lookup_struct_dtor(name).is_some());
         // Vtables, function pointers, and indirect calls all need a funcref
         // table. Slot 0 is reserved for the pure-virtual trap.
-        let need_table = has_vtables || !address_taken.is_empty() || has_indirect_calls;
+        let need_table =
+            has_vtables || !address_taken.is_empty() || has_indirect_calls || has_struct_dtors;
 
         let trap_func_idx = self.register_runtime_functions(need_printf, need_alloc, need_table);
         Plan {
@@ -311,6 +321,15 @@ impl<'a> Codegen<'a> {
                 worklist.push(idx);
             }
         }
+        Self::propagate_reachability(candidates, &mut reachable, worklist);
+        reachable
+    }
+
+    fn propagate_reachability(
+        candidates: &[FuncCandidate<'_>],
+        reachable: &mut HashSet<usize>,
+        mut worklist: Vec<usize>,
+    ) {
         while let Some(idx) = worklist.pop() {
             for call_target in &candidates[idx].calls {
                 for (t_idx, t_cand) in candidates.iter().enumerate() {
@@ -329,7 +348,23 @@ impl<'a> Codegen<'a> {
                 }
             }
         }
-        reachable
+    }
+
+    /// Runtime termination paths call `std::terminate` directly. It is inline
+    /// in the stdlib, so mark it reachable even if the program only installs a
+    /// handler and never calls it by name.
+    fn mark_terminate_reachable(candidates: &[FuncCandidate<'_>], reachable: &mut HashSet<usize>) {
+        let Some(idx) = candidates
+            .iter()
+            .position(|c| c.aliases.iter().any(|a| a == "std::terminate"))
+        else {
+            return;
+        };
+        let mut worklist = Vec::new();
+        if reachable.insert(idx) {
+            worklist.push(idx);
+        }
+        Self::propagate_reachability(candidates, reachable, worklist);
     }
 
     fn collect_reachable_calls(
@@ -407,50 +442,5 @@ impl<'a> Codegen<'a> {
                 .map(|l| l.has_vtable)
                 .unwrap_or(false)
         })
-    }
-
-    fn register_runtime_functions(
-        &mut self,
-        need_printf: bool,
-        need_alloc: bool,
-        need_table: bool,
-    ) -> Option<u32> {
-        if need_printf {
-            let func_idx = (self.module.imports.len() + self.module.functions.len()) as u32;
-            let t_printf = self
-                .module
-                .add_type(vec![TYPE_I32, TYPE_I32], vec![TYPE_I32]);
-            self.module.functions.push(t_printf);
-            self.func_indices.insert("printf".to_string(), func_idx);
-            self.func_indices
-                .insert("std::printf".to_string(), func_idx);
-            self.func_printf = func_idx;
-        }
-
-        if need_alloc {
-            let func_malloc = (self.module.imports.len() + self.module.functions.len()) as u32;
-            let t_malloc = self.module.add_type(vec![TYPE_I32], vec![TYPE_I32]);
-            self.module.functions.push(t_malloc);
-            self.func_indices.insert("malloc".to_string(), func_malloc);
-
-            let func_free = (self.module.imports.len() + self.module.functions.len()) as u32;
-            let t_free = self.module.add_type(vec![TYPE_I32], vec![]);
-            self.module.functions.push(t_free);
-            self.func_indices.insert("free".to_string(), func_free);
-        }
-
-        if need_table {
-            let func_trap = (self.module.imports.len() + self.module.functions.len()) as u32;
-            let t_trap = self.module.add_type(vec![], vec![]);
-            self.module.functions.push(t_trap);
-            self.func_indices
-                .insert("__cxa_pure_virtual".to_string(), func_trap);
-            // Table slot 0 points at the trap so an unfilled vtable slot is a
-            // deterministic dynamic error.
-            self.vtable_func_indices = vec![func_trap];
-            Some(func_trap)
-        } else {
-            None
-        }
     }
 }

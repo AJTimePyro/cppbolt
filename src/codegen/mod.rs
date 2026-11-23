@@ -7,6 +7,7 @@ mod call_types;
 mod cond;
 mod construct;
 mod emit_context;
+mod exception_can_catch;
 mod expr;
 mod expr_assign;
 mod expr_binary;
@@ -38,14 +39,21 @@ mod overload;
 mod program;
 mod program_emit;
 mod program_prepare;
+mod program_prepare_runtime;
 mod raii;
 mod stmt;
 mod stmt_loop;
 mod stmt_return;
+mod stmt_throw;
+mod stmt_try;
+mod stmt_try_param;
 mod stmt_var;
 mod stmt_var_init;
 mod strings;
 mod type_of;
+mod unwind;
+
+pub(super) const UNCAUGHT_COUNT_GLOBAL: u32 = 3;
 
 use crate::ast::types::{Type, WasmType};
 use crate::ast::*;
@@ -59,7 +67,7 @@ use analysis::{
     FuncCandidate, FuncDeclRef, check_stmt_has_new_delete, collect_address_taken_expr,
     collect_address_taken_stmt, collect_expr_calls, collect_stmt_calls, collect_type_lifecycle,
 };
-use analysis_vars::collect_static_vars;
+use analysis_vars::{check_stmt_has_try_throw, collect_static_vars};
 use emit_context::{
     ArrayLocal, ArrayLoop, ArraySlots, BinaryTypes, CallSite, CtorCall, GlobalInit, MemberAccess,
     NamedCall, ScalarAssign, SwitchSlots,
@@ -84,7 +92,7 @@ pub struct Codegen<'a> {
     pub next_data_offset: u32,
     pub func_indices: HashMap<String, u32>,
     pub func_printf: u32,
-    pub loop_depths: Vec<(u32, u32, usize)>,
+    pub loop_depths: Vec<(u32, u32, usize, usize)>,
     pub current_block_depth: u32,
     /// Per class: `(vptr_offset_in_object, vtable_data_address)` for every
     /// polymorphic subobject of that class.
@@ -95,6 +103,7 @@ pub struct Codegen<'a> {
     pub global_inits: Vec<(String, Type, Option<Expr>)>,
     pub global_dtors: Vec<(String, u32)>,
     pub func_table_indices: HashMap<String, u32>,
+    pub dtor_table_indices: HashMap<String, u32>,
     /// The position of the statement being lowered.
     ///
     /// Lowering errors that cannot name an expression report this position,
@@ -126,6 +135,9 @@ impl<'a> Codegen<'a> {
         let t_v_i32 = module.add_type(vec![], vec![TYPE_I32]);
         // Type 4: (i32) -> void (exit)
         let t_exit = module.add_type(vec![TYPE_I32], vec![]);
+        // Tag 0: (i32) -> void (C++ exception tag)
+        let t_tag = module.add_type(vec![TYPE_I32], vec![]);
+        module.tags.push(t_tag);
 
         // Host imports
         module
@@ -171,6 +183,7 @@ impl<'a> Codegen<'a> {
             global_inits: Vec::new(),
             global_dtors: Vec::new(),
             func_table_indices: HashMap::new(),
+            dtor_table_indices: HashMap::new(),
             current_line: 1,
             current_col: 1,
             current_scratch1: std::cell::Cell::new(0),
@@ -186,6 +199,8 @@ enum VarBinding {
         name: String,
         previous_offset: Option<u32>,
         previous_type: Option<Type>,
+        previous_try_depth: Option<u32>,
+        previous_is_param: Option<bool>,
     },
     Static {
         name: String,
@@ -197,6 +212,8 @@ enum VarBinding {
         previous_type: Option<Type>,
     },
 }
+
+pub type ScopeObjectEntry = (String, Type, u32, Option<usize>);
 
 /// Per-function lowering state.
 ///
@@ -213,7 +230,21 @@ pub struct FunctionContext {
     pub ret_temp_i32: u32,
     pub ret_temp_i64: u32,
     pub ret_temp_f64: u32,
+    pub exnref_local: u32,
+    pub unwind_exnref_local: u32,
+    pub max_catch_depth: u32,
+    pub cleanup_mask_local: u32,
+    pub last_exn_val_local: u32,
+    pub cleanup_entries: Vec<function_context::CleanupEntry>,
+    pub in_catch_all: bool,
+    pub catch_depth: usize,
+    /// Number of enclosing try blocks at the current lowering point.
+    pub try_depth: u32,
+    pub active_exception_slots: Vec<u32>,
     pub var_offsets: HashMap<String, u32>,
+    pub var_is_param: HashMap<String, bool>,
+    /// Try depth at which each local was declared, for throw move-eligibility.
+    pub var_try_depths: HashMap<String, u32>,
     pub var_types: HashMap<String, Type>,
     pub static_var_offsets: HashMap<String, (u32, Type)>,
     pub next_local_offset: u32,
@@ -223,10 +254,10 @@ pub struct FunctionContext {
     pub frame_size_patches: Vec<usize>,
     /// Bindings shadowed by each active block, innermost last.
     var_scopes: Vec<Vec<VarBinding>>,
-    /// Objects to destroy at scope exit, in construction order.
-    pub scope_objects: Vec<Vec<(String, Type, u32)>>,
-    /// Statement temporaries: `(class, frame slot, needs destructor)`.
-    pub temp_objects: Vec<(String, u32, bool)>,
+    /// Objects to destroy at scope exit, in construction order: (name, ty, offset, cleanup_idx).
+    pub scope_objects: Vec<Vec<ScopeObjectEntry>>,
+    /// Statement temporaries: `(class, frame slot, needs destructor, cleanup_idx)`.
+    pub temp_objects: Vec<(String, u32, bool, Option<usize>)>,
     /// Backing-array elements whose destructors run at full-expression end.
     pub initializer_list_temps: Vec<(String, u32)>,
     pub current_class: Option<String>,
@@ -252,7 +283,19 @@ impl Default for FunctionContext {
             ret_temp_i32: 6,
             ret_temp_i64: 7,
             ret_temp_f64: 8,
+            exnref_local: 9,
+            unwind_exnref_local: 9,
+            max_catch_depth: 0,
+            cleanup_mask_local: 10,
+            last_exn_val_local: 11,
+            cleanup_entries: Vec::new(),
+            in_catch_all: false,
+            catch_depth: 0,
+            try_depth: 0,
+            active_exception_slots: Vec::new(),
             var_offsets: HashMap::new(),
+            var_is_param: HashMap::new(),
+            var_try_depths: HashMap::new(),
             var_types: HashMap::new(),
             static_var_offsets: HashMap::new(),
             next_local_offset: 16,
@@ -289,9 +332,13 @@ impl FunctionContext {
                     name,
                     previous_offset,
                     previous_type,
+                    previous_try_depth,
+                    previous_is_param,
                 } => {
                     restore_binding(&mut self.var_offsets, name.clone(), previous_offset);
-                    restore_binding(&mut self.var_types, name, previous_type);
+                    restore_binding(&mut self.var_types, name.clone(), previous_type);
+                    restore_binding(&mut self.var_try_depths, name.clone(), previous_try_depth);
+                    restore_binding(&mut self.var_is_param, name, previous_is_param);
                 }
                 VarBinding::Static {
                     name,
@@ -310,13 +357,25 @@ impl FunctionContext {
     }
 
     pub fn bind_local(&mut self, name: String, offset: u32, ty: Type) {
+        self.bind_var_internal(name, offset, ty, false);
+    }
+
+    pub fn bind_param(&mut self, name: String, offset: u32, ty: Type) {
+        self.bind_var_internal(name, offset, ty, true);
+    }
+
+    fn bind_var_internal(&mut self, name: String, offset: u32, ty: Type, is_param: bool) {
         let previous_offset = self.var_offsets.insert(name.clone(), offset);
+        let previous_try_depth = self.var_try_depths.insert(name.clone(), self.try_depth);
         let previous_type = self.var_types.insert(name.clone(), ty);
+        let previous_is_param = self.var_is_param.insert(name.clone(), is_param);
         if let Some(scope) = self.var_scopes.last_mut() {
             scope.push(VarBinding::Local {
                 name,
                 previous_offset,
                 previous_type,
+                previous_try_depth,
+                previous_is_param,
             });
         }
     }

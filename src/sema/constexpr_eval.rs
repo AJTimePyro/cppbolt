@@ -10,6 +10,7 @@ pub struct ConstexprEnv<'a> {
     pub constants: Option<&'a HashMap<String, i128>>,
     pub pack_lengths: Option<&'a HashMap<String, usize>>,
     pub struct_aligns: Option<&'a HashMap<String, usize>>,
+    pub sema: Option<&'a super::Sema>,
 }
 
 /// Evaluates an expression as an integral constant expression.
@@ -22,6 +23,7 @@ pub fn eval_integral_constexpr(
         constants: None,
         pack_lengths: None,
         struct_aligns: None,
+        sema: None,
     };
     eval_integral_constexpr_with_env(expr, env)
 }
@@ -38,6 +40,23 @@ pub fn eval_constexpr_with_context(
         constants,
         pack_lengths,
         struct_aligns: None,
+        sema: None,
+    };
+    eval_integral_constexpr_with_env(expr, env)
+}
+
+/// Evaluates a constant expression with access to semantic state.
+pub fn eval_constexpr_with_sema(
+    expr: &Expr,
+    sema: &super::Sema,
+    constants: Option<&HashMap<String, i128>>,
+) -> Result<i128, CompileError> {
+    let env = ConstexprEnv {
+        struct_sizes: Some(&sema.struct_sizes),
+        constants,
+        pack_lengths: None,
+        struct_aligns: Some(&sema.struct_aligns),
+        sema: Some(sema),
     };
     eval_integral_constexpr_with_env(expr, env)
 }
@@ -112,6 +131,24 @@ pub fn eval_integral_constexpr_with_env(
             }
         }
         Expr::Cast { expr: inner, .. } => eval_integral_constexpr_with_env(inner, env),
+        Expr::SizeofType(..)
+        | Expr::AlignofType(..)
+        | Expr::SizeofExpr(..)
+        | Expr::SizeofPack { .. }
+        | Expr::Noexcept(..) => eval_query_constexpr(expr, env),
+        _ => {
+            let pos = expr.pos();
+            Err(CompileError::new(
+                "expression is not an integer constant expression",
+                pos.line,
+                pos.col,
+            ))
+        }
+    }
+}
+
+fn eval_query_constexpr(expr: &Expr, env: ConstexprEnv<'_>) -> Result<i128, CompileError> {
+    match expr {
         Expr::SizeofType(ty) => {
             let empty = HashMap::new();
             let sizes = env.struct_sizes.unwrap_or(&empty);
@@ -134,14 +171,25 @@ pub fn eval_integral_constexpr_with_env(
                 ))
             }
         }
-        _ => {
-            let pos = expr.pos();
-            Err(CompileError::new(
-                "expression is not an integer constant expression",
-                pos.line,
-                pos.col,
-            ))
+        Expr::Noexcept(inner, pos) => {
+            if let Some(sema) = env.sema {
+                let throws = sema.is_potentially_throwing(inner);
+                Ok(if throws { 0 } else { 1 })
+            } else if contains_throw_or_call(inner) {
+                Err(CompileError::new(
+                    "expression is not an integer constant expression",
+                    pos.line,
+                    pos.col,
+                ))
+            } else {
+                Ok(1)
+            }
         }
+        _ => Err(CompileError::new(
+            "expression is not an integer constant expression",
+            expr.pos().line,
+            expr.pos().col,
+        )),
     }
 }
 
@@ -258,5 +306,28 @@ fn eval_sizeof_expr(
             0,
             0,
         )),
+    }
+}
+
+fn contains_throw_or_call(expr: &Expr) -> bool {
+    match expr {
+        Expr::Throw(..) | Expr::Call { .. } | Expr::New { .. } => true,
+        Expr::Noexcept(..) => false,
+        Expr::Unary { expr: inner, .. } | Expr::Cast { expr: inner, .. } => {
+            contains_throw_or_call(inner)
+        }
+        Expr::Binary { left, right, .. } => {
+            contains_throw_or_call(left) || contains_throw_or_call(right)
+        }
+        Expr::Ternary {
+            cond,
+            then_expr,
+            else_expr,
+        } => {
+            contains_throw_or_call(cond)
+                || contains_throw_or_call(then_expr)
+                || contains_throw_or_call(else_expr)
+        }
+        _ => false,
     }
 }

@@ -1,17 +1,67 @@
 use super::*;
 
 impl<'a> Codegen<'a> {
+    fn emit_if_cleanup_bit_set(idx: usize, ctx: &FunctionContext, code: &mut Vec<u8>) {
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.cleanup_mask_local);
+        code.push(OP_I64_CONST);
+        crate::wasm::write_i64(code, 1_i64 << idx);
+        code.push(OP_I64_AND);
+        code.push(OP_I64_EQZ);
+        code.push(OP_I32_EQZ);
+        code.push(OP_IF);
+        code.push(0x40);
+    }
+
+    fn emit_destroy_and_free_slot(
+        slot: u32,
+        dtor_idx: Option<u32>,
+        free_idx: Option<u32>,
+        fp_local: u32,
+        code: &mut Vec<u8>,
+    ) {
+        Self::emit_slot_load(slot, fp_local, code);
+        code.push(OP_IF);
+        code.push(0x40);
+        if let Some(dtor) = dtor_idx {
+            Self::emit_slot_load(slot, fp_local, code);
+            code.push(OP_CALL);
+            write_u32(code, dtor);
+        }
+        if let Some(free) = free_idx {
+            Self::emit_slot_load(slot, fp_local, code);
+            code.push(OP_CALL);
+            write_u32(code, free);
+        }
+        Self::emit_slot_zero(slot, fp_local, code);
+        code.push(OP_END);
+    }
+
     pub(super) fn emit_clean_temporaries(&mut self, ctx: &mut FunctionContext, code: &mut Vec<u8>) {
         let temps = std::mem::take(&mut ctx.temp_objects);
-        for (sname, temp_slot, should_destroy) in temps.iter().rev() {
-            if *should_destroy && let Some(dtor_idx) = self.lookup_struct_dtor(sname) {
-                Self::emit_slot_load(*temp_slot, ctx.fp_local, code);
-                code.push(OP_CALL);
-                write_u32(code, dtor_idx);
+        if !temps.is_empty() {
+            let free_idx = self.func_indices.get("free").copied();
+            for (sname, temp_slot, should_destroy, clean_idx) in temps.iter().rev() {
+                let dtor_idx = if *should_destroy {
+                    self.lookup_struct_dtor(sname)
+                } else {
+                    None
+                };
+                if let Some(idx) = clean_idx {
+                    Self::emit_if_cleanup_bit_set(*idx, ctx, code);
+                    self.emit_mark_cleanup_inactive(*idx, ctx, code);
+                }
+                Self::emit_destroy_and_free_slot(
+                    *temp_slot,
+                    dtor_idx,
+                    free_idx,
+                    ctx.fp_local,
+                    code,
+                );
+                if clean_idx.is_some() {
+                    code.push(OP_END);
+                }
             }
-            Self::emit_slot_load(*temp_slot, ctx.fp_local, code);
-            code.push(OP_CALL);
-            write_u32(code, self.func_indices["free"]);
         }
         let list_temps = std::mem::take(&mut ctx.initializer_list_temps);
         for (sname, offset) in list_temps.iter().rev() {
@@ -25,21 +75,39 @@ impl<'a> Codegen<'a> {
 
     pub(super) fn emit_dtor_for_scope(
         &self,
-        objs: &[(String, Type, u32)],
+        objs: &[(String, Type, u32, Option<usize>)],
         ctx: &FunctionContext,
         code: &mut Vec<u8>,
     ) {
-        for (_name, ty, offset) in objs.iter().rev() {
-            if let Type::Struct(sname) = ty.strip_const()
+        for (_name, ty, offset, clean_idx) in objs.iter().rev() {
+            if ty.is_reference()
+                && let Some(inner) = ty.deref_type()
+                && let Type::Struct(sname) = inner.strip_const()
                 && let Some(dtor_idx) = self.lookup_struct_dtor(sname)
             {
-                code.push(OP_LOCAL_GET);
-                write_u32(code, ctx.fp_local);
-                code.push(OP_I32_CONST);
-                write_i32(code, *offset as i32);
-                code.push(OP_I32_ADD); // this
-                code.push(OP_CALL);
-                write_u32(code, dtor_idx);
+                if let Some(idx) = clean_idx {
+                    Self::emit_if_cleanup_bit_set(*idx, ctx, code);
+                    self.emit_mark_cleanup_inactive(*idx, ctx, code);
+                    self.emit_destroy_and_free_temp(*offset, dtor_idx, ctx, code);
+                    code.push(OP_END);
+                } else {
+                    self.emit_destroy_and_free_temp(*offset, dtor_idx, ctx, code);
+                }
+            } else {
+                if let Some(idx) = clean_idx {
+                    self.emit_mark_cleanup_inactive(*idx, ctx, code);
+                }
+                if let Type::Struct(sname) = ty.strip_const()
+                    && let Some(dtor_idx) = self.lookup_struct_dtor(sname)
+                {
+                    code.push(OP_LOCAL_GET);
+                    write_u32(code, ctx.fp_local);
+                    code.push(OP_I32_CONST);
+                    write_i32(code, *offset as i32);
+                    code.push(OP_I32_ADD); // this
+                    code.push(OP_CALL);
+                    write_u32(code, dtor_idx);
+                }
             }
         }
     }
@@ -53,7 +121,7 @@ impl<'a> Codegen<'a> {
         if !return_type.is_reference()
             && let Type::Struct(sname) = return_type.strip_const()
         {
-            let temp_slot = ctx.alloc_frame(4, 4)?;
+            let (temp_slot, clean_idx) = self.acquire_temp_slot_and_cleanup(sname, ctx, code)?;
             code.push(OP_LOCAL_SET);
             write_u32(code, ctx.scratch1);
             code.push(OP_LOCAL_GET);
@@ -63,11 +131,59 @@ impl<'a> Codegen<'a> {
             code.push(OP_I32_STORE);
             write_u32(code, 2);
             write_u32(code, temp_slot);
-            ctx.temp_objects.push((sname.clone(), temp_slot, true));
+            ctx.temp_objects
+                .push((sname.clone(), temp_slot, true, clean_idx));
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.scratch1);
         }
         Ok(())
+    }
+
+    pub(super) fn emit_destroy_and_free_temp(
+        &self,
+        slot: u32,
+        dtor_idx: u32,
+        ctx: &FunctionContext,
+        code: &mut Vec<u8>,
+    ) {
+        Self::emit_destroy_and_free_slot(
+            slot,
+            Some(dtor_idx),
+            self.func_indices.get("free").copied(),
+            ctx.fp_local,
+            code,
+        );
+    }
+
+    pub(super) fn acquire_temp_slot_and_cleanup(
+        &mut self,
+        sname: &str,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(u32, Option<usize>), CompileError> {
+        let Some(dtor_idx) = self.lookup_struct_dtor(sname) else {
+            let slot = ctx.alloc_frame(4, 4)?;
+            return Ok((slot, None));
+        };
+        let reused = ctx
+            .cleanup_entries
+            .iter()
+            .find(|e| {
+                e.is_temp
+                    && e.dtor_idx == dtor_idx
+                    && !ctx.temp_objects.iter().any(|t| t.3 == Some(e.index))
+            })
+            .map(|e| (e.offset, e.index));
+
+        if let Some((slot, idx)) = reused {
+            self.emit_mark_cleanup_active(idx, ctx, code);
+            Ok((slot, Some(idx)))
+        } else {
+            let slot = ctx.alloc_frame(4, 4)?;
+            let idx = ctx.register_temp_cleanup(sname.to_string(), dtor_idx, slot)?;
+            self.emit_mark_cleanup_active(idx, ctx, code);
+            Ok((slot, Some(idx)))
+        }
     }
 
     pub(super) fn emit_copy_struct(

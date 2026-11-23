@@ -12,6 +12,18 @@
 #endif
 
 // Upstream libc++ compatibility definitions
+#ifndef _LIBCPP_EXPORTED_FROM_ABI
+#define _LIBCPP_EXPORTED_FROM_ABI
+#endif
+
+#ifndef _LIBCPP_HIDDEN
+#define _LIBCPP_HIDDEN
+#endif
+
+#ifndef _LIBCPP_NORETURN
+#define _LIBCPP_NORETURN
+#endif
+
 #ifndef _LIBCPP_HIDE_FROM_ABI
 #define _LIBCPP_HIDE_FROM_ABI
 #endif

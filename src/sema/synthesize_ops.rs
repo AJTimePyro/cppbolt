@@ -103,6 +103,7 @@ if QualifiedName::new(s).class_short_name() == short))
         }));
         methods.push(FunctionDecl {
             qualifiers: FunctionQualifiers::default(),
+            noexcept_expr: None,
             name: name.to_string(),
             return_type: Type::Void,
             params: vec![Param {
@@ -163,6 +164,7 @@ fn synthesize_move_constructor(
     }));
     methods.push(FunctionDecl {
         qualifiers: FunctionQualifiers::default(),
+        noexcept_expr: None,
         name: name.to_string(),
         return_type: Type::Void,
         params: vec![Param {
@@ -206,6 +208,7 @@ if QualifiedName::new(s).class_short_name() == short))
         let body_stmts = synthesize_assignment_body(base_classes, fields, false);
         methods.push(FunctionDecl {
             qualifiers: FunctionQualifiers::default(),
+            noexcept_expr: None,
             name: "operator=".to_string(),
             return_type: Type::Reference(Box::new(Type::Struct(name.to_string()))),
             params: vec![Param {
@@ -239,6 +242,7 @@ fn synthesize_move_assignment(
     let body_stmts = synthesize_assignment_body(base_classes, fields, true);
     methods.push(FunctionDecl {
         qualifiers: FunctionQualifiers::default(),
+        noexcept_expr: None,
         name: "operator=".to_string(),
         return_type: Type::Reference(Box::new(Type::Struct(name.to_string()))),
         params: vec![Param {

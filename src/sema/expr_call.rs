@@ -6,7 +6,7 @@ use super::template_deduce::split_template_call_name;
 use super::*;
 /// The return type of a function pointer or of a function type.
 fn function_return_type(ty: &Type) -> Option<Type> {
-    match ty.strip_const() {
+    match ty.strip_reference().strip_const() {
         Type::Pointer(inner) => function_return_type(inner),
         Type::Function { return_type, .. } => Some((**return_type).clone()),
         Type::BoundMemberFunction { member_type, .. } => function_return_type(member_type),

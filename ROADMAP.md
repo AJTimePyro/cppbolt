@@ -33,6 +33,9 @@ These features build naturally on existing language constructs without requiring
 - [x] **C++17 Selection Initializers**: Parse and desugar `if (init; cond)` and `switch (init; cond)` with scope isolated to the selection body.
 - [x] **Non-Static Data Member Initializers (NSDMI)**: Support in-class field defaults (`= expr`, `{ ... }`) in constructors and aggregate initialization.
 - [x] **Pointers to Members & Multiple Inheritance**: C++17 data-member and member-function pointers (`T C::*`, `R (C::*)()`), `.*`/`->*` application and fold expressions, virtual and multiple-inheritance subobject adjustments, base-to-derived conversions, and direct/indirect base layout.
+- [x] **WebAssembly Exception Handling & Scope-Aware Unwinding**: Native WebAssembly `try_table` unwinding, 64-bit dynamic liveness mask, reverse-destruction order, scope-isolated try/catch handlers, `catch (...)`, typed catch with payload binding, rethrowing `throw;`, terminating destructors (`std::terminate`), constructor subobject cleanup, and shadow-stack frame integrity.
+- [x] **Standard Exception Hierarchy & RTTI Matching**: Class-based exception types (`std::exception`, `std::runtime_error`, `std::logic_error`, `std::out_of_range`), inheritance-based catch matching restricted to unambiguous public bases, and dynamic `std::uncaught_exceptions()` tracking.
+- [x] **C++17 `noexcept` Specifications & Runtime Enforcement**: Function `noexcept`, `noexcept(true)`, `noexcept(false)`, and constant-expression / template-dependent `noexcept(expr)` specifications, function type system integration and pointer conversions, the unevaluated `noexcept(expr)` operator, runtime termination via `std::terminate`, and default `noexcept(true)` destructors.
 
 ---
 

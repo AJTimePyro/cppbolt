@@ -3,6 +3,70 @@
 use super::analyze::this_param;
 use super::*;
 
+fn stmt_contains_return(s: &Stmt) -> Option<(usize, usize)> {
+    match &s.kind {
+        StmtKind::Return(_) => Some((s.line, s.col)),
+        StmtKind::Compound(stmts) | StmtKind::VarDeclGroup(stmts) => {
+            stmts.iter().find_map(stmt_contains_return)
+        }
+        StmtKind::If {
+            branches,
+            else_stmt,
+        } => branches
+            .iter()
+            .find_map(|(_, b)| stmt_contains_return(b))
+            .or_else(|| else_stmt.as_deref().and_then(stmt_contains_return)),
+        StmtKind::While { body, .. }
+        | StmtKind::DoWhile { body, .. }
+        | StmtKind::For { body, .. }
+        | StmtKind::RangeFor { body, .. }
+        | StmtKind::Switch { body, .. } => stmt_contains_return(body),
+        StmtKind::Try { try_body, catches } => stmt_contains_return(try_body)
+            .or_else(|| catches.iter().find_map(|c| stmt_contains_return(&c.body))),
+        _ => None,
+    }
+}
+
+/// Falling off the end of a constructor or destructor function-try-block handler
+/// rethrows the handled exception ([except.handle] p15). Return statements in a
+/// constructor function-try-block handler are forbidden by [except.handle] p17.
+pub(super) fn desugar_function_try_block(
+    is_ctor: bool,
+    is_dtor: bool,
+    body: &mut Stmt,
+) -> Result<(), CompileError> {
+    if !is_ctor && !is_dtor {
+        return Ok(());
+    }
+    let StmtKind::Try { catches, .. } = &mut body.kind else {
+        return Ok(());
+    };
+    for clause in catches {
+        if is_ctor && let Some((line, col)) = stmt_contains_return(&clause.body) {
+            return Err(CompileError::new(
+                "return statements cannot appear in a function-try-block handler of a constructor",
+                line,
+                col,
+            ));
+        }
+        let (line, col) = (clause.body.line, clause.body.col);
+        let rethrow = Stmt::new(StmtKind::Throw(None), line, col);
+        if let StmtKind::Compound(stmts) = &mut clause.body.kind {
+            stmts.push(rethrow);
+        } else {
+            let handler = std::mem::replace(
+                clause.body.as_mut(),
+                Stmt::new(StmtKind::Compound(vec![rethrow]), line, col),
+            );
+            let StmtKind::Compound(stmts) = &mut clause.body.kind else {
+                unreachable!();
+            };
+            stmts.insert(0, handler);
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn method_matches_out_of_class(
     m: &FunctionDecl,
     short_method: &str,
@@ -146,13 +210,21 @@ impl Sema {
         class_name: &str,
         mut func: FunctionDecl,
     ) -> Result<(String, FunctionDecl), CompileError> {
+        if let Some(ref expr) = func.noexcept_expr {
+            let val = crate::sema::constexpr_eval::eval_constexpr_with_sema(
+                expr,
+                self,
+                Some(&self.static_const_values),
+            )?;
+            func.qualifiers.is_noexcept = val != 0;
+        }
         self.resolve_and_instantiate_type(&mut func.return_type, func.line, func.col)?;
         for p in &mut func.params {
             self.resolve_and_instantiate_type(&mut p.ty, func.line, func.col)?;
         }
         let mangled = self.mangle_name(&func.name, &func.params);
         let sig = FunctionSig {
-            qualifiers: FunctionQualifiers::default(),
+            qualifiers: func.qualifiers,
             name: func.name.clone(),
             mangled_name: mangled.clone(),
             return_type: func.return_type.clone(),
@@ -200,6 +272,7 @@ impl Sema {
                 name: qual_name.clone(),
                 ty: sf.1.clone(),
                 is_global: true,
+                is_param: false,
                 stack_offset: 0,
             };
             self.global_vars.insert(qual_name.clone(), sym.clone());
@@ -222,6 +295,14 @@ impl Sema {
                         .push(m.clone());
                 }
                 continue;
+            }
+            if let Some(ref expr) = m.noexcept_expr {
+                let val = crate::sema::constexpr_eval::eval_constexpr_with_sema(
+                    expr,
+                    self,
+                    Some(&self.static_const_values),
+                )?;
+                m.qualifiers.is_noexcept = val != 0;
             }
             self.resolve_and_instantiate_type(&mut m.return_type, m.line, m.col)?;
             for param in &mut m.params {

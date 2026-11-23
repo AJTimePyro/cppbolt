@@ -71,6 +71,7 @@ impl Sema {
                 name: name.to_string(),
                 ty: ty.clone(),
                 is_global: true,
+                is_param: false,
                 stack_offset: 0,
             },
         );
@@ -81,6 +82,7 @@ impl Sema {
                     name: alias.to_string(),
                     ty: ty.clone(),
                     is_global: true,
+                    is_param: false,
                     stack_offset: 0,
                 },
             );

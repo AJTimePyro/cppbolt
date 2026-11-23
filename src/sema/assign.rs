@@ -16,6 +16,23 @@ impl Sema {
         if target == source {
             return true;
         }
+        if let (
+            Type::Function {
+                return_type: ret_to,
+                param_types: params_to,
+                qualifiers: quals_to,
+            },
+            Type::Function {
+                return_type: ret_from,
+                param_types: params_from,
+                qualifiers: quals_from,
+            },
+        ) = (target, source)
+        {
+            return ret_to == ret_from
+                && params_to == params_from
+                && (!quals_to.is_noexcept || quals_from.is_noexcept);
+        }
         if let (Type::Struct(s1), Type::Struct(s2)) = (target, source) {
             let p1 = QualifiedName::new(s1).plain();
             let p2 = QualifiedName::new(s2).plain();
@@ -67,6 +84,14 @@ impl Sema {
             );
         }
         if let Type::Reference(inner) = target {
+            if matches!(inner.strip_const(), Type::Function { .. }) {
+                let actual = if let Type::Pointer(p_in) = value.strip_reference().strip_const() {
+                    p_in.as_ref()
+                } else {
+                    value.strip_reference().strip_const()
+                };
+                return Some(self.reference_types_compatible(inner.strip_const(), actual));
+            }
             if inner.is_const() {
                 return Some(self.can_assign_expr(inner.strip_const(), value, expr));
             }
@@ -303,6 +328,25 @@ impl Sema {
 
         if base_to == base_from {
             return true;
+        }
+        if n == 1
+            && let (
+                Type::Function {
+                    return_type: ret_to,
+                    param_types: params_to,
+                    qualifiers: quals_to,
+                },
+                Type::Function {
+                    return_type: ret_from,
+                    param_types: params_from,
+                    qualifiers: quals_from,
+                },
+            ) = (base_to, base_from)
+        {
+            if ret_to == ret_from && params_to == params_from {
+                return !quals_to.is_noexcept || quals_from.is_noexcept;
+            }
+            return false;
         }
         if n == 1
             && let (Type::Struct(base), Type::Struct(derived)) = (base_to, base_from)

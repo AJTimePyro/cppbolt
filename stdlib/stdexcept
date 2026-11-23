@@ -1,0 +1,145 @@
+// -*- C++ -*-
+//===----------------------------------------------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef _LIBCPP_STDEXCEPT
+#define _LIBCPP_STDEXCEPT
+
+#include <compat/compiler/compiler.h>
+#include <exception>
+#include <string>
+
+_LIBCPP_BEGIN_NAMESPACE_STD
+
+class _LIBCPP_EXPORTED_FROM_ABI logic_error : public exception {
+private:
+  string __msg_;
+public:
+  _LIBCPP_HIDE_FROM_ABI explicit logic_error(const string& __arg) : __msg_(__arg) {}
+  _LIBCPP_HIDE_FROM_ABI explicit logic_error(const char* __arg) : __msg_(__arg ? __arg : "") {}
+  _LIBCPP_HIDE_FROM_ABI logic_error(const logic_error& __other) _NOEXCEPT : exception(__other), __msg_(__other.__msg_) {}
+  _LIBCPP_HIDE_FROM_ABI logic_error& operator=(const logic_error& __other) _NOEXCEPT {
+    if (this != &__other) {
+      exception::operator=(__other);
+      __msg_ = __other.__msg_;
+    }
+    return *this;
+  }
+  _LIBCPP_HIDE_FROM_ABI virtual ~logic_error() _NOEXCEPT {}
+  _LIBCPP_HIDE_FROM_ABI virtual const char* what() const _NOEXCEPT {
+    return __msg_.c_str();
+  }
+};
+
+class _LIBCPP_EXPORTED_FROM_ABI domain_error : public logic_error {
+public:
+  _LIBCPP_HIDE_FROM_ABI explicit domain_error(const string& __arg) : logic_error(__arg) {}
+  _LIBCPP_HIDE_FROM_ABI explicit domain_error(const char* __arg) : logic_error(__arg) {}
+  _LIBCPP_HIDE_FROM_ABI domain_error(const domain_error& __other) _NOEXCEPT : logic_error(__other) {}
+  _LIBCPP_HIDE_FROM_ABI domain_error& operator=(const domain_error& __other) _NOEXCEPT {
+    logic_error::operator=(__other);
+    return *this;
+  }
+  _LIBCPP_HIDE_FROM_ABI virtual ~domain_error() _NOEXCEPT {}
+};
+
+class _LIBCPP_EXPORTED_FROM_ABI invalid_argument : public logic_error {
+public:
+  _LIBCPP_HIDE_FROM_ABI explicit invalid_argument(const string& __arg) : logic_error(__arg) {}
+  _LIBCPP_HIDE_FROM_ABI explicit invalid_argument(const char* __arg) : logic_error(__arg) {}
+  _LIBCPP_HIDE_FROM_ABI invalid_argument(const invalid_argument& __other) _NOEXCEPT : logic_error(__other) {}
+  _LIBCPP_HIDE_FROM_ABI invalid_argument& operator=(const invalid_argument& __other) _NOEXCEPT {
+    logic_error::operator=(__other);
+    return *this;
+  }
+  _LIBCPP_HIDE_FROM_ABI virtual ~invalid_argument() _NOEXCEPT {}
+};
+
+class _LIBCPP_EXPORTED_FROM_ABI length_error : public logic_error {
+public:
+  _LIBCPP_HIDE_FROM_ABI explicit length_error(const string& __arg) : logic_error(__arg) {}
+  _LIBCPP_HIDE_FROM_ABI explicit length_error(const char* __arg) : logic_error(__arg) {}
+  _LIBCPP_HIDE_FROM_ABI length_error(const length_error& __other) _NOEXCEPT : logic_error(__other) {}
+  _LIBCPP_HIDE_FROM_ABI length_error& operator=(const length_error& __other) _NOEXCEPT {
+    logic_error::operator=(__other);
+    return *this;
+  }
+  _LIBCPP_HIDE_FROM_ABI virtual ~length_error() _NOEXCEPT {}
+};
+
+class _LIBCPP_EXPORTED_FROM_ABI out_of_range : public logic_error {
+public:
+  _LIBCPP_HIDE_FROM_ABI explicit out_of_range(const string& __arg) : logic_error(__arg) {}
+  _LIBCPP_HIDE_FROM_ABI explicit out_of_range(const char* __arg) : logic_error(__arg) {}
+  _LIBCPP_HIDE_FROM_ABI out_of_range(const out_of_range& __other) _NOEXCEPT : logic_error(__other) {}
+  _LIBCPP_HIDE_FROM_ABI out_of_range& operator=(const out_of_range& __other) _NOEXCEPT {
+    logic_error::operator=(__other);
+    return *this;
+  }
+  _LIBCPP_HIDE_FROM_ABI virtual ~out_of_range() _NOEXCEPT {}
+};
+
+class _LIBCPP_EXPORTED_FROM_ABI runtime_error : public exception {
+private:
+  string __msg_;
+public:
+  _LIBCPP_HIDE_FROM_ABI explicit runtime_error(const string& __arg) : __msg_(__arg) {}
+  _LIBCPP_HIDE_FROM_ABI explicit runtime_error(const char* __arg) : __msg_(__arg ? __arg : "") {}
+  _LIBCPP_HIDE_FROM_ABI runtime_error(const runtime_error& __other) _NOEXCEPT : exception(__other), __msg_(__other.__msg_) {}
+  _LIBCPP_HIDE_FROM_ABI runtime_error& operator=(const runtime_error& __other) _NOEXCEPT {
+    if (this != &__other) {
+      exception::operator=(__other);
+      __msg_ = __other.__msg_;
+    }
+    return *this;
+  }
+  _LIBCPP_HIDE_FROM_ABI virtual ~runtime_error() _NOEXCEPT {}
+  _LIBCPP_HIDE_FROM_ABI virtual const char* what() const _NOEXCEPT {
+    return __msg_.c_str();
+  }
+};
+
+class _LIBCPP_EXPORTED_FROM_ABI range_error : public runtime_error {
+public:
+  _LIBCPP_HIDE_FROM_ABI explicit range_error(const string& __arg) : runtime_error(__arg) {}
+  _LIBCPP_HIDE_FROM_ABI explicit range_error(const char* __arg) : runtime_error(__arg) {}
+  _LIBCPP_HIDE_FROM_ABI range_error(const range_error& __other) _NOEXCEPT : runtime_error(__other) {}
+  _LIBCPP_HIDE_FROM_ABI range_error& operator=(const range_error& __other) _NOEXCEPT {
+    runtime_error::operator=(__other);
+    return *this;
+  }
+  _LIBCPP_HIDE_FROM_ABI virtual ~range_error() _NOEXCEPT {}
+};
+
+class _LIBCPP_EXPORTED_FROM_ABI overflow_error : public runtime_error {
+public:
+  _LIBCPP_HIDE_FROM_ABI explicit overflow_error(const string& __arg) : runtime_error(__arg) {}
+  _LIBCPP_HIDE_FROM_ABI explicit overflow_error(const char* __arg) : runtime_error(__arg) {}
+  _LIBCPP_HIDE_FROM_ABI overflow_error(const overflow_error& __other) _NOEXCEPT : runtime_error(__other) {}
+  _LIBCPP_HIDE_FROM_ABI overflow_error& operator=(const overflow_error& __other) _NOEXCEPT {
+    runtime_error::operator=(__other);
+    return *this;
+  }
+  _LIBCPP_HIDE_FROM_ABI virtual ~overflow_error() _NOEXCEPT {}
+};
+
+class _LIBCPP_EXPORTED_FROM_ABI underflow_error : public runtime_error {
+public:
+  _LIBCPP_HIDE_FROM_ABI explicit underflow_error(const string& __arg) : runtime_error(__arg) {}
+  _LIBCPP_HIDE_FROM_ABI explicit underflow_error(const char* __arg) : runtime_error(__arg) {}
+  _LIBCPP_HIDE_FROM_ABI underflow_error(const underflow_error& __other) _NOEXCEPT : runtime_error(__other) {}
+  _LIBCPP_HIDE_FROM_ABI underflow_error& operator=(const underflow_error& __other) _NOEXCEPT {
+    runtime_error::operator=(__other);
+    return *this;
+  }
+  _LIBCPP_HIDE_FROM_ABI virtual ~underflow_error() _NOEXCEPT {}
+};
+
+_LIBCPP_END_NAMESPACE_STD
+
+#endif // _LIBCPP_STDEXCEPT

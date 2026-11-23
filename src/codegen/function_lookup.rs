@@ -80,7 +80,10 @@ impl<'a> Codegen<'a> {
     /// Direct bases and their offsets within `cls`, recovered from the flat
     /// `base_offsets` list (each direct base is followed by its own bases).
     fn direct_base_offsets(&self, cls: &str) -> Vec<(String, usize)> {
-        let Some(layout) = self.sema.struct_layouts.get(cls) else {
+        let Some(layout) = self.sema.struct_layouts.get(cls).or_else(|| {
+            let alt = QualifiedName::new(cls).alternate();
+            self.sema.struct_layouts.get(alt.as_ref())
+        }) else {
             return Vec::new();
         };
         let mut result = Vec::new();
@@ -112,7 +115,8 @@ impl<'a> Codegen<'a> {
         if depth > 64 {
             return None;
         }
-        if cls == owner && cls_offset == target_offset {
+        if QualifiedName::new(cls).matches(QualifiedName::new(owner)) && cls_offset == target_offset
+        {
             return Some(vec![(cls.to_string(), cls_offset)]);
         }
         for (base, base_offset) in self.direct_base_offsets(cls) {
@@ -184,7 +188,13 @@ impl<'a> Codegen<'a> {
         {
             return Some(idx);
         }
-        if let Some(layout) = self.sema.struct_layouts.get(class_name) {
+        let alt = QualifiedName::new(class_name).alternate();
+        let layout_opt = self
+            .sema
+            .struct_layouts
+            .get(class_name)
+            .or_else(|| self.sema.struct_layouts.get(alt.as_ref()));
+        if let Some(layout) = layout_opt {
             for b in &layout.base_classes {
                 if let Some(idx) = self.find_class_vmethod(b, key) {
                     return Some(idx);

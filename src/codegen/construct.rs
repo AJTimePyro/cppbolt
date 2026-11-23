@@ -99,8 +99,9 @@ impl<'a> Codegen<'a> {
         best_idx
     }
 
-    /// Finds an explicit or synthesized move constructor for `class_name`.
-    pub fn find_move_constructor(&self, class_name: &str) -> Option<u32> {
+    /// Finds a move constructor for `class_name`. Copy-initialization must
+    /// exclude explicit constructors.
+    pub fn find_move_constructor(&self, class_name: &str, allow_explicit: bool) -> Option<u32> {
         let short_name = QualifiedName::new(class_name).class_short_name();
         let q1 = format!("{class_name}::{short_name}");
         let q2 = format!(
@@ -112,7 +113,9 @@ impl<'a> Codegen<'a> {
                 continue;
             };
             for sig in sigs {
-                if !move_constructor_matches(sig, class_name) {
+                if !move_constructor_matches(sig, class_name)
+                    || (!allow_explicit && sig.is_explicit)
+                {
                     continue;
                 }
                 if let Some(&idx) = self.func_indices.get(&sig.mangled_name) {

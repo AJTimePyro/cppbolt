@@ -170,6 +170,14 @@ impl Sema {
         defined_functions: &mut HashSet<String>,
         state: &mut DeclSnapshot,
     ) -> Result<(), CompileError> {
+        if let Some(ref expr) = f.noexcept_expr {
+            let val = crate::sema::constexpr_eval::eval_constexpr_with_sema(
+                expr,
+                self,
+                Some(&self.static_const_values),
+            )?;
+            f.qualifiers.is_noexcept = val != 0;
+        }
         self.resolve_and_instantiate_type(&mut f.return_type, f.line, f.col)?;
         for p in &mut f.params {
             self.resolve_and_instantiate_type(&mut p.ty, f.line, f.col)?;
@@ -183,7 +191,7 @@ impl Sema {
             ));
         }
         let sig = FunctionSig {
-            qualifiers: FunctionQualifiers::default(),
+            qualifiers: f.qualifiers,
             name: f.name.clone(),
             mangled_name: mangled,
             return_type: f.return_type.clone(),

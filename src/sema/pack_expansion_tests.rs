@@ -176,6 +176,7 @@ fn make_tparam(name: &str, is_pack: bool) -> TemplateParam {
 fn make_test_func(tmpl_params: Vec<TemplateParam>, params: Vec<Param>) -> FunctionDecl {
     FunctionDecl {
         qualifiers: FunctionQualifiers::default(),
+        noexcept_expr: None,
         name: "f".to_string(),
         return_type: Type::Void,
         params,

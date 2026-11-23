@@ -63,6 +63,7 @@ pub(super) struct ScalarAssign<'e> {
 }
 
 /// The frame slots and width of one switch statement.
+#[derive(Clone, Copy)]
 pub(super) struct SwitchSlots {
     pub(super) target_slot: u32,
     pub(super) matched_slot: u32,

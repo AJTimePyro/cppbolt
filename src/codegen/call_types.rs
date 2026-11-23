@@ -54,8 +54,8 @@ pub(crate) fn emit_return_adjustment(adjust_slot: u32, ctx: &FunctionContext, co
 /// The return type of a callable value: a function, a function pointer, a
 /// pointer to member function, or a bound member function.
 pub(crate) fn callee_return_type(callee_ty: &Type) -> Type {
-    match callee_ty.strip_const() {
-        Type::Pointer(inner) => match &**inner {
+    match callee_ty.strip_reference().strip_const() {
+        Type::Pointer(inner) | Type::Reference(inner) => match &**inner {
             Type::Function { return_type, .. } => (**return_type).clone(),
             _ => Type::Int,
         },

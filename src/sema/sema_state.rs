@@ -16,6 +16,12 @@ pub struct AliasVisibility {
 
 #[derive(Clone)]
 pub struct Sema {
+    /// Stable IDs for function and member-pointer exception types, assigned on
+    /// first use because those types have no separate declaration registry.
+    pub aux_exception_type_ids: std::cell::RefCell<HashMap<String, u32>>,
+    pub canonical_class_cache: std::cell::RefCell<Option<Vec<String>>>,
+    pub thrown_classes: std::cell::RefCell<HashSet<String>>,
+    pub caught_classes: std::cell::RefCell<HashSet<String>>,
     pub struct_layouts: HashMap<String, StructLayout>,
     pub struct_order: Vec<String>,
     pub enum_values: HashMap<String, i64>,
@@ -25,6 +31,8 @@ pub struct Sema {
     pub static_const_values: HashMap<String, i128>,
     pub enum_types: HashMap<String, String>,
     pub scoped_enums: HashSet<String>,
+    /// Source names of functions declared `= delete`.
+    pub deleted_functions: HashSet<String>,
     pub functions: HashMap<String, Vec<FunctionSig>>,
     /// Friend functions defined in a class, keyed by that class's name.
     /// Found only through ADL, never through ordinary lookup.
@@ -43,6 +51,8 @@ pub struct Sema {
     pub current_col: usize,
     pub loop_depth: usize,
     pub switch_depth: usize,
+    pub try_depth: u32,
+    pub var_try_depths: HashMap<String, u32>,
     pub current_class: Option<String>,
     pub current_func_name: Option<String>,
     pub open_namespaces: Vec<String>,
@@ -119,4 +129,14 @@ pub struct Sema {
     pub structs_with_dtor: HashSet<String>,
     pub structs_with_move: HashSet<String>,
     pub(super) depth: crate::depth::DepthCounters,
+}
+
+impl Sema {
+    pub(super) fn with_try_depth<T>(&mut self, depth: u32, f: impl FnOnce(&mut Self) -> T) -> T {
+        let old = self.try_depth;
+        self.try_depth = depth;
+        let result = f(self);
+        self.try_depth = old;
+        result
+    }
 }

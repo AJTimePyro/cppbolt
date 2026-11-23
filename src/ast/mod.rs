@@ -5,6 +5,7 @@
 pub mod decl;
 pub mod expr;
 mod expr_drop;
+pub mod expr_ops;
 pub mod fold_op;
 pub mod stmt;
 pub mod template;
@@ -21,6 +22,6 @@ pub use expr::{
     zero_literal_for_type,
 };
 pub use fold_op::FoldOp;
-pub use stmt::{Stmt, StmtKind};
+pub use stmt::{CatchClause, Stmt, StmtKind};
 pub use template::{TemplateClass, TemplateDecl, TemplateKind, TemplateParam};
 pub use types::FunctionQualifiers;

@@ -58,6 +58,7 @@ impl Sema {
                         name: param.name.clone(),
                         ty: param.ty.clone(),
                         is_global: false,
+                        is_param: true,
                         stack_offset: 0,
                     },
                 );

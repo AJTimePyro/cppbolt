@@ -38,6 +38,7 @@ impl Sema {
                 name: param.name.clone(),
                 ty: param.ty.clone(),
                 is_global: false,
+                is_param: true,
                 stack_offset: param_offset,
             };
             let Some(scope) = self.scopes.last_mut() else {
@@ -57,8 +58,27 @@ impl Sema {
             }
         }
 
+        let is_ctor = self.current_class.as_deref().is_some_and(|cls| {
+            let short = cls.rsplit("::").next().unwrap_or(cls);
+            func.name == cls || func.name == short
+        });
+        let is_dtor = self.current_class.as_deref().is_some_and(|cls| {
+            let short = cls.rsplit("::").next().unwrap_or(cls);
+            func.name == format!("~{cls}") || func.name == format!("~{short}")
+        });
         if let Some(body) = &mut func.body {
-            self.analyze_stmt(body)?;
+            super::analyze_helpers::desugar_function_try_block(is_ctor, is_dtor, body)?;
+            self.with_try_depth(0, |s| s.analyze_stmt(body))?;
+        }
+        Ok(())
+    }
+
+    fn desugar_stmt(&mut self, stmt: &mut Stmt) -> Result<(), CompileError> {
+        if let StmtKind::RangeFor { .. } = stmt.kind {
+            *stmt = self.desugar_range_for(stmt.clone())?;
+        }
+        if let StmtKind::StructuredBinding { .. } = stmt.kind {
+            *stmt = self.desugar_structured_binding(stmt.clone())?;
         }
         Ok(())
     }
@@ -68,12 +88,7 @@ impl Sema {
     /// Every statement kind is handled by its own helper so that this
     /// function stays a dispatcher.
     pub(super) fn analyze_stmt(&mut self, stmt: &mut Stmt) -> Result<(), CompileError> {
-        if let StmtKind::RangeFor { .. } = stmt.kind {
-            *stmt = self.desugar_range_for(stmt.clone())?;
-        }
-        if let StmtKind::StructuredBinding { .. } = stmt.kind {
-            *stmt = self.desugar_structured_binding(stmt.clone())?;
-        }
+        self.desugar_stmt(stmt)?;
         // A compound block has its own budget, so a nested `if` with its
         // block costs one statement level and one block level.
         if let StmtKind::Compound(stmts) = &mut stmt.kind {
@@ -117,12 +132,8 @@ impl Sema {
             | StmtKind::Switch { .. } => {
                 self.analyze_flow_stmt(&mut stmt.kind, stmt.line, stmt.col)?;
             }
-            StmtKind::Break => {
-                self.analyze_break(stmt.line, stmt.col)?;
-            }
-            StmtKind::Continue => {
-                self.analyze_continue(stmt.line, stmt.col)?;
-            }
+            StmtKind::Break => self.analyze_break(stmt.line, stmt.col)?,
+            StmtKind::Continue => self.analyze_continue(stmt.line, stmt.col)?,
             StmtKind::Case(expr, val) => {
                 *val = self.eval_const_int_expr(expr, stmt.line, stmt.col)?;
             }
@@ -134,13 +145,60 @@ impl Sema {
             | StmtKind::TypeAlias { .. }
             | StmtKind::StaticAssert { .. }
             | StmtKind::Expr(_) => {}
-            StmtKind::Return(expr_opt) => {
-                self.analyze_return(expr_opt, stmt.line, stmt.col)?;
+            StmtKind::Return(expr_opt) => self.analyze_return(expr_opt, stmt.line, stmt.col)?,
+            StmtKind::Throw(expr_opt) => self.analyze_throw(expr_opt, stmt.line, stmt.col)?,
+            StmtKind::Try { try_body, catches } => {
+                self.analyze_try_stmt(try_body, catches, stmt.line, stmt.col)?;
             }
             StmtKind::RangeFor { .. } => unreachable!("RangeFor is desugared before dispatch"),
             StmtKind::StructuredBinding { .. } => {
                 unreachable!("StructuredBinding is desugared before dispatch")
             }
+        }
+        Ok(())
+    }
+
+    fn analyze_throw(
+        &mut self,
+        expr_opt: &mut Option<Expr>,
+        line: usize,
+        col: usize,
+    ) -> Result<(), CompileError> {
+        if let Some(expr) = expr_opt {
+            let ty = self.analyze_expr(expr)?;
+            self.validate_throw_expr(expr, &ty, line, col)?;
+        }
+        Ok(())
+    }
+
+    fn analyze_try_stmt(
+        &mut self,
+        try_body: &mut Stmt,
+        catches: &mut [CatchClause],
+        line: usize,
+        col: usize,
+    ) -> Result<(), CompileError> {
+        let depth = self.try_depth + 1;
+        self.with_try_depth(depth, |s| s.analyze_stmt(try_body))?;
+        let num_catches = catches.len();
+        for (i, clause) in catches.iter_mut().enumerate() {
+            if clause.param.is_none() && i + 1 < num_catches {
+                return Err(CompileError::new(
+                    "catch-all handler (...) must be the last handler for its try block",
+                    clause.body.line,
+                    clause.body.col,
+                ));
+            }
+            self.enter_scope();
+            if let Some((ty, name)) = &mut clause.param {
+                self.resolve_and_instantiate_type(ty, line, col)?;
+                self.validate_catch_type(ty, line, col)?;
+                if !name.is_empty() {
+                    self.declare_catch_param(name, ty, line, col)?;
+                }
+            }
+            self.analyze_stmt(&mut clause.body)?;
+            self.exit_scope();
         }
         Ok(())
     }
@@ -408,28 +466,18 @@ impl Sema {
             BinaryOp::Add => Ok(l + r),
             BinaryOp::Sub => Ok(l - r),
             BinaryOp::Mul => Ok(l * r),
-            BinaryOp::Div => {
-                if r == 0 {
-                    Err(CompileError::new(
-                        "division by zero in constant expression",
-                        line,
-                        col,
-                    ))
-                } else {
-                    Ok(l / r)
-                }
-            }
-            BinaryOp::Rem => {
-                if r == 0 {
-                    Err(CompileError::new(
-                        "remainder by zero in constant expression",
-                        line,
-                        col,
-                    ))
-                } else {
-                    Ok(l % r)
-                }
-            }
+            BinaryOp::Div if r == 0 => Err(CompileError::new(
+                "division by zero in constant expression",
+                line,
+                col,
+            )),
+            BinaryOp::Div => Ok(l / r),
+            BinaryOp::Rem if r == 0 => Err(CompileError::new(
+                "remainder by zero in constant expression",
+                line,
+                col,
+            )),
+            BinaryOp::Rem => Ok(l % r),
             BinaryOp::BitAnd => Ok(l & r),
             BinaryOp::BitOr => Ok(l | r),
             BinaryOp::BitXor => Ok(l ^ r),

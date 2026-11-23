@@ -18,6 +18,7 @@ pub struct VarSymbol {
     pub name: String,
     pub ty: Type,
     pub is_global: bool,
+    pub is_param: bool,
     /// Offset from the local frame pointer for locals; unused for globals.
     pub stack_offset: i32,
 }

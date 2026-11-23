@@ -175,6 +175,7 @@ mod tests {
     fn make_fn_decl(name: &str, params: Vec<Param>) -> FunctionDecl {
         FunctionDecl {
             qualifiers: FunctionQualifiers::default(),
+            noexcept_expr: None,
             name: name.to_string(),
             return_type: Type::Void,
             params,

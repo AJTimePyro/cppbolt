@@ -90,7 +90,11 @@ impl Sema {
             let dtor_name = format!("~{}", inst_name);
             if !methods.iter().any(|m| m.name == dtor_name) {
                 methods.push(FunctionDecl {
-                    qualifiers: FunctionQualifiers::default(),
+                    qualifiers: FunctionQualifiers {
+                        is_noexcept: true,
+                        ..Default::default()
+                    },
+                    noexcept_expr: None,
                     name: dtor_name,
                     return_type: Type::Void,
                     params: vec![],
@@ -116,6 +120,7 @@ impl Sema {
         if !has_user_ctor {
             methods.push(FunctionDecl {
                 qualifiers: FunctionQualifiers::default(),
+                noexcept_expr: None,
                 name: inst_name.to_string(),
                 return_type: Type::Void,
                 params: Vec::new(),
@@ -182,6 +187,7 @@ impl Sema {
                 if !base_blocks && !field_blocks {
                     methods.push(FunctionDecl {
                         qualifiers: FunctionQualifiers::default(),
+                        noexcept_expr: None,
                         name: name.clone(),
                         return_type: Type::Void,
                         params: vec![],

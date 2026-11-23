@@ -204,6 +204,7 @@ impl Sema {
                 name: var.name.clone(),
                 ty: var.ty.clone(),
                 is_global: true,
+                is_param: false,
                 stack_offset: 0,
             });
         }

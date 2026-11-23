@@ -37,18 +37,11 @@ impl<'a> Codegen<'a> {
         let is_byval_struct = param_ty
             .map(|p| matches!(p.strip_const(), Type::Struct(_)))
             .unwrap_or(false);
-        let temp_count_before = ctx.temp_objects.len();
 
         if is_ref {
             self.compile_call_arg_ref(a, param_ty, ctx, code)?;
         } else {
             self.compile_call_arg_value(a, param_ty, is_byval_struct, ctx, code)?;
-        }
-
-        if is_byval_struct {
-            for item in &mut ctx.temp_objects[temp_count_before..] {
-                item.2 = false;
-            }
         }
         Ok(())
     }
@@ -150,7 +143,7 @@ impl<'a> Codegen<'a> {
         code.push(OP_CALL);
         write_u32(code, ctor_idx);
 
-        let temp_slot = ctx.alloc_frame(4, 4)?;
+        let (temp_slot, clean_idx) = self.acquire_temp_slot_and_cleanup(psname, ctx, code)?;
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.fp_local);
         Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
@@ -158,7 +151,8 @@ impl<'a> Codegen<'a> {
         write_u32(code, 2);
         write_u32(code, temp_slot);
 
-        ctx.temp_objects.push((psname.to_string(), temp_slot, true));
+        ctx.temp_objects
+            .push((psname.to_string(), temp_slot, true, clean_idx));
 
         Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
         Ok(())
@@ -187,7 +181,7 @@ impl<'a> Codegen<'a> {
                     let is_xval = self.is_expr_xvalue(a, ctx);
                     if is_xval {
                         let ctor = self
-                            .find_move_constructor(psname)
+                            .find_move_constructor(psname, true)
                             .or_else(|| self.find_copy_constructor(psname, is_const));
                         if let Some(ctor_idx) = ctor {
                             self.compile_call_arg_byval_temp(a, psname, ctor_idx, ctx, code)?;
@@ -255,7 +249,7 @@ impl<'a> Codegen<'a> {
         code.push(OP_CALL);
         write_u32(code, ctor_idx);
 
-        let temp_slot = ctx.alloc_frame(4, 4)?;
+        let (temp_slot, clean_idx) = self.acquire_temp_slot_and_cleanup(sname, ctx, code)?;
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.fp_local);
         Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
@@ -263,7 +257,8 @@ impl<'a> Codegen<'a> {
         write_u32(code, 2);
         write_u32(code, temp_slot);
 
-        ctx.temp_objects.push((sname.to_string(), temp_slot, false));
+        ctx.temp_objects
+            .push((sname.to_string(), temp_slot, true, clean_idx));
 
         Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
         Ok(())

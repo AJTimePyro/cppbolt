@@ -3,6 +3,7 @@ use super::*;
 
 impl Sema {
     pub fn analyze_program(&mut self, program: &mut Program) -> Result<(), CompileError> {
+        self.deleted_functions = program.deleted_functions.iter().cloned().collect();
         self.object_use_classes = collect_object_use_classes(program);
         self.attach_out_of_class_methods(program);
         self.seed_lifecycle_types(program);
@@ -101,6 +102,7 @@ impl Sema {
                 name: name.clone(),
                 ty: ty.clone(),
                 is_global: true,
+                is_param: false,
                 stack_offset: 0,
             };
             self.global_vars.insert(name.clone(), symbol.clone());
@@ -363,11 +365,10 @@ impl Sema {
         col: usize,
         all_constants: &HashMap<String, i128>,
     ) -> Result<(), CompileError> {
-        let value = crate::sema::constexpr_eval::eval_constexpr_with_context(
+        let value = crate::sema::constexpr_eval::eval_constexpr_with_sema(
             condition,
-            Some(&self.struct_sizes),
+            self,
             Some(all_constants),
-            None,
         );
         // The pre-pass snapshot misses class static members folded
         // later and variable templates not yet instantiated. Render

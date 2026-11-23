@@ -8,6 +8,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### WebAssembly Exception Handling & Unwinding
+- Implemented native WebAssembly Phase 4 exception handling (`try_table`, `throw`, `throw_ref`) with 64-bit dynamic liveness bitmask tracking for automatic variables, member subobjects, and expression temporaries.
+- Enforced strict reverse-destruction ordering across normal scope exit, `return`, `break`, `continue`, and stack unwinding.
+- Implemented typed exception object representation with a 16-byte metadata header on the heap and indirect destructor invocation through vtables.
+- Implemented dynamic polymorphic catch matching (`__cppbolt_can_catch`) supporting exact types, single and multiple inheritance conversions with non-zero subobject offset adjustments, pointer qualification conversions, `void*` and `nullptr` matching.
+- Supported catching by reference (zero-copy with in-place mutation) and catching by value (copy constructor or byte copy with slicing and local lifetime management).
+- Enforced ISO C++17 handler ordering: `catch (...)` must appear as the final clause in any try block. Supported arbitrary static nesting depth for `try`/`catch` blocks and expression temporary cleanups.
+- Preserved exception objects across rethrow (`throw;`), and ensured destructors throwing during unwinding invoke `std::terminate`.
+
+### Standard Library Exception Hierarchy (`<exception>`, `<stdexcept>`)
+- Integrated C++17 `<exception>` header adapted from LLVM libc++ 23.1.5, providing `std::exception`, `std::bad_exception`, and custom terminate handler controls (`std::set_terminate`, `std::get_terminate`, `std::terminate`).
+- Integrated C++17 `<stdexcept>` header declaring complete standard exception hierarchy (`std::logic_error`, `std::runtime_error`, and all derived classes) with string and C-string message constructors, heap message buffer ownership, and virtual `what()` dispatch.
+
+### Exception Handling & C++17 `noexcept`
+- Supported `noexcept`, `noexcept(true)`, `noexcept(false)`, and expression-based `noexcept(expr)` specifications evaluated as constant expressions for normal functions and methods, or substituted during template instantiation.
+- Enforced runtime termination semantics for `noexcept` functions: exceptions attempting to escape unwind local automatic frames, restore the shadow stack, and terminate via WebAssembly `unreachable` (exit code 134).
+- Integrated `noexcept` into the C++17 function type system. Pointers and references to `noexcept` functions convert to potentially-throwing function types at single indirection depth, while assigning potentially-throwing functions to `noexcept` targets or multi-level conversions fail compilation.
+- Implemented the unevaluated `noexcept(expr)` operator, evaluating to a `bool` constant expression without emitting runtime instructions or evaluating operand side effects.
+- Defaulted class destructors and synthesized default destructors to `noexcept(true)` per C++17 [except.spec] unless explicitly declared `noexcept(false)`.
+
+### Exception Handling Conformance (C++17)
+- Added `Expr::Throw` to function unwinding reachability analysis (`expr_can_throw_or_call`), guaranteeing that functions with local objects throwing from subexpressions generate unwinding tables and invoke destructors.
+- Zeroed stack frame slots immediately upon destroying and freeing heap temporary objects in `emit_destroy_and_free_slot`, eliminating stale heap addresses in recycled frame slots.
+- Inverted unwinding cleanup loops to destroy active statement temporaries before enclosing local scope variables, preserving strict C++17 LIFO destruction order.
+- Enforced ISO C++17 [except.handle] p15 implicit rethrow when control reaches the end of a destructor function-try-block handler.
+- Retained exception destructors for exceptions thrown from expressions (including conditional ternary expressions) during dead-code elimination, and streamlined DCE class collection.
+- Preserved `std::uncaught_exceptions()` count when catching foreign exceptions in `catch (...)`, avoiding counter underflow.
+- Appended `OP_UNREACHABLE` after `std::terminate` in unwinding handlers for `noexcept` functions and `main`, and eliminated dead terminate calls in cleanup ranges.
+- Runtime termination paths now call `std::terminate`, so handlers installed with `std::set_terminate` run on `noexcept` violations, `throw;` without an active exception, throwing destructors during unwinding, and exceptions escaping `main`.
+- Gave enums, function signatures, and member-pointer types distinct exception type IDs, and restricted derived-to-base catch matching to unambiguous public bases. `nullptr` now matches member-pointer handlers.
+- Rejected throwing or catching class types whose copy or move constructor is deleted or private; distinguished value categories so prvalues use guaranteed copy elision, rvalues (including `std::move` calls) and move-eligible locals select the move constructor, and lvalues select the copy constructor. Copy-initialization bypasses explicit move constructors in favour of the copy constructor, rejects explicit copy constructors, and accounts for implicit copy-ctor suppression by user-declared move constructors and const/rvalue binding rules.
+- Enforced C++17 move-eligibility scope rules on thrown locals, multi-level pointer qualification conversions, and overloaded operators inside `noexcept(expr)`.
+- Overflowing the 64-entry cleanup budget is now a compile error instead of silently dropping temporary destructors.
+- Checked exception object heap allocation and branch to `__cppbolt_terminate` on allocation failure, calling `std::terminate` per ISO C++17 [except.throw] p4.
+- Recycled completed temporary frame slots and cleanup bitmask indices across sequential expressions in a function, preventing cleanup budget exhaustion on functions with many sequential temporaries.
+- Enforced ISO C++17 [class.copy.elision] p3 requirement that throwing function parameters or catch parameters requires a copy constructor rather than treating them as move-eligible locals.
+- Treated unevaluated `sizeof(expr)` as non-throwing in unwinding analysis, omitting unwinding wrappers for leaf functions containing `sizeof`.
+- Cleared handled exception frame slots on loop `break` and `continue`, preventing stale pointers from being re-destroyed during subsequent unwinding or early returns.
+- Filtered `__cppbolt_can_catch` inheritance dispatch pairs to classes referenced in `throw` expressions or `catch` clauses across the program, and cached canonical class names in `Sema`.
+- Implemented dynamic `std::uncaught_exceptions()` and `std::uncaught_exception()` via a WebAssembly counter, tracking in-flight exceptions across initial throws, rethrows (`throw;`), and handler entries.
+- Added function-try-block parsing and code generation with automatic rethrow from constructor handlers, member initializer lists after `try`, subobject construction/destruction coverage enclosing the constructor prologue, raw function-pointer declarators in `catch` clauses, and rejection of return statements in constructor handlers.
+- Skipped bodyless methods when declaring the WebAssembly function table, so deleted constructors cannot leave the function/body count mismatched.
+
 ### Static Assert & Constant Evaluation (C++17)
 - `static_assert` conditions now reject non-constant expressions, including runtime variables and non-constexpr function calls, with an explicit compile error. Diagnostics point to the failing condition expression rather than the keyword token.
 - Qualified static constexpr members and variable template specializations fold into assertion conditions before evaluation.

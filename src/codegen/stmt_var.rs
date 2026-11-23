@@ -22,33 +22,42 @@ impl<'a> Codegen<'a> {
             self.compile_static_local(name, ty, stmt, ctx);
             return Ok(());
         }
-        let size = u32::try_from(ty.size_of(&self.sema.struct_sizes))
-            .map_err(|_| crate::internal_error!(stmt.line, stmt.col, "local is too large"))?;
-        let align = u32::try_from(ty.align_of(&self.sema.struct_aligns))
-            .unwrap_or(4)
-            .max(4);
+        let (size, align) = self.local_size_and_align(ty, stmt)?;
         let offset = ctx.alloc_frame(size, align)?;
         ctx.bind_local(name.clone(), offset, ty.clone());
 
         if ty.is_reference() {
             if let Some(init_expr) = init {
+                let temp_count_before = ctx.temp_objects.len();
                 self.compile_reference_local(init_expr, ty, offset, ctx, code)?;
+                if ctx.temp_objects.len() > temp_count_before {
+                    let new_temps = ctx
+                        .temp_objects
+                        .drain(temp_count_before..)
+                        .collect::<Vec<_>>();
+                    if let Some(scope) = ctx.scope_objects.last_mut() {
+                        for (_sname, temp_slot, _, clean_idx) in new_temps {
+                            scope.push((
+                                format!("{name}$ref_temp"),
+                                ty.clone(),
+                                temp_slot,
+                                clean_idx,
+                            ));
+                        }
+                    }
+                }
             }
         } else if let Type::Struct(sname) = ty.strip_const() {
+            let clean_idx = if let Some(dtor_idx) = self.lookup_struct_dtor(sname) {
+                Some(ctx.register_cleanup(sname.to_string(), dtor_idx, offset, false)?)
+            } else {
+                None
+            };
             let Some(scope) = ctx.scope_objects.last_mut() else {
                 return Err(self.internal_error("missing object scope"));
             };
-            scope.push((name.to_string(), ty.clone(), offset));
-
-            // Install the vtable before construction. The constructor will
-            // install it again for the most-derived class.
-            self.emit_vtable_install(sname, offset, ctx, code);
-
-            if let Some(init_expr) = init {
-                self.compile_aggregate_local(ty, init_expr, offset, ctx, code)?;
-            } else {
-                self.compile_struct_default_constructor(sname, offset, ctx, code);
-            }
+            scope.push((name.to_string(), ty.clone(), offset, clean_idx));
+            self.emit_struct_local_init(sname, ty, (init.as_ref(), offset, clean_idx), ctx, code)?;
         } else if let Type::Array(elem_ty, count) = ty.strip_const() {
             self.compile_array_local(
                 ArrayLocal {
@@ -67,6 +76,36 @@ impl<'a> Codegen<'a> {
         }
         self.emit_clean_temporaries(ctx, code);
 
+        Ok(())
+    }
+
+    fn local_size_and_align(&self, ty: &Type, stmt: &Stmt) -> Result<(u32, u32), CompileError> {
+        let size = u32::try_from(ty.size_of(&self.sema.struct_sizes))
+            .map_err(|_| crate::internal_error!(stmt.line, stmt.col, "local is too large"))?;
+        let align = u32::try_from(ty.align_of(&self.sema.struct_aligns))
+            .unwrap_or(4)
+            .max(4);
+        Ok((size, align))
+    }
+
+    fn emit_struct_local_init(
+        &mut self,
+        sname: &str,
+        ty: &Type,
+        init_offset: (Option<&Expr>, u32, Option<usize>),
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        let (init, offset, clean_idx) = init_offset;
+        self.emit_vtable_install(sname, offset, ctx, code);
+        if let Some(init_expr) = init {
+            self.compile_aggregate_local(ty, init_expr, offset, ctx, code)?;
+        } else {
+            self.compile_struct_default_constructor(sname, offset, ctx, code);
+        }
+        if let Some(idx) = clean_idx {
+            self.emit_mark_cleanup_active(idx, ctx, code);
+        }
         Ok(())
     }
 
@@ -223,10 +262,16 @@ impl<'a> Codegen<'a> {
                 .ok_or_else(|| {
                     crate::internal_error!(decl.stmt.line, decl.stmt.col, "array is too large")
                 })?;
+            let clean_idx = if let Some(dtor_idx) = self.lookup_struct_dtor(sname) {
+                Some(ctx.register_cleanup(sname.to_string(), dtor_idx, elem_offset, false)?)
+            } else {
+                None
+            };
             scope_entries.push((
                 format!("{}[{}]", decl.name, i),
                 decl.elem_ty.clone(),
                 elem_offset,
+                clean_idx,
             ));
             if let Some(cur) = cursor.as_mut()
                 && !cur.is_empty()
@@ -242,6 +287,9 @@ impl<'a> Codegen<'a> {
                 write_u32(code, ci);
             } else {
                 self.emit_zero_local(decl.elem_ty, elem_offset, ctx, code)?;
+            }
+            if let Some(idx) = clean_idx {
+                self.emit_mark_cleanup_active(idx, ctx, code);
             }
         }
         if let Some(scope) = ctx.scope_objects.last_mut() {
@@ -315,6 +363,16 @@ impl<'a> Codegen<'a> {
         write_u32(code, fp_local);
         code.push(OP_LOCAL_GET);
         write_u32(code, val_local);
+        code.push(OP_I32_STORE);
+        write_u32(code, 2);
+        write_u32(code, slot_offset);
+    }
+
+    pub(crate) fn emit_slot_zero(slot_offset: u32, fp_local: u32, code: &mut Vec<u8>) {
+        code.push(OP_LOCAL_GET);
+        write_u32(code, fp_local);
+        code.push(OP_I32_CONST);
+        write_i32(code, 0);
         code.push(OP_I32_STORE);
         write_u32(code, 2);
         write_u32(code, slot_offset);

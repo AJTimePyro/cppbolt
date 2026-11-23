@@ -20,7 +20,12 @@ impl<'a> Codegen<'a> {
             | Expr::This
             | Expr::SizeofType(..)
             | Expr::AlignofType(..)
-            | Expr::SizeofExpr(..) => self.compile_literal(expr, ctx, code)?,
+            | Expr::SizeofExpr(..)
+            | Expr::Noexcept(..) => self.compile_literal(expr, ctx, code)?,
+            Expr::Throw(inner, _) => {
+                let expr_ref = inner.as_deref().cloned();
+                self.compile_throw_stmt(&expr_ref, ctx, code)?;
+            }
             Expr::Identifier { .. } => self.compile_identifier(expr, ctx, code)?,
             Expr::Binary {
                 op: BinaryOp::LogicalAnd,
@@ -242,6 +247,14 @@ impl<'a> Codegen<'a> {
                 code.push(OP_I32_CONST);
                 write_i32(code, size);
             }
+            Expr::Noexcept(inner, _) => {
+                let throws = self
+                    .sema
+                    .is_potentially_throwing_with_types(inner, Some(&ctx.var_types));
+                let val = if throws { 0 } else { 1 };
+                code.push(OP_I32_CONST);
+                write_i32(code, val);
+            }
             _ => {}
         }
         Ok(())
@@ -265,15 +278,19 @@ impl<'a> Codegen<'a> {
         let result_ty = self.get_expr_type(expr, ctx);
         let then_ty = self.get_expr_type(then_expr, ctx);
         let else_ty = self.get_expr_type(else_expr, ctx);
-        let wty = result_ty
-            .to_wasm_type()
-            .map(|w| match w {
-                WasmType::I32 => TYPE_I32,
-                WasmType::I64 => TYPE_I64,
-                WasmType::F32 => TYPE_F32,
-                WasmType::F64 => TYPE_F64,
-            })
-            .unwrap_or(TYPE_I32);
+        let wty = if result_ty == Type::Void {
+            0x40
+        } else {
+            result_ty
+                .to_wasm_type()
+                .map(|w| match w {
+                    WasmType::I32 => TYPE_I32,
+                    WasmType::I64 => TYPE_I64,
+                    WasmType::F32 => TYPE_F32,
+                    WasmType::F64 => TYPE_F64,
+                })
+                .unwrap_or(TYPE_I32)
+        };
 
         self.compile_cond(cond, ctx, code)?;
         code.push(OP_IF);

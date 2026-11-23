@@ -253,6 +253,7 @@ impl Sema {
 fn base_fn_decl(name: &str, pos: ExprPos) -> FunctionDecl {
     FunctionDecl {
         qualifiers: FunctionQualifiers::default(),
+        noexcept_expr: None,
         name: name.to_string(),
         return_type: Type::Void,
         params: vec![],

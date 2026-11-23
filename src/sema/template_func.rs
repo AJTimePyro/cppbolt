@@ -308,7 +308,7 @@ impl Sema {
 
         let mangled = self.mangle_name(&func_decl.name, &func_decl.params);
         let sig = FunctionSig {
-            qualifiers: FunctionQualifiers::default(),
+            qualifiers: func_decl.qualifiers,
             name: func_decl.name.clone(),
             mangled_name: mangled,
             return_type: func_decl.return_type.clone(),
@@ -400,7 +400,7 @@ impl Sema {
 
         let mangled = self.mangle_name(&func_decl.name, &func_decl.params);
         let sig = FunctionSig {
-            qualifiers: FunctionQualifiers::default(),
+            qualifiers: func_decl.qualifiers,
             name: func_decl.name.clone(),
             mangled_name: mangled.clone(),
             return_type: func_decl.return_type.clone(),

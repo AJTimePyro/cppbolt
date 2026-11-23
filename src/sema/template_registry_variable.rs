@@ -64,6 +64,7 @@ impl Sema {
                 name: name.to_string(),
                 ty: inst_ty.clone(),
                 is_global: true,
+                is_param: false,
                 stack_offset: 0,
             },
         );

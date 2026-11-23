@@ -44,6 +44,7 @@ impl Parser {
             TokenKind::KwReinterpretCast => self.parse_reinterpret_cast_expr(),
             TokenKind::KwSizeof => self.parse_sizeof_expr(),
             TokenKind::KwAlignof => self.parse_alignof_expr(),
+            TokenKind::KwNoexcept => self.parse_noexcept_expr(),
             TokenKind::LParen => self.parse_parenthesized_expr(),
             _ => {
                 let start = self.current_pos();
@@ -220,6 +221,15 @@ impl Parser {
         let ty = self.parse_type()?;
         self.expect(TokenKind::RParen)?;
         Ok(Expr::AlignofType(ty))
+    }
+
+    fn parse_noexcept_expr(&mut self) -> Result<Expr, CompileError> {
+        let tok = self.advance();
+        let pos = ExprPos::new(tok.line, tok.col);
+        self.expect(TokenKind::LParen)?;
+        let expr = self.parse_expr()?;
+        self.expect(TokenKind::RParen)?;
+        Ok(Expr::Noexcept(Box::new(expr), pos))
     }
 
     fn parse_parenthesized_expr(&mut self) -> Result<Expr, CompileError> {

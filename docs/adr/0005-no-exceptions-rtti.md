@@ -1,10 +1,12 @@
 # ADR 0005: Exclusion of Exceptions and RTTI from v1 Subset
 
 ## Status
-Accepted (reconstructed) <!-- TODO: confirm with author -->
+Superseded in part by ADR 0016 (Exceptions implemented via native WASM try_table; RTTI remains excluded)
 
 ## Context
-Exceptions and RTTI are excluded from v1 (`docs/decisions/005-no-exceptions-rtti.md`, commit `d23afed`). Unsupported constructs produce diagnostics rather than silently lowering to a different runtime model (`docs/decisions/005-no-exceptions-rtti.md`, commit `d23afed`, `src/parser/unsupported.rs`). Full C++ runtime features like exception handling (`try`/`catch`/`throw`) and Run-Time Type Information (`typeid`, `dynamic_cast`) require substantial runtime machinery (stack unwinding tables, personality functions, type descriptor tables) that are omitted to keep the direct lowering model simple and deterministic (`docs/decisions/005-no-exceptions-rtti.md`, `src/codegen/mod.rs`).
+Exceptions and RTTI were initially excluded from v1 (`docs/decisions/005-no-exceptions-rtti.md`, commit `d23afed`). Unsupported constructs produced diagnostics rather than silently lowering to a different runtime model (`docs/decisions/005-no-exceptions-rtti.md`, commit `d23afed`, `src/parser/unsupported.rs`). Full C++ runtime features like exception handling (`try`/`catch`/`throw`) and Run-Time Type Information (`typeid`, `dynamic_cast`) require substantial runtime machinery.
+
+Exception handling has since been implemented using native WebAssembly exception handling and dynamic liveness tracking (see [ADR 0016](0016-wasm-exception-handling.md)). RTTI (`typeid`, `dynamic_cast`) remains excluded from the compiler to keep vtables simple and deterministic.
 
 ## Options Considered
 - **Option 1: Implement WebAssembly exception handling proposal or Emscripten-style setjmp/longjmp emulation**

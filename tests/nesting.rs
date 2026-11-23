@@ -151,9 +151,19 @@ fn wide_binary_chain_compiles() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn wide_string_concatenation_compiles() -> Result<(), Box<dyn std::error::Error>> {
-    compile_on_big_stack(string_concat(4_000))?;
-    Ok(())
+fn wide_string_concatenation_reports_cleanup_limit() -> Result<(), Box<dyn std::error::Error>> {
+    // 4000 concatenations need more than the 64 tracked cleanup entries. The
+    // compiler rejects them rather than dropping temporary destructors.
+    match compile_on_big_stack(string_concat(4_000)) {
+        Err(error) => {
+            assert!(
+                error.contains("maximum of 64 cleanup objects"),
+                "unexpected diagnostic: {error}"
+            );
+            Ok(())
+        }
+        Ok(_) => Err("expected a cleanup-capacity diagnostic".into()),
+    }
 }
 
 #[test]

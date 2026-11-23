@@ -7,6 +7,56 @@ use std::collections::HashMap;
 pub type FieldInit = Option<(Expr, usize, usize)>;
 pub type StructFieldDecl = (String, Type, FieldInit);
 
+/// A copy constructor takes an lvalue reference to its own class.
+pub fn is_copy_ctor(name: &str, params: &[Param]) -> bool {
+    let Some(first) = params.first() else {
+        return false;
+    };
+    first.ty.is_lvalue_reference()
+        && matches!(first.ty.clean_type(), Type::Struct(ty)
+            if crate::name::QualifiedName::new(ty).class_short_name() == name)
+        && params.iter().skip(1).all(|p| p.default_val.is_some())
+}
+
+/// A move constructor takes an rvalue reference to its own class.
+pub fn is_move_ctor(name: &str, params: &[Param]) -> bool {
+    let Some(first) = params.first() else {
+        return false;
+    };
+    first.ty.is_rvalue_reference()
+        && matches!(first.ty.clean_type(), Type::Struct(ty)
+            if crate::name::QualifiedName::new(ty).class_short_name() == name)
+        && params.iter().skip(1).all(|p| p.default_val.is_some())
+}
+
+/// Visibility keys registered for a declared constructor so exception
+/// validation can tell an unavailable copy/move ctor from an unrelated one.
+pub fn ctor_access_keys(
+    name: &str,
+    params: &[Param],
+    is_private: bool,
+    is_explicit: bool,
+) -> Vec<String> {
+    let mut keys = Vec::new();
+    if is_private {
+        if is_copy_ctor(name, params) {
+            keys.push(crate::name::copy_ctor_key(name));
+        } else if is_move_ctor(name, params) {
+            keys.push(crate::name::move_ctor_key(name));
+        } else {
+            keys.push(name.to_string());
+        }
+    }
+    if is_explicit {
+        if is_copy_ctor(name, params) {
+            keys.push(crate::name::explicit_copy_ctor_key(name));
+        } else if is_move_ctor(name, params) {
+            keys.push(crate::name::explicit_move_ctor_key(name));
+        }
+    }
+    keys
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Param {
     pub name: String,
@@ -46,6 +96,7 @@ pub struct FunctionDecl {
     pub ctor_initializers: Vec<(String, Vec<Expr>)>,
     pub template_params: Vec<TemplateParam>,
     pub qualifiers: FunctionQualifiers,
+    pub noexcept_expr: Option<Expr>,
     pub line: usize,
     pub col: usize,
 }
@@ -115,6 +166,9 @@ pub enum Decl {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
     pub declarations: Vec<Decl>,
+    /// Source names of functions declared `= delete`. Used to reject throwing
+    /// or catching class types whose copy or move constructor is deleted.
+    pub deleted_functions: Vec<String>,
     pub type_aliases: HashMap<String, Type>,
     /// Names of type aliases declared at namespace scope, as opposed to member
     /// aliases whose names are qualified by their owning class.
