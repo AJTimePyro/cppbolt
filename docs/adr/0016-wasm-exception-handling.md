@@ -79,17 +79,18 @@ A `try` statement compiles to an inner `try_table` targeting its catch handlers:
 - A `try` statement supports multiple sequential `catch` clauses (such as `catch (Derived&)`, `catch (Base&)`, and `catch (...)`).
 - ISO C++17 [except.handle] handler ordering is strictly enforced: `catch (...)` must appear last in the handler sequence. If any catch clause follows `catch (...)`, semantic analysis rejects the program with a compile-time error.
 - Exception objects are heap-allocated with a 16-byte header: `[offset 0: type_id (u32), offset 4: dtor_table_idx (i32), offset 8: flags (u32), offset 12: size (u32)]`, followed by the exception payload at offset 16. WebAssembly exception tag 0 carries the 32-bit pointer to this header.
-- Thrown expressions initialize the payload: class types invoke copy constructors or copy bytes directly into the heap buffer; scalar types and pointers store their raw values.
+- Thrown expressions initialize the payload: class types invoke move constructors for eligible local variables or xvalues, copy constructors, or byte copies directly into the heap buffer; scalar types and pointers store their raw values.
+- If payload construction throws an exception, a `try_table` guard frees the allocated exception buffer before rethrowing the constructor exception.
 - In `try_table`, tag 0 branches to a typed dispatch block that sequentially tests each catch clause using `__cppbolt_can_catch(thrown_id, handler_id)`.
-- `__cppbolt_can_catch` evaluates exact type matches, pointer conversions (`char*` to `const char*`, object pointers to `void*` or `const void*`), and derived-to-base class inheritance. For derived exceptions caught by base handlers, it returns the base subobject byte offset.
+- `__cppbolt_can_catch` evaluates exact type matches, pointer qualification conversions (`T*` to `const T*`), void pointer matches (`void*` to mutable pointers, `const void*` to any pointer), `nullptr` exceptions to pointer handlers, and derived-to-base class inheritance. Pointer types use distinct type-ID intervals to prevent collisions between unrelated pointer types.
+- For derived exceptions caught by base handlers, `__cppbolt_can_catch` returns the base subobject byte offset. For pointer catches, the code applies this offset directly to the dereferenced pointer value while preserving null pointers.
 - Catch parameters bind according to declared type:
   - Catch by reference (`catch (T&)` or `catch (const T&)`): stores the payload address (adjusted for subobject offset) into a local slot, enabling zero-copy access and in-place mutation.
-  - Catch by value (`catch (T)`): allocates a local slot and invokes the copy constructor (or performs a byte copy) from the payload address, destroying the local copy at catch scope exit.
-- When catch handling completes normally or exits via `return`, the compiler invokes the exception destructor (via `call_indirect` on `dtor_table_idx`) and frees the exception header buffer with `free`.
-- Catch-all (`catch (...)`) catches any WebAssembly exception, handling both tag 0 exceptions and foreign `exnref` values.
-- Unmatched exceptions in a `try` block rethrow tag 0 to enclosing scopes.
-- Rethrow (`throw;`) rethrows the active exception object pointer directly. The original object and its metadata remain intact until the final handler completes.
+  - Catch by value (`catch (T)`): allocates a local slot and invokes the copy constructor (or performs a byte copy) from the payload address, destroying the local copy at catch scope exit even when the parameter is unnamed. Slicing occurs when catching a derived object as a base value.
+- Handled exception slots are tracked in `active_exception_slots`. Exiting a catch handler normally, via `return`, or via loop `break` or `continue` invokes the exception destructor (via `call_indirect` on `dtor_table_idx`) and frees the heap allocation with `free`.
+- Catch clause bodies execute inside a nested exception handler. If a new exception propagates out of a catch body, the runtime destroys the currently handled exception object before propagating the new exception. Rethrow (`throw;`) rethrows the active exception object without destroying it.
 - Outside any catch block (`catch_depth == 0`), `throw;` emits `OP_UNREACHABLE` to trigger `std::terminate()`.
+- Dead-code elimination marks all class destructors and their transitive call trees reachable whenever the program uses try blocks or throw statements.
 - Semantic analysis validates throw and catch types: throwing `void`, incomplete types, or abstract classes fails compilation; catching abstract classes by value or catching rvalue references (`catch (T&&)`) fails compilation.
 
 ### 5. Terminating Destructors (`src/codegen/unwind.rs`)
@@ -124,3 +125,5 @@ Fully constructed temporary objects created during expression evaluation registe
 ### Negative / Trade-offs
 - Limits single functions to 64 tracked automatic/local variable cleanup objects, checked at compile time.
 - Dynamic exception objects allocate heap memory through `malloc` and `free`.
+- Multi-level qualification conversions beyond single-level pointers (such as `const T* const*` catching `T**`) are currently unhandled and will fail to catch.
+- Volatile pointer qualifications are not modeled in AST types and remain unsupported.

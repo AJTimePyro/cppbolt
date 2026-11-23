@@ -4,6 +4,46 @@ Ongoing chronological record of major milestones, engineering refactors, and arc
 
 ---
 
+## 2026-11-23: Typed Exception Handling Correctness Audit and Lifecycle Hardening
+
+Audited, verified, and resolved edge cases across typed C++ exception handling:
+
+### Summary of Work
+
+1. Resolved exception destruction and scratch register corruption (`src/codegen/stmt_throw.rs`):
+   - Fixed `emit_destroy_exception_if_not_rethrown` to avoid clobbering `scratch1` when it holds the exception pointer, routing destructor table index loads to `scratch2`.
+   - Added null-pointer check before loading metadata or calling `free`.
+2. Handled nested exceptions and early catch exits (`src/codegen/stmt_try.rs`, `src/codegen/stmt_return.rs`, `src/codegen/stmt.rs`, `src/codegen/stmt_loop.rs`):
+   - Wrapped catch clause bodies in an inner exception handler. When a newly thrown exception exits a catch block, the runtime destroys the handled exception object before propagating the new exception, while preserving it on `throw;`.
+   - Tracked active handled exception slots in `FunctionContext::active_exception_slots`.
+   - Destroyed active exception objects when exiting catch blocks via `return`, `break`, or `continue`.
+   - Maintained `current_block_depth` across try and catch blocks so control flow jumps target the correct block depth.
+3. Cleaned up allocations on constructor failure (`src/codegen/stmt_throw.rs`):
+   - Enclosed payload construction in a `try_table` guard. If a copy or move constructor throws during exception initialization, the allocated heap buffer is freed before propagating the constructor's exception.
+4. Preserved exception destructors during dead-code elimination (`src/codegen/analysis.rs`, `src/codegen/program_prepare.rs`, `src/codegen/program_prepare_runtime.rs`):
+   - Retained class destructors and their transitive call trees when programs contain try blocks or throw statements, ensuring indirect calls through the exception destructor table do not trap.
+   - Collected lifecycle references for catch-by-value parameters and typed initializer lists.
+5. Resolved pointer type collisions and multiple inheritance pointer adjustments (`src/sema/exception_types.rs`, `src/codegen/exception_can_catch.rs`, `src/codegen/stmt_try_param.rs`):
+   - Replaced overlapping primitive pointer IDs with distinct type intervals, preventing accidental matches across unrelated pointer types (such as `int*` and `double*`).
+   - Supported `nullptr` catch matching for pointer handlers.
+   - Adjusted dereferenced pointer values directly for multiple inheritance base conversions rather than adjusting the payload buffer address, preserving null pointers.
+6. Implemented move-constructor selection and unnamed catch parameters (`src/codegen/stmt_throw.rs`, `src/codegen/stmt_try_param.rs`):
+   - Preferred move constructors when throwing automatic non-const local variables or xvalues per ISO C++17 [class.copy.elision].
+   - Constructed temporary parameters, performed slicing, and scheduled destructors for unnamed catch-by-value parameters.
+7. Verified architectural boundaries:
+   - Confirmed `volatile` qualification is absent from AST `Type` representations and deferred until general cv-qualification improvements.
+   - Verified that multi-level pointer qualification conversions correctly reject invalid conversions (such as `T**` to `const T**`) while documenting that `const T* const*` catching `T**` remains unsupported.
+
+### Verification Results
+
+- Exception test suite: all 64 tests in `tests/exceptions.rs` pass.
+- Full test suite: unit tests, integration tests, nesting checks, and `tests/oracle_gate.rs` pass.
+- Census audit: all 7 tests in `tests/census_fixture.rs` pass (0 files over 500 lines, 0 functions over 80 lines, 0 functions with >5 parameters excluding self).
+- Clippy: `cargo clippy --all-targets -- -D warnings` passes with 0 warnings.
+- Documentation checks: `python3 tools/check_feature_matrix.py` and `mdbook build docs/book` pass without error.
+
+---
+
 ## 2026-11-23: Exception Handling Phase 4: Typed Exception Objects and Catch Matching
 
 Implemented C++17 typed exception objects, dynamic catch matching, class inheritance conversions, reference and value bindings, and exception object lifecycle management:
