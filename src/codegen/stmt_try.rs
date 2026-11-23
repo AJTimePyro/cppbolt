@@ -222,6 +222,7 @@ impl<'a> Codegen<'a> {
         let old_in_catch_all = ctx.in_catch_all;
         ctx.in_catch_all = false;
         ctx.catch_depth += 1;
+        self.emit_uncaught_count_change(code, -1);
         let clean_start = ctx.cleanup_entries.len();
         let clause_exit_target = self.emit_clause_try_table_prelude(code);
 
@@ -431,6 +432,7 @@ impl<'a> Codegen<'a> {
         let old_in_catch_all = ctx.in_catch_all;
         ctx.in_catch_all = true;
         ctx.catch_depth += 1;
+        self.emit_uncaught_count_change(code, -1);
 
         self.compile_stmt(body, ctx, code)?;
         self.emit_clean_temporaries(ctx, code);

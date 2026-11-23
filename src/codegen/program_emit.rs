@@ -50,6 +50,9 @@ impl<'a> Codegen<'a> {
         // Global 2: Free list head pointer (starts at 0)
         self.module.globals.push((TYPE_I32, true, 0));
 
+        // Global 3: count of exceptions thrown but not yet caught
+        self.module.globals.push((TYPE_I32, true, 0));
+
         // Memory export: calculate needed pages covering stack, data, BSS
         let needed_pages =
             memory_layout::pages_for(heap_start).max(memory_layout::DEFAULT_MEMORY_PAGES);

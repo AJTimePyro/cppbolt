@@ -47,6 +47,7 @@ impl<'a> Codegen<'a> {
             self.emit_exception_header(temp_ptr_slot, &meta, ctx, code);
             self.compile_throw_payload_with_guard(expr, &ty, temp_ptr_slot, ctx, code)?;
             Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
+            self.emit_uncaught_count_change(code, 1);
             code.push(OP_THROW);
             write_u32(code, 0);
         } else if ctx.catch_depth == 0 {

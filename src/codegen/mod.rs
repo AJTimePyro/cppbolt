@@ -53,6 +53,8 @@ mod strings;
 mod type_of;
 mod unwind;
 
+pub(super) const UNCAUGHT_COUNT_GLOBAL: u32 = 3;
+
 use crate::ast::types::{Type, WasmType};
 use crate::ast::*;
 use crate::diagnostics::CompileError;

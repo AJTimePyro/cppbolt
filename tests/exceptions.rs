@@ -3410,6 +3410,38 @@ int main() {
 }
 
 #[test]
+fn test_uncaught_exceptions_during_unwinding() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+#include <exception>
+
+struct Tracer {
+    ~Tracer() noexcept {
+        std::printf("Uncaught:%d\n", std::uncaught_exceptions());
+    }
+};
+
+void inner() {
+    Tracer t;
+    throw 1;
+}
+
+int main() {
+    try {
+        inner();
+    } catch (...) {
+        std::printf("Count:%d\n", std::uncaught_exceptions());
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Uncaught:1\nCount:0");
+    Ok(())
+}
+
+#[test]
 fn test_temp_cleanup_overflow_fails_compilation() -> Result<(), String> {
     let mut source = String::from("struct S { ~S() {} }; void sink(S s) {} int main() {\n");
     for i in 0..64 {

@@ -220,6 +220,16 @@ impl<'a> Codegen<'a> {
         trap_ret
     }
 
+    pub(super) fn emit_uncaught_count_change(&self, code: &mut Vec<u8>, delta: i32) {
+        code.push(OP_GLOBAL_GET);
+        write_u32(code, UNCAUGHT_COUNT_GLOBAL);
+        code.push(OP_I32_CONST);
+        write_i32(code, delta);
+        code.push(OP_I32_ADD);
+        code.push(OP_GLOBAL_SET);
+        write_u32(code, UNCAUGHT_COUNT_GLOBAL);
+    }
+
     pub(super) fn emit_terminate_call(&self, code: &mut Vec<u8>) {
         code.push(OP_CALL);
         write_u32(code, self.func_indices["__cppbolt_terminate"]);

@@ -96,6 +96,14 @@ impl<'a> Codegen<'a> {
             code.push(0);
             return Ok(());
         }
+        if crate::name::QualifiedName::new(name)
+            .plain()
+            .starts_with("__cppbolt_uncaught_exceptions")
+        {
+            code.push(OP_GLOBAL_GET);
+            write_u32(code, UNCAUGHT_COUNT_GLOBAL);
+            return Ok(());
+        }
         if self.sema.struct_layouts.contains_key(name) {
             return self.compile_struct_value_call(name, args, ctx, code);
         }
