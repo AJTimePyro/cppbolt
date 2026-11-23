@@ -43,6 +43,16 @@ impl<'a> Codegen<'a> {
             write_u32(code, ctx.scratch1);
             Self::emit_slot_store(temp_ptr_slot, ctx.fp_local, ctx.scratch1, code);
 
+            // [except.throw] p4: terminate immediately if exception allocation fails.
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.scratch1);
+            code.push(OP_I32_EQZ);
+            code.push(OP_IF);
+            code.push(0x40);
+            self.emit_terminate_call(code);
+            code.push(OP_UNREACHABLE);
+            code.push(OP_END);
+
             let meta = ExceptionMeta { type_id, dtor_idx, size };
             self.emit_exception_header(temp_ptr_slot, &meta, ctx, code);
             self.compile_throw_payload_with_guard(expr, &ty, temp_ptr_slot, ctx, code)?;

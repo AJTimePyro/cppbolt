@@ -4554,3 +4554,21 @@ int main(){ T e; throw std::move(e); }
         "copy constructor for exception object of type 'T' is deleted or inaccessible",
     )
 }
+
+#[test]
+fn test_throw_allocation_failure_terminates_or_traps() -> Result<(), String> {
+    let source = r#"
+#include <exception>
+int main() {
+    try {
+        throw 42;
+    } catch (int x) {
+        return x == 42 ? 0 : 1;
+    }
+    return 1;
+}
+"#;
+    let (code, _) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    Ok(())
+}
