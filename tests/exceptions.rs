@@ -2930,6 +2930,22 @@ int main() {
     Ok(())
 }
 
+#[test]
+fn test_noexcept_multilevel_function_pointer_conversion_rejected() {
+    let source = r#"
+void f() noexcept {}
+using FnNoexcept = void (*)() noexcept;
+using Fn = void (*)();
+int main() {
+    FnNoexcept p = f;
+    Fn* pp = &p;
+    return 0;
+}
+"#;
+    let res = run_cpp(source);
+    assert!(res.is_err());
+}
+
 
 
 

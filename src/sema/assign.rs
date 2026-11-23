@@ -328,18 +328,20 @@ impl Sema {
         if base_to == base_from {
             return true;
         }
-        if let (
-            Type::Function {
-                return_type: ret_to,
-                param_types: params_to,
-                qualifiers: quals_to,
-            },
-            Type::Function {
-                return_type: ret_from,
-                param_types: params_from,
-                qualifiers: quals_from,
-            },
-        ) = (base_to, base_from) {
+        if n == 1
+            && let (
+                Type::Function {
+                    return_type: ret_to,
+                    param_types: params_to,
+                    qualifiers: quals_to,
+                },
+                Type::Function {
+                    return_type: ret_from,
+                    param_types: params_from,
+                    qualifiers: quals_from,
+                },
+            ) = (base_to, base_from)
+        {
             if ret_to == ret_from && params_to == params_from {
                 return !quals_to.is_noexcept || quals_from.is_noexcept;
             }
