@@ -264,6 +264,13 @@ impl<'a> Codegen<'a> {
                 self.sema.class_type_id_from_names(derived_name, &canonical_names)
             {
                 for (base_name, base_off) in &layout.base_offsets {
+                    // [except.handle]: catch(Base&) matches Derived only for an
+                    // unambiguous public base subobject.
+                    if self.sema.base_subobject_path_count(derived_name, base_name) != 1
+                        || !self.sema.base_path_is_public(derived_name, base_name)
+                    {
+                        continue;
+                    }
                     if let Some(base_id) =
                         self.sema.class_type_id_from_names(base_name, &canonical_names)
                     {

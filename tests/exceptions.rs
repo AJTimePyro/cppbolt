@@ -3359,6 +3359,60 @@ int main() {
 }
 
 #[test]
+fn test_private_base_catch_is_rejected() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct Base { int tag; };
+struct Derived : private Base { Derived() { tag = 7; } };
+
+int main() {
+    Derived d;
+    try {
+        throw d;
+    } catch (Base&) {
+        std::printf("WrongPrivate ");
+    } catch (...) {
+        std::printf("CorrectFallback");
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "CorrectFallback");
+    Ok(())
+}
+
+#[test]
+fn test_ambiguous_base_catch_is_rejected() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct Base { int tag; };
+struct Left : Base {};
+struct Right : Base {};
+struct Bottom : Left, Right {};
+
+int main() {
+    Bottom b;
+    try {
+        throw b;
+    } catch (Base&) {
+        std::printf("WrongAmbiguous ");
+    } catch (...) {
+        std::printf("CorrectFallback");
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "CorrectFallback");
+    Ok(())
+}
+
+#[test]
 fn test_enum_exception_type_id_is_distinct() -> Result<(), String> {
     let source = r#"
 #include <cstdio>

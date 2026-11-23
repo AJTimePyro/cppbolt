@@ -24,6 +24,25 @@ impl Sema {
             .map(|b| self.base_subobject_path_count(b, base))
             .sum()
     }
+    /// True when every edge on a derivation path is public. Catch matching is
+    /// done at namespace scope, where private and protected bases are not
+    /// accessible even from a handler inside the derived class.
+    pub fn base_path_is_public(&self, derived: &str, base: &str) -> bool {
+        if derived == base {
+            return true;
+        }
+        let Some(layout) = self.struct_layouts.get(derived) else {
+            return false;
+        };
+        for (i, b) in layout.base_classes.iter().enumerate() {
+            let access = layout.base_access.get(i).copied().unwrap_or_default();
+            if access == crate::ast::BaseAccess::Public && self.base_path_is_public(b, base) {
+                return true;
+            }
+        }
+        false
+    }
+
     fn base_path_is_accessible(&self, derived: &str, base: &str) -> bool {
         if derived == base {
             return true;
