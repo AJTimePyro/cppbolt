@@ -1977,3 +1977,80 @@ int main() {
     }
 }
 
+#[test]
+fn test_catch_by_value_destroys_parameter_at_catch_exit() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct TracerVal {
+    int id;
+    TracerVal(int i) : id(i) { std::printf("C:%d ", id); }
+    TracerVal(const TracerVal& o) : id(o.id) { std::printf("Copy:%d ", id); }
+    ~TracerVal() { std::printf("D:%d ", id); }
+};
+
+int main() {
+    try {
+        throw TracerVal(10);
+    } catch (TracerVal v) {
+        std::printf("InCatch:%d ", v.id);
+    }
+    std::printf("AfterCatch");
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "C:10 Copy:10 InCatch:10 D:10 D:10 AfterCatch");
+    Ok(())
+}
+
+#[test]
+fn test_pointer_const_qualification_conversion() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct Widget {
+    int val;
+    Widget(int v) : val(v) {}
+};
+
+Widget g_w(99);
+
+int main() {
+    // 1. const Widget* should NOT be caught by non-const Widget*
+    try {
+        const Widget* pw = &g_w;
+        throw pw;
+    } catch (Widget* w) {
+        std::printf("ErrorShouldNotCatch ");
+    } catch (const Widget* cw) {
+        std::printf("CaughtConstWidget:%d ", cw->val);
+    }
+
+    // 2. non-const Widget* CAN be caught by const Widget*
+    try {
+        Widget* pw = &g_w;
+        throw pw;
+    } catch (const Widget* cw) {
+        std::printf("CaughtNonConstByConst:%d ", cw->val);
+    }
+
+    // 3. const char* should NOT be caught by void*
+    try {
+        const char* msg = "test";
+        throw msg;
+    } catch (void* v) {
+        std::printf("ErrorVoidPtr ");
+    } catch (const void* cv) {
+        std::printf("CaughtConstVoid");
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "CaughtConstWidget:99 CaughtNonConstByConst:99 CaughtConstVoid");
+    Ok(())
+}
+

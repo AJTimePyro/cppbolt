@@ -4,8 +4,6 @@ use super::*;
 use crate::ast::types::Type;
 use crate::diagnostics::CompileError;
 
-#[allow(dead_code)]
-pub const TYPE_ID_NONE: u32 = 0;
 pub const TYPE_ID_INT: u32 = 1;
 pub const TYPE_ID_UINT: u32 = 2;
 pub const TYPE_ID_BOOL: u32 = 3;
@@ -25,6 +23,7 @@ pub const TYPE_ID_LONG: u32 = 16;
 pub const TYPE_ID_ULONG: u32 = 17;
 pub const TYPE_ID_CLASS_BASE: u32 = 1000;
 pub const TYPE_ID_PTR_CLASS_BASE: u32 = 20000;
+pub const TYPE_ID_CONST_PTR_CLASS_BASE: u32 = 30000;
 
 impl Sema {
     pub fn get_class_type_id(&self, class_name: &str) -> Option<u32> {
@@ -34,17 +33,6 @@ impl Sema {
             .iter()
             .position(|k| *k == class_name)
             .map(|i| (i as u32) + TYPE_ID_CLASS_BASE)
-    }
-
-    #[allow(dead_code)]
-    pub fn get_class_name_from_id(&self, class_id: u32) -> Option<String> {
-        if class_id < TYPE_ID_CLASS_BASE {
-            return None;
-        }
-        let idx = (class_id - TYPE_ID_CLASS_BASE) as usize;
-        let mut names: Vec<&String> = self.struct_layouts.keys().collect();
-        names.sort();
-        names.get(idx).map(|s| (*s).clone())
     }
 
     pub fn get_exception_type_id(&self, ty: &Type) -> Option<u32> {
@@ -78,10 +66,21 @@ impl Sema {
                         Some(TYPE_ID_VOID_PTR)
                     }
                 }
-                Type::Struct(sname) => self
-                    .get_class_type_id(sname)
-                    .map(|id| id - TYPE_ID_CLASS_BASE + TYPE_ID_PTR_CLASS_BASE),
-                _ => Some(TYPE_ID_VOID_PTR),
+                Type::Struct(sname) => self.get_class_type_id(sname).map(|id| {
+                    let base = if inner.is_const() {
+                        TYPE_ID_CONST_PTR_CLASS_BASE
+                    } else {
+                        TYPE_ID_PTR_CLASS_BASE
+                    };
+                    id - TYPE_ID_CLASS_BASE + base
+                }),
+                _ => {
+                    if inner.is_const() {
+                        Some(TYPE_ID_CONST_VOID_PTR)
+                    } else {
+                        Some(TYPE_ID_VOID_PTR)
+                    }
+                }
             },
             Type::Struct(sname) => self.get_class_type_id(sname),
             Type::Enum(_) => Some(TYPE_ID_INT),

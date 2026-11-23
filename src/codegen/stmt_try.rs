@@ -192,6 +192,7 @@ impl<'a> Codegen<'a> {
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
         ctx.enter_scope();
+        ctx.scope_objects.push(Vec::new());
         let old_in_catch_all = ctx.in_catch_all;
         ctx.in_catch_all = false;
         ctx.catch_depth += 1;
@@ -215,6 +216,8 @@ impl<'a> Codegen<'a> {
 
         self.compile_stmt(&clause.body, ctx, code)?;
         self.emit_clean_temporaries(ctx, code);
+        let catch_objs = ctx.scope_objects.pop().unwrap_or_default();
+        self.emit_dtor_for_scope(&catch_objs, ctx, code);
         ctx.catch_depth -= 1;
         ctx.in_catch_all = old_in_catch_all;
         ctx.exit_scope();
