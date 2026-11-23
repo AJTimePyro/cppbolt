@@ -58,8 +58,12 @@ impl Sema {
             let short = cls.rsplit("::").next().unwrap_or(cls);
             func.name == cls || func.name == short
         });
+        let is_dtor = self.current_class.as_deref().is_some_and(|cls| {
+            let short = cls.rsplit("::").next().unwrap_or(cls);
+            func.name == format!("~{cls}") || func.name == format!("~{short}")
+        });
         if let Some(body) = &mut func.body {
-            super::analyze_helpers::desugar_function_try_block(is_ctor, body)?;
+            super::analyze_helpers::desugar_function_try_block(is_ctor, is_dtor, body)?;
             self.with_try_depth(0, |s| s.analyze_stmt(body))?;
         }
         Ok(())

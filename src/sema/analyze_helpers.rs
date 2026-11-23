@@ -27,21 +27,22 @@ fn stmt_contains_return(s: &Stmt) -> Option<(usize, usize)> {
     }
 }
 
-/// Falling off the end of a constructor function-try-block handler rethrows
-/// the handled exception ([except.handle]). Return statements in a constructor
-/// function-try-block handler are forbidden by [except.handle] p17.
+/// Falling off the end of a constructor or destructor function-try-block handler
+/// rethrows the handled exception ([except.handle] p15). Return statements in a
+/// constructor function-try-block handler are forbidden by [except.handle] p17.
 pub(super) fn desugar_function_try_block(
     is_ctor: bool,
+    is_dtor: bool,
     body: &mut Stmt,
 ) -> Result<(), CompileError> {
-    if !is_ctor {
+    if !is_ctor && !is_dtor {
         return Ok(());
     }
     let StmtKind::Try { catches, .. } = &mut body.kind else {
         return Ok(());
     };
     for clause in catches {
-        if let Some((line, col)) = stmt_contains_return(&clause.body) {
+        if is_ctor && let Some((line, col)) = stmt_contains_return(&clause.body) {
             return Err(CompileError::new(
                 "return statements cannot appear in a function-try-block handler of a constructor",
                 line,
