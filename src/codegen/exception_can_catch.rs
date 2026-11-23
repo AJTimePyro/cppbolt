@@ -285,13 +285,26 @@ impl<'a> Codegen<'a> {
     }
 
     fn emit_can_catch_inheritance(&self, code: &mut Vec<u8>) {
+        let thrown = self.sema.thrown_classes.borrow();
+        let caught = self.sema.caught_classes.borrow();
+        if thrown.is_empty() || caught.is_empty() {
+            return;
+        }
         let mut seen = std::collections::HashSet::new();
         let canonical_names = self.sema.canonical_class_names();
         for (derived_name, layout) in &self.sema.struct_layouts {
+            let plain_derived = crate::name::QualifiedName::new(derived_name).plain();
+            if !thrown.contains(derived_name) && !thrown.contains(plain_derived) {
+                continue;
+            }
             if let Some(derived_id) =
                 self.sema.class_type_id_from_names(derived_name, &canonical_names)
             {
                 for (base_name, base_off) in &layout.base_offsets {
+                    let plain_base = crate::name::QualifiedName::new(base_name).plain();
+                    if !caught.contains(base_name) && !caught.contains(plain_base) {
+                        continue;
+                    }
                     // [except.handle]: catch(Base&) matches Derived only for an
                     // unambiguous public base subobject.
                     if self.sema.base_subobject_path_count(derived_name, base_name) != 1

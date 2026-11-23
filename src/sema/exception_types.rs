@@ -30,26 +30,33 @@ pub const TYPE_ID_MEMBER_PTR_BASE: u32 = 60000;
 pub const TYPE_ID_AUX_SPAN: u32 = 5000;
 
 impl Sema {
-    pub fn canonical_class_names(&self) -> Vec<&str> {
-        let mut names: Vec<&str> = self
+    pub fn canonical_class_names(&self) -> Vec<String> {
+        if let Some(cached) = self.canonical_class_cache.borrow().as_ref() {
+            return cached.clone();
+        }
+        let mut names: Vec<String> = self
             .struct_layouts
             .keys()
-            .map(|k| crate::name::QualifiedName::new(k).plain())
+            .map(|k| crate::name::QualifiedName::new(k).plain().to_string())
             .collect();
         names.sort_unstable();
         names.dedup();
+        *self.canonical_class_cache.borrow_mut() = Some(names.clone());
         names
     }
 
-    pub fn class_type_id_from_names(&self, class_name: &str, names: &[&str]) -> Option<u32> {
+    pub fn class_type_id_from_names(&self, class_name: &str, names: &[String]) -> Option<u32> {
         let plain_target = crate::name::QualifiedName::new(class_name).plain();
         names
-            .binary_search(&plain_target)
+            .binary_search_by(|s| s.as_str().cmp(plain_target))
             .ok()
             .map(|i| (i as u32) + TYPE_ID_CLASS_BASE)
     }
 
     pub fn get_class_type_id(&self, class_name: &str) -> Option<u32> {
+        if let Some(cached) = self.canonical_class_cache.borrow().as_ref() {
+            return self.class_type_id_from_names(class_name, cached);
+        }
         let names = self.canonical_class_names();
         self.class_type_id_from_names(class_name, &names)
     }
@@ -239,6 +246,16 @@ impl Sema {
         line: usize,
         col: usize,
     ) -> Result<(), CompileError> {
+        let mut curr = ty.strip_reference().strip_const();
+        while let Type::Pointer(inner) = curr {
+            curr = inner.strip_const();
+        }
+        if let Type::Struct(sname) = curr {
+            self.thrown_classes.borrow_mut().insert(sname.clone());
+            self.thrown_classes
+                .borrow_mut()
+                .insert(crate::name::QualifiedName::new(sname).plain().to_string());
+        }
         let clean = ty.strip_reference().strip_const();
         if matches!(clean, Type::Void) {
             return Err(CompileError::new("cannot throw void expression", line, col));
@@ -382,6 +399,16 @@ impl Sema {
         line: usize,
         col: usize,
     ) -> Result<(), CompileError> {
+        let mut curr = ty.strip_reference().strip_const();
+        while let Type::Pointer(inner) = curr {
+            curr = inner.strip_const();
+        }
+        if let Type::Struct(sname) = curr {
+            self.caught_classes.borrow_mut().insert(sname.clone());
+            self.caught_classes
+                .borrow_mut()
+                .insert(crate::name::QualifiedName::new(sname).plain().to_string());
+        }
         if ty.is_rvalue_reference() {
             return Err(CompileError::new(
                 "cannot declare catch handler with rvalue reference type",

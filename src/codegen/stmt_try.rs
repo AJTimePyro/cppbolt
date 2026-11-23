@@ -324,6 +324,39 @@ impl<'a> Codegen<'a> {
         clause_exit_target
     }
 
+    fn emit_clause_unwind_cleanup(
+        &mut self,
+        clean_start: usize,
+        (handled_slot, unwind_thrown_slot, save_val_slot): (u32, Option<u32>, u32),
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) {
+        self.emit_cleanup_range(clean_start, ctx.cleanup_entries.len(), ctx, code);
+        Self::emit_slot_load(handled_slot, ctx.fp_local, code);
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.scratch2);
+
+        if let Some(thrown_slot) = unwind_thrown_slot {
+            Self::emit_slot_load(thrown_slot, ctx.fp_local, code);
+            code.push(OP_LOCAL_GET);
+            write_u32(code, ctx.scratch2);
+            code.push(OP_I32_NE);
+            code.push(OP_IF);
+            code.push(0x40);
+        }
+
+        self.emit_destroy_exception_if_not_rethrown(ctx.scratch2, ctx, code);
+        Self::emit_slot_zero(handled_slot, ctx.fp_local, code);
+
+        if unwind_thrown_slot.is_some() {
+            code.push(OP_END);
+        }
+
+        Self::emit_slot_load(save_val_slot, ctx.fp_local, code);
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.last_exn_val_local);
+    }
+
     fn emit_clause_other_unwind(
         &mut self,
         clean_start: usize,
@@ -336,24 +369,12 @@ impl<'a> Codegen<'a> {
         code.push(OP_LOCAL_SET);
         write_u32(code, ctx.unwind_exnref_local);
 
-        self.emit_cleanup_range(clean_start, ctx.cleanup_entries.len(), ctx, code);
-
-        Self::emit_slot_load(handled_slot, ctx.fp_local, code);
-        code.push(OP_LOCAL_SET);
-        write_u32(code, ctx.scratch2);
-        self.emit_destroy_exception_if_not_rethrown(ctx.scratch2, ctx, code);
-
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_I32_CONST);
-        write_i32(code, 0);
-        code.push(OP_I32_STORE);
-        write_u32(code, 2);
-        write_u32(code, handled_slot);
-
-        Self::emit_slot_load(save_val_slot, ctx.fp_local, code);
-        code.push(OP_LOCAL_SET);
-        write_u32(code, ctx.last_exn_val_local);
+        self.emit_clause_unwind_cleanup(
+            clean_start,
+            (handled_slot, None, save_val_slot),
+            ctx,
+            code,
+        );
 
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.unwind_exnref_local);
@@ -373,31 +394,12 @@ impl<'a> Codegen<'a> {
         write_u32(code, ctx.scratch1);
         Self::emit_slot_store(thrown_slot, ctx.fp_local, ctx.scratch1, code);
 
-        self.emit_cleanup_range(clean_start, ctx.cleanup_entries.len(), ctx, code);
-
-        Self::emit_slot_load(handled_slot, ctx.fp_local, code);
-        code.push(OP_LOCAL_SET);
-        write_u32(code, ctx.scratch2);
-
-        Self::emit_slot_load(thrown_slot, ctx.fp_local, code);
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.scratch2);
-        code.push(OP_I32_NE);
-        code.push(OP_IF);
-        code.push(0x40);
-        self.emit_destroy_exception_if_not_rethrown(ctx.scratch2, ctx, code);
-        code.push(OP_LOCAL_GET);
-        write_u32(code, ctx.fp_local);
-        code.push(OP_I32_CONST);
-        write_i32(code, 0);
-        code.push(OP_I32_STORE);
-        write_u32(code, 2);
-        write_u32(code, handled_slot);
-        code.push(OP_END);
-
-        Self::emit_slot_load(save_val_slot, ctx.fp_local, code);
-        code.push(OP_LOCAL_SET);
-        write_u32(code, ctx.last_exn_val_local);
+        self.emit_clause_unwind_cleanup(
+            clean_start,
+            (handled_slot, Some(thrown_slot), save_val_slot),
+            ctx,
+            code,
+        );
 
         Self::emit_slot_load(thrown_slot, ctx.fp_local, code);
         code.push(OP_THROW);

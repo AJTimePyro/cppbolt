@@ -19,6 +19,9 @@ pub struct Sema {
     /// Stable IDs for function and member-pointer exception types, assigned on
     /// first use because those types have no separate declaration registry.
     pub aux_exception_type_ids: std::cell::RefCell<HashMap<String, u32>>,
+    pub canonical_class_cache: std::cell::RefCell<Option<Vec<String>>>,
+    pub thrown_classes: std::cell::RefCell<HashSet<String>>,
+    pub caught_classes: std::cell::RefCell<HashSet<String>>,
     pub struct_layouts: HashMap<String, StructLayout>,
     pub struct_order: Vec<String>,
     pub enum_values: HashMap<String, i64>,
