@@ -4792,4 +4792,35 @@ int main() {
     Ok(())
 }
 
+#[test]
+fn test_exception_thrown_in_conditional_expression_preserves_destructor() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct ExprExn {
+    int val;
+    ExprExn(int v) : val(v) {}
+    ~ExprExn() { std::printf("DtorExn:%d ", val); }
+};
+
+int compute(bool fail) {
+    return fail ? throw ExprExn(7) : 42;
+}
+
+int main() {
+    try {
+        compute(true);
+    } catch (ExprExn& e) {
+        std::printf("Caught:%d ", e.val);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Caught:7 DtorExn:7");
+    Ok(())
+}
+
+
 

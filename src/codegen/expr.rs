@@ -278,15 +278,19 @@ impl<'a> Codegen<'a> {
         let result_ty = self.get_expr_type(expr, ctx);
         let then_ty = self.get_expr_type(then_expr, ctx);
         let else_ty = self.get_expr_type(else_expr, ctx);
-        let wty = result_ty
-            .to_wasm_type()
-            .map(|w| match w {
-                WasmType::I32 => TYPE_I32,
-                WasmType::I64 => TYPE_I64,
-                WasmType::F32 => TYPE_F32,
-                WasmType::F64 => TYPE_F64,
-            })
-            .unwrap_or(TYPE_I32);
+        let wty = if result_ty == Type::Void {
+            0x40
+        } else {
+            result_ty
+                .to_wasm_type()
+                .map(|w| match w {
+                    WasmType::I32 => TYPE_I32,
+                    WasmType::I64 => TYPE_I64,
+                    WasmType::F32 => TYPE_F32,
+                    WasmType::F64 => TYPE_F64,
+                })
+                .unwrap_or(TYPE_I32)
+        };
 
         self.compile_cond(cond, ctx, code)?;
         code.push(OP_IF);

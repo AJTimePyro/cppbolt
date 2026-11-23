@@ -1,105 +1,17 @@
 //! Runtime support function registration and reachability preparation.
 
 use super::*;
-use crate::ast::stmt::{Stmt, StmtKind};
-use crate::ast::types::Type;
 use crate::runtime::opcodes::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 impl<'a> Codegen<'a> {
-    fn scan_stmt_for_exception_classes(
-        stmt: &Stmt,
-        locals: &mut HashMap<String, String>,
-        classes: &mut HashSet<String>,
-    ) {
-        match &stmt.kind {
-            StmtKind::VarDecl { name, ty, .. } => {
-                if let Type::Struct(sname) = ty.strip_reference().strip_const() {
-                    locals.insert(name.clone(), sname.clone());
-                }
-            }
-            StmtKind::Throw(Some(e)) => {
-                Self::extract_throw_expr_class(e, locals, classes);
-            }
-            StmtKind::Try { try_body, catches } => {
-                Self::scan_stmt_for_exception_classes(try_body, locals, classes);
-                for c in catches {
-                    if let Some((ty, _)) = &c.param
-                        && let Type::Struct(sname) = ty.strip_reference().strip_const()
-                    {
-                        classes.insert(sname.clone());
-                    }
-                    Self::scan_stmt_for_exception_classes(&c.body, locals, classes);
-                }
-            }
-            StmtKind::Compound(stmts) | StmtKind::VarDeclGroup(stmts) => {
-                for s in stmts {
-                    Self::scan_stmt_for_exception_classes(s, locals, classes);
-                }
-            }
-            StmtKind::If {
-                branches,
-                else_stmt,
-            } => {
-                for (_, then_s) in branches {
-                    Self::scan_stmt_for_exception_classes(then_s, locals, classes);
-                }
-                if let Some(es) = else_stmt {
-                    Self::scan_stmt_for_exception_classes(es, locals, classes);
-                }
-            }
-            StmtKind::While { body, .. }
-            | StmtKind::DoWhile { body, .. }
-            | StmtKind::For { body, .. }
-            | StmtKind::Switch { body, .. } => {
-                Self::scan_stmt_for_exception_classes(body, locals, classes);
-            }
-            _ => {}
-        }
-    }
-
-    fn extract_throw_expr_class(
-        expr: &Expr,
-        locals: &HashMap<String, String>,
-        classes: &mut HashSet<String>,
-    ) {
-        match expr {
-            Expr::Identifier(name) => {
-                if let Some(sname) = locals.get(name) {
-                    classes.insert(sname.clone());
-                } else {
-                    classes.insert(name.clone());
-                }
-            }
-            Expr::Call { callee, .. } => {
-                if let Expr::Identifier(cname) = &**callee {
-                    classes.insert(cname.clone());
-                }
-            }
-            Expr::TypedInitList { ty, .. } => {
-                if let Type::Struct(sname) = ty.strip_reference().strip_const() {
-                    classes.insert(sname.clone());
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn collect_reachable_exception_classes(
-        &self,
-        candidates: &[FuncCandidate<'_>],
-        reachable: &HashSet<usize>,
-    ) -> HashSet<String> {
+    fn collect_reachable_exception_classes(&self) -> HashSet<String> {
         let mut classes = HashSet::new();
-        for &idx in reachable {
-            let body_opt = match &candidates[idx].decl {
-                FuncDeclRef::Function(f) => f.body.as_ref(),
-                FuncDeclRef::Method(_, m) => m.body.as_ref(),
-            };
-            if let Some(stmt) = body_opt {
-                let mut locals = HashMap::new();
-                Self::scan_stmt_for_exception_classes(stmt, &mut locals, &mut classes);
-            }
+        for sname in self.sema.thrown_classes.borrow().iter() {
+            classes.insert(sname.clone());
+        }
+        for sname in self.sema.caught_classes.borrow().iter() {
+            classes.insert(sname.clone());
         }
         let initial_classes: Vec<String> = classes.iter().cloned().collect();
         for sname in initial_classes {
@@ -128,7 +40,7 @@ impl<'a> Codegen<'a> {
             return false;
         }
 
-        let target_classes = self.collect_reachable_exception_classes(candidates, reachable);
+        let target_classes = self.collect_reachable_exception_classes();
         let mut worklist = Vec::new();
         for (idx, c) in candidates.iter().enumerate() {
             if let FuncDeclRef::Method(name, m) = c.decl {

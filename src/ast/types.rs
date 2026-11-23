@@ -272,6 +272,12 @@ impl Type {
     pub fn conditional_result_type(&self, other: &Type) -> Type {
         let left = self.strip_reference();
         let right = other.strip_reference();
+        if matches!(left, Type::Void) {
+            return right.clone();
+        }
+        if matches!(right, Type::Void) {
+            return left.clone();
+        }
         let left_arithmetic = left.is_integer() || left.is_floating();
         let right_arithmetic = right.is_integer() || right.is_floating();
         if left_arithmetic && right_arithmetic {
@@ -284,18 +290,9 @@ impl Type {
     pub fn is_integer(&self) -> bool {
         matches!(
             self.strip_const(),
-            Type::Bool
-                | Type::Char
-                | Type::SignedChar
-                | Type::UnsignedChar
-                | Type::Short
-                | Type::UnsignedShort
-                | Type::Int
-                | Type::UnsignedInt
-                | Type::Long
-                | Type::UnsignedLong
-                | Type::LongLong
-                | Type::UnsignedLongLong
+            Type::Bool | Type::Char | Type::SignedChar | Type::UnsignedChar
+                | Type::Short | Type::UnsignedShort | Type::Int | Type::UnsignedInt
+                | Type::Long | Type::UnsignedLong | Type::LongLong | Type::UnsignedLongLong
                 | Type::Enum(_)
         )
     }
@@ -303,13 +300,8 @@ impl Type {
     pub fn is_signed(&self) -> bool {
         matches!(
             self.strip_const(),
-            Type::Char
-                | Type::SignedChar
-                | Type::Short
-                | Type::Int
-                | Type::Long
-                | Type::LongLong
-                | Type::Enum(_)
+            Type::Char | Type::SignedChar | Type::Short | Type::Int
+                | Type::Long | Type::LongLong | Type::Enum(_)
         )
     }
 
