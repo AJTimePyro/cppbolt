@@ -7,6 +7,16 @@ use std::collections::HashMap;
 pub type FieldInit = Option<(Expr, usize, usize)>;
 pub type StructFieldDecl = (String, Type, FieldInit);
 
+/// A copy/move constructor takes a reference to its own class; other ctors
+/// share the name but not this signature.
+pub fn is_copy_or_move_ctor(name: &str, params: &[Param]) -> bool {
+    let Some(first) = params.first() else { return false; };
+    first.ty.is_reference()
+        && matches!(first.ty.clean_type(), Type::Struct(ty)
+            if crate::name::QualifiedName::new(ty).class_short_name() == name)
+        && params.iter().skip(1).all(|p| p.default_val.is_some())
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Param {
     pub name: String,

@@ -20,6 +20,16 @@ impl Parser {
 
     pub(super) fn parse_try_stmt(&mut self, line: usize, col: usize) -> Result<Stmt, CompileError> {
         self.advance();
+        self.parse_try_body_and_catches(line, col)
+    }
+
+    /// Parses the body and handlers of a `try` whose keyword was already
+    /// consumed. Function-try-blocks put ctor initializers in between.
+    pub(super) fn parse_try_body_and_catches(
+        &mut self,
+        line: usize,
+        col: usize,
+    ) -> Result<Stmt, CompileError> {
         let try_body = self.parse_stmt()?;
         let mut catches = Vec::new();
         while self.peek() == &TokenKind::KwCatch {

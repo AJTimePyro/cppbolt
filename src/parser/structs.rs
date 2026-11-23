@@ -326,7 +326,7 @@ impl Parser {
             )?;
             ctor.is_virtual |= is_virtual;
             ctor.is_explicit = is_explicit;
-            if body.is_private && super::decl_func::is_copy_or_move_ctor(short_name, &ctor.params) {
+            if body.is_private && crate::ast::decl::is_copy_or_move_ctor(short_name, &ctor.params) {
                 body.private_members
                     .push(crate::name::copy_ctor_key(short_name));
             }

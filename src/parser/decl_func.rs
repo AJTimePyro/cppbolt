@@ -2,16 +2,6 @@
 
 use super::*;
 
-/// A copy/move constructor takes a reference to its own class; other ctors
-/// share the name but not this signature.
-pub(super) fn is_copy_or_move_ctor(name: &str, params: &[Param]) -> bool {
-    let Some(first) = params.first() else { return false; };
-    first.ty.is_reference()
-        && matches!(first.ty.clean_type(), Type::Struct(ty)
-            if crate::name::QualifiedName::new(ty).class_short_name() == name)
-        && params.iter().skip(1).all(|p| p.default_val.is_some())
-}
-
 impl Parser {
     pub(super) fn parse_function_tail(
         &mut self,
@@ -35,10 +25,15 @@ impl Parser {
         };
         let (is_const, ref_qualifier) = (quals.is_const, quals.ref_qualifier);
         let is_virtual = quals.is_override;
+        let function_try = self.peek() == &TokenKind::KwTry;
         let ctor_initializers = self.parse_ctor_initializers()?;
-        let (body, is_pure_virtual, is_deleted) = self.parse_function_body(line, col)?;
+        let (body, is_pure_virtual, is_deleted) = if function_try {
+            (Some(self.parse_try_body_and_catches(line, col)?), false, false)
+        } else {
+            self.parse_function_body(line, col)?
+        };
         if is_deleted {
-            let key = if is_copy_or_move_ctor(&name, &params) {
+            let key = if crate::ast::decl::is_copy_or_move_ctor(&name, &params) {
                 crate::name::copy_ctor_key(&name)
             } else {
                 name.clone()
@@ -409,6 +404,10 @@ impl Parser {
     pub(super) fn parse_ctor_initializers(
         &mut self,
     ) -> Result<Vec<(String, Vec<Expr>)>, CompileError> {
+        // A function-try-block puts `try` before the member initializer list.
+        if self.peek() == &TokenKind::KwTry {
+            self.advance();
+        }
         let mut ctor_initializers = Vec::new();
         if self.peek() == &TokenKind::Colon {
             self.advance();
@@ -488,8 +487,6 @@ impl Parser {
             None
         } else if self.peek() == &TokenKind::LBrace {
             Some(self.parse_compound_stmt()?)
-        } else if self.peek() == &TokenKind::KwTry {
-            Some(self.parse_try_stmt(line, col)?)
         } else {
             self.expect(TokenKind::Semi)?;
             None

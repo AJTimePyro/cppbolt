@@ -18,11 +18,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Exception Handling Conformance (C++17)
 - Runtime termination paths now call `std::terminate`, so handlers installed with `std::set_terminate` run on `noexcept` violations, `throw;` without an active exception, throwing destructors during unwinding, and exceptions escaping `main`.
 - Gave enums, function signatures, and member-pointer types distinct exception type IDs, and restricted derived-to-base catch matching to unambiguous public bases. `nullptr` now matches member-pointer handlers.
-- Rejected throwing or catching class types whose copy constructor is deleted or private; added `= delete` parsing and private-constructor tracking.
+- Rejected throwing or catching class types whose copy or move constructor is deleted or private; added `= delete` parsing and signature-based constructor tracking so private or deleted default/converting constructors do not block exception construction.
 - Enforced C++17 move-eligibility scope rules on thrown locals, multi-level pointer qualification conversions, and overloaded operators inside `noexcept(expr)`.
 - Overflowing the 64-entry cleanup budget is now a compile error instead of silently dropping temporary destructors.
 - Implemented dynamic `std::uncaught_exceptions()` and `std::uncaught_exception()` via a WebAssembly counter.
-- Added function-try-block parsing with automatic rethrow from constructor handlers, and raw function-pointer declarators in `catch` clauses.
+- Added function-try-block parsing with automatic rethrow from constructor handlers, member initializer lists after `try`, and raw function-pointer declarators in `catch` clauses.
+- Skipped bodyless methods when declaring the WebAssembly function table, so deleted constructors cannot leave the function/body count mismatched.
 
 ### Static Assert & Constant Evaluation (C++17)
 - `static_assert` conditions now reject non-constant expressions, including runtime variables and non-constexpr function calls, with an explicit compile error. Diagnostics point to the failing condition expression rather than the keyword token.

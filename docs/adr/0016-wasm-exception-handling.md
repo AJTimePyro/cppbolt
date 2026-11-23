@@ -129,7 +129,7 @@ Fully constructed temporary objects created during expression evaluation registe
 
 ### 8. C++17 Conformance Details
 - Throwing an automatic variable uses the move constructor only when the variable was declared inside the innermost enclosing try block; an outer local is copied ([class.copy.elision]).
-- Throwing or catching a class type by value with a deleted or inaccessible copy constructor fails compilation. Function declarations support `= delete`, and private constructor names are recorded for access checks.
+- Throwing or catching a class type by value with a deleted or inaccessible copy or move constructor fails compilation. Function declarations support `= delete`, and copy/move constructors are tracked by signature so private or deleted default and converting constructors do not block exception construction.
 - `std::uncaught_exceptions()` reads mutable WebAssembly global 3. Throws increment it and catch-handler entry decrements it, so destructors running during unwinding observe the active count.
-- Function-try-blocks parse for regular functions and constructors. A constructor handler that falls through implicitly rethrows the handled exception ([except.handle]). Constructor initializer lists after `try` remain unsupported.
+- Function-try-blocks parse for regular functions and constructors, including member initializer lists between `try` and the body. A constructor handler that falls through implicitly rethrows the handled exception ([except.handle]). Known limitation: constructor handlers currently cover only the function body, not exceptions thrown while initializing bases or members; closing that gap requires emitting the constructor prologue inside the try region.
 - `noexcept(expr)` accounts for overloaded member and free operators, including `operator[]`, using the operator's own exception specification.

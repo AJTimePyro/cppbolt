@@ -3544,6 +3544,32 @@ int main() {
 }
 
 #[test]
+fn test_constructor_function_try_block_with_member_initializers() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct B {
+    int x;
+    B() try : x(42) {
+        std::printf("Ctor:%d ", x);
+    } catch (...) {
+        std::printf("Handler ");
+    }
+};
+
+int main() {
+    B b;
+    std::printf("Done:%d", b.x);
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Ctor:42 Done:42");
+    Ok(())
+}
+
+#[test]
 fn test_uncaught_exceptions_during_unwinding() -> Result<(), String> {
     let source = r#"
 #include <cstdio>
