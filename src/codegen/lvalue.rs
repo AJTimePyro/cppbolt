@@ -244,7 +244,10 @@ impl<'a> Codegen<'a> {
         let table_idx = self
             .func_table_indices
             .get(name)
-            .or_else(|| self.func_table_indices.get(QualifiedName::new(name).plain()))
+            .or_else(|| {
+                self.func_table_indices
+                    .get(QualifiedName::new(name).plain())
+            })
             .copied();
         if let Some(table_idx) = table_idx {
             code.push(OP_I32_CONST);

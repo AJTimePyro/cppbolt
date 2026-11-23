@@ -22,7 +22,9 @@ impl<'a> Codegen<'a> {
         let needs_unwind = class_name.is_some()
             || ctx.is_main
             || f.qualifiers.is_noexcept
-            || f.params.iter().any(|p| matches!(p.ty.strip_const(), Type::Struct(_)))
+            || f.params
+                .iter()
+                .any(|p| matches!(p.ty.strip_const(), Type::Struct(_)))
             || unwind::stmt_can_throw_or_call(body);
 
         if needs_unwind {

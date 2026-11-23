@@ -12,8 +12,7 @@ impl Parser {
     ) -> Result<FunctionDecl, CompileError> {
         self.expect(TokenKind::LParen)?;
         let params = self.parse_function_params()?;
-        let (mut quals, noexcept_expr, has_exception_spec) =
-            self.parse_function_qualifiers()?;
+        let (mut quals, noexcept_expr, has_exception_spec) = self.parse_function_qualifiers()?;
         if !has_exception_spec && (name.starts_with('~') || name.contains("::~")) {
             quals.is_noexcept = true;
         }
@@ -28,7 +27,8 @@ impl Parser {
         let function_try = self.peek() == &TokenKind::KwTry;
         let ctor_initializers = self.parse_ctor_initializers()?;
         let (body, is_pure_virtual, is_deleted) = if function_try {
-            (Some(self.parse_try_body_and_catches(line, col)?), false, false)
+            let b = self.parse_try_body_and_catches(line, col)?;
+            (Some(b), false, false)
         } else {
             self.parse_function_body(line, col)?
         };
@@ -234,7 +234,11 @@ impl Parser {
         match name_error {
             Some(message) => match self.advance().kind.clone() {
                 TokenKind::Ident(id) => Ok(id),
-                _ => Err(CompileError::new(message, self.current().line, self.current().col)),
+                _ => Err(CompileError::new(
+                    message,
+                    self.current().line,
+                    self.current().col,
+                )),
             },
             None => {
                 if let TokenKind::Ident(id) = self.peek().clone() {
@@ -295,13 +299,8 @@ impl Parser {
                 class_name: cls,
                 member_type: Box::new(inner),
             },
-            None => {
-                if is_reference {
-                    Type::Reference(Box::new(inner))
-                } else {
-                    Type::Pointer(Box::new(inner))
-                }
-            }
+            None if is_reference => Type::Reference(Box::new(inner)),
+            None => Type::Pointer(Box::new(inner)),
         };
         let entity_type = match entity_params {
             Some(params) => Type::Function {

@@ -95,7 +95,10 @@ impl<'a> Codegen<'a> {
             write_u32(code, 2);
             write_u32(code, offset);
             if let Some(inner) = ty.deref_type()
-                && !matches!(inner.strip_const(), Type::Struct(_) | Type::Array(_, _) | Type::Function { .. })
+                && !matches!(
+                    inner.strip_const(),
+                    Type::Struct(_) | Type::Array(_, _) | Type::Function { .. }
+                )
             {
                 self.emit_load(inner, 0, code);
             }
@@ -126,7 +129,10 @@ impl<'a> Codegen<'a> {
                 code.push(OP_I32_LOAD);
                 write_u32(code, 2);
                 write_u32(code, fld.offset as u32);
-                if !matches!(inner.strip_const(), Type::Struct(_) | Type::Array(_, _) | Type::Function { .. }) {
+                if !matches!(
+                    inner.strip_const(),
+                    Type::Struct(_) | Type::Array(_, _) | Type::Function { .. }
+                ) {
                     self.emit_load(inner, 0, code);
                 }
             } else if matches!(fld.ty.strip_const(), Type::Struct(_) | Type::Array(_, _)) {

@@ -27,7 +27,8 @@ impl Sema {
                 param_types: params_from,
                 qualifiers: quals_from,
             },
-        ) = (target, source) {
+        ) = (target, source)
+        {
             return ret_to == ret_from
                 && params_to == params_from
                 && (!quals_to.is_noexcept || quals_from.is_noexcept);

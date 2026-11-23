@@ -109,7 +109,13 @@ impl<'a> Codegen<'a> {
         };
         self.emit_local_address(offset, ctx, code);
         let full_args = self.constructor_arguments(&sig, args);
-        self.compile_call_arguments_and_deactivate_byval(&full_args, &sig.param_types, 1, ctx, code)?;
+        self.compile_call_arguments_and_deactivate_byval(
+            &full_args,
+            &sig.param_types,
+            1,
+            ctx,
+            code,
+        )?;
         code.push(OP_CALL);
         write_u32(code, ctor_idx);
         Ok(())

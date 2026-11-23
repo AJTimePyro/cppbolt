@@ -9,7 +9,9 @@ pub type StructFieldDecl = (String, Type, FieldInit);
 
 /// A copy constructor takes an lvalue reference to its own class.
 pub fn is_copy_ctor(name: &str, params: &[Param]) -> bool {
-    let Some(first) = params.first() else { return false; };
+    let Some(first) = params.first() else {
+        return false;
+    };
     first.ty.is_lvalue_reference()
         && matches!(first.ty.clean_type(), Type::Struct(ty)
             if crate::name::QualifiedName::new(ty).class_short_name() == name)
@@ -18,7 +20,9 @@ pub fn is_copy_ctor(name: &str, params: &[Param]) -> bool {
 
 /// A move constructor takes an rvalue reference to its own class.
 pub fn is_move_ctor(name: &str, params: &[Param]) -> bool {
-    let Some(first) = params.first() else { return false; };
+    let Some(first) = params.first() else {
+        return false;
+    };
     first.ty.is_rvalue_reference()
         && matches!(first.ty.clean_type(), Type::Struct(ty)
             if crate::name::QualifiedName::new(ty).class_short_name() == name)

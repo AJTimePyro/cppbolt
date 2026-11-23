@@ -45,8 +45,8 @@ impl<'a> Codegen<'a> {
         for (idx, c) in candidates.iter().enumerate() {
             if let FuncDeclRef::Method(name, m) = c.decl {
                 let short_name = QualifiedName::new(name).class_short_name();
-                let matches_target = target_classes.contains(name)
-                    || target_classes.contains(short_name);
+                let matches_target =
+                    target_classes.contains(name) || target_classes.contains(short_name);
                 if matches_target
                     && (m.name == format!("~{name}") || m.name == format!("~{short_name}"))
                     && reachable.insert(idx)
@@ -119,7 +119,9 @@ impl<'a> Codegen<'a> {
         };
 
         let func_can_catch = (self.module.imports.len() + self.module.functions.len()) as u32;
-        let t_can_catch = self.module.add_type(vec![TYPE_I32, TYPE_I32], vec![TYPE_I32]);
+        let t_can_catch = self
+            .module
+            .add_type(vec![TYPE_I32, TYPE_I32], vec![TYPE_I32]);
         self.module.functions.push(t_can_catch);
         self.func_indices
             .insert("__cppbolt_can_catch".to_string(), func_can_catch);

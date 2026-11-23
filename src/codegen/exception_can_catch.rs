@@ -259,12 +259,7 @@ impl<'a> Codegen<'a> {
         code.push(OP_END);
     }
 
-    fn emit_can_catch_pair(
-        thrown_id: u32,
-        handler_id: u32,
-        base_off: usize,
-        code: &mut Vec<u8>,
-    ) {
+    fn emit_can_catch_pair(thrown_id: u32, handler_id: u32, base_off: usize, code: &mut Vec<u8>) {
         code.push(OP_LOCAL_GET);
         write_u32(code, 0);
         code.push(OP_I32_CONST);
@@ -297,8 +292,9 @@ impl<'a> Codegen<'a> {
             if !thrown.contains(derived_name) && !thrown.contains(plain_derived) {
                 continue;
             }
-            if let Some(derived_id) =
-                self.sema.class_type_id_from_names(derived_name, &canonical_names)
+            if let Some(derived_id) = self
+                .sema
+                .class_type_id_from_names(derived_name, &canonical_names)
             {
                 for (base_name, base_off) in &layout.base_offsets {
                     let plain_base = crate::name::QualifiedName::new(base_name).plain();
@@ -312,8 +308,9 @@ impl<'a> Codegen<'a> {
                     {
                         continue;
                     }
-                    if let Some(base_id) =
-                        self.sema.class_type_id_from_names(base_name, &canonical_names)
+                    if let Some(base_id) = self
+                        .sema
+                        .class_type_id_from_names(base_name, &canonical_names)
                     {
                         if !seen.insert((derived_id, base_id, *base_off)) {
                             continue;

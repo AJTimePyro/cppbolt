@@ -66,13 +66,29 @@ fn expr_contains_throw(expr: &Expr) -> bool {
             | Expr::PackExpansion { pattern: inner, .. }
             | Expr::Delete { expr: inner, .. } => stack.push(inner),
             Expr::Binary { left, right, .. }
-            | Expr::Assign { target: left, value: right, .. }
-            | Expr::CompoundAssign { target: left, value: right, .. }
-            | Expr::ArraySubscript { array: left, index: right, .. } => {
+            | Expr::Assign {
+                target: left,
+                value: right,
+                ..
+            }
+            | Expr::CompoundAssign {
+                target: left,
+                value: right,
+                ..
+            }
+            | Expr::ArraySubscript {
+                array: left,
+                index: right,
+                ..
+            } => {
                 stack.push(left);
                 stack.push(right);
             }
-            Expr::Ternary { cond, then_expr, else_expr } => {
+            Expr::Ternary {
+                cond,
+                then_expr,
+                else_expr,
+            } => {
                 stack.push(cond);
                 stack.push(then_expr);
                 stack.push(else_expr);
@@ -81,8 +97,7 @@ fn expr_contains_throw(expr: &Expr) -> bool {
                 stack.push(callee);
                 stack.extend(args.iter());
             }
-            Expr::InitializerList { elements, .. }
-            | Expr::TypedInitList { elements, .. } => {
+            Expr::InitializerList { elements, .. } | Expr::TypedInitList { elements, .. } => {
                 stack.extend(elements.iter());
             }
             _ => {}
@@ -127,14 +142,23 @@ pub(super) fn check_stmt_has_try_throw(stmt: &Stmt) -> bool {
                 }
                 stack.push(body);
             }
-            StmtKind::For { init, cond, step, body } => {
+            StmtKind::For {
+                init,
+                cond,
+                step,
+                body,
+            } => {
                 if let Some(init_s) = init {
                     stack.push(init_s);
                 }
-                if let Some(cond_e) = cond && expr_contains_throw(cond_e) {
+                if let Some(cond_e) = cond
+                    && expr_contains_throw(cond_e)
+                {
                     return true;
                 }
-                if let Some(step_e) = step && expr_contains_throw(step_e) {
+                if let Some(step_e) = step
+                    && expr_contains_throw(step_e)
+                {
                     return true;
                 }
                 stack.push(body);

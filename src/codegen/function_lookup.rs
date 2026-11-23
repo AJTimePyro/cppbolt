@@ -115,8 +115,7 @@ impl<'a> Codegen<'a> {
         if depth > 64 {
             return None;
         }
-        if QualifiedName::new(cls).matches(QualifiedName::new(owner))
-            && cls_offset == target_offset
+        if QualifiedName::new(cls).matches(QualifiedName::new(owner)) && cls_offset == target_offset
         {
             return Some(vec![(cls.to_string(), cls_offset)]);
         }
@@ -190,9 +189,11 @@ impl<'a> Codegen<'a> {
             return Some(idx);
         }
         let alt = QualifiedName::new(class_name).alternate();
-        let layout_opt = self.sema.struct_layouts.get(class_name).or_else(|| {
-            self.sema.struct_layouts.get(alt.as_ref())
-        });
+        let layout_opt = self
+            .sema
+            .struct_layouts
+            .get(class_name)
+            .or_else(|| self.sema.struct_layouts.get(alt.as_ref()));
         if let Some(layout) = layout_opt {
             for b in &layout.base_classes {
                 if let Some(idx) = self.find_class_vmethod(b, key) {

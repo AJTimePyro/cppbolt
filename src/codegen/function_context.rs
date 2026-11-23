@@ -70,10 +70,7 @@ impl FunctionContext {
 pub(super) fn max_catch_depth(stmt: &Stmt, current: u32) -> u32 {
     let mut max_d = current;
     match &stmt.kind {
-        StmtKind::Try {
-            try_body,
-            catches,
-        } => {
+        StmtKind::Try { try_body, catches } => {
             let in_try = max_catch_depth(try_body, current);
             max_d = max_d.max(in_try);
             for clause in catches {

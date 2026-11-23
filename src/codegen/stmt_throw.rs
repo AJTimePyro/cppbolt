@@ -26,9 +26,12 @@ impl<'a> Codegen<'a> {
             let raw_size = ty.size_of(&self.sema.struct_sizes);
             let size = u32::try_from(raw_size).unwrap_or(4).max(4);
             let dtor_idx = match ty.strip_reference().strip_const() {
-                Type::Struct(sname) => {
-                    self.dtor_table_indices.get(sname).copied().map(|i| i as i32).unwrap_or(-1)
-                }
+                Type::Struct(sname) => self
+                    .dtor_table_indices
+                    .get(sname)
+                    .copied()
+                    .map(|i| i as i32)
+                    .unwrap_or(-1),
                 _ => -1,
             };
 
@@ -53,7 +56,11 @@ impl<'a> Codegen<'a> {
             code.push(OP_UNREACHABLE);
             code.push(OP_END);
 
-            let meta = ExceptionMeta { type_id, dtor_idx, size };
+            let meta = ExceptionMeta {
+                type_id,
+                dtor_idx,
+                size,
+            };
             self.emit_exception_header(temp_ptr_slot, &meta, ctx, code);
             self.compile_throw_payload_with_guard(expr, &ty, temp_ptr_slot, ctx, code)?;
             Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
@@ -260,13 +267,7 @@ impl<'a> Codegen<'a> {
         Self::emit_slot_store(payload_ptr_slot, ctx.fp_local, ctx.scratch1, code);
 
         if self.is_struct_lvalue(expr, ctx) || self.is_expr_xvalue(expr, ctx) {
-            self.emit_struct_payload_lvalue(
-                expr,
-                sname,
-                (payload_ptr_slot, raw_size),
-                ctx,
-                code,
-            )?;
+            self.emit_struct_payload_lvalue(expr, sname, (payload_ptr_slot, raw_size), ctx, code)?;
         } else {
             let temp_count_before = ctx.temp_objects.len();
             self.compile_expr(expr, ctx, code)?;

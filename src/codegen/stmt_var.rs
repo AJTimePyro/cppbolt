@@ -31,10 +31,18 @@ impl<'a> Codegen<'a> {
                 let temp_count_before = ctx.temp_objects.len();
                 self.compile_reference_local(init_expr, ty, offset, ctx, code)?;
                 if ctx.temp_objects.len() > temp_count_before {
-                    let new_temps = ctx.temp_objects.drain(temp_count_before..).collect::<Vec<_>>();
+                    let new_temps = ctx
+                        .temp_objects
+                        .drain(temp_count_before..)
+                        .collect::<Vec<_>>();
                     if let Some(scope) = ctx.scope_objects.last_mut() {
                         for (_sname, temp_slot, _, clean_idx) in new_temps {
-                            scope.push((format!("{name}$ref_temp"), ty.clone(), temp_slot, clean_idx));
+                            scope.push((
+                                format!("{name}$ref_temp"),
+                                ty.clone(),
+                                temp_slot,
+                                clean_idx,
+                            ));
                         }
                     }
                 }
@@ -49,13 +57,7 @@ impl<'a> Codegen<'a> {
                 return Err(self.internal_error("missing object scope"));
             };
             scope.push((name.to_string(), ty.clone(), offset, clean_idx));
-            self.emit_struct_local_init(
-                sname,
-                ty,
-                (init.as_ref(), offset, clean_idx),
-                ctx,
-                code,
-            )?;
+            self.emit_struct_local_init(sname, ty, (init.as_ref(), offset, clean_idx), ctx, code)?;
         } else if let Type::Array(elem_ty, count) = ty.strip_const() {
             self.compile_array_local(
                 ArrayLocal {

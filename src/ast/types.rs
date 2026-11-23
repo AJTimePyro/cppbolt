@@ -290,9 +290,18 @@ impl Type {
     pub fn is_integer(&self) -> bool {
         matches!(
             self.strip_const(),
-            Type::Bool | Type::Char | Type::SignedChar | Type::UnsignedChar
-                | Type::Short | Type::UnsignedShort | Type::Int | Type::UnsignedInt
-                | Type::Long | Type::UnsignedLong | Type::LongLong | Type::UnsignedLongLong
+            Type::Bool
+                | Type::Char
+                | Type::SignedChar
+                | Type::UnsignedChar
+                | Type::Short
+                | Type::UnsignedShort
+                | Type::Int
+                | Type::UnsignedInt
+                | Type::Long
+                | Type::UnsignedLong
+                | Type::LongLong
+                | Type::UnsignedLongLong
                 | Type::Enum(_)
         )
     }
@@ -300,8 +309,13 @@ impl Type {
     pub fn is_signed(&self) -> bool {
         matches!(
             self.strip_const(),
-            Type::Char | Type::SignedChar | Type::Short | Type::Int
-                | Type::Long | Type::LongLong | Type::Enum(_)
+            Type::Char
+                | Type::SignedChar
+                | Type::Short
+                | Type::Int
+                | Type::Long
+                | Type::LongLong
+                | Type::Enum(_)
         )
     }
 
@@ -412,34 +426,32 @@ impl Type {
                 Type::Double => 8,
                 Type::Pointer(_) | Type::Reference(_) | Type::RvalueReference(_) => 4,
                 Type::Array(elem, _) => elem.align_of(struct_aligns),
-                Type::Struct(name) => *struct_aligns
-                    .get(name)
-                    .or_else(|| struct_aligns.get(QualifiedName::new(name).plain()))
-                    .or_else(|| struct_aligns.get(QualifiedName::new(name).std_name().as_ref()))
-                    .unwrap_or(&4),
-                Type::TemplateInstance { name, .. } => *struct_aligns
-                    .get(name)
-                    .or_else(|| struct_aligns.get(QualifiedName::new(name).plain()))
-                    .unwrap_or(&4),
+                Type::Struct(name) => Self::lookup_align(name, struct_aligns),
+                Type::TemplateInstance { name, .. } => Self::lookup_align(name, struct_aligns),
                 Type::TypeParam(_)
                 | Type::DependentNested(_)
                 | Type::Decltype { .. }
                 | Type::NonType(_)
                 | Type::DependentNonType(_)
                 | Type::DependentArray(_, _) => 4,
-                Type::MemberPointer { member_type, .. } => {
-                    if matches!(member_type.strip_const(), Type::Function { .. }) {
-                        8
-                    } else {
-                        4
-                    }
-                }
+                Type::MemberPointer { member_type, .. } => match member_type.strip_const() {
+                    Type::Function { .. } => 8,
+                    _ => 4,
+                },
                 Type::Function { .. } | Type::BoundMemberFunction { .. } => 4,
                 Type::PackExpansion(_) => 1,
                 Type::Const(_) => unreachable!(),
                 Type::Aligned(..) | Type::DependentAlignas(..) => unreachable!(),
             },
         }
+    }
+
+    fn lookup_align(name: &str, struct_aligns: &HashMap<String, usize>) -> usize {
+        *struct_aligns
+            .get(name)
+            .or_else(|| struct_aligns.get(QualifiedName::new(name).plain()))
+            .or_else(|| struct_aligns.get(QualifiedName::new(name).std_name().as_ref()))
+            .unwrap_or(&4)
     }
 
     pub fn to_wasm_type(&self) -> Option<WasmType> {
@@ -463,13 +475,10 @@ impl Type {
             Type::LongLong | Type::UnsignedLongLong => Some(WasmType::I64),
             Type::Float => Some(WasmType::F32),
             Type::Double => Some(WasmType::F64),
-            Type::MemberPointer { member_type, .. } => {
-                if matches!(member_type.strip_const(), Type::Function { .. }) {
-                    Some(WasmType::I64)
-                } else {
-                    Some(WasmType::I32)
-                }
-            }
+            Type::MemberPointer { member_type, .. } => match member_type.strip_const() {
+                Type::Function { .. } => Some(WasmType::I64),
+                _ => Some(WasmType::I32),
+            },
             Type::Array(_, _)
             | Type::Struct(_)
             | Type::TemplateInstance { .. }

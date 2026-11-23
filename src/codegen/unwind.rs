@@ -208,7 +208,10 @@ pub(super) fn stmt_can_throw_or_call(stmt: &Stmt) -> bool {
             StmtKind::VarDeclGroup(stmts) | StmtKind::Compound(stmts) => {
                 stack.extend(stmts.iter());
             }
-            StmtKind::If { branches, else_stmt } => {
+            StmtKind::If {
+                branches,
+                else_stmt,
+            } => {
                 for (cond, then_s) in branches {
                     if expr_can_throw_or_call(cond) {
                         return true;

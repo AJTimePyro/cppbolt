@@ -135,7 +135,12 @@ impl<'a> Codegen<'a> {
                 write_u32(code, b_idx);
                 let base_dtor = format!("{}_~{}", base_name, base_name);
                 if let Some(&d_idx) = self.func_indices.get(&base_dtor) {
-                    let c_idx = ctx.register_cleanup(base_name.to_string(), d_idx, *base_offset as u32, true)?;
+                    let c_idx = ctx.register_cleanup(
+                        base_name.to_string(),
+                        d_idx,
+                        *base_offset as u32,
+                        true,
+                    )?;
                     self.emit_mark_cleanup_active(c_idx, ctx, code);
                 }
             } else if let Some(base_layout) = self.sema.struct_layouts.get(base_name).cloned() {
@@ -277,7 +282,8 @@ impl<'a> Codegen<'a> {
             if let Type::Struct(sname) = fld.ty.strip_const() {
                 self.compile_struct_field_init(sname, fld.offset, init_args, ctx, code)?;
                 if let Some(d_idx) = self.lookup_struct_dtor(sname) {
-                    let c_idx = ctx.register_cleanup(sname.to_string(), d_idx, fld.offset as u32, true)?;
+                    let c_idx =
+                        ctx.register_cleanup(sname.to_string(), d_idx, fld.offset as u32, true)?;
                     self.emit_mark_cleanup_active(c_idx, ctx, code);
                 }
             } else if let Type::Array(elem_ty, count) = fld.ty.strip_const()
@@ -303,7 +309,8 @@ impl<'a> Codegen<'a> {
                     code.push(OP_CALL);
                     write_u32(code, ctor_idx);
                     if let Some(d_idx) = self.lookup_struct_dtor(sname) {
-                        let c_idx = ctx.register_cleanup(sname.to_string(), d_idx, member_offset, true)?;
+                        let c_idx =
+                            ctx.register_cleanup(sname.to_string(), d_idx, member_offset, true)?;
                         self.emit_mark_cleanup_active(c_idx, ctx, code);
                     }
                 }

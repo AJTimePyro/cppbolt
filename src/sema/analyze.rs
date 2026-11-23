@@ -95,7 +95,9 @@ impl Sema {
     /// declared type is refined later by `analyze_global_var`.
     fn seed_global_symbols(&mut self, program: &Program) {
         for decl in &program.declarations {
-            let Decl::GlobalVar { name, ty, .. } = decl else { continue; };
+            let Decl::GlobalVar { name, ty, .. } = decl else {
+                continue;
+            };
             let symbol = VarSymbol {
                 name: name.clone(),
                 ty: ty.clone(),

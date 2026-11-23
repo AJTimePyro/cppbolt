@@ -53,4 +53,3 @@ pub(crate) fn select_function_sig<'b>(
     }
     &sigs[0]
 }
-

@@ -210,6 +210,7 @@ impl Parser {
     }
 }
 
+#[derive(Default)]
 pub(super) struct StructBody {
     pub(super) name: String,
     pub(super) is_class: bool,
@@ -238,16 +239,10 @@ impl StructBody {
             name,
             is_class,
             is_final,
-            fields: Vec::new(),
-            methods: Vec::new(),
-            static_fields: Vec::new(),
-            private_members: Vec::new(),
-            nested_structs: Vec::new(),
-            friends: Vec::new(),
             is_private: is_class,
-            alignment: None,
             line,
             col,
+            ..Default::default()
         }
     }
 
@@ -319,12 +314,20 @@ impl Parser {
         {
             self.advance();
             let mut ctor = self.parse_function_tail(
-                short_name.to_string(), Type::Void, start_tok.line, start_tok.col,
+                short_name.to_string(),
+                Type::Void,
+                start_tok.line,
+                start_tok.col,
             )?;
-            ctor.is_virtual |= is_virtual; ctor.is_explicit = is_explicit;
-            body.private_members.extend(crate::ast::decl::ctor_access_keys(
-                short_name, &ctor.params, body.is_private, ctor.is_explicit,
-            ));
+            ctor.is_virtual |= is_virtual;
+            ctor.is_explicit = is_explicit;
+            body.private_members
+                .extend(crate::ast::decl::ctor_access_keys(
+                    short_name,
+                    &ctor.params,
+                    body.is_private,
+                    ctor.is_explicit,
+                ));
             body.methods.push(ctor);
             return Ok(true);
         }
@@ -437,10 +440,9 @@ impl Parser {
     }
     fn parse_optional_member_init(&mut self) -> Result<FieldInit, CompileError> {
         if matches!(self.peek(), TokenKind::Assign | TokenKind::LBrace) {
-            let tok = if self.peek() == &TokenKind::Assign {
-                self.advance().clone()
-            } else {
-                self.current().clone()
+            let tok = match self.peek() {
+                TokenKind::Assign => self.advance().clone(),
+                _ => self.current().clone(),
             };
             Ok(Some((self.parse_initializer()?, tok.line, tok.col)))
         } else {
@@ -467,11 +469,12 @@ impl Parser {
             body.private_members.push(fname.clone());
         }
         if is_static {
-            let init = if self.peek() == &TokenKind::Assign {
-                self.advance();
-                Some(self.parse_initializer()?)
-            } else {
-                None
+            let init = match self.peek() {
+                TokenKind::Assign => {
+                    self.advance();
+                    Some(self.parse_initializer()?)
+                }
+                _ => None,
             };
             self.expect(TokenKind::Semi)?;
             body.static_fields.push((fname, final_ty, init));

@@ -42,7 +42,11 @@ impl Sema {
                 stack_offset: param_offset,
             };
             let Some(scope) = self.scopes.last_mut() else {
-                return Err(crate::internal_error!(func.line, func.col, "missing function scope"));
+                return Err(crate::internal_error!(
+                    func.line,
+                    func.col,
+                    "missing function scope"
+                ));
             };
             scope.vars.insert(param.name.clone(), sym);
         }
@@ -462,28 +466,18 @@ impl Sema {
             BinaryOp::Add => Ok(l + r),
             BinaryOp::Sub => Ok(l - r),
             BinaryOp::Mul => Ok(l * r),
-            BinaryOp::Div => {
-                if r == 0 {
-                    Err(CompileError::new(
-                        "division by zero in constant expression",
-                        line,
-                        col,
-                    ))
-                } else {
-                    Ok(l / r)
-                }
-            }
-            BinaryOp::Rem => {
-                if r == 0 {
-                    Err(CompileError::new(
-                        "remainder by zero in constant expression",
-                        line,
-                        col,
-                    ))
-                } else {
-                    Ok(l % r)
-                }
-            }
+            BinaryOp::Div if r == 0 => Err(CompileError::new(
+                "division by zero in constant expression",
+                line,
+                col,
+            )),
+            BinaryOp::Div => Ok(l / r),
+            BinaryOp::Rem if r == 0 => Err(CompileError::new(
+                "remainder by zero in constant expression",
+                line,
+                col,
+            )),
+            BinaryOp::Rem => Ok(l % r),
             BinaryOp::BitAnd => Ok(l & r),
             BinaryOp::BitOr => Ok(l | r),
             BinaryOp::BitXor => Ok(l ^ r),

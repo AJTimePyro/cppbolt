@@ -11,8 +11,7 @@ impl<'a> Codegen<'a> {
         self.lay_out_globals(program);
         let candidates = self.build_candidates(program, &address_taken);
         let mut reachable = Self::compute_reachable(&candidates);
-        let has_exceptions =
-            self.mark_exception_destructors_reachable(&candidates, &mut reachable);
+        let has_exceptions = self.mark_exception_destructors_reachable(&candidates, &mut reachable);
         if has_exceptions {
             Self::mark_terminate_reachable(&candidates, &mut reachable);
         }

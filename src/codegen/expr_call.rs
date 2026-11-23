@@ -334,7 +334,13 @@ impl<'a> Codegen<'a> {
             write_u32(code, 2);
             write_u32(code, temp_ptr_slot); // this
             let full_args = self.constructor_arguments(&sig, args);
-            self.compile_call_arguments_and_deactivate_byval(&full_args, &sig.param_types, 1, ctx, code)?;
+            self.compile_call_arguments_and_deactivate_byval(
+                &full_args,
+                &sig.param_types,
+                1,
+                ctx,
+                code,
+            )?;
             code.push(OP_CALL);
             write_u32(code, ctor_idx);
         } else if self.sema.struct_layouts.contains_key(name) {

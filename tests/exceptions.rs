@@ -127,7 +127,10 @@ int main() {
 }
 "#;
     let (code, _) = run_cpp(source)?;
-    assert_eq!(code, 42, "inner() throwing 42 caught by main() must return exit code 42");
+    assert_eq!(
+        code, 42,
+        "inner() throwing 42 caught by main() must return exit code 42"
+    );
     Ok(())
 }
 
@@ -366,7 +369,10 @@ int main() {
 "#;
     let (code, stdout) = run_cpp(source)?;
     assert_eq!(code, 0);
-    assert_eq!(stdout.trim(), "C:100 C:0 D:0 C:1 D:1 C:2 D:2 D:100 Caught:77");
+    assert_eq!(
+        stdout.trim(),
+        "C:100 C:0 D:0 C:1 D:1 C:2 D:2 D:100 Caught:77"
+    );
     Ok(())
 }
 
@@ -522,9 +528,15 @@ int main() {
 }
 "#;
     let (code, stdout) = run_cpp(source)?;
-    assert_eq!(code, 134, "program must trap with abort/134 on throwing destructor during unwinding");
+    assert_eq!(
+        code, 134,
+        "program must trap with abort/134 on throwing destructor during unwinding"
+    );
     assert!(stdout.contains("BadDtor"), "BadDtor must have been entered");
-    assert!(!stdout.contains("Caught"), "handler must NOT catch or replace active exception");
+    assert!(
+        !stdout.contains("Caught"),
+        "handler must NOT catch or replace active exception"
+    );
     Ok(())
 }
 
@@ -564,7 +576,10 @@ int main() {
 "#;
     let (code, stdout) = run_cpp(source)?;
     assert_eq!(code, 0);
-    assert_eq!(stdout.trim(), "C:100 C:10 D:10 Caught:1 C:20 D:20 Caught:2 End D:100");
+    assert_eq!(
+        stdout.trim(),
+        "C:100 C:10 D:10 Caught:1 C:20 D:20 Caught:2 End D:100"
+    );
     Ok(())
 }
 
@@ -587,7 +602,10 @@ int main() {
 }
 "#;
     let (code, stdout) = run_cpp(source)?;
-    assert_eq!(code, 134, "throw; outside catch must terminate with abort/unreachable");
+    assert_eq!(
+        code, 134,
+        "throw; outside catch must terminate with abort/unreachable"
+    );
     assert!(!stdout.contains("Caught"));
     Ok(())
 }
@@ -657,7 +675,8 @@ int main() {
 }
 
 #[test]
-fn test_destructor_throwing_while_unwinding_from_normal_destructor_throw_terminates() -> Result<(), String> {
+fn test_destructor_throwing_while_unwinding_from_normal_destructor_throw_terminates()
+-> Result<(), String> {
     let source = r#"
 #include <cstdio>
 
@@ -685,10 +704,19 @@ int main() {
 }
 "#;
     let (code, stdout) = run_cpp(source)?;
-    assert_eq!(code, 134, "destructor throwing during unwinding from normal exit throw must terminate with abort/134");
+    assert_eq!(
+        code, 134,
+        "destructor throwing during unwinding from normal exit throw must terminate with abort/134"
+    );
     assert!(stdout.contains("D_Throw:2"), "second dtor must have thrown");
-    assert!(stdout.contains("D_Throw:1"), "first dtor must have been entered during unwinding and thrown");
-    assert!(!stdout.contains("Caught"), "active exception must terminate, not be caught");
+    assert!(
+        stdout.contains("D_Throw:1"),
+        "first dtor must have been entered during unwinding and thrown"
+    );
+    assert!(
+        !stdout.contains("Caught"),
+        "active exception must terminate, not be caught"
+    );
     Ok(())
 }
 
@@ -773,7 +801,10 @@ int main() {
 "#;
     let (code, stdout) = run_cpp(source)?;
     assert_eq!(code, 0);
-    assert_eq!(stdout.trim(), "C_M:1 C_M:2 C_M:3 C_Throw D_M:3 D_M:2 D_M:1 Caught:77");
+    assert_eq!(
+        stdout.trim(),
+        "C_M:1 C_M:2 C_M:3 C_Throw D_M:3 D_M:2 D_M:1 Caught:77"
+    );
     Ok(())
 }
 
@@ -803,7 +834,10 @@ int main() {
 "#;
     let (code, stdout) = run_cpp(source)?;
     assert_eq!(code, 0);
-    assert_eq!(stdout.trim(), "OuterCatch:10 InnerCatch:20 CaughtRethrown:10");
+    assert_eq!(
+        stdout.trim(),
+        "OuterCatch:10 InnerCatch:20 CaughtRethrown:10"
+    );
     Ok(())
 }
 
@@ -895,7 +929,10 @@ int main() {
 "#;
     let (code, stdout) = run_cpp(source)?;
     assert_eq!(code, 0);
-    assert_eq!(stdout.trim(), "C:10 C:20 D:20 Caught:0 LoopEnd:0 D:10 C:11 C:21 D:21 Caught:1 LoopEnd:1 D:11");
+    assert_eq!(
+        stdout.trim(),
+        "C:10 C:20 D:20 Caught:0 LoopEnd:0 D:10 C:11 C:21 D:21 Caught:1 LoopEnd:1 D:11"
+    );
     Ok(())
 }
 
@@ -991,7 +1028,10 @@ int main() {
 "#;
     let (code, stdout) = run_cpp(source)?;
     assert_eq!(code, 0);
-    assert_eq!(stdout.trim(), "L1:111 L2 L3:333 L4 L5:555 A4 A3 A2 CaughtFinal:222");
+    assert_eq!(
+        stdout.trim(),
+        "L1:111 L2 L3:333 L4 L5:555 A4 A3 A2 CaughtFinal:222"
+    );
     Ok(())
 }
 
@@ -1090,7 +1130,10 @@ int main() {
 "#;
     let (code, stdout) = run_cpp(source)?;
     assert_eq!(code, 0);
-    assert_eq!(stdout.trim(), "C:10 C:20 C:30 BarThrow D:30 D:20 D:10 Caught:99");
+    assert_eq!(
+        stdout.trim(),
+        "C:10 C:20 C:30 BarThrow D:30 D:20 D:10 Caught:99"
+    );
     Ok(())
 }
 
@@ -1128,7 +1171,10 @@ int main() {
 "#;
     let (code, stdout) = run_cpp(source)?;
     assert_eq!(code, 0);
-    assert_eq!(stdout.trim(), "Make:100 C_Temp:100 ThrowNested D_Temp:100 Caught:88");
+    assert_eq!(
+        stdout.trim(),
+        "Make:100 C_Temp:100 ThrowNested D_Temp:100 Caught:88"
+    );
     Ok(())
 }
 
@@ -1169,7 +1215,10 @@ int main() {
 "#;
     let (code, stdout) = run_cpp(source)?;
     assert_eq!(code, 0);
-    assert_eq!(stdout.trim(), "Start C_Temp:50 RefBound EndFn D_Temp:50 AfterNormal C_Temp:60 RefActive D_Temp:60 Caught:99");
+    assert_eq!(
+        stdout.trim(),
+        "Start C_Temp:50 RefBound EndFn D_Temp:50 AfterNormal C_Temp:60 RefActive D_Temp:60 Caught:99"
+    );
     Ok(())
 }
 
@@ -1216,7 +1265,10 @@ int main() {
 "#;
     let (code, stdout) = run_cpp(source)?;
     assert_eq!(code, 0);
-    assert_eq!(stdout.trim(), "C_Temp:2 C_Sub:1 CtorThrow D_Sub:1 D_Temp:2 Caught:123");
+    assert_eq!(
+        stdout.trim(),
+        "C_Temp:2 C_Sub:1 CtorThrow D_Sub:1 D_Temp:2 Caught:123"
+    );
     Ok(())
 }
 
@@ -1344,7 +1396,10 @@ int main() {
 "#;
     let (code, stdout) = run_cpp(source)?;
     assert_eq!(code, 0);
-    assert_eq!(stdout.trim(), "C:1 C:2 Copy:1 Copy:2 InTarget D:2 D:1 Caught:888 D:2 D:1");
+    assert_eq!(
+        stdout.trim(),
+        "C:1 C:2 Copy:1 Copy:2 InTarget D:2 D:1 Caught:888 D:2 D:1"
+    );
     Ok(())
 }
 
@@ -1864,7 +1919,10 @@ int main() {
 "#;
     let (code, stdout) = run_cpp(source)?;
     assert_eq!(code, 0);
-    assert_eq!(stdout.trim(), "C:88 InnerCatch:88 OuterCatch:88 D:88 Finished");
+    assert_eq!(
+        stdout.trim(),
+        "C:88 InnerCatch:88 OuterCatch:88 D:88 Finished"
+    );
     Ok(())
 }
 
@@ -2004,7 +2062,10 @@ int main() {
 "#;
     let (code, stdout) = run_cpp(source)?;
     assert_eq!(code, 0);
-    assert_eq!(stdout.trim(), "C:10 Copy:10 InCatch:10 D:10 D:10 AfterCatch");
+    assert_eq!(
+        stdout.trim(),
+        "C:10 Copy:10 InCatch:10 D:10 D:10 AfterCatch"
+    );
     Ok(())
 }
 
@@ -2053,7 +2114,10 @@ int main() {
 "#;
     let (code, stdout) = run_cpp(source)?;
     assert_eq!(code, 0);
-    assert_eq!(stdout.trim(), "CaughtConstWidget:99 CaughtNonConstByConst:99 CaughtConstVoid");
+    assert_eq!(
+        stdout.trim(),
+        "CaughtConstWidget:99 CaughtNonConstByConst:99 CaughtConstVoid"
+    );
     Ok(())
 }
 
@@ -2096,7 +2160,10 @@ int main() {
 "#;
     let (code, stdout) = run_cpp(source)?;
     assert_eq!(code, 0);
-    assert_eq!(stdout.trim(), "C:10 InReturnCatch D:10 RetVal:77 C:20 InBreakCatch D:20 AfterBreak");
+    assert_eq!(
+        stdout.trim(),
+        "C:10 InReturnCatch D:10 RetVal:77 C:20 InBreakCatch D:20 AfterBreak"
+    );
     Ok(())
 }
 
@@ -2214,7 +2281,10 @@ int main() {
 "#;
     let (code, stdout) = run_cpp(source)?;
     assert_eq!(code, 0);
-    assert_eq!(stdout.trim(), "IntPtr:42 MI_Base2:200 NullMI:null NullptrCaught:null");
+    assert_eq!(
+        stdout.trim(),
+        "IntPtr:42 MI_Base2:200 NullMI:null NullptrCaught:null"
+    );
     Ok(())
 }
 
@@ -2564,8 +2634,14 @@ int main() {
 }
 "#;
     let (code, stdout) = run_cpp(source)?;
-    assert_eq!(code, 134, "noexcept function throwing must terminate with exit code 134");
-    assert!(!stdout.contains("Caught"), "exception must not be caught by caller");
+    assert_eq!(
+        code, 134,
+        "noexcept function throwing must terminate with exit code 134"
+    );
+    assert!(
+        !stdout.contains("Caught"),
+        "exception must not be caught by caller"
+    );
     Ok(())
 }
 
@@ -2646,7 +2722,10 @@ int main() {
     let (code, stdout) = run_cpp(source)?;
     assert_eq!(code, 134, "must terminate with exit code 134");
     assert!(stdout.contains("C:123"), "Tracer must be constructed");
-    assert!(stdout.contains("D:123"), "Tracer must be destroyed before termination");
+    assert!(
+        stdout.contains("D:123"),
+        "Tracer must be destroyed before termination"
+    );
     assert!(!stdout.contains("Caught"), "caller must not catch");
     Ok(())
 }
@@ -2805,7 +2884,10 @@ int main() {
 }
 "#;
     let res = run_cpp(source);
-    assert!(res.is_err(), "assigning throwing function pointer to noexcept pointer must fail");
+    assert!(
+        res.is_err(),
+        "assigning throwing function pointer to noexcept pointer must fail"
+    );
     Ok(())
 }
 
@@ -3151,7 +3233,10 @@ int main() {
 "#;
     let (code, stdout) = run_cpp(source)?;
     assert_eq!(code, 0);
-    assert_eq!(stdout.trim(), "Sliced:std::exception Ref:std::bad_exception");
+    assert_eq!(
+        stdout.trim(),
+        "Sliced:std::exception Ref:std::bad_exception"
+    );
     Ok(())
 }
 
@@ -3190,7 +3275,10 @@ int main() {
 "#;
     let (code, stdout) = run_cpp(source)?;
     assert_eq!(code, 0);
-    assert_eq!(stdout.trim(), "CaughtCustom:custom exception message DtorCount:1");
+    assert_eq!(
+        stdout.trim(),
+        "CaughtCustom:custom exception message DtorCount:1"
+    );
     Ok(())
 }
 
@@ -3678,7 +3766,10 @@ void f() {
 
 int main() { return 0; }
 "#;
-    assert_compile_error(source, "move constructor for exception object of type 'PrivMove' is inaccessible")
+    assert_compile_error(
+        source,
+        "move constructor for exception object of type 'PrivMove' is inaccessible",
+    )
 }
 
 #[test]
@@ -3740,7 +3831,10 @@ void f(MoveOnly& ref) {
 
 int main() { return 0; }
 "#;
-    assert_compile_error(source, "copy constructor for exception object of type 'MoveOnly' is deleted")
+    assert_compile_error(
+        source,
+        "copy constructor for exception object of type 'MoveOnly' is deleted",
+    )
 }
 
 #[test]
@@ -3793,7 +3887,10 @@ void f() {
 
 int main() { return 0; }
 "#;
-    assert_compile_error(source, "move constructor for exception object of type 'DelMove' is deleted")
+    assert_compile_error(
+        source,
+        "move constructor for exception object of type 'DelMove' is deleted",
+    )
 }
 
 #[test]
@@ -3983,7 +4080,10 @@ struct A {
 };
 int main() { return 0; }
 "#;
-    assert_compile_error(source, "return statements cannot appear in a function-try-block handler")
+    assert_compile_error(
+        source,
+        "return statements cannot appear in a function-try-block handler",
+    )
 }
 
 #[test]
@@ -4058,7 +4158,10 @@ int main() {
 "#;
     let (code, stdout) = run_cpp(source)?;
     assert_eq!(code, 0);
-    assert_eq!(stdout.trim(), "Dtor1:1 InCatch1:0 Dtor2:1 InCatch2:0 Done:0");
+    assert_eq!(
+        stdout.trim(),
+        "Dtor1:1 InCatch1:0 Dtor2:1 InCatch2:0 Done:0"
+    );
     Ok(())
 }
 
@@ -4467,7 +4570,10 @@ fn test_throw_std_move_with_deleted_move_ctor_fails() -> Result<(), String> {
 struct T { T(); T(const T&); T(T&&) = delete; };
 int main(){ T e; throw std::move(e); }
 "#;
-    assert_compile_error(source, "move constructor for exception object of type 'T' is deleted")
+    assert_compile_error(
+        source,
+        "move constructor for exception object of type 'T' is deleted",
+    )
 }
 
 #[test]
@@ -4575,7 +4681,9 @@ int main() {
 
 #[test]
 fn test_more_than_64_sequential_temporaries_compile_and_run() -> Result<(), String> {
-    let mut source = String::from("struct S { int v; S(int x) : v(x) {} ~S() {} }; int sum = 0; void sink(S s) { sum += s.v; } int main() {\n");
+    let mut source = String::from(
+        "struct S { int v; S(int x) : v(x) {} ~S() {} }; int sum = 0; void sink(S s) { sum += s.v; } int main() {\n",
+    );
     for i in 0..100 {
         source.push_str(&format!("    sink(S({i}));\n"));
     }
@@ -4937,4 +5045,3 @@ int main() {
     assert_eq!(stdout.trim(), "~Item(10) ~Item(20) Done");
     Ok(())
 }
-

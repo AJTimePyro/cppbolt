@@ -143,7 +143,12 @@ fn substitute_try_stmt(
         if let Some((ty, _)) = &mut clause.param {
             *ty = substitute_type_with_sema(ty, mapping, injected_class, sema.as_deref_mut())?;
         }
-        substitute_stmt_with_sema(&mut clause.body, mapping, injected_class, sema.as_deref_mut())?;
+        substitute_stmt_with_sema(
+            &mut clause.body,
+            mapping,
+            injected_class,
+            sema.as_deref_mut(),
+        )?;
     }
     Ok(())
 }

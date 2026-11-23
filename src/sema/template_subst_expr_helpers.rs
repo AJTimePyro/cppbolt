@@ -354,4 +354,3 @@ pub(crate) fn substitute_noexcept_qualifiers(
     }
     quals
 }
-

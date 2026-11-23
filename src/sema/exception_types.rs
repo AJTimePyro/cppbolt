@@ -166,13 +166,10 @@ impl Sema {
         let key = crate::name::copy_ctor_key(short);
         let explicit_key = crate::name::explicit_copy_ctor_key(short);
         let unavailable = self.deleted_functions.contains(&key)
-            || self
-                .struct_layouts
-                .get(sname)
-                .is_some_and(|layout| {
-                    layout.private_members.contains(&key)
-                        || layout.private_members.contains(&explicit_key)
-                });
+            || self.struct_layouts.get(sname).is_some_and(|layout| {
+                layout.private_members.contains(&key)
+                    || layout.private_members.contains(&explicit_key)
+            });
         if unavailable {
             return Err(CompileError::new(
                 format!(
@@ -195,12 +192,14 @@ impl Sema {
         let Expr::Identifier(name) = &**callee else {
             return false;
         };
-        self.functions.get(name).or_else(|| {
-            let plain = crate::name::QualifiedName::new(name).plain();
-            self.functions.get(plain)
-        })
-        .and_then(|sigs| sigs.first())
-        .is_some_and(|sig| sig.return_type.is_rvalue_reference())
+        self.functions
+            .get(name)
+            .or_else(|| {
+                let plain = crate::name::QualifiedName::new(name).plain();
+                self.functions.get(plain)
+            })
+            .and_then(|sigs| sigs.first())
+            .is_some_and(|sig| sig.return_type.is_rvalue_reference())
     }
 
     /// Returns `(param_is_const, is_explicit)` for a registered constructor
@@ -366,7 +365,9 @@ impl Sema {
             && move_sig.is_none()
             && !self.deleted_functions.contains(&move_key)
             && !layout.private_members.contains(&move_key)
-            && !layout.private_members.contains(&crate::name::explicit_move_ctor_key(short)));
+            && !layout
+                .private_members
+                .contains(&crate::name::explicit_move_ctor_key(short)));
 
         let copy_unavailable = !copy_usable
             || self.deleted_functions.contains(&copy_key)
