@@ -143,15 +143,13 @@ impl<'a> Codegen<'a> {
         code.push(OP_CALL);
         write_u32(code, ctor_idx);
 
-        let temp_slot = ctx.alloc_frame(4, 4)?;
+        let (temp_slot, clean_idx) = self.acquire_temp_slot_and_cleanup(psname, ctx, code)?;
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.fp_local);
         Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
         code.push(OP_I32_STORE);
         write_u32(code, 2);
         write_u32(code, temp_slot);
-
-        let clean_idx = self.register_and_activate_temp_cleanup(psname, temp_slot, ctx, code)?;
 
         ctx.temp_objects
             .push((psname.to_string(), temp_slot, true, clean_idx));
@@ -251,15 +249,13 @@ impl<'a> Codegen<'a> {
         code.push(OP_CALL);
         write_u32(code, ctor_idx);
 
-        let temp_slot = ctx.alloc_frame(4, 4)?;
+        let (temp_slot, clean_idx) = self.acquire_temp_slot_and_cleanup(sname, ctx, code)?;
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.fp_local);
         Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
         code.push(OP_I32_STORE);
         write_u32(code, 2);
         write_u32(code, temp_slot);
-
-        let clean_idx = self.register_and_activate_temp_cleanup(sname, temp_slot, ctx, code)?;
 
         ctx.temp_objects
             .push((sname.to_string(), temp_slot, true, clean_idx));

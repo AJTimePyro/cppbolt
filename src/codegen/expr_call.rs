@@ -266,15 +266,13 @@ impl<'a> Codegen<'a> {
 
         // Save the temporary pointer in a frame slot so statement
         // cleanup can destroy and free it after the full expression.
-        let temp_slot = ctx.alloc_frame(4, 4)?;
+        let (temp_slot, clean_idx) = self.acquire_temp_slot_and_cleanup(name, ctx, code)?;
         code.push(OP_LOCAL_GET);
         write_u32(code, ctx.fp_local);
         Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
         code.push(OP_I32_STORE);
         write_u32(code, 2);
         write_u32(code, temp_slot);
-
-        let clean_idx = self.register_and_activate_temp_cleanup(name, temp_slot, ctx, code)?;
         ctx.temp_objects
             .push((name.to_string(), temp_slot, true, clean_idx));
 

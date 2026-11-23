@@ -114,7 +114,7 @@ impl<'a> Codegen<'a> {
         if !return_type.is_reference()
             && let Type::Struct(sname) = return_type.strip_const()
         {
-            let temp_slot = ctx.alloc_frame(4, 4)?;
+            let (temp_slot, clean_idx) = self.acquire_temp_slot_and_cleanup(sname, ctx, code)?;
             code.push(OP_LOCAL_SET);
             write_u32(code, ctx.scratch1);
             code.push(OP_LOCAL_GET);
@@ -124,7 +124,6 @@ impl<'a> Codegen<'a> {
             code.push(OP_I32_STORE);
             write_u32(code, 2);
             write_u32(code, temp_slot);
-            let clean_idx = self.register_and_activate_temp_cleanup(sname, temp_slot, ctx, code)?;
             ctx.temp_objects
                 .push((sname.clone(), temp_slot, true, clean_idx));
             code.push(OP_LOCAL_GET);
@@ -149,19 +148,35 @@ impl<'a> Codegen<'a> {
         );
     }
 
-    pub(super) fn register_and_activate_temp_cleanup(
+    pub(super) fn acquire_temp_slot_and_cleanup(
         &mut self,
         sname: &str,
-        temp_slot: u32,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
-    ) -> Result<Option<usize>, CompileError> {
+    ) -> Result<(u32, Option<usize>), CompileError> {
         let Some(dtor_idx) = self.lookup_struct_dtor(sname) else {
-            return Ok(None);
+            let slot = ctx.alloc_frame(4, 4)?;
+            return Ok((slot, None));
         };
-        let idx = ctx.register_temp_cleanup(sname.to_string(), dtor_idx, temp_slot)?;
-        self.emit_mark_cleanup_active(idx, ctx, code);
-        Ok(Some(idx))
+        let reused = ctx
+            .cleanup_entries
+            .iter()
+            .find(|e| {
+                e.is_temp
+                    && e.dtor_idx == dtor_idx
+                    && !ctx.temp_objects.iter().any(|t| t.3 == Some(e.index))
+            })
+            .map(|e| (e.offset, e.index));
+
+        if let Some((slot, idx)) = reused {
+            self.emit_mark_cleanup_active(idx, ctx, code);
+            Ok((slot, Some(idx)))
+        } else {
+            let slot = ctx.alloc_frame(4, 4)?;
+            let idx = ctx.register_temp_cleanup(sname.to_string(), dtor_idx, slot)?;
+            self.emit_mark_cleanup_active(idx, ctx, code);
+            Ok((slot, Some(idx)))
+        }
     }
 
     pub(super) fn emit_copy_struct(

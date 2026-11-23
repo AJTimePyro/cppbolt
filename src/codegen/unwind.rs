@@ -79,7 +79,13 @@ impl<'a> Codegen<'a> {
         ctx: &FunctionContext,
         code: &mut Vec<u8>,
     ) {
-        if start >= end || end > ctx.cleanup_entries.len() {
+        if end > ctx.cleanup_entries.len() {
+            return;
+        }
+        let has_prior_temps = ctx.cleanup_entries[..start.min(ctx.cleanup_entries.len())]
+            .iter()
+            .any(|e| e.is_temp);
+        if start >= end && !has_prior_temps {
             return;
         }
 
@@ -93,8 +99,18 @@ impl<'a> Codegen<'a> {
         code.push(0x02); // catch_all
         write_u32(code, 0);
 
-        for entry in ctx.cleanup_entries[start..end].iter().rev() {
-            self.emit_cleanup_entry_raw(entry, ctx, code);
+        if start < end {
+            for entry in ctx.cleanup_entries[start..end].iter().rev() {
+                self.emit_cleanup_entry_raw(entry, ctx, code);
+            }
+        }
+        for entry in ctx.cleanup_entries[..start.min(ctx.cleanup_entries.len())]
+            .iter()
+            .rev()
+        {
+            if entry.is_temp {
+                self.emit_cleanup_entry_raw(entry, ctx, code);
+            }
         }
 
         code.push(OP_BR);

@@ -4572,3 +4572,15 @@ int main() {
     assert_eq!(code, 0);
     Ok(())
 }
+
+#[test]
+fn test_more_than_64_sequential_temporaries_compile_and_run() -> Result<(), String> {
+    let mut source = String::from("struct S { int v; S(int x) : v(x) {} ~S() {} }; int sum = 0; void sink(S s) { sum += s.v; } int main() {\n");
+    for i in 0..100 {
+        source.push_str(&format!("    sink(S({i}));\n"));
+    }
+    source.push_str("    return sum == 4950 ? 0 : 1;\n}\n");
+    let (code, _) = run_cpp(&source)?;
+    assert_eq!(code, 0);
+    Ok(())
+}
