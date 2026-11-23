@@ -183,7 +183,7 @@ impl<'a> Codegen<'a> {
                     let is_xval = self.is_expr_xvalue(a, ctx);
                     if is_xval {
                         let ctor = self
-                            .find_move_constructor(psname)
+                            .find_move_constructor(psname, true)
                             .or_else(|| self.find_copy_constructor(psname, is_const));
                         if let Some(ctor_idx) = ctor {
                             self.compile_call_arg_byval_temp(a, psname, ctor_idx, ctx, code)?;

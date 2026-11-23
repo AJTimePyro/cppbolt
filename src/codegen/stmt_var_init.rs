@@ -330,7 +330,7 @@ impl<'a> Codegen<'a> {
             let is_rvalue = self.is_expr_xvalue(init, ctx);
             let is_const = init_ty.strip_reference().is_const();
             if is_rvalue {
-                if let Some(ctor_idx) = self.find_move_constructor(sname) {
+                if let Some(ctor_idx) = self.find_move_constructor(sname, true) {
                     return self.emit_init_ctor_call(ctor_idx, init, offset, ctx, code);
                 }
                 if let Some(ctor_idx) = self.find_copy_constructor(sname, is_const) {

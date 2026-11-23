@@ -91,11 +91,14 @@ impl<'a> Codegen<'a> {
         &mut self,
         f: &FunctionDecl,
         cls: &str,
-        try_body: &Stmt,
-        catches: &[CatchClause],
+        body: &Stmt,
         ctx: &mut FunctionContext,
         code: &mut Vec<u8>,
     ) -> Result<(), CompileError> {
+        let StmtKind::Try { try_body, catches } = &body.kind else {
+            self.compile_constructor_prologue(f, cls, ctx, code)?;
+            return self.compile_stmt(body, ctx, code);
+        };
         self.compile_try_block_with(catches, ctx, code, |this, ctx, code| {
             this.compile_constructor_prologue(f, cls, ctx, code)?;
             this.compile_stmt(try_body, ctx, code)

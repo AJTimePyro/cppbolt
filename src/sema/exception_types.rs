@@ -179,32 +179,57 @@ impl Sema {
         Ok(())
     }
 
-    pub fn has_move_constructor(&self, class_name: &str) -> bool {
-        let short_name = crate::name::QualifiedName::new(class_name).class_short_name();
-        let move_key = crate::name::move_ctor_key(short_name);
-        if self.deleted_functions.contains(&move_key)
-            || self
-                .struct_layouts
-                .get(class_name)
-                .is_some_and(|l| l.private_members.contains(&move_key))
-        {
-            return true;
-        }
-        let q1 = format!("{class_name}::{short_name}");
+    /// A call returning `T&&` is an xvalue, even when the analyzed expression
+    /// type has the reference stripped (as `std::move` does after instantiation).
+    fn call_returns_rvalue_ref(&self, expr: &Expr) -> bool {
+        let Expr::Call { callee, .. } = expr else {
+            return false;
+        };
+        let Expr::Identifier(name) = &**callee else {
+            return false;
+        };
+        self.functions.get(name).or_else(|| {
+            let plain = crate::name::QualifiedName::new(name).plain();
+            self.functions.get(plain)
+        })
+        .and_then(|sigs| sigs.first())
+        .is_some_and(|sig| sig.return_type.is_rvalue_reference())
+    }
+
+    /// Returns `(param_is_const, is_explicit)` for a registered constructor
+    /// taking a single reference to its own class. `param_types[0]` is `this`.
+    fn own_class_ctor_sig(&self, class_name: &str, rvalue: bool) -> Option<(bool, bool)> {
+        let short = crate::name::QualifiedName::new(class_name).class_short_name();
+        let q1 = format!("{class_name}::{short}");
         let q2 = format!(
-            "{}::{short_name}",
+            "{}::{short}",
             crate::name::QualifiedName::new(class_name).alternate()
         );
         for qual in [&q1, &q2] {
-            if let Some(sigs) = self.functions.get(qual) {
-                for sig in sigs {
-                    if sig.param_types.len() >= 2 && sig.param_types[1].is_rvalue_reference() {
-                        return true;
-                    }
+            for sig in self.functions.get(qual).into_iter().flatten() {
+                let Some(first) = sig.param_types.get(1) else {
+                    continue;
+                };
+                if first.is_rvalue_reference() != rvalue
+                    || (!rvalue && !first.is_lvalue_reference())
+                {
+                    continue;
                 }
+                let Some(inner) = first.deref_type() else {
+                    continue;
+                };
+                if !matches!(
+                    inner.strip_const(),
+                    Type::Struct(s)
+                        if crate::name::QualifiedName::new(s)
+                            .matches(crate::name::QualifiedName::new(class_name))
+                ) {
+                    continue;
+                }
+                return Some((inner.is_const(), sig.is_explicit));
             }
         }
-        false
+        None
     }
 
     pub fn validate_throw_expr(
@@ -238,6 +263,7 @@ impl Sema {
 
         let is_xval = match expr {
             Expr::Cast { target_type, .. } => target_type.is_rvalue_reference(),
+            Expr::Call { .. } => ty.is_rvalue_reference() || self.call_returns_rvalue_ref(expr),
             _ => false,
         };
 
@@ -261,113 +287,90 @@ impl Sema {
             return Ok(());
         }
 
-        let short = crate::name::QualifiedName::new(sname).class_short_name();
-        let is_rvalue = is_xval || is_move_eligible_local;
+        let source_is_const = ty.strip_reference().is_const();
+        self.validate_throw_ctor(
+            sname,
+            layout,
+            source_is_const,
+            is_xval || is_move_eligible_local,
+            (line, col),
+        )
+    }
 
-        if is_rvalue {
-            let move_key = crate::name::move_ctor_key(short);
-            let explicit_move_key = crate::name::explicit_move_ctor_key(short);
-            if self.has_move_constructor(sname) {
-                if self.deleted_functions.contains(&move_key) {
-                    return Err(CompileError::new(
-                        format!(
-                            "move constructor for exception object of type '{}' is deleted",
-                            sname
-                        ),
-                        line,
-                        col,
-                    ));
-                }
-                if layout.private_members.contains(&move_key) {
-                    return Err(CompileError::new(
-                        format!(
-                            "move constructor for exception object of type '{}' is inaccessible",
-                            sname
-                        ),
-                        line,
-                        col,
-                    ));
-                }
-                if layout.private_members.contains(&explicit_move_key) {
-                    return Err(CompileError::new(
-                        format!(
-                            "explicit move constructor for exception object of type '{}' cannot be used in copy-initialization",
-                            sname
-                        ),
-                        line,
-                        col,
-                    ));
-                }
+    /// Resolves the constructor used to copy-initialize the exception object
+    /// from a non-prvalue operand, following C++17 [except.throw] p3.
+    fn validate_throw_ctor(
+        &self,
+        sname: &str,
+        layout: &StructLayout,
+        source_is_const: bool,
+        is_rvalue: bool,
+        pos: (usize, usize),
+    ) -> Result<(), CompileError> {
+        let (line, col) = pos;
+        let short = crate::name::QualifiedName::new(sname).class_short_name();
+        let move_key = crate::name::move_ctor_key(short);
+        let copy_key = crate::name::copy_ctor_key(short);
+        let explicit_copy_key = crate::name::explicit_copy_ctor_key(short);
+
+        let move_sig = self.own_class_ctor_sig(sname, true);
+        let copy_sig = self.own_class_ctor_sig(sname, false);
+        // A const source cannot bind to a non-const rvalue-reference constructor.
+        let move_selected = is_rvalue
+            && !source_is_const
+            && (self.deleted_functions.contains(&move_key)
+                || layout.private_members.contains(&move_key)
+                || move_sig.is_some_and(|(_, explicit)| !explicit));
+
+        if move_selected {
+            if !self.deleted_functions.contains(&move_key)
+                && !layout.private_members.contains(&move_key)
+            {
                 return Ok(());
             }
+            let reason = if self.deleted_functions.contains(&move_key) {
+                "deleted"
+            } else {
+                "inaccessible"
+            };
+            return Err(CompileError::new(
+                format!("move constructor for exception object of type '{sname}' is {reason}"),
+                line,
+                col,
+            ));
+        }
 
-            // If move ctor is not declared, rvalues fall back to copy constructor
-            let copy_key = crate::name::copy_ctor_key(short);
-            let explicit_copy_key = crate::name::explicit_copy_ctor_key(short);
-            if self.deleted_functions.contains(&copy_key) {
-                return Err(CompileError::new(
-                    format!(
-                        "copy constructor for exception object of type '{}' is deleted or inaccessible",
-                        sname
-                    ),
-                    line,
-                    col,
-                ));
-            }
-            if layout.private_members.contains(&copy_key) {
-                return Err(CompileError::new(
-                    format!(
-                        "copy constructor for exception object of type '{}' is deleted or inaccessible",
-                        sname
-                    ),
-                    line,
-                    col,
-                ));
-            }
-            if layout.private_members.contains(&explicit_copy_key) {
-                return Err(CompileError::new(
+        // Explicit constructors are not candidates in copy-initialization, and
+        // a user-declared move constructor suppresses the implicit copy ctor.
+        let copy_usable = copy_sig.is_some_and(|(param_const, explicit)| {
+            !explicit && (param_const || (!source_is_const && !is_rvalue))
+        }) || (copy_sig.is_none()
+            && move_sig.is_none()
+            && !self.deleted_functions.contains(&move_key)
+            && !layout.private_members.contains(&move_key)
+            && !layout.private_members.contains(&crate::name::explicit_move_ctor_key(short)));
+
+        let copy_unavailable = !copy_usable
+            || self.deleted_functions.contains(&copy_key)
+            || layout.private_members.contains(&copy_key);
+        let copy_explicit = copy_sig.is_some_and(|(_, explicit)| explicit)
+            || layout.private_members.contains(&explicit_copy_key);
+        if copy_unavailable {
+            return Err(CompileError::new(
+                if copy_explicit && copy_sig.is_some() {
                     format!(
                         "explicit copy constructor for exception object of type '{}' cannot be used in copy-initialization",
                         sname
-                    ),
-                    line,
-                    col,
-                ));
-            }
-        } else {
-            // Lvalue: overload resolution selects copy constructor.
-            let copy_key = crate::name::copy_ctor_key(short);
-            let explicit_copy_key = crate::name::explicit_copy_ctor_key(short);
-            if self.deleted_functions.contains(&copy_key) {
-                return Err(CompileError::new(
+                    )
+                } else {
                     format!(
                         "copy constructor for exception object of type '{}' is deleted or inaccessible",
                         sname
-                    ),
-                    line,
-                    col,
-                ));
-            }
-            if layout.private_members.contains(&copy_key) {
-                return Err(CompileError::new(
-                    format!(
-                        "copy constructor for exception object of type '{}' is deleted or inaccessible",
-                        sname
-                    ),
-                    line,
-                    col,
-                ));
-            }
-            if layout.private_members.contains(&explicit_copy_key) {
-                return Err(CompileError::new(
-                    format!(
-                        "explicit copy constructor for exception object of type '{}' cannot be used in copy-initialization",
-                        sname
-                    ),
-                    line,
-                    col,
-                ));
-            }
+                    )
+                },
+                line,
+                col,
+            ));
         }
         Ok(())
     }

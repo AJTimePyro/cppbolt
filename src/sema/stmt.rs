@@ -62,12 +62,8 @@ impl Sema {
             func.name == cls || func.name == short
         });
         if let Some(body) = &mut func.body {
-            let old_try_depth = self.try_depth;
-            self.try_depth = 0;
             super::analyze_helpers::desugar_function_try_block(is_ctor, body)?;
-            let res = self.analyze_stmt(body);
-            self.try_depth = old_try_depth;
-            res?;
+            self.with_try_depth(0, |s| s.analyze_stmt(body))?;
         }
         Ok(())
     }
@@ -177,10 +173,8 @@ impl Sema {
         line: usize,
         col: usize,
     ) -> Result<(), CompileError> {
-        self.try_depth += 1;
-        let res = self.analyze_stmt(try_body);
-        self.try_depth = self.try_depth.saturating_sub(1);
-        res?;
+        let depth = self.try_depth + 1;
+        self.with_try_depth(depth, |s| s.analyze_stmt(try_body))?;
         let num_catches = catches.len();
         for (i, clause) in catches.iter_mut().enumerate() {
             if clause.param.is_none() && i + 1 < num_catches {

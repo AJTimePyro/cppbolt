@@ -25,6 +25,34 @@ pub fn is_move_ctor(name: &str, params: &[Param]) -> bool {
         && params.iter().skip(1).all(|p| p.default_val.is_some())
 }
 
+/// Visibility keys registered for a declared constructor so exception
+/// validation can tell an unavailable copy/move ctor from an unrelated one.
+pub fn ctor_access_keys(
+    name: &str,
+    params: &[Param],
+    is_private: bool,
+    is_explicit: bool,
+) -> Vec<String> {
+    let mut keys = Vec::new();
+    if is_private {
+        if is_copy_ctor(name, params) {
+            keys.push(crate::name::copy_ctor_key(name));
+        } else if is_move_ctor(name, params) {
+            keys.push(crate::name::move_ctor_key(name));
+        } else {
+            keys.push(name.to_string());
+        }
+    }
+    if is_explicit {
+        if is_copy_ctor(name, params) {
+            keys.push(crate::name::explicit_copy_ctor_key(name));
+        } else if is_move_ctor(name, params) {
+            keys.push(crate::name::explicit_move_ctor_key(name));
+        }
+    }
+    keys
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Param {
     pub name: String,

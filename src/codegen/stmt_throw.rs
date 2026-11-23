@@ -194,7 +194,7 @@ impl<'a> Codegen<'a> {
             false
         };
         let ctor = if is_xvalue || is_local_var {
-            self.find_move_constructor(sname)
+            self.find_move_constructor(sname, false)
                 .or_else(|| self.find_copy_constructor(sname, is_const))
         } else {
             self.find_copy_constructor(sname, is_const)

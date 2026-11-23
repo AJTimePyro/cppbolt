@@ -127,3 +127,13 @@ pub struct Sema {
     pub structs_with_move: HashSet<String>,
     pub(super) depth: crate::depth::DepthCounters,
 }
+
+impl Sema {
+    pub(super) fn with_try_depth<T>(&mut self, depth: u32, f: impl FnOnce(&mut Self) -> T) -> T {
+        let old = self.try_depth;
+        self.try_depth = depth;
+        let result = f(self);
+        self.try_depth = old;
+        result
+    }
+}

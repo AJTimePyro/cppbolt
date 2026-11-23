@@ -30,29 +30,7 @@ impl<'a> Codegen<'a> {
         }
 
         self.bind_parameters(f, &mut ctx, &mut code)?;
-
-        let is_ctor = class_name.as_deref().is_some_and(|cls| {
-            let short = QualifiedName::new(cls).class_short_name();
-            f.name == *cls || f.name == short
-        });
-
-        if let Some(ref cls) = class_name {
-            if is_ctor && let StmtKind::Try { try_body, catches } = &body.kind {
-                self.compile_constructor_function_try_block(
-                    f,
-                    cls,
-                    try_body,
-                    catches,
-                    &mut ctx,
-                    &mut code,
-                )?;
-            } else {
-                self.compile_constructor_prologue(f, cls, &mut ctx, &mut code)?;
-                self.compile_stmt(body, &mut ctx, &mut code)?;
-            }
-        } else {
-            self.compile_stmt(body, &mut ctx, &mut code)?;
-        }
+        self.compile_function_body(f, body, class_name.as_deref(), &mut ctx, &mut code)?;
 
         // Destroy locals still live in the body's root scope.
         let root_objs = ctx.scope_objects.pop().unwrap_or_default();
@@ -83,6 +61,32 @@ impl<'a> Codegen<'a> {
 
         Self::emit_epilogue(f, &mut ctx, &mut code)?;
         Ok((locals, code))
+    }
+
+    /// Constructors initialize their bases and members as part of the guarded
+    /// body when their function-try-block must cover those initializers.
+    fn compile_function_body(
+        &mut self,
+        f: &FunctionDecl,
+        body: &Stmt,
+        class_name: Option<&str>,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        if let Some(cls) = class_name {
+            let is_ctor = {
+                let short = QualifiedName::new(cls).class_short_name();
+                f.name == *cls || f.name == short
+            };
+            if is_ctor && matches!(body.kind, StmtKind::Try { .. }) {
+                self.compile_constructor_function_try_block(f, cls, body, ctx, code)
+            } else {
+                self.compile_constructor_prologue(f, cls, ctx, code)?;
+                self.compile_stmt(body, ctx, code)
+            }
+        } else {
+            self.compile_stmt(body, ctx, code)
+        }
     }
 
     fn emit_unwind_enter(code: &mut Vec<u8>) {

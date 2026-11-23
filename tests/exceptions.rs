@@ -4459,3 +4459,98 @@ int main() {
     assert_eq!(stdout.trim(), "CustomTerminateCalled");
     Ok(())
 }
+
+#[test]
+fn test_throw_std_move_with_deleted_move_ctor_fails() -> Result<(), String> {
+    let source = r#"
+#include <utility>
+struct T { T(); T(const T&); T(T&&) = delete; };
+int main(){ T e; throw std::move(e); }
+"#;
+    assert_compile_error(source, "move constructor for exception object of type 'T' is deleted")
+}
+
+#[test]
+fn test_throw_std_move_with_private_move_ctor_fails() -> Result<(), String> {
+    let source = r#"
+#include <utility>
+struct T { T(); T(const T&); private: T(T&&); };
+int main(){ T e; throw std::move(e); }
+"#;
+    assert_compile_error(
+        source,
+        "move constructor for exception object of type 'T' is inaccessible",
+    )
+}
+
+#[test]
+fn test_throw_const_std_move_falls_back_to_copy_ctor() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+#include <utility>
+struct T { T(){} T(const T&){ std::printf("Copy "); } T(T&&) = delete; };
+int main(){ const T e; try { throw std::move(e); } catch(const T&) {} std::printf("Done\n"); return 0; }
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Copy Done");
+    Ok(())
+}
+
+#[test]
+fn test_throw_lvalue_and_xvalue_ignore_explicit_move_ctor() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+struct T { T(){} T(const T&){ std::printf("Copy "); } explicit T(T&&){ std::printf("Move "); } };
+int main(){
+    T e;
+    try { throw e; } catch(const T&) {}
+    try { throw static_cast<T&&>(e); } catch(const T&) {}
+    std::printf("Done\n");
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "Copy Copy Done");
+    Ok(())
+}
+
+#[test]
+fn test_throw_lvalue_of_move_only_class_fails() -> Result<(), String> {
+    let source = r#"
+struct T { T(); T(T&&); };
+void f(T& ref) { throw ref; }
+int main(){ return 0; }
+"#;
+    assert_compile_error(
+        source,
+        "copy constructor for exception object of type 'T' is deleted or inaccessible",
+    )
+}
+
+#[test]
+fn test_throw_const_lvalue_with_nonconst_copy_ctor_fails() -> Result<(), String> {
+    let source = r#"
+struct T { T(); T(T&); };
+const T g;
+int main(){ throw g; }
+"#;
+    assert_compile_error(
+        source,
+        "copy constructor for exception object of type 'T' is deleted or inaccessible",
+    )
+}
+
+#[test]
+fn test_throw_std_move_with_nonconst_copy_ctor_fails() -> Result<(), String> {
+    let source = r#"
+#include <utility>
+struct T { T(); T(T&); };
+int main(){ T e; throw std::move(e); }
+"#;
+    assert_compile_error(
+        source,
+        "copy constructor for exception object of type 'T' is deleted or inaccessible",
+    )
+}
