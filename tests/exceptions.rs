@@ -4720,3 +4720,45 @@ int main() {
     assert_eq!(code, 0);
     Ok(())
 }
+
+#[test]
+fn test_unwinding_destroys_temporaries_before_enclosing_locals() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct RecycledTemp {
+    int id;
+    RecycledTemp(int i) : id(i) { std::printf("C_Temp:%d ", id); }
+    ~RecycledTemp() { std::printf("D_Temp:%d ", id); }
+};
+
+struct LocalVar {
+    int id;
+    LocalVar(int i) : id(i) { std::printf("C_Local:%d ", id); }
+    ~LocalVar() { std::printf("D_Local:%d ", id); }
+};
+
+void consume(RecycledTemp, int) {}
+int throwing() { throw 42; }
+
+int main() {
+    consume(RecycledTemp(1), 0);
+    std::printf("---Try--- ");
+    try {
+        LocalVar v(2);
+        consume(RecycledTemp(3), throwing());
+    } catch (int) {
+        std::printf("Caught ");
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(
+        stdout.trim(),
+        "C_Temp:1 D_Temp:1 ---Try--- C_Local:2 C_Temp:3 D_Temp:3 D_Local:2 Caught"
+    );
+    Ok(())
+}
+

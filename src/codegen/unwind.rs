@@ -99,16 +99,16 @@ impl<'a> Codegen<'a> {
         code.push(0x02); // catch_all
         write_u32(code, 0);
 
-        if start < end {
-            for entry in ctx.cleanup_entries[start..end].iter().rev() {
-                self.emit_cleanup_entry_raw(entry, ctx, code);
-            }
-        }
         for entry in ctx.cleanup_entries[..start.min(ctx.cleanup_entries.len())]
             .iter()
             .rev()
         {
             if entry.is_temp {
+                self.emit_cleanup_entry_raw(entry, ctx, code);
+            }
+        }
+        if start < end {
+            for entry in ctx.cleanup_entries[start..end].iter().rev() {
                 self.emit_cleanup_entry_raw(entry, ctx, code);
             }
         }
