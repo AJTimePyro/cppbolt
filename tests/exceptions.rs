@@ -2422,6 +2422,89 @@ int main() {
 }
 
 #[test]
+fn test_derived_to_base_pointer_qualification_and_adjustment() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct Base1 {
+    int b1;
+    Base1(int x) : b1(x) {}
+};
+
+struct Base2 {
+    int b2;
+    Base2(int x) : b2(x) {}
+};
+
+struct Derived : Base1, Base2 {
+    int d;
+    Derived(int x, int y, int z) : Base1(x), Base2(y), d(z) {}
+};
+
+int main() {
+    Derived obj(10, 20, 30);
+    Derived* p_derived = &obj;
+
+    // 1. Derived* caught by const Base2* (offset adjustment + qualification)
+    try {
+        throw p_derived;
+    } catch (const Base2* pb2) {
+        std::printf("CaughtConstBase2:%d ", pb2->b2);
+    } catch (...) {
+        std::printf("FailedConstBase2 ");
+    }
+
+    // 2. Derived* caught by Base2* (offset adjustment)
+    try {
+        throw p_derived;
+    } catch (Base2* pb2) {
+        std::printf("CaughtBase2:%d ", pb2->b2);
+    } catch (...) {
+        std::printf("FailedBase2 ");
+    }
+
+    // 3. const Derived* caught by const Base2*
+    const Derived* cp_derived = &obj;
+    try {
+        throw cp_derived;
+    } catch (const Base2* pb2) {
+        std::printf("CaughtConstDByConstBase2:%d ", pb2->b2);
+    } catch (...) {
+        std::printf("FailedConstDByConstBase2 ");
+    }
+
+    // 4. const Derived* must NOT be caught by non-const Base2* (dropping const)
+    try {
+        throw cp_derived;
+    } catch (Base2* pb2) {
+        std::printf("ShouldNotCatchDroppingConst ");
+    } catch (...) {
+        std::printf("CorrectlyRejectedDroppingConst ");
+    }
+
+    // 5. Derived** must NOT be caught by const Base2* const* (multi-level inheritance conversion forbidden)
+    Derived** pp_derived = &p_derived;
+    try {
+        throw pp_derived;
+    } catch (const Base2* const*) {
+        std::printf("ShouldNotCatchMultiLevelBase ");
+    } catch (...) {
+        std::printf("CorrectlyRejectedMultiLevelBase");
+    }
+
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(
+        stdout.trim(),
+        "CaughtConstBase2:20 CaughtBase2:20 CaughtConstDByConstBase2:20 CorrectlyRejectedDroppingConst CorrectlyRejectedMultiLevelBase"
+    );
+    Ok(())
+}
+
+#[test]
 fn test_dce_eliminates_unreferenced_exception_class_destructors() -> Result<(), String> {
     let source = r#"
 #include <cstdio>
