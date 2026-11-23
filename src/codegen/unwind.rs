@@ -167,7 +167,6 @@ fn expr_can_throw_or_call(expr: &Expr) -> bool {
                 stack.extend(elements.iter());
             }
             Expr::PackExpansion { pattern, .. } => stack.push(pattern),
-            Expr::SizeofExpr(expr) => stack.push(expr),
             Expr::Assign { target, value, .. } | Expr::CompoundAssign { target, value, .. } => {
                 stack.extend([target.as_ref(), value.as_ref()]);
             }

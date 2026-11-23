@@ -4675,3 +4675,22 @@ int main() {
     assert_eq!(code, 0);
     Ok(())
 }
+
+#[test]
+fn test_sizeof_throwing_function_call_does_not_execute_or_unwind() -> Result<(), String> {
+    let source = r#"
+int throwing_func() {
+    throw 42;
+    return 1;
+}
+int query_size() {
+    return sizeof(throwing_func());
+}
+int main() {
+    return query_size() == sizeof(int) ? 0 : 1;
+}
+"#;
+    let (code, _) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    Ok(())
+}
