@@ -2129,3 +2129,35 @@ int main() {
     Ok(())
 }
 
+#[test]
+fn test_exception_allocation_freed_when_payload_constructor_throws() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct ThrowOnCopy {
+    int id;
+    ThrowOnCopy(int i) : id(i) {}
+    ThrowOnCopy(const ThrowOnCopy& o) : id(o.id) {
+        if (id == 99) {
+            std::printf("ThrowingFromCopyCtor ");
+            throw 123;
+        }
+    }
+};
+
+int main() {
+    try {
+        ThrowOnCopy obj(99);
+        throw obj;
+    } catch (int e) {
+        std::printf("CaughtInt:%d", e);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "ThrowingFromCopyCtor CaughtInt:123");
+    Ok(())
+}
+

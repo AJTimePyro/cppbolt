@@ -45,15 +45,7 @@ impl<'a> Codegen<'a> {
 
             let meta = ExceptionMeta { type_id, dtor_idx, size };
             self.emit_exception_header(temp_ptr_slot, &meta, ctx, code);
-
-            if let Type::Struct(sname) = ty.strip_reference().strip_const() {
-                self.compile_struct_payload_init(expr, sname, temp_ptr_slot, ctx, code)?;
-            } else {
-                Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
-                self.compile_expr(expr, ctx, code)?;
-                self.emit_store(&ty, 16, code);
-            }
-
+            self.compile_throw_payload_with_guard(expr, &ty, temp_ptr_slot, ctx, code)?;
             Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
             code.push(OP_THROW);
             write_u32(code, 0);
@@ -66,6 +58,75 @@ impl<'a> Codegen<'a> {
         } else {
             self.emit_rethrow_tag0(ctx, code);
         }
+        Ok(())
+    }
+
+    fn compile_throw_payload_with_guard(
+        &mut self,
+        expr: &Expr,
+        ty: &Type,
+        temp_ptr_slot: u32,
+        ctx: &mut FunctionContext,
+        code: &mut Vec<u8>,
+    ) -> Result<(), CompileError> {
+        code.push(OP_BLOCK);
+        code.push(0x40);
+        self.current_block_depth += 1;
+
+        code.push(OP_BLOCK);
+        code.push(TYPE_I32);
+        self.current_block_depth += 1;
+
+        code.push(OP_BLOCK);
+        code.push(TYPE_EXNREF);
+        self.current_block_depth += 1;
+
+        code.push(OP_TRY_TABLE);
+        code.push(0x40);
+        write_u32(code, 2);
+        code.push(0x00); // catch tag 0 -> target 1
+        write_u32(code, 0);
+        write_u32(code, 1);
+        code.push(0x03); // catch_all_ref -> target 0
+        write_u32(code, 0);
+        self.current_block_depth += 1;
+
+        if let Type::Struct(sname) = ty.strip_reference().strip_const() {
+            self.compile_struct_payload_init(expr, sname, temp_ptr_slot, ctx, code)?;
+        } else {
+            Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
+            self.compile_expr(expr, ctx, code)?;
+            self.emit_store(ty, 16, code);
+        }
+
+        code.push(OP_BR);
+        write_u32(code, 3);
+
+        code.push(OP_END); // end try_table
+        self.current_block_depth -= 1;
+        code.push(OP_UNREACHABLE);
+
+        code.push(OP_END); // end catch_all_ref (target 0)
+        self.current_block_depth -= 1;
+        Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
+        code.push(OP_CALL);
+        write_u32(code, self.func_indices["free"]);
+        code.push(OP_THROW_REF);
+
+        code.push(OP_END); // end catch tag 0 (target 1)
+        self.current_block_depth -= 1;
+        code.push(OP_LOCAL_SET);
+        write_u32(code, ctx.scratch1);
+        Self::emit_slot_load(temp_ptr_slot, ctx.fp_local, code);
+        code.push(OP_CALL);
+        write_u32(code, self.func_indices["free"]);
+        code.push(OP_LOCAL_GET);
+        write_u32(code, ctx.scratch1);
+        code.push(OP_THROW);
+        write_u32(code, 0);
+
+        code.push(OP_END); // end outer block
+        self.current_block_depth -= 1;
         Ok(())
     }
 
