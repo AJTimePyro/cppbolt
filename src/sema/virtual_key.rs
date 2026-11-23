@@ -90,10 +90,14 @@ pub(crate) fn find_sig<'a>(
     class_name: &str,
     key: &VirtualKey,
 ) -> Option<&'a FunctionSig> {
-    let qualified = format!("{}::{}", class_name, key.name);
+    let qual1 = format!("{}::{}", class_name, key.name);
+    let alt_class = crate::name::QualifiedName::new(class_name).alternate();
+    let qual2 = format!("{}::{}", alt_class, key.name);
     for name in [
-        qualified,
-        sema.resolve_alias_in_qualified_name(&format!("{}::{}", class_name, key.name)),
+        qual1.clone(),
+        qual2.clone(),
+        sema.resolve_alias_in_qualified_name(&qual1),
+        sema.resolve_alias_in_qualified_name(&qual2),
     ] {
         if let Some(sig) = sema
             .functions
@@ -104,11 +108,12 @@ pub(crate) fn find_sig<'a>(
         }
     }
     if key.is_destructor() {
-        let prefix = format!("{}::~", class_name);
+        let prefix1 = format!("{}::~", class_name);
+        let prefix2 = format!("{}::~", alt_class);
         return sema
             .functions
             .iter()
-            .filter(|(name, _)| name.starts_with(&prefix))
+            .filter(|(name, _)| name.starts_with(&prefix1) || name.starts_with(&prefix2))
             .flat_map(|(_, sigs)| sigs)
             .find(|sig| key.matches_sig(sig));
     }

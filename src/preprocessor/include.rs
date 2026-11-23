@@ -22,6 +22,7 @@ const EMBEDDED_HEADERS: &[(&str, &str)] = &[
     ("iostream", include_str!("../../stdlib/iostream")),
     ("string", include_str!("../../stdlib/string")),
     ("exception", include_str!("../../stdlib/exception")),
+    ("stdexcept", include_str!("../../stdlib/stdexcept")),
     ("functional", include_str!("../../stdlib/functional")),
     ("iomanip", include_str!("../../stdlib/iomanip")),
     ("cstdio", include_str!("../../stdlib/cstdio")),
