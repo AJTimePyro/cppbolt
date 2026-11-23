@@ -627,7 +627,7 @@ struct Normal {
 struct ThrowingDtor {
     int val;
     ThrowingDtor(int v) : val(v) {}
-    ~ThrowingDtor() {
+    ~ThrowingDtor() noexcept(false) {
         std::printf("D_Throw:%d ", val);
         throw val;
     }
@@ -661,7 +661,7 @@ fn test_destructor_throwing_while_unwinding_from_normal_destructor_throw_termina
 struct ThrowingDtor {
     int val;
     ThrowingDtor(int v) : val(v) {}
-    ~ThrowingDtor() {
+    ~ThrowingDtor() noexcept(false) {
         std::printf("D_Throw:%d ", val);
         throw val;
     }
@@ -2809,6 +2809,99 @@ int main() {
     assert_eq!(code, 0);
     Ok(())
 }
+
+#[test]
+fn test_destructor_implicitly_noexcept_terminates_on_throw() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct ThrowingDtor {
+    int val;
+    ThrowingDtor(int v) : val(v) {}
+    ~ThrowingDtor() {
+        std::printf("EnteringDtor:%d ", val);
+        throw val;
+    }
+};
+
+void test_fn() {
+    ThrowingDtor t(42);
+}
+
+int main() {
+    try {
+        test_fn();
+    } catch (...) {
+        std::printf("Caught ");
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 134, "unannotated throwing destructor must terminate");
+    assert!(stdout.contains("EnteringDtor:42"));
+    assert!(!stdout.contains("Caught"));
+    Ok(())
+}
+
+#[test]
+fn test_destructor_explicit_noexcept_false_propagates() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+
+struct ThrowingDtor {
+    int val;
+    ThrowingDtor(int v) : val(v) {}
+    ~ThrowingDtor() noexcept(false) {
+        std::printf("EnteringDtor:%d ", val);
+        throw val;
+    }
+};
+
+void test_fn() {
+    ThrowingDtor t(42);
+}
+
+int main() {
+    try {
+        test_fn();
+    } catch (int e) {
+        std::printf("Caught:%d", e);
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    assert_eq!(stdout.trim(), "EnteringDtor:42 Caught:42");
+    Ok(())
+}
+
+#[test]
+fn test_noexcept_operator_on_destructor() -> Result<(), String> {
+    let source = r#"
+struct Tracer {
+    ~Tracer() {}
+};
+struct Thrower {
+    ~Thrower() noexcept(false) {}
+};
+
+int main() {
+    Tracer t;
+    Thrower th;
+    bool b1 = noexcept(t.~Tracer());
+    bool b2 = noexcept(th.~Thrower());
+    if (!b1) return 1;
+    if (b2) return 2;
+    return 0;
+}
+"#;
+    let (code, _) = run_cpp(source)?;
+    assert_eq!(code, 0);
+    Ok(())
+}
+
 
 
 

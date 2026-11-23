@@ -90,7 +90,10 @@ impl Sema {
             let dtor_name = format!("~{}", inst_name);
             if !methods.iter().any(|m| m.name == dtor_name) {
                 methods.push(FunctionDecl {
-                    qualifiers: FunctionQualifiers::default(),
+                    qualifiers: FunctionQualifiers {
+                        is_noexcept: true,
+                        ..Default::default()
+                    },
                     noexcept_expr: None,
                     name: dtor_name,
                     return_type: Type::Void,

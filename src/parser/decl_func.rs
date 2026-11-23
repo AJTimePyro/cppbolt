@@ -12,7 +12,11 @@ impl Parser {
     ) -> Result<FunctionDecl, CompileError> {
         self.expect(TokenKind::LParen)?;
         let params = self.parse_function_params()?;
-        let (quals, noexcept_expr) = self.parse_function_qualifiers()?;
+        let (mut quals, noexcept_expr, has_exception_spec) =
+            self.parse_function_qualifiers()?;
+        if !has_exception_spec && (name.starts_with('~') || name.contains("::~")) {
+            quals.is_noexcept = true;
+        }
         let return_type = if self.peek() == &TokenKind::Arrow {
             self.advance();
             self.parse_type()?
@@ -260,7 +264,7 @@ impl Parser {
         // or `(` decides which derivation applies.
         let inner = if self.peek() == &TokenKind::LParen {
             let fn_params = self.parse_abstract_fn_params()?;
-            let (qualifiers, _) = self.parse_function_qualifiers()?;
+            let (qualifiers, _, _) = self.parse_function_qualifiers()?;
             Type::Function {
                 return_type: Box::new(base_type),
                 param_types: fn_params,
@@ -297,9 +301,10 @@ impl Parser {
 
     pub(super) fn parse_function_qualifiers(
         &mut self,
-    ) -> Result<(FunctionQualifiers, Option<Expr>), CompileError> {
+    ) -> Result<(FunctionQualifiers, Option<Expr>, bool), CompileError> {
         let mut quals = FunctionQualifiers::default();
         let mut noexcept_expr = None;
+        let mut has_exception_spec = false;
         while matches!(
             self.peek(),
             TokenKind::KwConst
@@ -337,6 +342,7 @@ impl Parser {
                 }
                 TokenKind::KwThrow | TokenKind::KwNoexcept | TokenKind::Ident(_) => {
                     let (is_noexcept, value, expr_opt) = self.parse_exception_spec()?;
+                    has_exception_spec = true;
                     if is_noexcept {
                         quals.is_noexcept = value;
                     }
@@ -348,7 +354,7 @@ impl Parser {
             }
         }
 
-        Ok((quals, noexcept_expr))
+        Ok((quals, noexcept_expr, has_exception_spec))
     }
 
     fn parse_exception_spec(&mut self) -> Result<(bool, bool, Option<Expr>), CompileError> {

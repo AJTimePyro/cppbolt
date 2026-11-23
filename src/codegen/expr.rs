@@ -248,7 +248,9 @@ impl<'a> Codegen<'a> {
                 write_i32(code, size);
             }
             Expr::Noexcept(inner, _) => {
-                let throws = self.sema.is_potentially_throwing(inner);
+                let throws = self
+                    .sema
+                    .is_potentially_throwing_with_types(inner, Some(&ctx.var_types));
                 let val = if throws { 0 } else { 1 };
                 code.push(OP_I32_CONST);
                 write_i32(code, val);
