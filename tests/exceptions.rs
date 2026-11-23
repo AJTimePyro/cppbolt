@@ -4845,6 +4845,39 @@ int main() {
     Ok(())
 }
 
+#[test]
+fn test_noexcept_function_unwind_handler_emits_unreachable() -> Result<(), String> {
+    let source = r#"
+#include <cstdio>
+#include <exception>
+
+void custom_term() {
+    std::printf("CustomTerminated ");
+}
+
+void throwing() { throw 1; }
+
+void noexcept_fn() noexcept {
+    throwing();
+}
+
+int main() {
+    std::set_terminate(custom_term);
+    try {
+        noexcept_fn();
+    } catch (...) {
+        std::printf("Caught ");
+    }
+    return 0;
+}
+"#;
+    let (code, stdout) = run_cpp(source)?;
+    assert_eq!(code, 134);
+    assert_eq!(stdout.trim(), "CustomTerminated");
+    Ok(())
+}
+
+
 
 
 

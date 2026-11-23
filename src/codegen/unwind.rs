@@ -117,9 +117,10 @@ impl<'a> Codegen<'a> {
         write_u32(code, 2);
 
         code.push(OP_END);
-        self.emit_terminate_call(code);
+        code.push(OP_UNREACHABLE);
         code.push(OP_END);
         self.emit_terminate_call(code);
+        code.push(OP_UNREACHABLE);
         code.push(OP_END);
     }
 
@@ -144,6 +145,7 @@ impl<'a> Codegen<'a> {
         // [except.terminate]: an exception escaping main calls std::terminate.
         if is_noexcept || ctx.is_main {
             self.emit_terminate_call(code);
+            code.push(OP_UNREACHABLE);
         } else {
             code.push(OP_LOCAL_GET);
             write_u32(code, ctx.unwind_exnref_local);
