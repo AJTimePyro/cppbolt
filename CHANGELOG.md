@@ -29,6 +29,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Defaulted class destructors and synthesized default destructors to `noexcept(true)` per C++17 [except.spec] unless explicitly declared `noexcept(false)`.
 
 ### Exception Handling Conformance (C++17)
+- Added `Expr::Throw` to function unwinding reachability analysis (`expr_can_throw_or_call`), guaranteeing that functions with local objects throwing from subexpressions generate unwinding tables and invoke destructors.
+- Zeroed stack frame slots immediately upon destroying and freeing heap temporary objects in `emit_destroy_and_free_slot`, eliminating stale heap addresses in recycled frame slots.
 - Inverted unwinding cleanup loops to destroy active statement temporaries before enclosing local scope variables, preserving strict C++17 LIFO destruction order.
 - Enforced ISO C++17 [except.handle] p15 implicit rethrow when control reaches the end of a destructor function-try-block handler.
 - Retained exception destructors for exceptions thrown from expressions (including conditional ternary expressions) during dead-code elimination, and streamlined DCE class collection.

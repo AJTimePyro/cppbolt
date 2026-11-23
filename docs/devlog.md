@@ -26,10 +26,14 @@ Hardened C++17 exception handling conformance across unwinding destruction order
 5. Noexcept and main unwinding termination (`src/codegen/unwind.rs`, `tests/exceptions.rs`):
    - Emitted `OP_UNREACHABLE` immediately after `__cppbolt_terminate` in `emit_function_unwind_handler`.
    - Removed dead terminate calls between `try_table` end and catch blocks in `emit_cleanup_range`.
+6. Expression throw unwinding reachability (`src/codegen/unwind.rs`, `tests/exceptions.rs`):
+   - Added `Expr::Throw` to `expr_can_throw_or_call`, ensuring functions with local objects that throw inside subexpressions generate unwind tables and invoke destructors.
+7. Recycled temporary slot zeroing (`src/codegen/raii.rs`, `tests/exceptions.rs`):
+   - Zeroed stack frame slots immediately in `emit_destroy_and_free_slot` after freeing temporary objects, preventing recycled slots from retaining dangling pointers to freed heap memory.
 
 ### Verification Results
 
-- Exception test suite: all 152 tests in `tests/exceptions.rs` pass.
+- Exception test suite: all 154 tests in `tests/exceptions.rs` pass.
 - Census audit: all 7 tests in `tests/census_fixture.rs` pass (all files <= 500 lines, functions <= 80 lines, <= 5 parameters).
 - Unit tests: all 143 unit tests in `cargo test --lib` pass.
 - Clippy: `cargo clippy --all-targets -- -D warnings` clean (0 warnings).
